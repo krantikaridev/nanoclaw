@@ -1,0 +1,1 @@
+# CLAUDE.md - Revenue Lessons & Strategy\n\nInitial: Paper mode $10k. Goal: Max sim profit → real path (Polymarket USDC, freelance Stripe).\n\nSelf-improves after each cycle.
