@@ -12,7 +12,7 @@
 4. **Profit**: Sim 5-20% gains → Real API keys.
 
 ## Cycle Lessons (Auto-Appended)
-[2026-03-20 06:03] Cycle profit: $4221. Improved strategy: High vol markets, SEO keywords.
+[2026-03-20 06:03] Cycle profit: $4221. Improved strategy: High vol markets, SEO keywords.\n\n[2026-03-20 08:44] Cycle profit: $4221. Focus: Polymarket arb + gig bidding efficiency.
 
 ## Next Steps
 - Real Mode: Provide Polygon wallet PK, Stripe keys.
