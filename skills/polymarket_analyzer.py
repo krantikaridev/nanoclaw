@@ -1,1 +1,65 @@
-#!/usr/bin/env python3&#10;&quot;&quot;&quot;&#10;Polymarket Volume Analyzer Skill&#10;Fetches top active markets, computes volume/edge scores.&#10;&quot;&quot;&quot;&#10;&#10;import urllib.request&#10;import json&#10;import sys&#10;from typing import List, Dict&#10;&#10;BASE_URL = &quot;https://gamma.api.polymarket.com&quot;&#10;&#10;def fetch_active_markets(limit: int = 20) -&gt; List[Dict]:&#10;    &quot;&quot;&quot;Fetch top active markets from Polymarket Gamma API.&quot;&quot;&quot;&#10;    url = f&quot;{BASE_URL}/markets?active=true&amp;limit={limit}&amp;sort=volume&quot;&#10;    try:&#10;        with urllib.request.urlopen(url) as response:&#10;            data = json.loads(response.read().decode())&#10;            return data.get(&#39;markets&#39;, [])&#10;    except Exception as e:&#10;        print(f&quot;Error fetching markets: {e}&quot;, file=sys.stderr)&#10;        return []&#10;&#10;def analyze_market(market: Dict) -&gt; Dict:&#10;    &quot;&quot;&quot;Calculate volume, prices, edge score.&quot;&quot;&quot;&#10;    yes_price = market.get(&#39;yes_price&#39;, 0.5)&#10;    no_price = market.get(&#39;no_price&#39;, 0.5)&#10;    vol_24h = market.get(&#39;volume_24h&#39;, {}).get(&#39;usd&#39;, 0) or market.get(&#39;volume_24h_usd&#39;, 0)&#10;    liquidity = market.get(&#39;liquidity&#39;, 0) or market.get(&#39;open_interest&#39;, 0)&#10;    &#10;    spread = abs(yes_price - no_price)&#10;    edge_score = &quot;Interesting&quot; if vol_24h &gt; 50000 and spread &lt; 0.05 else &quot;Neutral&quot;&#10;    &#10;    return {&#10;        &#39;title&#39;: market.get(&#39;question&#39;, market.get(&#39;slug&#39;, &#39;N/A&#39;)),&#10;        &#39;slug&#39;: market.get(&#39;slug&#39;, &#39;N/A&#39;),&#10;        &#39;yes_price&#39;: f&quot;{yes_price:.2%}&quot;,&#10;        &#39;no_price&#39;: f&quot;{no_price:.2%}&quot;,&#10;        &#39;volume_24h_usd&#39;: vol_24h,&#10;        &#39;liquidity&#39;: liquidity,&#10;        &#39;spread&#39;: f&quot;{spread:.3f}&quot;,&#10;        &#39;edge&#39;: edge_score&#10;    }&#10;&#10;def main(top_n: int = 5):&#10;    &quot;&quot;&quot;CLI: Print top N markets by volume.&quot;&quot;&quot;&#10;    markets = fetch_active_markets(20)&#10;    if not markets:&#10;        print(&quot;No markets fetched.&quot;)&#10;        return&#10;    &#10;    analyzed = sorted([analyze_market(m) for m in markets], key=lambda x: x[&#39;volume_24h_usd&#39;], reverse=True)&#10;    &#10;    print(f&quot;Top {top_n} Polymarket Markets (by 24h Vol USD):\\n&quot;)&#10;    for i, m in enumerate(analyzed[:top_n], 1):&#10;        print(f&quot;{i}. {m[&#39;title&#39;][:80]}...&quot;)&#10;        print(f&quot;   Slug: {m[&#39;slug&#39;]}&quot;)&#10;        print(f&quot;   Yes/No: {m[&#39;yes_price&#39;]}/{m[&#39;no_price&#39;]} (spread: {m[&#39;spread&#39;]})&quot;)&#10;        print(f&quot;   Vol 24h: ${m[&#39;volume_24h_usd&#39;]:,.0f} | Liq: ${m[&#39;liquidity&#39;]:,.0f}&quot;)&#10;        print(f&quot;   Edge: {m[&#39;edge&#39;]}\\n&quot;)&#10;&#10;if __name__ == &quot;__main__&quot;:&#10;    top_n = int(sys.argv[1]) if len(sys.argv) &gt; 1 else 5&#10;    main(top_n)
+#!/usr/bin/env python3
+\"\"\" 
+Polymarket Volume Analyzer Skill
+Fetches top active markets, computes volume/edge scores.
+\"\"\"
+
+import urllib.request
+import json
+import sys
+from typing import List, Dict
+
+BASE_URL = \"https://gamma.api.polymarket.com\"
+
+def fetch_active_markets(limit: int = 20) -> List[Dict]:
+    \"\"\"Fetch top active markets from Polymarket Gamma API.\"\"\" 
+    url = f\"{BASE_URL}/markets?active=true&limit={limit}&sort=volume\"
+    try:
+        with urllib.request.urlopen(url) as response:
+            data = json.loads(response.read().decode())
+            return data.get('markets', [])
+    except Exception as e:
+        print(f\"Error fetching markets: {e}\", file=sys.stderr)
+        return []
+
+def analyze_market(market: Dict) -> Dict:
+    \"\"\"Calculate volume, prices, edge score.\"\"\" 
+    yes_price = market.get('yes_price', 0.5)
+    no_price = market.get('no_price', 0.5)
+    vol_24h = market.get('volume_24h', {}).get('usd', 0) or market.get('volume_24h_usd', 0)
+    liquidity = market.get('liquidity', 0) or market.get('open_interest', 0)
+    
+    spread = abs(yes_price - no_price)
+    edge_score = \"Interesting\" if vol_24h > 50000 and spread < 0.05 else \"Neutral\"
+    
+    return {
+        'title': market.get('question', market.get('slug', 'N/A')),
+        'slug': market.get('slug', 'N/A'),
+        'yes_price': f\"{yes_price:.2%}\",
+        'no_price': f\"{no_price:.2%}\",
+        'volume_24h_usd': vol_24h,
+        'liquidity': liquidity,
+        'spread': f\"{spread:.3f}\",
+        'edge': edge_score
+    }
+
+def main(top_n: int = 5):
+    \"\"\"CLI: Print top N markets by volume.\"\"\" 
+    markets = fetch_active_markets(20)
+    if not markets:
+        print(\"No markets fetched.\")
+        return
+    
+    analyzed = sorted([analyze_market(m) for m in markets], key=lambda x: x['volume_24h_usd'], reverse=True)
+    
+    print(f\"Top {top_n} Polymarket Markets (by 24h Vol USD):\\n\")
+    for i, m in enumerate(analyzed[:top_n], 1):
+        print(f\"{i}. {m['title'][:80]}...\")
+        print(f\"   Slug: {m['slug']}\")
+        print(f\"   Yes/No: {m['yes_price']}/{m['no_price']} (spread: {m['spread']})\")
+        print(f\"   Vol 24h: ${m['volume_24h_usd']:, .0f} | Liq: ${m['liquidity']:, .0f}\")
+        print(f\"   Edge: {m['edge']}\\n\")
+
+if __name__ == \"__main__\":
+    top_n = int(sys.argv[1]) if len(sys.argv) > 1 else 5
+    main(top_n)
