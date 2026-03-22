@@ -1,1 +1,108 @@
-#!/usr/bin/env python3\n"""\nAutonomous Revenue Engine - Paper Sim Mode\nFull cycle: 12 skills, $10k virtual capital, Grok-4 reasoning.\n"""\n\nimport json\nimport os\nimport sys\nfrom datetime import datetime\n\nCAPITAL_FILE = 'capital.json'\nCLAUDE_FILE = '../../groups/revenue/CLAUDE.md'\nTELEGRAM_CHAT = '5816538180'\n\nINITIAL_CAPITAL = 10000\n\nclass RevenueEngine:\n    def __init__(self):\n        self.capital = self.load_capital()\n        self.profit = 0\n        self.lessons = []\n\n    def load_capital(self):\n        if os.path.exists(CAPITAL_FILE):\n            with open(CAPITAL_FILE) as f:\n                return json.load(f).get('capital', INITIAL_CAPITAL)\n        return INITIAL_CAPITAL\n\n    def save_capital(self):\n        with open(CAPITAL_FILE, 'w') as f:\n            json.dump({'capital': self.capital, 'timestamp': datetime.now().isoformat()}, f)\n\n    def run_skill(self, skill_name):\n        # Sim each CashClaw skill\n        sim_profit = 100 + hash(skill_name) % 500  # Fake profit\n        self.profit += sim_profit\n        self.lessons.append(f"{skill_name}: +${sim_profit:.0f} (sim)")\n        return sim_profit\n\n    def grok_reason(self, task):\n        # Spawn Grok-4 subagent sim\n        print(f"Grok-4 reasoning: {task} => Optimize {task.lower()}")\n        return "Improved strategy: High vol markets, SEO keywords"\n\n    def full_cycle(self):\n        print("=== Revenue Cycle Start ===")\n        skills = [\n            'seo-auditor', 'content-writer', 'lead-generator', 'invoicer',\n            'hyrve-gigs', 'polymarket-trader', 'x-poster', 'affiliate-bot',\n            'arbitrage-scanner', 'gig-bidder', 'stripe-sim', 'self-optimizer'\n        ]\n        for skill in skills:\n            self.run_skill(skill)\n            self.grok_reason(skill)\n        self.capital += self.profit\n        print("=== Cycle End ===")\n\n    def generate_report(self):\n        report = f"\\n🚀 Revenue Cycle Report ({datetime.now()}):\\n"\n        report += f"Virtual Capital: ${self.capital:,.0f} (+${self.profit:,.0f})\\n"\n        report += "\\nLessons:\\n" + '\\n'.join(self.lessons[:5])\n        report += "\\nNext: Scale to real w/ wallet."\n        return report\n\n    def update_claude(self):\n        new_lesson = f"[ {datetime.now().strftime('%Y-%m-%d %H:%M')} ] Cycle profit: ${self.profit:.0f}. {self.grok_reason('overall')}"\n        with open(CLAUDE_FILE, 'a') as f:\n            f.write(f"\\n{new_lesson}")\n\n    def send_report(self):\n        report = self.generate_report()\n        print(report)  # TODO: message tool integration\n        # os.system(f"echo '{report}' | message_tool")  # Placeholder\n        self.update_claude()\n\n    def run(self):\n        self.full_cycle()\n        self.save_capital()\n        self.send_report()\n\nif __name__ == '__main__':\n    engine = RevenueEngine()\n    engine.run()
+#!/usr/bin/env python3
+import json
+import os
+import sys
+import traceback
+from datetime import datetime
+
+print('DEBUG: Script started', flush=True)
+
+CAPITAL_FILE = 'capital.json'
+CLAUDE_FILE = '../../groups/revenue/CLAUDE.md'
+TELEGRAM_CHAT = '5816538180'
+
+INITIAL_CAPITAL = 10000
+
+class RevenueEngine:
+    def __init__(self):
+        print('DEBUG: __init__ called', flush=True)
+        try:
+            self.capital = self.load_capital()
+            print(f'DEBUG: Capital loaded: {self.capital}', flush=True)
+        except Exception as e:
+            print(f'DEBUG: Init error: {e}', flush=True)
+            print(traceback.format_exc(), flush=True)
+            self.capital = INITIAL_CAPITAL
+        self.profit = 0
+        self.lessons = []
+
+    def load_capital(self):
+        print('DEBUG: load_capital called', flush=True)
+        if os.path.exists(CAPITAL_FILE):
+            print('DEBUG: CAPITAL_FILE exists', flush=True)
+            with open(CAPITAL_FILE) as f:
+                data = json.load(f)
+                print(f'DEBUG: JSON data: {data}', flush=True)
+                return data.get('capital', INITIAL_CAPITAL)
+        print('DEBUG: No CAPITAL_FILE', flush=True)
+        return INITIAL_CAPITAL
+
+    # ... rest same, but add flushes and try/excepts later if needed
+
+    def save_capital(self):
+        print('DEBUG: save_capital called', flush=True)
+        with open(CAPITAL_FILE, 'w') as f:
+            json.dump({'capital': self.capital, 'timestamp': datetime.now().isoformat()}, f)
+        print('DEBUG: Capital saved', flush=True)
+
+    def run_skill(self, skill_name):
+        sim_profit = 100 + hash(skill_name) % 500
+        self.profit += sim_profit
+        self.lessons.append(f"{skill_name}: +${sim_profit:.0f} (sim)")
+        return sim_profit
+
+    def grok_reason(self, task):
+        print(f"Grok-4 reasoning: {task} => Optimize {task.lower()}", flush=True)
+        return "Improved strategy: High vol markets, SEO keywords"
+
+    def full_cycle(self):
+        print("=== Revenue Cycle Start ===", flush=True)
+        skills = [
+            'seo-auditor', 'content-writer', 'lead-generator', 'invoicer',
+            'hyrve-gigs', 'polymarket-trader', 'x-poster', 'affiliate-bot',
+            'arbitrage-scanner', 'gig-bidder', 'stripe-sim', 'self-optimizer'
+        ]
+        for skill in skills:
+            self.run_skill(skill)
+            self.grok_reason(skill)
+        self.capital += self.profit
+        print("=== Cycle End ===", flush=True)
+
+    def generate_report(self):
+        report = f"\\n🚀 Revenue Cycle Report ({datetime.now()}):\\n"
+        report += f"Virtual Capital: ${self.capital:,.0f} (+${self.profit:,.0f})\\n"
+        report += "\\nLessons:\\n" + '\\n'.join(self.lessons[:5])
+        report += "\\nNext: Scale to real w/ wallet."
+        return report
+
+    def update_claude(self):
+        print('DEBUG: update_claude called', flush=True)
+        try:
+            new_lesson = f"[ {datetime.now().strftime('%Y-%m-%d %H:%M')} ] Cycle profit: ${self.profit:.0f}. {self.grok_reason('overall')}"
+            with open(CLAUDE_FILE, 'a') as f:
+                f.write(f"\\n{new_lesson}")
+            print('DEBUG: CLAUDE updated', flush=True)
+        except Exception as e:
+            print(f'DEBUG: Claude update error: {e}', flush=True)
+            print(traceback.format_exc(), flush=True)
+
+    def send_report(self):
+        print('DEBUG: send_report called', flush=True)
+        report = self.generate_report()
+        print(report, flush=True)
+        self.update_claude()
+
+    def run(self):
+        print('DEBUG: run() called', flush=True)
+        self.full_cycle()
+        self.save_capital()
+        self.send_report()
+
+if __name__ == '__main__':
+    print('DEBUG: __main__ if', flush=True)
+    try:
+        engine = RevenueEngine()
+        engine.run()
+    except Exception as e:
+        print(f'CRITICAL ERROR: {e}', flush=True)
+        print(traceback.format_exc(), flush=True)
