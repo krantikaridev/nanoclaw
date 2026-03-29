@@ -117,3 +117,11 @@ if __name__ == '__main__':
     except Exception as e:
         print(f'CRITICAL ERROR: {e}', flush=True)
         print(traceback.format_exc(), flush=True)
+
+# FORCE LOAD REAL MODE - 29 Mar 2026
+try:
+    from skills.real_mode_loader import *
+    print("Real mode loader executed at startup", flush=True)
+except Exception as e:
+    print(f"Real mode loader failed at startup: {e}", flush=True)
+
