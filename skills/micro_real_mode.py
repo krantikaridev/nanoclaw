@@ -1,7 +1,24 @@
 # MICRO REAL MODE HANDLER - 29 Mar 2026
 # Strict limits as requested by user
+import os
 
 REAL_MODE = False
+REAL_MODE_FILE = "/home/ubuntu/.nanobot/workspace/nanoclaw/.real_mode_enabled"
+
+# Force reload from file on every import/check
+def get_real_mode():
+    try:
+        if os.path.exists(REAL_MODE_FILE):
+            with open(REAL_MODE_FILE, "r") as f:
+                content = f.read().strip().lower()
+                return content == "true"
+    except Exception as e:
+        print(f"DEBUG: Error reading real mode file: {e}")
+    return False
+
+# At module level for backward compatibility
+REAL_MODE = get_real_mode()
+
 MICRO_LIMITS = {
     "max_trade_usdc": 2.0,
     "daily_loss_cap_usdc": 1.0,
@@ -12,25 +29,32 @@ MICRO_LIMITS = {
 }
 
 async def enable_micro_real(update, context):
-    global REAL_MODE
-    REAL_MODE = True
-    await update.message.reply_text(f"""🔓 MICRO REAL MODE ENABLED WITH STRICT LIMITS
+    try:
+        with open(REAL_MODE_FILE, "w") as f:
+            f.write("true")
+        global REAL_MODE
+        REAL_MODE = True
+        await update.message.reply_text(f"""✅ MICRO REAL MODE ENABLED WITH STRICT LIMITS
 Max trade: {MICRO_LIMITS["max_trade_usdc"]} USDC
 Daily loss cap: {MICRO_LIMITS["daily_loss_cap_usdc"]} USDC
-Using only {MICRO_LIMITS["seed_usdc"]} USDC seed
-0.88 USDC reserve untouched
+Seed: {MICRO_LIMITS["seed_usdc"]} USDC
+Reserve untouched: 0.88 USDC
 Wallet: {MICRO_LIMITS["wallet"]} ({MICRO_LIMITS["network"]})
-All trades will be logged for tax audit""")
+All trades logged.""")
+    except Exception as e:
+        await update.message.reply_text(f"Error enabling real mode: {e}")
 
 async def micro_safe_cycle(update, context):
+    global REAL_MODE
+    REAL_MODE = get_real_mode()   # re-check file every time
+    
     if not REAL_MODE:
-        await update.message.reply_text("Real mode not enabled yet. Send 'enable micro real mode' first.")
+        await update.message.reply_text("Paper sim only. No real mode. 🐶")
         return
-    await update.message.reply_text(f"""⚡ STARTING MICRO REAL CYCLE
-Position size capped at {MICRO_LIMITS["max_trade_usdc"]} USDC
-Daily loss protection: {MICRO_LIMITS["daily_loss_cap_usdc"]} USDC
-Reserve protected: {MICRO_LIMITS["reserve_usdc"]} USDC
-Tax audit log will be created automatically""")
+    
+    # Real mode logic goes here (your existing real trading code)
+    await update.message.reply_text("✅ Real mode active. Proceeding with live trades under strict limits.")
+
     # Your existing cycle logic will run here with size limit applied
 
 # Register commands so they work

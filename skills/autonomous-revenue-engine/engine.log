@@ -1,0 +1,30 @@
+nohup: ignoring input
+DEBUG: Script started
+DEBUG: __main__ if
+DEBUG: __init__ called
+DEBUG: load_capital called
+DEBUG: CAPITAL_FILE exists
+DEBUG: JSON data: {'capital': 425816, 'timestamp': '2026-03-29T08:39:40.948143'}
+DEBUG: Capital loaded: 425816
+DEBUG: run() called
+=== Revenue Cycle Start ===
+Grok-4 reasoning: seo-auditor => Optimize seo-auditor
+Grok-4 reasoning: content-writer => Optimize content-writer
+Grok-4 reasoning: lead-generator => Optimize lead-generator
+Grok-4 reasoning: invoicer => Optimize invoicer
+Grok-4 reasoning: hyrve-gigs => Optimize hyrve-gigs
+Grok-4 reasoning: polymarket-trader => Optimize polymarket-trader
+Grok-4 reasoning: x-poster => Optimize x-poster
+Grok-4 reasoning: affiliate-bot => Optimize affiliate-bot
+Grok-4 reasoning: arbitrage-scanner => Optimize arbitrage-scanner
+Grok-4 reasoning: gig-bidder => Optimize gig-bidder
+Grok-4 reasoning: stripe-sim => Optimize stripe-sim
+Grok-4 reasoning: self-optimizer => Optimize self-optimizer
+=== Cycle End ===
+DEBUG: save_capital called
+DEBUG: Capital saved
+DEBUG: send_report called
+\n🚀 Revenue Cycle Report (2026-03-29 08:50:02.424663):\nVirtual Capital: $430,118 (+$4,302)\n\nLessons:\nseo-auditor: +$529 (sim)\ncontent-writer: +$414 (sim)\nlead-generator: +$202 (sim)\ninvoicer: +$550 (sim)\nhyrve-gigs: +$140 (sim)\nNext: Scale to real w/ wallet.
+DEBUG: update_claude called
+Grok-4 reasoning: overall => Optimize overall
+DEBUG: CLAUDE updated

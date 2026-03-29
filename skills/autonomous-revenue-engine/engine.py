@@ -100,6 +100,17 @@ class RevenueEngine:
 
 if __name__ == '__main__':
     print('DEBUG: __main__ if', flush=True)
+    # === MICRO REAL MODE INTEGRATION (29 Mar 2026) ===
+    # This registers the handler so natural language + commands can enable real trading
+
+    try:
+        from ..micro_real_mode import enable_micro_real, micro_safe_cycle
+        # Register the handlers
+        application.add_handler(CommandHandler("enable_micro_real", enable_micro_real))
+        application.add_handler(CommandHandler("micro_safe_cycle", micro_safe_cycle))
+        print("✅ Micro real mode handler successfully registered", flush=True)
+    except Exception as e:
+        print(f"⚠️ Micro real mode registration failed: {e}", flush=True)
     try:
         engine = RevenueEngine()
         engine.run()

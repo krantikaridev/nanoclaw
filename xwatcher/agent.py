@@ -5,7 +5,7 @@ import telegram
 with open("follows.json") as f: config = json.load(f)
 
 # YOUR TELEGRAM DETAILS – edit these two lines
-BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN_HERE"   # ← same one you already use
+BOT_TOKEN = "8759407551:AAHm7YaB4E2KBXuvU8FY_WnSIbhBt2CiZZY"   # ← same one you already use
 CHAT_ID = 5816538180
 
 bot = telegram.Bot(token=BOT_TOKEN)
