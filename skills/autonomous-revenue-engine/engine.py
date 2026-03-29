@@ -125,3 +125,11 @@ try:
 except Exception as e:
     print(f"Real mode loader failed at startup: {e}", flush=True)
 
+# HOOK REAL EXECUTOR - 29 Mar 2026
+# Allows real trades from the existing paper bot interface
+
+try:
+    from ..real_executor import execute_micro_trade
+    print("✅ Real executor hooked into paper engine", flush=True)
+except Exception as e:
+    print(f"Real executor hook failed: {e}", flush=True)
