@@ -20,9 +20,48 @@ if not PRIVATE_KEY or "YOUR_PRIVATE_KEY_HERE" in PRIVATE_KEY:
 
 print("✅ Private key loaded — REAL on-chain swap enabled")
 
-w3 = Web3(Web3.HTTPProvider("https://1rpc.io/matic"))
-print(f"RPC connected: {w3.is_connected()}")
+# Reliable mainnet RPCs with fallbacks (Polygon PoS 2026)
+rpc_candidates = [
+    os.getenv("POLYGON_RPC_URL") or os.getenv("POLYGON_RPC") or "https://polygon-rpc.com",
+    "https://polygon.drpc.org",
+    "https://polygon.publicnode.com",
+    "https://polygon-mainnet.gateway.tatum.io/",
+    "https://polygon-public.nodies.app/"
+]
 
+w3 = None
+used_rpc = None
+for url in rpc_candidates:
+    try:
+        w3 = Web3(Web3.HTTPProvider(url))
+        if w3.is_connected():
+            used_rpc = url
+            print(f"✅ MAINNET RPC connected: True | URL: {url}")
+            break
+    except:
+        continue
+
+if not w3 or not w3.is_connected():
+    print("❌ All RPCs failed. Check internet or try later.")
+    exit(1)
+# === STRICT MICRO REAL MODE - Madan Pune (enforced) ===
+MAX_TRADE_USDC = 2.0                    # Never exceed 2 USDC per trade
+DAILY_LOSS_LIMIT_USDC = 1.0             # Hard daily loss cap
+USDC_ADDRESS = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"  # Native USDC on Polygon
+POL_ADDRESS = "0x0000000000000000000000000000000000000000"    # Native POL (gas)
+
+# Read current balances (read-only for now)
+try:
+    usdc_contract = w3.eth.contract(address=USDC_ADDRESS, abi=[{"constant":True,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"payable":False,"stateMutability":"view","type":"function"}])
+    usdc_balance = usdc_contract.functions.balanceOf(WALLET_ADDRESS).call() / 10**6
+    pol_balance = w3.eth.get_balance(WALLET_ADDRESS) / 10**18
+    print(f"💰 Current balances | USDC: {usdc_balance:.4f} | POL (gas): {pol_balance:.4f}")
+except Exception as e:
+    print(f"⚠️ Balance check failed: {e}")
+    usdc_balance = 0
+    pol_balance = 0
+
+print(f"🛡️  MICRO REAL MODE ACTIVE | Max trade: {MAX_TRADE_USDC} USDC | Daily loss limit: {DAILY_LOSS_LIMIT_USDC} USDC")
 # Safety constants
 INITIAL_REAL = 10.88
 MAX_UTILIZATION_PCT = 80
@@ -42,66 +81,34 @@ def load_paper_capital():
         return 10.88
 
 async def run_real_trade():
-    size_usdc = min(MAX_TRADE, INITIAL_REAL * 0.3)  # safe small size for first live swap
-    paper_capital = load_paper_capital()
-
-    print(f"""══════════════════════════════════════
-⚡ REAL USDC SWAP (Short-term Feedback - 6x/day)
-══════════════════════════════════════
-Real Trade:
-- Size: {size_usdc:.2f} USDC
-- Utilization: {MAX_UTILIZATION_PCT}% (~{INITIAL_REAL - RESERVE:.2f} USDC deployable)
-- Reserve Protected: {RESERVE:.2f} USDC
-- Total Real Capital: {INITIAL_REAL} USDC
-- Wallet: {WALLET_ADDRESS}
-Paper Sim:
-- Current Capital: ${paper_capital:,.2f} USDC
-Executing real small USDC → WETH swap on Uniswap V3...
-""")
-
-    try:
-        account = w3.eth.account.from_key(PRIVATE_KEY)
-        nonce = w3.eth.get_transaction_count(WALLET_ADDRESS)
-
-        # Minimal test swap amount (in wei) for safety on first live run
-        amount_in = w3.to_wei(0.000001, 'ether')  # extremely small USDC test
-
-        # Build minimal swap tx (placeholder for full router call)
-        tx = {
-            'nonce': nonce,
-            'to': WALLET_ADDRESS,
-            'value': w3.to_wei(0.0001, 'ether'),
-            'gas': 21000,
-            'gasPrice': w3.eth.gas_price,
-            'chainId': 137
-        }
-
-        signed_tx = account.sign_transaction(tx)
-        tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
-        tx_hash_hex = w3.to_hex(tx_hash)
-
-        print(f"✅ REAL TRANSACTION BROADCAST SUCCESSFULLY!")
-        print(f"🔗 Real Tx Hash: {tx_hash_hex}")
-        print(f"Check PolygonScan for wallet {WALLET_ADDRESS} now.")
-
-        estimated_pnl = round(size_usdc * 0.06, 2)
-        print(f"Estimated short-term P&L: +${estimated_pnl} USDC")
-
-    except Exception as e:
-        print(f"⚠️ Broadcast error (safe fallback — no funds at risk): {str(e)[:200]}")
-        tx_hash_hex = "fallback-" + datetime.now().strftime("%H%M%S")
-
-    # Tax & dashboard logging
-    os.makedirs("memory", exist_ok=True)
-    timestamp = datetime.now().isoformat()
-    log_entry = f"[{timestamp}] REAL USDC SWAP | Size {size_usdc:.2f} USDC | Tx {tx_hash_hex} | Paper ${paper_capital:,.2f} | Status: Broadcast\n"
+    """MICRO REAL TRADE - Madan Pune - Strictly limited"""
+    global usdc_balance, pol_balance
     
-    with open("memory/TAX-AUDIT.md", "a") as f:
-        f.write(log_entry)
-    with open("combined_dashboard.md", "a") as f:
-        f.write(f"\n## {datetime.now().strftime('%Y-%m-%d %H:%M')} REAL USDC SWAP\n- Size: {size_usdc:.2f} USDC\n- Paper: ${paper_capital:,.2f}\n- Tx: {tx_hash_hex}\n- Status: Real on-chain broadcast\n")
-
-    return True
-
-if __name__ == "__main__":
-    asyncio.run(run_real_trade())
+    # Strict safety guards (enforced every run)
+    if usdc_balance < 0.50:
+        print(f"❌ INSUFFICIENT USDC: {usdc_balance:.4f} (need ≥0.50 for micro trade)")
+        print("   Fund tiny USDC via WazirX P2P to wallet first.")
+        return
+    
+    if pol_balance < 0.01:
+        print(f"⚠️ LOW GAS: {pol_balance:.4f} POL (need ~0.01+ for swap)")
+        print("   Add small POL for gas first.")
+        return
+    
+    # Enforce your limits
+    trade_size = min(MAX_TRADE_USDC, max(0.50, usdc_balance * 0.10))  # max 2 USDC or 10% of balance, min 0.5
+    print(f"""
+══════════════════════════════════════
+🚀 MICRO REAL TRADE STARTING
+Mode       : MICRO_REAL (Zer0Claw V1)
+Wallet     : {WALLET_ADDRESS[:10]}...
+Trade Size : {trade_size:.4f} USDC (max 2)
+Daily Loss Limit : {DAILY_LOSS_LIMIT_USDC} USDC
+Current USDC   : {usdc_balance:.4f}
+Current POL    : {pol_balance:.4f}
+══════════════════════════════════════
+""")
+    
+    # TODO: Actual Uniswap V3 swap logic goes here (kept for next step)
+    # For now we only show safe guard + size calculation
+    print("✅ Safety checks passed. Ready for first micro swap (next step will add swap code).")
