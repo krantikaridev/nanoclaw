@@ -11,3 +11,5 @@ env.bak/
 venv.bak/
 xwatcher/xwatcher_env/
 .venv/
+.env
+*.env
