@@ -969,3 +969,33 @@ Executing real small USDC → WETH swap on Uniswap V3...
 Check PolygonScan for wallet 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA now.
 Estimated short-term P&L: +$0.12 USDC
 === Real Trade Cron Finished at Sun Apr  5 16:00:05 UTC 2026 ===
+=== Real Trade Cron Started at Sun Apr  5 20:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 10.8800 | POL (gas): 5.7099
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Sun Apr  5 20:00:05 UTC 2026 ===
+=== Real Trade Cron Started at Mon Apr  6 00:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 10.8800 | POL (gas): 5.7099
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Mon Apr  6 00:00:04 UTC 2026 ===
+=== Real Trade Cron Started at Mon Apr  6 04:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 10.8800 | POL (gas): 5.7099
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Mon Apr  6 04:00:05 UTC 2026 ===
+=== Real Trade Cron Started at Mon Apr  6 08:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 10.8800 | POL (gas): 5.7099
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Mon Apr  6 08:00:05 UTC 2026 ===
+=== Real Trade Cron Started at Mon Apr  6 12:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 10.8800 | POL (gas): 5.7099
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Mon Apr  6 12:00:04 UTC 2026 ===
