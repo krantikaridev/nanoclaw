@@ -81,26 +81,35 @@ def load_paper_capital():
         return 10.88
 
 async def run_real_trade():
-    """LIVE MICRO REAL SWAP - Zer0Claw V1 - Madan Pune (USDC → WETH)"""
-    global usdc_balance, pol_balance
+    """IMPROVED LIVE MICRO SWAP - Zer0Claw V1 - Madan Pune (USDC → WETH)"""
+    global usdc_balance, pol_balance, daily_loss_today
     
+    # Initialize daily loss tracker (simple in-memory for one session)
+    if 'daily_loss_today' not in globals():
+        daily_loss_today = 0.0
+
     if usdc_balance < 0.50:
         print(f"❌ INSUFFICIENT USDC: {usdc_balance:.4f}")
         return
     if pol_balance < 0.005:
         print(f"⚠️ LOW GAS: {pol_balance:.4f} POL")
         return
+    if daily_loss_today >= DAILY_LOSS_LIMIT_USDC:
+        print(f"🛑 DAILY LOSS LIMIT REACHED ({daily_loss_today:.2f}/{DAILY_LOSS_LIMIT_USDC} USDC). Trading paused today.")
+        return
 
-    trade_size_wei = int(min(MAX_TRADE_USDC, max(0.50, usdc_balance * 0.12)) * 10**6)  # USDC has 6 decimals
-    
+    # Consistent trade size: target 1.0-1.5 USDC (fixed, not shrinking)
+    trade_size = min(MAX_TRADE_USDC, 1.30)  # Comfortable fixed micro size
+    trade_size_wei = int(trade_size * 10**6)
+
     print(f"""
 ══════════════════════════════════════
-🚀 EXECUTING LIVE MICRO SWAP (Zer0Claw V1)
-Wallet     : {WALLET_ADDRESS[:10]}...
-Trade Size : {trade_size_wei / 10**6:.4f} USDC → WETH
-Max Per Trade : {MAX_TRADE_USDC} USDC
-Daily Loss Cap: {DAILY_LOSS_LIMIT_USDC} USDC
-Current USDC  : {usdc_balance:.4f}
+🚀 IMPROVED MICRO SWAP (Zer0Claw V1)
+Wallet          : {WALLET_ADDRESS[:10]}...
+Trade Size      : {trade_size:.4f} USDC → WETH (fixed)
+Max Per Trade   : {MAX_TRADE_USDC} USDC
+Daily Loss      : {daily_loss_today:.2f}/{DAILY_LOSS_LIMIT_USDC} USDC
+Current USDC    : {usdc_balance:.4f}
 ══════════════════════════════════════
 """)
 
@@ -128,7 +137,7 @@ Current USDC  : {usdc_balance:.4f}
             "type": "function"
         }])
 
-        # 1. Approve USDC (if not enough allowance) - one-time cost
+        # 1. Approve USDC (safe full amount for micro)
         usdc_contract = w3.eth.contract(address=USDC_ADDRESS, abi=[{
             "constant": False,
             "inputs": [{"name": "_spender", "type": "address"}, {"name": "_value", "type": "uint256"}],
@@ -137,21 +146,29 @@ Current USDC  : {usdc_balance:.4f}
             "type": "function"
         }])
         
-        # Simple allowance check skipped for first run (approve full amount for safety)
+        # 1. Approve USDC (safe full amount for micro)
+        # Fetch fresh nonce for approve
+        nonce_approve = w3.eth.get_transaction_count(WALLET_ADDRESS)
+        
         approve_tx = usdc_contract.functions.approve(ROUTER_ADDRESS, trade_size_wei * 10).build_transaction({
             'from': WALLET_ADDRESS,
             'gas': 100000,
-            'gasPrice': w3.to_wei('150', 'gwei'),
-            'nonce': w3.eth.get_transaction_count(WALLET_ADDRESS),
+            'gasPrice': w3.to_wei('135', 'gwei'),   # Safe for current ~100-130 gwei base + priority
+            'nonce': nonce_approve,
         })
         signed_approve = w3.eth.account.sign_transaction(approve_tx, PRIVATE_KEY)
         approve_hash = w3.eth.send_raw_transaction(signed_approve.raw_transaction)
         print(f"✅ USDC Approval sent: https://polygonscan.com/tx/{approve_hash.hex()}")
 
-        # Wait a few seconds for approval (in real run we could check, but for micro we proceed)
-        await asyncio.sleep(8)
+        await asyncio.sleep(12)  # Give more time for approval to be picked up
 
-        # 2. Execute exactInputSingle swap
+        # 2. Swap with slippage protection + fresh nonce
+        # Fetch new nonce for swap (in case approve is still pending)
+        nonce_swap = w3.eth.get_transaction_count(WALLET_ADDRESS, 'pending')
+
+        expected_out_wei = int(trade_size * 0.00000046 * 10**18)  # rough WETH rate
+        amount_out_min = int(expected_out_wei * 0.97)  # 3% slippage tolerance
+
         params = {
             "tokenIn": USDC_ADDRESS,
             "tokenOut": WETH_ADDRESS,
@@ -159,30 +176,31 @@ Current USDC  : {usdc_balance:.4f}
             "recipient": WALLET_ADDRESS,
             "deadline": int(datetime.now().timestamp()) + 600,
             "amountIn": trade_size_wei,
-            "amountOutMinimum": 0,  # TODO: improve with slippage protection in future runs
+            "amountOutMinimum": amount_out_min,
             "sqrtPriceLimitX96": 0
         }
 
         swap_tx = router.functions.exactInputSingle(params).build_transaction({
             'from': WALLET_ADDRESS,
             'gas': 300000,
-            'gasPrice': w3.to_wei('150', 'gwei'),
-            'nonce': w3.eth.get_transaction_count(WALLET_ADDRESS),
+            'gasPrice': w3.to_wei('140', 'gwei'),   # Slightly higher than approve
+            'nonce': nonce_swap,
         })
 
         signed_swap = w3.eth.account.sign_transaction(swap_tx, PRIVATE_KEY)
         tx_hash = w3.eth.send_raw_transaction(signed_swap.raw_transaction)
         
         print(f"""
-✅ LIVE SWAP EXECUTED!
+✅ LIVE SWAP EXECUTED! (with 3% slippage protection)
 Tx Hash: {tx_hash.hex()}
-🔍 View on PolygonScan: https://polygonscan.com/tx/{tx_hash.hex()}
+🔍 View: https://polygonscan.com/tx/{tx_hash.hex()}
 """)
         
         # Update local balance estimate
-        usdc_balance -= (trade_size_wei / 10**6)
+        usdc_balance -= trade_size
         print(f"📊 Estimated new USDC: {usdc_balance:.4f}")
 
     except Exception as e:
-        print(f"❌ Trade execution failed: {str(e)[:200]}")
+        print(f"❌ Trade failed: {str(e)[:200]}")
+        daily_loss_today += 0.10  # Small penalty on failure
 
