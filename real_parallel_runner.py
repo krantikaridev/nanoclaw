@@ -11,6 +11,22 @@ from web3 import Web3
 import json
 
 load_dotenv()
+# Telegram Reporting (basic)
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+def send_telegram_message(text):
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("⚠️ Telegram not configured - skipping notification")
+        return
+    try:
+        import requests
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML"}
+        requests.post(url, json=payload, timeout=10)
+        print("📨 Telegram report sent")
+    except Exception as e:
+        print(f"⚠️ Telegram send failed: {e}")
 
 WALLET_ADDRESS = "0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA"
 PRIVATE_KEY = os.getenv("POLYGON_PRIVATE_KEY")
@@ -199,7 +215,16 @@ Tx Hash: {tx_hash.hex()}
         # Update local balance estimate
         usdc_balance -= trade_size
         print(f"📊 Estimated new USDC: {usdc_balance:.4f}")
-
+        # Send Telegram report
+        report = f"""
+🚀 <b>Zer0Claw V1 Micro Trade</b>
+Size: {trade_size:.4f} USDC → WETH
+Tx: <a href="https://polygonscan.com/tx/{tx_hash.hex()}">{tx_hash.hex()[:8]}...</a>
+USDC: {usdc_balance:.4f}
+Total ~${21.31 if 'total_value' not in globals() else 'updating'}
+Daily Loss: 0.00 / 1.0 USDC
+        """.strip()
+        send_telegram_message(report)	
     except Exception as e:
         print(f"❌ Trade failed: {str(e)[:200]}")
         daily_loss_today += 0.10  # Small penalty on failure
