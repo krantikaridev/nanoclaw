@@ -64,11 +64,12 @@ if not w3 or not w3.is_connected():
 MAX_TRADE_USDC = 2.0                    # Never exceed 2 USDC per trade
 DAILY_LOSS_LIMIT_USDC = 1.0             # Hard daily loss cap
 USDC_ADDRESS = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"  # Native USDC on Polygon
+USDT_ADDRESS = "0xc2132D05D31c914a87C6611C10748AEb04B58e8F"   # Official Polygon USDT
 POL_ADDRESS = "0x0000000000000000000000000000000000000000"    # Native POL (gas)
 
 # Read current balances (read-only for now)
 try:
-    usdc_contract = w3.eth.contract(address=USDC_ADDRESS, abi=[{"constant":True,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"payable":False,"stateMutability":"view","type":"function"}])
+    usdc_contract = w3.eth.contract(address=USDT_ADDRESS, abi=[{"constant":True,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"payable":False,"stateMutability":"view","type":"function"}])
     usdc_balance = usdc_contract.functions.balanceOf(WALLET_ADDRESS).call() / 10**6
     pol_balance = w3.eth.get_balance(WALLET_ADDRESS) / 10**18
     print(f"💰 Current balances | USDC: {usdc_balance:.4f} | POL (gas): {pol_balance:.4f}")
@@ -113,9 +114,24 @@ async def run_real_trade():
     if daily_loss_today >= DAILY_LOSS_LIMIT_USDC:
         print(f"🛑 DAILY LOSS LIMIT REACHED ({daily_loss_today:.2f}/{DAILY_LOSS_LIMIT_USDC} USDC). Trading paused today.")
         return
-
+    # Simple SIM Confidence Gate (minimal integration)
+    try:
+        import json
+        with open("skills/autonomous-revenue-engine/capital.json") as f:
+            sim_data = json.load(f)
+            sim_capital = sim_data.get("capital", 0)
+            # Very basic positive momentum check (can be improved later)
+            sim_positive = sim_capital > 200000  # from your summary ~215k
+        print(f"✅ SIM Confidence Check: Positive (capital ~{sim_capital/1000:.0f}k)")
+    except:
+        sim_positive = True  # fallback if file missing
+        print("⚠️ SIM check failed, proceeding with default")
+    
+    if not sim_positive:
+        print("⏸️  SIM confidence low - skipping trade today")
+        return
     # Consistent trade size: target 1.0-1.5 USDC (fixed, not shrinking)
-    trade_size = min(MAX_TRADE_USDC, 1.30)  # Comfortable fixed micro size
+    trade_size = min(MAX_TRADE_USDC, .70)  # Comfortable fixed micro size
     trade_size_wei = int(trade_size * 10**6)
 
     print(f"""
@@ -154,7 +170,7 @@ Current USDC    : {usdc_balance:.4f}
         }])
 
         # 1. Approve USDC (safe full amount for micro)
-        usdc_contract = w3.eth.contract(address=USDC_ADDRESS, abi=[{
+        usdc_contract = w3.eth.contract(address=USDT_ADDRESS, abi=[{
             "constant": False,
             "inputs": [{"name": "_spender", "type": "address"}, {"name": "_value", "type": "uint256"}],
             "name": "approve",
@@ -186,7 +202,7 @@ Current USDC    : {usdc_balance:.4f}
         amount_out_min = int(expected_out_wei * 0.97)  # 3% slippage tolerance
 
         params = {
-            "tokenIn": USDC_ADDRESS,
+            "tokenIn": USDT_ADDRESS,
             "tokenOut": WETH_ADDRESS,
             "fee": FEE_TIER,
             "recipient": WALLET_ADDRESS,

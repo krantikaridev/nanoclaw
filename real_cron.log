@@ -1035,3 +1035,225 @@ Estimated short-term P&L: +$0.12 USDC
 💰 Current balances | USDC: 1.4464 | POL (gas): 5.3167
 🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
 === Real Trade Cron Finished at Tue Apr  7 12:00:05 UTC 2026 ===
+=== Real Trade Cron Started at Tue Apr  7 16:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Tue Apr  7 16:00:04 UTC 2026 ===
+=== Real Trade Cron Started at Tue Apr  7 20:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Tue Apr  7 20:00:04 UTC 2026 ===
+=== Real Trade Cron Started at Wed Apr  8 00:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Wed Apr  8 00:00:05 UTC 2026 ===
+=== Real Trade Cron Started at Wed Apr  8 04:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Wed Apr  8 04:00:04 UTC 2026 ===
+=== Real Trade Cron Started at Wed Apr  8 08:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Wed Apr  8 08:00:05 UTC 2026 ===
+=== Real Trade Cron Started at Wed Apr  8 12:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Wed Apr  8 12:00:07 UTC 2026 ===
+=== Real Trade Cron Started at Wed Apr  8 16:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Wed Apr  8 16:00:06 UTC 2026 ===
+=== Real Trade Cron Started at Wed Apr  8 20:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Wed Apr  8 20:00:04 UTC 2026 ===
+=== Real Trade Cron Started at Thu Apr  9 00:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Thu Apr  9 00:00:05 UTC 2026 ===
+=== Real Trade Cron Started at Thu Apr  9 04:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Thu Apr  9 04:00:05 UTC 2026 ===
+=== Real Trade Cron Started at Thu Apr  9 08:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Thu Apr  9 08:00:06 UTC 2026 ===
+=== Real Trade Cron Started at Thu Apr  9 12:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Thu Apr  9 12:00:04 UTC 2026 ===
+=== Real Trade Cron Started at Thu Apr  9 16:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Thu Apr  9 16:00:05 UTC 2026 ===
+=== Real Trade Cron Started at Thu Apr  9 20:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Thu Apr  9 20:00:04 UTC 2026 ===
+=== Real Trade Cron Started at Fri Apr 10 00:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Fri Apr 10 00:00:06 UTC 2026 ===
+=== Real Trade Cron Started at Fri Apr 10 04:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Fri Apr 10 04:00:05 UTC 2026 ===
+=== Real Trade Cron Started at Fri Apr 10 08:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Fri Apr 10 08:00:06 UTC 2026 ===
+=== Real Trade Cron Started at Fri Apr 10 12:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Fri Apr 10 12:00:06 UTC 2026 ===
+=== Real Trade Cron Started at Fri Apr 10 16:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Fri Apr 10 16:00:04 UTC 2026 ===
+=== Real Trade Cron Started at Fri Apr 10 20:00:02 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Fri Apr 10 20:00:05 UTC 2026 ===
+=== Real Trade Cron Started at Sat Apr 11 00:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Sat Apr 11 00:00:05 UTC 2026 ===
+=== Real Trade Cron Started at Sat Apr 11 04:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Sat Apr 11 04:00:06 UTC 2026 ===
+=== Real Trade Cron Started at Sat Apr 11 08:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Sat Apr 11 08:00:05 UTC 2026 ===
+=== Real Trade Cron Started at Sat Apr 11 12:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Sat Apr 11 12:00:05 UTC 2026 ===
+=== Real Trade Cron Started at Sat Apr 11 16:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Sat Apr 11 16:00:05 UTC 2026 ===
+=== Real Trade Cron Started at Sat Apr 11 20:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Sat Apr 11 20:00:04 UTC 2026 ===
+=== Real Trade Cron Started at Sun Apr 12 00:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Sun Apr 12 00:00:05 UTC 2026 ===
+=== Real Trade Cron Started at Sun Apr 12 04:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Sun Apr 12 04:00:06 UTC 2026 ===
+=== Real Trade Cron Started at Sun Apr 12 08:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Sun Apr 12 08:00:08 UTC 2026 ===
+=== Real Trade Cron Started at Sun Apr 12 12:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Sun Apr 12 12:00:05 UTC 2026 ===
+=== Real Trade Cron Started at Sun Apr 12 16:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Sun Apr 12 16:00:05 UTC 2026 ===
+=== Real Trade Cron Started at Sun Apr 12 20:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Sun Apr 12 20:00:06 UTC 2026 ===
+=== Real Trade Cron Started at Mon Apr 13 00:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Mon Apr 13 00:00:05 UTC 2026 ===
+=== Real Trade Cron Started at Mon Apr 13 04:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Mon Apr 13 04:00:05 UTC 2026 ===
+=== Real Trade Cron Started at Mon Apr 13 08:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Mon Apr 13 08:00:05 UTC 2026 ===
+=== Real Trade Cron Started at Mon Apr 13 12:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 0.1464 | POL (gas): 5.2949
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Mon Apr 13 12:00:06 UTC 2026 ===
+=== Real Trade Cron Started at Mon Apr 13 16:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 35.5600 | POL (gas): 5.2714
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Mon Apr 13 16:00:05 UTC 2026 ===
