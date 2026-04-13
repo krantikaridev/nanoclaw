@@ -46,8 +46,9 @@ async def run_real_trade():
     if 'daily_loss_today' not in globals():
         daily_loss_today = 0.0
 
-    # Correct USDT balance check
+        # Correct USDT balance check (same reliable method as main file)
     try:
+        USDT_ADDRESS = "0xc2132D05D31c914a87C6611C10748AEb04B58e8F"
         usdt_contract = w3.eth.contract(address=USDT_ADDRESS, abi=[{
             "constant": True,
             "inputs": [{"name": "_owner", "type": "address"}],
@@ -58,9 +59,11 @@ async def run_real_trade():
             "type": "function"
         }])
         balance = usdt_contract.functions.balanceOf(WALLET_ADDRESS).call() / 10**6
-    except:
+        print(f"✅ USDT balance read successfully: {balance:.4f}")
+    except Exception as e:
+        print(f"❌ Balance check error: {e}")
         balance = 0
-
+        
     if balance < 0.30:
         print(f"❌ INSUFFICIENT USDT: {balance:.4f}")
         return
