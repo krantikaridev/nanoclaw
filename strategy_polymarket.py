@@ -45,11 +45,22 @@ async def run_real_trade():
 
     # Simple balance check (USDT)
     try:
-        usdt_contract = w3.eth.contract(address=USDT_ADDRESS, abi=[{"constant":True,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"payable":False,"stateMutability":"view","type":"function"}])
+            # Correct USDT balance check
+    try:
+        USDT_ADDRESS = "0xc2132D05D31c914a87C6611C10748AEb04B58e8F"
+        usdt_contract = w3.eth.contract(address=USDT_ADDRESS, abi=[{
+            "constant": True,
+            "inputs": [{"name": "_owner", "type": "address"}],
+            "name": "balanceOf",
+            "outputs": [{"name": "balance", "type": "uint256"}],
+            "payable": False,
+            "stateMutability": "view",
+            "type": "function"
+        }])
         balance = usdt_contract.functions.balanceOf(WALLET_ADDRESS).call() / 10**6
     except:
         balance = 0
-
+        
     if balance < 0.30:
         print("❌ INSUFFICIENT USDT")
         return
