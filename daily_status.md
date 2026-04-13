@@ -16,3 +16,8 @@ Trades today: 7
 Portfolio: 1.31 (+3.27%)
 USDC: 2.746 | WETH: 0.00844 (~8.07)
 Trades tonight: 5 (total many today)
+=== DAILY SNAPSHOT Mon Apr 13 16:19:08 UTC 2026 ===
+Portfolio: ~7
+USDT: ~34.86
+SIM capital: ~343k (positive)
+Strategy: Baseline + SIM confidence gate
