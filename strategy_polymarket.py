@@ -46,7 +46,6 @@ async def run_real_trade():
     # Simple balance check (USDT)
     try:
             # Correct USDT balance check
-    try:
         USDT_ADDRESS = "0xc2132D05D31c914a87C6611C10748AEb04B58e8F"
         usdt_contract = w3.eth.contract(address=USDT_ADDRESS, abi=[{
             "constant": True,
