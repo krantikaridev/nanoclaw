@@ -21,3 +21,6 @@ Portfolio: ~7
 USDT: ~34.86
 SIM capital: ~343k (positive)
 Strategy: Baseline + SIM confidence gate
+=== DAY END SNAPSHOT Mon Apr 13 18:07:44 UTC 2026 ===
+Portfolio: 9.01 | USDT: 34.36
+Strategy files: real_parallel_runner.py + strategy_polymarket.py
