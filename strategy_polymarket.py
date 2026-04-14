@@ -50,7 +50,7 @@ Balance    : {balance:.4f} USDT
 ══════════════════════════════════════
 """)
 
-    # Proven swap logic (same as main file)
+    # Proven swap logic
     try:
         FEE_TIER = 500
         router = w3.eth.contract(address=ROUTER_ADDRESS, abi=[{
