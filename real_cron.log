@@ -1257,3 +1257,15 @@ Estimated short-term P&L: +$0.12 USDC
 💰 Current balances | USDC: 35.5600 | POL (gas): 5.2714
 🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
 === Real Trade Cron Finished at Mon Apr 13 16:00:05 UTC 2026 ===
+=== Real Trade Cron Started at Mon Apr 13 20:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 34.3600 | POL (gas): 5.2291
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Mon Apr 13 20:00:05 UTC 2026 ===
+=== Real Trade Cron Started at Tue Apr 14 00:00:01 UTC 2026 ===
+✅ Private key loaded — REAL on-chain swap enabled
+✅ MAINNET RPC connected: True | URL: https://polygon.drpc.org
+💰 Current balances | USDC: 34.3600 | POL (gas): 5.2291
+🛡️  MICRO REAL MODE ACTIVE | Max trade: 2.0 USDC | Daily loss limit: 1.0 USDC
+=== Real Trade Cron Finished at Tue Apr 14 00:00:05 UTC 2026 ===
