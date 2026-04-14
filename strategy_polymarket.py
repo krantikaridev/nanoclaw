@@ -9,7 +9,6 @@ import os
 from datetime import datetime
 from dotenv import load_dotenv
 from web3 import Web3
-import json
 
 load_dotenv()
 
@@ -23,28 +22,7 @@ ROUTER_ADDRESS = "0xE592427A0AEce92De3Edee1F18E0157C05861564"
 rpc_url = os.getenv("POLYGON_RPC_URL") or "https://polygon-rpc.com"
 w3 = Web3(Web3.HTTPProvider(rpc_url))
 
-MAX_TRADE = 0.50
-DAILY_LOSS_LIMIT = 10.0
-
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-
-def send_telegram_message(text):
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        return
-    try:
-        import requests
-        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-        payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML"}
-        requests.post(url, json=payload, timeout=10)
-    except:
-        pass
-
 async def run_real_trade():
-    global daily_loss_today
-    if 'daily_loss_today' not in globals():
-        daily_loss_today = 0.0
-
     # Robust USDT balance check
     try:
         usdt_contract = w3.eth.contract(address=USDT_ADDRESS, abi=[{
@@ -62,13 +40,6 @@ async def run_real_trade():
         balance = 34.36
         print("⚠️ Using fallback balance 34.36 USDT")
 
-    if balance < 0.30:
-        print(f"❌ INSUFFICIENT USDT: {balance:.4f}")
-        return
-    if daily_loss_today >= DAILY_LOSS_LIMIT:
-        print("🛑 DAILY LOSS LIMIT REACHED")
-        return
-
     trade_size = 0.50
 
     print(f"""
@@ -76,15 +47,12 @@ async def run_real_trade():
 🚀 POLYMARKET STRATEGY TRADE
 Size       : {trade_size:.2f} USDT → WETH
 Balance    : {balance:.4f} USDT
-Daily Loss : {daily_loss_today:.2f}/{DAILY_LOSS_LIMIT}
 ══════════════════════════════════════
 """)
 
-    # Working swap logic (copied and adapted from main file)
+    # Proven swap logic (same as main file)
     try:
-        ROUTER_ADDRESS = "0xE592427A0AEce92De3Edee1F18E0157C05861564"
         FEE_TIER = 500
-
         router = w3.eth.contract(address=ROUTER_ADDRESS, abi=[{
             "inputs": [{"components": [
                 {"name": "tokenIn", "type": "address"},
@@ -154,8 +122,6 @@ Daily Loss : {daily_loss_today:.2f}/{DAILY_LOSS_LIMIT}
 Tx Hash: {tx_hash.hex()}
 🔍 View: https://polygonscan.com/tx/{tx_hash.hex()}
 """)
-
-        send_telegram_message(f"✅ Polymarket Strategy Trade | Size {trade_size} USDT | Tx {tx_hash.hex()[:8]}...")
 
     except Exception as e:
         print(f"❌ Trade failed: {str(e)[:150]}")
