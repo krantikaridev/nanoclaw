@@ -70,9 +70,12 @@ async def run_real_trade():
 
     print(f"""
 ══════════════════════════════════════
-🚀 v2 POLYMARKET TRADE (Edge: {edge_found}%)
+🚀 v2 TRADE (SIM-Aligned)
+Strategy : {"Baseline" if "baseline" in ACTIVE_STRATEGIES else "Polymarket"}
 Wallet : {WALLET_ADDRESS[:10]}...
-Trade Size : {TRADE_SIZE_USDT:.2f} USDT → WETH
+Trade Size : {TRADE_SIZE_USDT:.2f} USDT → WETH   ← from config_real.py
+Daily Loss : {daily_loss_today:.2f}/{MAX_DAILY_LOSS_USDT} USDT
+Min Edge  : {MIN_EDGE_PCT}%
 ══════════════════════════════════════
 """)
 
