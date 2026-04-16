@@ -63,19 +63,21 @@ async def run_real_trade():
         print("⏸️ SIM confidence low - skipping baseline trade")
         return
 
+       trade_size = TRADE_SIZE_USDT   # Force config value here
+
     print(f"""
 ══════════════════════════════════════
 🚀 v2 TRADE (SIM-Aligned)
 Strategy : {"Baseline" if "baseline" in ACTIVE_STRATEGIES else "Polymarket"}
 Wallet : {WALLET_ADDRESS[:10]}...
-Trade Size : {TRADE_SIZE_USDT:.2f} USDT → WETH   ← from config_real.py
+Trade Size : {trade_size:.2f} USDT → WETH   ← from config_real.py (forced)
 Daily Loss : {daily_loss_today:.2f}/{MAX_DAILY_LOSS_USDT} USDT
 Min Edge  : {MIN_EDGE_PCT}%
 ══════════════════════════════════════
 """)
 
     from swap_utils import execute_usdt_to_weth_swap
-    tx_hash = await execute_usdt_to_weth_swap(w3, WALLET_ADDRESS, PRIVATE_KEY, TRADE_SIZE_USDT)
+    tx_hash = await execute_usdt_to_weth_swap(w3, WALLET_ADDRESS, PRIVATE_KEY, trade_size)
 
     if tx_hash:
         daily_loss_today += 0.08  # approximate fee
