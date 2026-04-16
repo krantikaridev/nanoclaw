@@ -62,70 +62,28 @@ async def run_real_trade():
         print("⏸️ SIM confidence low - skipping Polymarket trade")
         return
 
-    # Simple Polymarket scan placeholder (will be enhanced with Gamma later)
-    print(f"""
-══════════════════════════════════════
-🚀 v2 POLYMARKET STRATEGY
-Wallet : {WALLET_ADDRESS[:10]}...
-Trade Size : {TRADE_SIZE_USDT:.2f} USDT → WETH
-Min Edge : {MIN_EDGE_PCT}% 
-══════════════════════════════════════
-""")
-
-    # For now: simulate edge check (replace with real Gamma call in next iteration)
-    edge_found = 4.2  # placeholder - we will make this dynamic
+    # Placeholder edge check (will connect to Gamma/API later)
+    edge_found = 4.2  # TODO: replace with real Gamma scan
     if edge_found < MIN_EDGE_PCT:
         print(f"⏸️ Edge too low ({edge_found}%) - skipping trade")
         return
 
-    trade_size = TRADE_SIZE_USDT
-    print(f"🚀 Executing Polymarket-backed trade of {trade_size:.2f} USDT")
+    print(f"""
+══════════════════════════════════════
+🚀 v2 POLYMARKET TRADE (Edge: {edge_found}%)
+Wallet : {WALLET_ADDRESS[:10]}...
+Trade Size : {TRADE_SIZE_USDT:.2f} USDT → WETH
+══════════════════════════════════════
+""")
 
-    try:
-        # Same swap logic as runner (we can extract to shared file later)
-        usdt_contract = w3.eth.contract(address=USDT_ADDRESS, abi=[{"constant":True,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"payable":False,"stateMutability":"view","type":"function"}])
-        usdt_balance = usdt_contract.functions.balanceOf(WALLET_ADDRESS).call() / 10**6
-        if usdt_balance < trade_size:
-            print(f"❌ INSUFFICIENT USDT")
-            return
+    from swap_utils import execute_usdt_to_weth_swap
+    tx_hash = await execute_usdt_to_weth_swap(w3, WALLET_ADDRESS, PRIVATE_KEY, TRADE_SIZE_USDT)
 
-        router = w3.eth.contract(address=ROUTER_ADDRESS, abi=[{"inputs":[{"components":[{"name":"tokenIn","type":"address"},{"name":"tokenOut","type":"address"},{"name":"fee","type":"uint24"},{"name":"recipient","type":"address"},{"name":"deadline","type":"uint256"},{"name":"amountIn","type":"uint256"},{"name":"amountOutMinimum","type":"uint256"},{"name":"sqrtPriceLimitX96","type":"uint160"}],"name":"params","type":"tuple"}],"name":"exactInputSingle","outputs":[{"name":"amountOut","type":"uint256"}],"stateMutability":"payable","type":"function"}])
-
-        # Approve + Swap (same as improved runner)
-        approve_tx = usdt_contract.functions.approve(ROUTER_ADDRESS, int(trade_size * 10**6 * 10)).build_transaction({
-            'from': WALLET_ADDRESS,
-            'gas': 150000,
-            'gasPrice': w3.to_wei('140', 'gwei'),
-            'nonce': w3.eth.get_transaction_count(WALLET_ADDRESS),
-        })
-        signed_approve = w3.eth.account.sign_transaction(approve_tx, PRIVATE_KEY)
-        w3.eth.send_raw_transaction(signed_approve.raw_transaction)
-        await asyncio.sleep(8)
-
-        params = {
-            "tokenIn": USDT_ADDRESS,
-            "tokenOut": WETH_ADDRESS,
-            "fee": 500,
-            "recipient": WALLET_ADDRESS,
-            "deadline": int(datetime.now().timestamp()) + 600,
-            "amountIn": int(trade_size * 10**6),
-            "amountOutMinimum": int(trade_size * 10**6 * 0.96),
-            "sqrtPriceLimitX96": 0
-        }
-        swap_tx = router.functions.exactInputSingle(params).build_transaction({
-            'from': WALLET_ADDRESS,
-            'gas': 300000,
-            'gasPrice': w3.to_wei('140', 'gwei'),
-            'nonce': w3.eth.get_transaction_count(WALLET_ADDRESS, 'pending'),
-        })
-        signed_swap = w3.eth.account.sign_transaction(swap_tx, PRIVATE_KEY)
-        tx_hash = w3.eth.send_raw_transaction(signed_swap.raw_transaction)
-
-        print(f"✅ Polymarket trade executed! Tx: {tx_hash.hex()}")
-        daily_loss_today += 0.08  # approximate fee
-
-    except Exception as e:
-        print(f"❌ Trade failed: {e}")
+    if tx_hash:
+        daily_loss_today += 0.08
+        print(f"✅ Polymarket trade completed. Tx: {tx_hash}")
+    else:
+        print("❌ Polymarket trade failed")
 
 if __name__ == "__main__":
     asyncio.run(run_real_trade())
