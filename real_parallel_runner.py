@@ -16,6 +16,7 @@ load_dotenv()
 # Load config
 try:
     from config_real import TRADE_SIZE_USDT, MAX_DAILY_LOSS_USDT, MIN_EDGE_PCT, SIM_CONFIDENCE_THRESHOLD, ACTIVE_STRATEGIES, WALLET_ADDRESS, RPC_URL
+    print(f"✅ Config loaded - Trade Size: {trade_size:.2f} USDT")
 except ImportError:
     print("❌ config_real.py not found. Using defaults.")
     TRADE_SIZE_USDT = 2.0
