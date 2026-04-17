@@ -62,31 +62,33 @@ async def run_real_trade():
         print("⏸️ SIM confidence low - skipping Polymarket trade")
         return
 
-    # Placeholder edge check (will connect to Gamma/API later)
-    edge_found = 4.2  # TODO: replace with real Gamma scan
-    if edge_found < MIN_EDGE_PCT:
-        print(f"⏸️ Edge too low ({edge_found}%) - skipping trade")
-        return
+    # Improved Edge Check (placeholder for real Gamma/API)
+    # In future we can call real Gamma analyzer here
+    edge_found = 4.2  # TODO: Replace with real Gamma scan or X-watcher signal strength
+    reason = "Placeholder edge (will be replaced with real Gamma)"
 
-       trade_size = TRADE_SIZE_USDT   # Force config value here
+    if edge_found < MIN_EDGE_PCT:
+        print(f"⏸️ Edge too low ({edge_found:.1f}% < {MIN_EDGE_PCT}%) - skipping trade | Reason: {reason}")
+        return
 
     print(f"""
 ══════════════════════════════════════
-🚀 v2 TRADE (SIM-Aligned)
-Strategy : {"Baseline" if "baseline" in ACTIVE_STRATEGIES else "Polymarket"}
+🚀 v2 IMPROVED POLYMARKET TRADE
+Strategy : Polymarket
 Wallet : {WALLET_ADDRESS[:10]}...
-Trade Size : {trade_size:.2f} USDT → WETH   ← from config_real.py (forced)
+Trade Size : {TRADE_SIZE_USDT:.2f} USDT → WETH
+Edge Found : {edge_found:.1f}% (above threshold)
+Reason : {reason}
 Daily Loss : {daily_loss_today:.2f}/{MAX_DAILY_LOSS_USDT} USDT
-Min Edge  : {MIN_EDGE_PCT}%
 ══════════════════════════════════════
 """)
 
     from swap_utils import execute_usdt_to_weth_swap
-    tx_hash = await execute_usdt_to_weth_swap(w3, WALLET_ADDRESS, PRIVATE_KEY, trade_size)
+    tx_hash = await execute_usdt_to_weth_swap(w3, WALLET_ADDRESS, PRIVATE_KEY, TRADE_SIZE_USDT)
 
     if tx_hash:
         daily_loss_today += 0.08
-        print(f"✅ Polymarket trade completed. Tx: {tx_hash}")
+        print(f"✅ Polymarket trade completed successfully. Tx: {tx_hash}")
     else:
         print("❌ Polymarket trade failed")
 
