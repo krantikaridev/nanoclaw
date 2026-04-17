@@ -10,3 +10,9 @@ ACTIVE_STRATEGIES = ["baseline", "polymarket"]
 # Wallet & RPC
 WALLET_ADDRESS = "0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA"
 RPC_URL = "https://polygon.drpc.org"
+
+# Daily alternation to run only 2 strategies per day
+import datetime
+TODAY = datetime.date.today().weekday()  # 0 = Monday, 6 = Sunday
+RUN_BASELINE_TODAY = TODAY % 2 == 0      # Even days: run baseline
+RUN_POLYMARKET_TODAY = TODAY % 2 == 1    # Odd days: run polymarket
