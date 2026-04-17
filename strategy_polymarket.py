@@ -48,7 +48,7 @@ async def run_real_trade():
         print(f"🛑 DAILY LOSS LIMIT REACHED ({daily_loss_today:.2f}/{MAX_DAILY_LOSS_USDT} USDT). Trading paused today.")
         return
 
-    # SIM Alignment Check
+    # SIM Alignment + Daily Alternation Check
     try:
         with open("skills/autonomous-revenue-engine/capital.json") as f:
             sim_data = json.load(f)
@@ -58,8 +58,21 @@ async def run_real_trade():
     except:
         sim_positive = True
 
+    # Daily Alternation Logic
+    import datetime
+    today = datetime.date.today().weekday()
+    run_baseline_today = today % 2 == 0
+    run_polymarket_today = today % 2 == 1
+
+    if "baseline" in ACTIVE_STRATEGIES and not run_baseline_today:
+        print("⏸️ Today is Polymarket day - skipping baseline")
+        return
+    if "polymarket" in ACTIVE_STRATEGIES and not run_polymarket_today:
+        print("⏸️ Today is Baseline day - skipping Polymarket")
+        return
+
     if not sim_positive:
-        print("⏸️ SIM confidence low - skipping Polymarket trade")
+        print("⏸️ SIM confidence low - skipping trade")
         return
 
     # Improved Edge Check (placeholder for real Gamma/API)
