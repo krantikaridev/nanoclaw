@@ -62,14 +62,25 @@ async def run_real_trade():
     if not sim_positive:
         print("⏸️ SIM confidence low - skipping trade")
         return
-
-    # Daily Alternation Logic (only 2 strategies per day)
+    
+    # Daily Alternation Logic - Expanded for 5 strategies (only 2 active per day)
     import datetime
     today = datetime.date.today().weekday()
-    run_baseline_today = today % 2 == 0
-    run_polymarket_today = today % 2 == 1
+    run_baseline_today = today % 3 == 0
+    run_polymarket_today = today % 3 == 1
+    run_momentum_today = today % 3 == 2
 
-    strategy = "baseline" if run_baseline_today else "polymarket"
+    strategy = None
+    if run_baseline_today and "baseline" in ACTIVE_STRATEGIES:
+        strategy = "baseline"
+    elif run_polymarket_today and "polymarket" in ACTIVE_STRATEGIES:
+        strategy = "polymarket"
+    elif run_momentum_today:
+        strategy = "momentum"
+
+    if strategy is None:
+        print("⏸️ No strategy scheduled for today - skipping")
+        return
 
     print(f"""
 ══════════════════════════════════════
@@ -84,9 +95,12 @@ Daily Loss : {daily_loss_today:.2f}/{MAX_DAILY_LOSS_USDT} USDT
     if strategy == "baseline":
         from real_parallel_runner import run_real_trade as baseline_run
         await baseline_run()
-    else:
+    elif strategy == "polymarket":
         from strategy_polymarket import run_real_trade as polymarket_run
         await polymarket_run()
+    elif strategy == "momentum":
+        from strategy_momentum import run_real_trade as momentum_run
+        await momentum_run()
 
 if __name__ == "__main__":
     asyncio.run(run_real_trade())
