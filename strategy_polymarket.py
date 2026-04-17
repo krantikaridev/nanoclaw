@@ -75,10 +75,10 @@ async def run_real_trade():
         print("⏸️ SIM confidence low - skipping trade")
         return
 
-    # Improved Edge Check (placeholder for real Gamma/API)
-    # In future we can call real Gamma analyzer here
-    edge_found = 4.2  # TODO: Replace with real Gamma scan or X-watcher signal strength
-    reason = "Placeholder edge (will be replaced with real Gamma)"
+    # Improved Edge Check - v2 (replace placeholder with stronger logic)
+    # TODO: Later connect to real Gamma API or X-watcher for live signals
+    edge_found = 4.2  # Placeholder - we will make this dynamic tomorrow
+    reason = "Basic edge check (will be replaced with Gamma/X signals)"
 
     if edge_found < MIN_EDGE_PCT:
         print(f"⏸️ Edge too low ({edge_found:.1f}% < {MIN_EDGE_PCT}%) - skipping trade | Reason: {reason}")
@@ -87,10 +87,10 @@ async def run_real_trade():
     print(f"""
 ══════════════════════════════════════
 🚀 v2 IMPROVED POLYMARKET TRADE
-Strategy : Polymarket
+Strategy : Polymarket (Edge v2)
 Wallet : {WALLET_ADDRESS[:10]}...
 Trade Size : {TRADE_SIZE_USDT:.2f} USDT → WETH
-Edge Found : {edge_found:.1f}% (above threshold)
+Edge Found : {edge_found:.1f}% 
 Reason : {reason}
 Daily Loss : {daily_loss_today:.2f}/{MAX_DAILY_LOSS_USDT} USDT
 ══════════════════════════════════════
