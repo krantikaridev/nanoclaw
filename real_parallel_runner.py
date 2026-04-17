@@ -49,7 +49,7 @@ async def run_real_trade():
         print(f"🛑 DAILY LOSS LIMIT REACHED ({daily_loss_today:.2f}/{MAX_DAILY_LOSS_USDT} USDT). Trading paused today.")
         return
 
-        # SIM Alignment + Daily Alternation Check
+    # SIM Alignment Check
     try:
         with open("skills/autonomous-revenue-engine/capital.json") as f:
             sim_data = json.load(f)
@@ -59,43 +59,34 @@ async def run_real_trade():
     except:
         sim_positive = True
 
-    # Daily Alternation Logic
+    if not sim_positive:
+        print("⏸️ SIM confidence low - skipping trade")
+        return
+
+    # Daily Alternation Logic (only 2 strategies per day)
     import datetime
     today = datetime.date.today().weekday()
     run_baseline_today = today % 2 == 0
     run_polymarket_today = today % 2 == 1
 
-    if "baseline" in ACTIVE_STRATEGIES and not run_baseline_today:
-        print("⏸️ Today is Polymarket day - skipping baseline")
-        return
-    if "polymarket" in ACTIVE_STRATEGIES and not run_polymarket_today:
-        print("⏸️ Today is Baseline day - skipping Polymarket")
-        return
-
-    if not sim_positive:
-        print("⏸️ SIM confidence low - skipping trade")
-        return
-    trade_size = TRADE_SIZE_USDT   # Force config value here
+    strategy = "baseline" if run_baseline_today else "polymarket"
 
     print(f"""
 ══════════════════════════════════════
-🚀 v2 TRADE (SIM-Aligned)
-Strategy : {"Baseline" if "baseline" in ACTIVE_STRATEGIES else "Polymarket"}
+🚀 v2 ALTERNATING TRADE
+Strategy Today : {strategy.upper()}
 Wallet : {WALLET_ADDRESS[:10]}...
-Trade Size : {trade_size:.2f} USDT → WETH   ← from config_real.py (forced)
+Trade Size : {TRADE_SIZE_USDT:.2f} USDT → WETH
 Daily Loss : {daily_loss_today:.2f}/{MAX_DAILY_LOSS_USDT} USDT
-Min Edge  : {MIN_EDGE_PCT}%
 ══════════════════════════════════════
 """)
 
-    from swap_utils import execute_usdt_to_weth_swap
-    tx_hash = await execute_usdt_to_weth_swap(w3, WALLET_ADDRESS, PRIVATE_KEY, trade_size)
-
-    if tx_hash:
-        daily_loss_today += 0.08  # approximate fee
-        print(f"✅ Baseline trade completed. Tx: {tx_hash}")
+    if strategy == "baseline":
+        from real_parallel_runner import run_real_trade as baseline_run
+        await baseline_run()
     else:
-        print("❌ Baseline trade failed")
+        from strategy_polymarket import run_real_trade as polymarket_run
+        await polymarket_run()
 
 if __name__ == "__main__":
     asyncio.run(run_real_trade())
