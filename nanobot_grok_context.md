@@ -18,3 +18,10 @@ Next: Top up 3–5 POL manually, re-test, then set 6h cron for 4 larger cycles/d
 POL price ~$0.0895, WETH ~$2,360–$2,410, gas ~126–130 Gwei.
 === 19 Apr 2026 POL Withdrawal ===
 4.51 POL incoming from Binance (Tx 0xc9b9...6c5). Guardrails blocking until POL ≥3.0. Auto WETH→POL option available.
+=== 19 Apr 2026 Evening Update ===
+- POL topped up to 5.29
+- Telegram working
+- Cron set every 6 hours
+- clean_swap.py running with full guardrails + dynamic gas
+- Rebalance (WETH→USDT) attempted multiple times (pending confirmation)
+- Plan: Monitor morning, then add 1-2 more strategies (momentum/polymarket) if stable
