@@ -3,6 +3,7 @@ from web3 import Web3
 from dotenv import load_dotenv
 import os
 from datetime import datetime
+
 load_dotenv()
 
 WALLET = "0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA"
@@ -13,10 +14,10 @@ WETH = "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619"
 ROUTER = "0xE592427A0AEce92De3Edee1F18E0157C05861564"
 
 w3 = Web3(Web3.HTTPProvider(RPC))
-print("RPC:", w3.is_connected())
+print("RPC connected:", w3.is_connected())
 
 bal = w3.eth.contract(address=USDT, abi=[{"constant":True,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"payable":False,"stateMutability":"view","type":"function"}]).functions.balanceOf(WALLET).call() / 10**6
-print("Real USDT:", bal)
+print("Real USDT balance:", bal)
 
 async def swap():
     amount = 2_000_000
