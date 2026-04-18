@@ -7,7 +7,7 @@ load_dotenv()
 
 WALLET = "0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA"
 PRIVATE_KEY = os.getenv("POLYGON_PRIVATE_KEY")
-RPC = "https://rpc.ankr.com/polygon"
+RPC = "https://polygon.drpc.org"
 USDT = "0xc2132D05D31c914a87C6611C10748AEb04B58e8F"
 WETH = "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619"
 ROUTER = "0xE592427A0AEce92De3Edee1F18E0157C05861564"
@@ -21,9 +21,9 @@ print("Real USDT balance:", bal)
 async def swap():
     amount = 2_000_000
 
-    # Approve USDT to Router
-    usdt_contract = w3.eth.contract(address=USDT, abi=[{"inputs":[{"name":"spender","type":"address"},{"name":"amount","type":"uint256"}],"name":"approve","outputs":[{"name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"}])
-    approve_tx = usdt_contract.functions.approve(ROUTER, amount).build_transaction({
+    # 1. Approve USDT to Router
+    usdt = w3.eth.contract(address=USDT, abi=[{"inputs":[{"name":"spender","type":"address"},{"name":"amount","type":"uint256"}],"name":"approve","outputs":[{"name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"}])
+    approve_tx = usdt.functions.approve(ROUTER, amount).build_transaction({
         'from': WALLET,
         'gas': 100000,
         'gasPrice': w3.to_wei('400', 'gwei'),
@@ -33,7 +33,7 @@ async def swap():
     approve_hash = w3.eth.send_raw_transaction(signed_approve.raw_transaction)
     print("✅ Approve Tx:", approve_hash.hex())
 
-    # Swap
+    # 2. Execute swap
     router = w3.eth.contract(address=ROUTER, abi=[{"inputs":[{"components":[{"name":"tokenIn","type":"address"},{"name":"tokenOut","type":"address"},{"name":"fee","type":"uint24"},{"name":"recipient","type":"address"},{"name":"deadline","type":"uint256"},{"name":"amountIn","type":"uint256"},{"name":"amountOutMinimum","type":"uint256"},{"name":"sqrtPriceLimitX96","type":"uint160"}],"name":"params","type":"tuple"}],"name":"exactInputSingle","outputs":[{"name":"","type":"uint256"}],"stateMutability":"payable","type":"function"}])
 
     params = {
