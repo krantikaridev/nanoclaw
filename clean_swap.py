@@ -52,7 +52,20 @@ def get_current_gas_gwei():
 def get_pol_balance():
     pol_contract = "0x0000000000000000000000000000000000001010"  # POL native
     return w3.eth.get_balance(WALLET) / 10**18
-
+    
+def has_pending_transactions():
+    try:
+        pending_count = len(w3.eth.get_block('pending')['transactions'])  # rough check
+        # Better: check nonce difference
+        latest_nonce = w3.eth.get_transaction_count(WALLET, 'latest')
+        pending_nonce = w3.eth.get_transaction_count(WALLET, 'pending')
+        if pending_nonce > latest_nonce:
+            print(f"⏳ Pending transactions detected ({pending_nonce - latest_nonce} pending). Waiting...")
+            return True
+        return False
+    except:
+        return False
+        
 def should_run_cycle(state):
     now = time.time()
     if now - state.get("last_run", 0) < COOLDOWN_MINUTES * 60:
@@ -165,6 +178,9 @@ async def main():
         return
 
     if usdt_balance < MIN_TRADE_USD:
+        if has_pending_transactions():
+            print("⚠️ Pending txs detected — skipping rebalance this cycle to avoid nonce conflicts")
+            return
         print("⚠️ Not enough USDT for min trade — triggering rebalance")
         await auto_rebalance()
         return
