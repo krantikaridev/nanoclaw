@@ -1,0 +1,7 @@
+{
+  "last_run": 0,
+  "usdt_seed_target": 10,
+  "min_trade_usd": 2.0,
+  "max_gas_gwei": 80,
+  "cooldown_minutes": 5
+}
