@@ -33,7 +33,9 @@ async def swap():
     approve_hash = w3.eth.send_raw_transaction(signed_approve.raw_transaction)
     print("✅ Approve Tx:", approve_hash.hex())
 
-    # Swap
+    await asyncio.sleep(10)   # Wait for approve to be accepted
+
+    # Swap with fresh nonce + higher gas
     router = w3.eth.contract(address=ROUTER, abi=[{"inputs":[{"components":[{"name":"tokenIn","type":"address"},{"name":"tokenOut","type":"address"},{"name":"fee","type":"uint24"},{"name":"recipient","type":"address"},{"name":"deadline","type":"uint256"},{"name":"amountIn","type":"uint256"},{"name":"amountOutMinimum","type":"uint256"},{"name":"sqrtPriceLimitX96","type":"uint160"}],"name":"params","type":"tuple"}],"name":"exactInputSingle","outputs":[{"name":"","type":"uint256"}],"stateMutability":"payable","type":"function"}])
 
     params = {
@@ -50,7 +52,7 @@ async def swap():
     tx = router.functions.exactInputSingle(params).build_transaction({
         'from': WALLET,
         'gas': 400000,
-        'gasPrice': w3.to_wei('400', 'gwei'),
+        'gasPrice': w3.to_wei('500', 'gwei'),
         'nonce': w3.eth.get_transaction_count(WALLET),
     })
 
