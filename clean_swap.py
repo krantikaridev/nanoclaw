@@ -46,4 +46,3 @@ async def swap():
     print("https://polygonscan.com/tx/" + tx_hash.hex())
 
 asyncio.run(swap())
-python clean_swap.py
