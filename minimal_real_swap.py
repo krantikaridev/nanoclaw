@@ -14,10 +14,10 @@ WETH = "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619"
 ROUTER = "0xE592427A0AEce92De3Edee1F18E0157C05861564"
 
 w3 = Web3(Web3.HTTPProvider(RPC))
-print("RPC:", w3.is_connected())
+print("RPC connected:", w3.is_connected())
 
 bal = w3.eth.contract(address=USDT, abi=[{"constant":True,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"payable":False,"stateMutability":"view","type":"function"}]).functions.balanceOf(WALLET).call() / 10**6
-print("Real USDT:", bal)
+print("Real USDT balance:", bal)
 
 async def swap():
     amount = 2_000_000
@@ -36,8 +36,8 @@ async def swap():
 
     tx = router.functions.exactInputSingle(params).build_transaction({
         'from': WALLET,
-        'gas': 350000,
-        'gasPrice': w3.to_wei('350', 'gwei'),
+        'gas': 400000,
+        'gasPrice': w3.to_wei('400', 'gwei'),
         'nonce': w3.eth.get_transaction_count(WALLET),
     })
 
