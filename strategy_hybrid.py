@@ -15,7 +15,6 @@ load_dotenv()
 try:
     from config_real import TRADE_SIZE_USDT, MAX_DAILY_LOSS_USDT, MIN_EDGE_PCT, SIM_CONFIDENCE_THRESHOLD, ACTIVE_STRATEGIES, WALLET_ADDRESS, RPC_URL
 except ImportError:
-import os
     TRADE_SIZE_USDT = 2.0
     MAX_DAILY_LOSS_USDT = 10.0
     MIN_EDGE_PCT = 3.0
@@ -25,6 +24,7 @@ import os
     RPC_URL = "https://polygon.drpc.org"
 
 PRIVATE_KEY = os.getenv("POLYGON_PRIVATE_KEY")
+import os
 w3 = Web3(Web3.HTTPProvider(RPC_URL))
 
 daily_loss_today = 0.0
