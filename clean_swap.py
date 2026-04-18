@@ -3,7 +3,6 @@ from web3 import Web3
 from dotenv import load_dotenv
 import os
 from datetime import datetime
-
 load_dotenv()
 
 WALLET = "0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA"
