@@ -68,32 +68,81 @@ def should_run_cycle(state):
         return False
     return True
 
-async def approve_and_swap(amount_in_usdt: int, direction="USDT_TO_WETH"):
-    """Core swap — minimal change, dynamic gas"""
-    token_in = USDT if direction == "USDT_TO_WETH" else WETH
-    token_out = WETH if direction == "USDT_TO_WETH" else USDT
-    amount = amount_in_usdt if direction == "USDT_TO_WETH" else int(REBALANCE_WETH_AMOUNT * 10**18)
+async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
+    """Fixed version with dynamic gas + replacement safety"""
+    if direction == "USDT_TO_WETH":
+        token_in = USDT
+        token_out = WETH
+        amount = amount_in
+    else:  # WETH_TO_USDT
+        token_in = WETH
+        token_out = USDT
+        amount = int(REBALANCE_WETH_AMOUNT * 10**18)   # ~0.004 WETH
+
+    print(f"🔄 Starting {direction} | Amount: {amount} | Gas multiplier active")
+
+    # Dynamic safe gas price (30% higher for replacement txs)
+    current_gas_wei = w3.eth.gas_price
+    safe_gas_wei = int(current_gas_wei * 1.3)   # GAS_PRICE_MULTIPLIER = 1.3
+    print(f"   Using gasPrice: {safe_gas_wei // 10**9} Gwei (30% bump)")
 
     # Approve
-    contract_in = w3.eth.contract(address=token_in, abi=[{"inputs":[{"name":"spender","type":"address"},{"name":"amount","type":"uint256"}],"name":"approve","outputs":[{"name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"}])
+    contract_in = w3.eth.contract(address=token_in, abi=[{
+        "inputs": [{"name":"spender","type":"address"},{"name":"amount","type":"uint256"}],
+        "name":"approve",
+        "outputs": [{"name":"","type":"bool"}],
+        "stateMutability":"nonpayable",
+        "type":"function"
+    }])
+
     approve_tx = contract_in.functions.approve(ROUTER, amount).build_transaction({
-        'from': WALLET, 'gas': 100000, 'gasPrice': w3.to_wei('60', 'gwei'), 'nonce': w3.eth.get_transaction_count(WALLET)
+        'from': WALLET,
+        'gas': 100000,
+        'gasPrice': safe_gas_wei,
+        'nonce': w3.eth.get_transaction_count(WALLET, 'pending'),   # IMPORTANT for replacement
     })
-    signed = w3.eth.account.sign_transaction(approve_tx, PRIVATE_KEY)
-    tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
-    print(f"✅ Approve Tx ({direction}): {tx_hash.hex()}")
+
+    signed_approve = w3.eth.account.sign_transaction(approve_tx, PRIVATE_KEY)
+    approve_hash = w3.eth.send_raw_transaction(signed_approve.raw_transaction)
+    print(f"✅ Approve Tx ({direction}): {approve_hash.hex()}")
     await asyncio.sleep(15)
 
     # Swap
-    router = w3.eth.contract(address=ROUTER, abi=[{"inputs":[{"components":[{"name":"tokenIn","type":"address"},{"name":"tokenOut","type":"address"},{"name":"fee","type":"uint24"},{"name":"recipient","type":"address"},{"name":"deadline","type":"uint256"},{"name":"amountIn","type":"uint256"},{"name":"amountOutMinimum","type":"uint256"},{"name":"sqrtPriceLimitX96","type":"uint160"}],"name":"params","type":"tuple"}],"name":"exactInputSingle","outputs":[{"name":"","type":"uint256"}],"stateMutability":"payable","type":"function"}])
+    router = w3.eth.contract(address=ROUTER, abi=[{
+        "inputs": [{"components": [
+            {"name":"tokenIn","type":"address"},
+            {"name":"tokenOut","type":"address"},
+            {"name":"fee","type":"uint24"},
+            {"name":"recipient","type":"address"},
+            {"name":"deadline","type":"uint256"},
+            {"name":"amountIn","type":"uint256"},
+            {"name":"amountOutMinimum","type":"uint256"},
+            {"name":"sqrtPriceLimitX96","type":"uint160"}
+        ], "name":"params","type":"tuple"}],
+        "name":"exactInputSingle",
+        "outputs": [{"name":"","type":"uint256"}],
+        "stateMutability":"payable",
+        "type":"function"
+    }])
+
     params = {
-        "tokenIn": token_in, "tokenOut": token_out, "fee": 500, "recipient": WALLET,
-        "deadline": int(datetime.now().timestamp()) + 600, "amountIn": amount,
-        "amountOutMinimum": 0, "sqrtPriceLimitX96": 0
+        "tokenIn": token_in,
+        "tokenOut": token_out,
+        "fee": 500,
+        "recipient": WALLET,
+        "deadline": int(datetime.now().timestamp()) + 600,
+        "amountIn": amount,
+        "amountOutMinimum": 0,
+        "sqrtPriceLimitX96": 0
     }
+
     tx = router.functions.exactInputSingle(params).build_transaction({
-        'from': WALLET, 'gas': 400000, 'gasPrice': w3.to_wei('60', 'gwei'), 'nonce': w3.eth.get_transaction_count(WALLET)
+        'from': WALLET,
+        'gas': 400000,
+        'gasPrice': safe_gas_wei,
+        'nonce': w3.eth.get_transaction_count(WALLET, 'pending'),
     })
+
     signed = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
     tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
     print(f"✅ REAL TX HASH ({direction}): {tx_hash.hex()}")
