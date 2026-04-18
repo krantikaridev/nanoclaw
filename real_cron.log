@@ -1,24 +1,270 @@
-=== Real Trade Cron Started at Sat Apr 18 12:00:02 UTC 2026 ===
-✅ Config loaded successfully - Trade Size: 2.00 USDT | Max Daily Loss: 10.0 USDT | Min Edge: 3.0%
-✅ RPC connected: True | URL: https://polygon.drpc.org
-✅ SIM Confidence: Strong (~421k)
-
-══════════════════════════════════════
-🚀 v2 ALTERNATING TRADE
-Strategy Today : MOMENTUM
-Wallet : 0x6e291a71...
-Trade Size : 2.00 USDT → WETH
-Daily Loss : 0.00/10.0 USDT
-══════════════════════════════════════
-
-✅ Momentum SIM Check: Strong (~421k)
-
-══════════════════════════════════════
-🚀 v2 MOMENTUM BASELINE TRADE
-Wallet : 0x6e291a71...
-Trade Size : 2.00 USDT → WETH
-══════════════════════════════════════
-
-❌ INSUFFICIENT USDT: 0.1464
-❌ Momentum trade failed
-=== Real Trade Cron Finished at Sat Apr 18 12:00:04 UTC 2026 ===
+RPC connected: True
+Real USDT balance: 14.36
+✅ Approve Tx: ded7a3d6758138c98ee232090f5026995a8937d26e7493df6c316be6c04e3efc
+✅ REAL TX HASH: d1651e14506462a3220cc90b87798380745c06d40ff6cd0236e743ddb4ca19de
+https://polygonscan.com/tx/d1651e14506462a3220cc90b87798380745c06d40ff6cd0236e743ddb4ca19de
+RPC connected: True
+Real USDT balance: 12.36
+✅ Approve Tx: 37f1b0bad0602552c02e953ea586961da7686ac7799916d26fcce1640006070f
+✅ REAL TX HASH: c89f1b7e48b95c462c071e232089bebe8e1e6527f455b8dbde744d6cdb25a35d
+https://polygonscan.com/tx/c89f1b7e48b95c462c071e232089bebe8e1e6527f455b8dbde744d6cdb25a35d
+RPC connected: True
+Real USDT balance: 10.36
+✅ Approve Tx: 2edae7113a61cd2479106c72806d96a0629421f697f5d8a77d1c23cddeb1a1ab
+✅ REAL TX HASH: 10159b8d5ed5568270762b1b3e86c185c5359baa1375c6c8e00e481858165c3d
+https://polygonscan.com/tx/10159b8d5ed5568270762b1b3e86c185c5359baa1375c6c8e00e481858165c3d
+RPC connected: True
+Real USDT balance: 8.36
+✅ Approve Tx: 95d1c62417da0c873cacae5332303e2a3d265f071271a63aee4e80a0bef2cc84
+✅ REAL TX HASH: 4f61d4746c40c26b79fbbccf68aeb77cd20782022b55b5627432706bd889735e
+https://polygonscan.com/tx/4f61d4746c40c26b79fbbccf68aeb77cd20782022b55b5627432706bd889735e
+RPC connected: True
+Real USDT balance: 6.36
+✅ Approve Tx: 4703238b329eeaa6310d9ee4c8b4b039b7bc4dc56325709759b86ac99d2bd47a
+✅ REAL TX HASH: 0050346c8c66e83b230a45851ef7ee4e206c22248795f4e1ded1e35cfc003e13
+https://polygonscan.com/tx/0050346c8c66e83b230a45851ef7ee4e206c22248795f4e1ded1e35cfc003e13
+RPC connected: True
+Real USDT balance: 4.36
+✅ Approve Tx: ffbfcfbddbee7bae938e597bc0412fa5273ba2893e6407e2a7cb9753b93d4d96
+✅ REAL TX HASH: 1b2eeb689b968cc0bc6b01b77e66ff4b616fa196bd62a90bd85b0e45cbd7901e
+https://polygonscan.com/tx/1b2eeb689b968cc0bc6b01b77e66ff4b616fa196bd62a90bd85b0e45cbd7901e
+RPC connected: True
+Real USDT balance: 2.36
+✅ Approve Tx: 8b33d2d586e59ac6817792e33bfed2c2fb421bdf938fc999f884d16f0a8d14f4
+✅ REAL TX HASH: c61c436809fa587db95af76e2b57287e22f9b1d97983ec0d5a43345e7a8904de
+https://polygonscan.com/tx/c61c436809fa587db95af76e2b57287e22f9b1d97983ec0d5a43345e7a8904de
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: 6689330d9f0e4ab62cd66007d9271e1cbdb04fafe9764d8ca00ea7d18df56dfd
+✅ REAL TX HASH: e5d2bf2a3c226ff8d166aede6918c91852123dd08a8b76182575dabfc9423bf6
+https://polygonscan.com/tx/e5d2bf2a3c226ff8d166aede6918c91852123dd08a8b76182575dabfc9423bf6
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: 09748392c09a6d3808e2f3734a135ce82cf16fb2da92a97ef121e87e9e134a9a
+✅ REAL TX HASH: 8f3f1fcc839ec1c7c5ce924824717825764f3791c3705b2cd01f1f0a9834607b
+https://polygonscan.com/tx/8f3f1fcc839ec1c7c5ce924824717825764f3791c3705b2cd01f1f0a9834607b
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: 85f493865f5027d53e014287808972604d8294b3f471fc1a7a4a7d91ff114f08
+✅ REAL TX HASH: 0c9a936270b4f9ffa81c94288c92ccc698dc52807424174497fcba54341136ec
+https://polygonscan.com/tx/0c9a936270b4f9ffa81c94288c92ccc698dc52807424174497fcba54341136ec
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: d518c86784190d75e98580dba8ba15fd54e2c75299e2dbc50d6763728ec5fbe0
+✅ REAL TX HASH: f43a40546a7467c33c34fe3461ae902ed3fe1e01b1b9357e8c84ea123e527510
+https://polygonscan.com/tx/f43a40546a7467c33c34fe3461ae902ed3fe1e01b1b9357e8c84ea123e527510
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: 7b1e57bd0b071603125243490e2e93703cbaee145514dfbde8269dfa5cead9ca
+✅ REAL TX HASH: 5cf25e7bc56a8745eac7a4da4a0ab4c1391d3a5761d6b4d6e18346351244c6c2
+https://polygonscan.com/tx/5cf25e7bc56a8745eac7a4da4a0ab4c1391d3a5761d6b4d6e18346351244c6c2
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: 8b4378e2ce612fc689491a97a0291aa9e53e93b8e2df33140e26203f9b35871f
+✅ REAL TX HASH: a32c2431e437c4b93cf5c601355fc755f1856ff454f4f4b88f30d172fc7e757e
+https://polygonscan.com/tx/a32c2431e437c4b93cf5c601355fc755f1856ff454f4f4b88f30d172fc7e757e
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: 5e6710e955cc05f147359baa97fba8086b46a513d0b9161b428edccc3d558e22
+✅ REAL TX HASH: f9fce280dbad4dfb53962ebd61a4a0951b7d07fd2a803461135a3941ee30ee9c
+https://polygonscan.com/tx/f9fce280dbad4dfb53962ebd61a4a0951b7d07fd2a803461135a3941ee30ee9c
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: c457e04e072701e124eb0ba9dce4ae419bc78c8c05a4bac319f126c99a584ea9
+✅ REAL TX HASH: b5a1599185bd608abfc35dcbbe1e237a13e2215b9d8d1c55a11b0befe2b922af
+https://polygonscan.com/tx/b5a1599185bd608abfc35dcbbe1e237a13e2215b9d8d1c55a11b0befe2b922af
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: eb4e0d27e74c00f131f7eaa1f9338eb908214f78732ccb4959cfa881ccf28483
+✅ REAL TX HASH: 75bc6132f441fff4abe741f1f0e36a4f8f0af71cc5b07db9fe9e80bffacedb0e
+https://polygonscan.com/tx/75bc6132f441fff4abe741f1f0e36a4f8f0af71cc5b07db9fe9e80bffacedb0e
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: ba1fa208d27831385b04a7343b198282d2680739cbde55e35b3ec4cd529a44c8
+✅ REAL TX HASH: 6e5fbb4bdf2d365ad803f53534af6469a8d94fc44d3b637e970122b16ac30640
+https://polygonscan.com/tx/6e5fbb4bdf2d365ad803f53534af6469a8d94fc44d3b637e970122b16ac30640
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: 6616fc712a02fa5d5d64fa9c029b4e29cbeb928148fc0895a13ea5bfe28d425b
+✅ REAL TX HASH: e96385fa9d01b383025aa4bce760466e15ee15124dc9e757e4a8dbcccbf88566
+https://polygonscan.com/tx/e96385fa9d01b383025aa4bce760466e15ee15124dc9e757e4a8dbcccbf88566
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: 3608e78b3b7383077ebaf3834c993c6648d3ce942d9628f3a41ea95e1e58a416
+✅ REAL TX HASH: 084336a0692b4d4f5bd6a41c3cf3e1f81666fb77a4d256a81313151b11f1bdfa
+https://polygonscan.com/tx/084336a0692b4d4f5bd6a41c3cf3e1f81666fb77a4d256a81313151b11f1bdfa
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: dfa503176730ae79fb4db5383183c6d6cd06e443671eacda8c78c05f3c717bbe
+✅ REAL TX HASH: fc487c7005a596b0435949389a09e9659a451fd1b20d13c7b370f251c1b44941
+https://polygonscan.com/tx/fc487c7005a596b0435949389a09e9659a451fd1b20d13c7b370f251c1b44941
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: dfe240b7d8933ae65b80456d48556bcc67fe533e59756c16ee47dcedf0fec630
+✅ REAL TX HASH: b79fc0c3161e7a09daeff6954788305e30dc6178d4228e0f4cda209532b40957
+https://polygonscan.com/tx/b79fc0c3161e7a09daeff6954788305e30dc6178d4228e0f4cda209532b40957
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: c9d7ab676a967be03dcc8d091d893aa91c1cf00a0ae5d2bdd7590e8d1c2c659a
+✅ REAL TX HASH: 5d62d193877b1018a89d12123a79c26baaf20ef25d7cc6eb9be6bac4736d0f5e
+https://polygonscan.com/tx/5d62d193877b1018a89d12123a79c26baaf20ef25d7cc6eb9be6bac4736d0f5e
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: 3f40bcc02cc7c4c7a3c866a46e4a75ab16e6c55226e446d957998f3c2026b0d6
+✅ REAL TX HASH: 78dc00867bca350d85b908c1b191c593042259fb9ab7063c24f3a1f12a71aeb2
+https://polygonscan.com/tx/78dc00867bca350d85b908c1b191c593042259fb9ab7063c24f3a1f12a71aeb2
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: d166a55a805cd46fd7310d26e2d92e79f9505473fa674bc6bf825f7385c6aaa8
+✅ REAL TX HASH: 3846bf9298c52bd6a0ef082eb4e357d8ce934562a9d3daceaa1f272ff38b1522
+https://polygonscan.com/tx/3846bf9298c52bd6a0ef082eb4e357d8ce934562a9d3daceaa1f272ff38b1522
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: 2f9c3459ed4f881247691462f1584f077384022a4738f68b94a8c98f1d4bc4b6
+✅ REAL TX HASH: 069a161cdd39566da352bf8b42e17525f6f50d075ee9a16165f8043b7054a148
+https://polygonscan.com/tx/069a161cdd39566da352bf8b42e17525f6f50d075ee9a16165f8043b7054a148
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: cff2b17254360487683c57a938523edb0eced3e33b899b0e1d90877222364a79
+✅ REAL TX HASH: 190d7ef4679e3c9e5f418350fbb485515c91857e0ad0f2c568b19532cf17a148
+https://polygonscan.com/tx/190d7ef4679e3c9e5f418350fbb485515c91857e0ad0f2c568b19532cf17a148
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: 9bc52727a57e2c5c46a0611a8c55c91a4d96cf2aa071acb36457cd980417e36a
+✅ REAL TX HASH: 4a5040604ada4c96d653c17c0ea6024609bb724c756a00863d6bd7dddb92e4d0
+https://polygonscan.com/tx/4a5040604ada4c96d653c17c0ea6024609bb724c756a00863d6bd7dddb92e4d0
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: bb9cd39bafc1c2661218b28b7478684d621904ea46502c9170c7634a54fdd626
+✅ REAL TX HASH: a645ea412a8bee79041959e058af93428f2a122c343e26d7196a3f5fc5583fc6
+https://polygonscan.com/tx/a645ea412a8bee79041959e058af93428f2a122c343e26d7196a3f5fc5583fc6
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: ec0e207adbf58a64d4919eea3b00b40fec813c9207d06eea53c254d96c5601bc
+✅ REAL TX HASH: c1da8b0d39c36c15b7bbda719c6f8fc614bc4710ab74d48d1904f44618bc2766
+https://polygonscan.com/tx/c1da8b0d39c36c15b7bbda719c6f8fc614bc4710ab74d48d1904f44618bc2766
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: 9ca2ec5f567ffe520aa90f703e52e46d9c976c9b5fd787440e10b40f2716572a
+✅ REAL TX HASH: d34509326d69153b24dde04a9cb557991730a7cd1262bee8e69c17249b254549
+https://polygonscan.com/tx/d34509326d69153b24dde04a9cb557991730a7cd1262bee8e69c17249b254549
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: 3761020b8a971782b70ddf5a5de7e5e272ee3e9272af2406f5667a1e422e7a70
+✅ REAL TX HASH: e751e58c65d27c0f7ef6ede51c991f25646f3c0c49e2f14d3685c1b3cc0dea49
+https://polygonscan.com/tx/e751e58c65d27c0f7ef6ede51c991f25646f3c0c49e2f14d3685c1b3cc0dea49
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: 7fabb30d2b04b0420b9a7b0bb6e2e84837e501cf77a10d3d0e9abf47bc8b8ad3
+✅ REAL TX HASH: 9f4de725dc7b067a17f8cc01800a654c2a652888cac3eba5e16411fd547458df
+https://polygonscan.com/tx/9f4de725dc7b067a17f8cc01800a654c2a652888cac3eba5e16411fd547458df
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: c03d22a1d0de066799bf730b681aba2884b06e20332a8415c1f5a48321e84309
+✅ REAL TX HASH: a47de56461572420dcd55d10d3d51302ae3a0f57e0150432aef95679c074427d
+https://polygonscan.com/tx/a47de56461572420dcd55d10d3d51302ae3a0f57e0150432aef95679c074427d
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: 15394e92ab25c0452262e2210a1805a5b30cfd2a1994ea1d335a90a67181203a
+✅ REAL TX HASH: f1e55adecfac03eae7eaeb57f2b2a88c67002548635a0147b8ce932c6db313c4
+https://polygonscan.com/tx/f1e55adecfac03eae7eaeb57f2b2a88c67002548635a0147b8ce932c6db313c4
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: 306da3957720e00ea88a87050bcfb79b14ce45ef66ed46e6cdbc97b336e0f102
+✅ REAL TX HASH: a5c381ff66c214111b2663945f340567cfe02f0ae0fcd35e1d44f3a00058e3ad
+https://polygonscan.com/tx/a5c381ff66c214111b2663945f340567cfe02f0ae0fcd35e1d44f3a00058e3ad
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: f13adc301b28a470a23285e8fafe55dac8a208b032e5af1b52089e750a445a6b
+✅ REAL TX HASH: bf31495ced709d57fb9b5f37428f473499d46544b9e1c43479765eaa12f76f13
+https://polygonscan.com/tx/bf31495ced709d57fb9b5f37428f473499d46544b9e1c43479765eaa12f76f13
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: eda0dc34edefcc73c9c911ca9a254ad132858e471984a6598fa26e2899cb881b
+✅ REAL TX HASH: 9e467d1cbe84ec7f956138d165e4dad89413702a7220f2eae699d48d1a8ba7be
+https://polygonscan.com/tx/9e467d1cbe84ec7f956138d165e4dad89413702a7220f2eae699d48d1a8ba7be
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: 48131da1481d381b27732ffe41ba22ee5264a4c96ecec5fdd6a5cf5821420067
+✅ REAL TX HASH: 3ebe8388191d047e572543adacd055e1ca2d47d1660a0469bb6c7c3c4a4c4b65
+https://polygonscan.com/tx/3ebe8388191d047e572543adacd055e1ca2d47d1660a0469bb6c7c3c4a4c4b65
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: 5291afcf21a07be8f7586e707133c4eed1cd608aae967cf6a9485b1f9db2b326
+✅ REAL TX HASH: ba805a88f83c8ac94738c24ccb11c42eef32f8016671d4233d63fdc949ef8d74
+https://polygonscan.com/tx/ba805a88f83c8ac94738c24ccb11c42eef32f8016671d4233d63fdc949ef8d74
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: 103db0aa7af0dd230cbde21338187b650cb91751423e089980a862d7bf08cf79
+✅ REAL TX HASH: d7c6cc034179def1c46f51ef2b0beb38669482182c1d5eed0282ab81a6550ee4
+https://polygonscan.com/tx/d7c6cc034179def1c46f51ef2b0beb38669482182c1d5eed0282ab81a6550ee4
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: 9182a91befc7768ce022590658714a7db75f9b5b415c04a69148f149d2e3218d
+✅ REAL TX HASH: 7fc0962c5d738514e562ef796e626dc07dde6f4a5a7d20f85920ca85f1b2b1ae
+https://polygonscan.com/tx/7fc0962c5d738514e562ef796e626dc07dde6f4a5a7d20f85920ca85f1b2b1ae
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: dd1fd33b0f1b622ab7f62251ff03590156c8c72fbd5956cb60983e69b454cb1a
+✅ REAL TX HASH: fafdd859688c5d1d1e6cab558872d88dbe0973caf85915fbcf42a14380b3f9da
+https://polygonscan.com/tx/fafdd859688c5d1d1e6cab558872d88dbe0973caf85915fbcf42a14380b3f9da
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: a5fd3827f1f3d1a6e783db1d78ad13843373a19e1294e6be00291cf1d5274d9b
+✅ REAL TX HASH: 9040a6f1d6cfa75c590a724911743a4db3e79682dba08764795f4e63a5e7e857
+https://polygonscan.com/tx/9040a6f1d6cfa75c590a724911743a4db3e79682dba08764795f4e63a5e7e857
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: f342d9fb20dd19b94d6b526aaf4f382f4373b25b330d3018a91982b553591f2c
+✅ REAL TX HASH: 13258b6cb3a3b1bf0d4f4f69b66df543182a535bebb16d44873c154f23c3c4e0
+https://polygonscan.com/tx/13258b6cb3a3b1bf0d4f4f69b66df543182a535bebb16d44873c154f23c3c4e0
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: 3736057a716757f6d363072cb693133bcdaf901d94b1a82e67d4ca8dfda209b3
+✅ REAL TX HASH: 04f83c7342adeb75416695faf9cecbd8ae154a731db6c18f03eab36a8f7d7a55
+https://polygonscan.com/tx/04f83c7342adeb75416695faf9cecbd8ae154a731db6c18f03eab36a8f7d7a55
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: 276f687657df4a2b4f7af918a00183a7528745a46d3c4b7def15dcbf8411e044
+✅ REAL TX HASH: 862725c5f3b92f6aaf3b8252c87c5d259dbbd606e1e56090bc90e7017d1b9490
+https://polygonscan.com/tx/862725c5f3b92f6aaf3b8252c87c5d259dbbd606e1e56090bc90e7017d1b9490
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: bd471abb8977cf4395e519734249cf0301af6dc984f75a7ccce86ba53113ad0b
+✅ REAL TX HASH: b2657ebdaae208cd50c3b41c9b780f2c24aa3171b3307b69cf141cb6101b556f
+https://polygonscan.com/tx/b2657ebdaae208cd50c3b41c9b780f2c24aa3171b3307b69cf141cb6101b556f
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: 5fd59f5685039d95c04baaa6e545ea117af2dfcf0d3474f211802f9f3b70f0ef
+✅ REAL TX HASH: 3a312aa8c9493ad93fb9fb5db5e2edaa34303b561477b06447173262095d9f3f
+https://polygonscan.com/tx/3a312aa8c9493ad93fb9fb5db5e2edaa34303b561477b06447173262095d9f3f
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: 891fd9cdc3145c09a8a9746cc1a71b150f9796b7e6efbfa36e96375fa40765a9
+✅ REAL TX HASH: 4d86feb662545c111833aa1ed81983d364fcc252a9e5ad61bd28658dca82ecbd
+https://polygonscan.com/tx/4d86feb662545c111833aa1ed81983d364fcc252a9e5ad61bd28658dca82ecbd
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: 2180508cbfef6f80108c3556207b12f547fd159e01835e7f0abacb0cfa8380d7
+✅ REAL TX HASH: b76fce4a08d42dd2892e0b8b64074402f35dd0a5c38b63df683047ca377820c4
+https://polygonscan.com/tx/b76fce4a08d42dd2892e0b8b64074402f35dd0a5c38b63df683047ca377820c4
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: 4ece900b87d14101822035ac1feb952a29ad398f549c62b6a304daf0a82e2b51
+✅ REAL TX HASH: 120c83c91c21789fddf1526d66d16f786ff7b976f7f0ec1e82735e5c105a7ee7
+https://polygonscan.com/tx/120c83c91c21789fddf1526d66d16f786ff7b976f7f0ec1e82735e5c105a7ee7
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: a69304d9ac475bfa661c3b5b441920ee9f63ea8ab5e7e6cfec534e2a7202aa0c
+✅ REAL TX HASH: 85053a58e5a12ea38d7f0cf9ef77809aa2589d37604fff59a0274cd288a5694b
+https://polygonscan.com/tx/85053a58e5a12ea38d7f0cf9ef77809aa2589d37604fff59a0274cd288a5694b
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: 3b42b3101af79cd681b9a10332ac153e299536d3afc0fa624cd76f2f733e8797
+✅ REAL TX HASH: 32f2f1869fb148beafd166d743e3960d1c0071ec650a27269124feb1b75d41ce
+https://polygonscan.com/tx/32f2f1869fb148beafd166d743e3960d1c0071ec650a27269124feb1b75d41ce
+RPC connected: True
+Real USDT balance: 0.36
+✅ Approve Tx: 4426a60cec4a0c7aac8f0d0b4c4c317cd1206dcf4fa9e40b62b494ed69ba7f8e
+✅ REAL TX HASH: 5b218784388198c02c2aa34e5349fb64afc0e262b0e704b8a617900ec9be2c82
+https://polygonscan.com/tx/5b218784388198c02c2aa34e5349fb64afc0e262b0e704b8a617900ec9be2c82
