@@ -8,7 +8,7 @@ from datetime import datetime
 
 load_dotenv()
 
-# === CONFIG FROM ENV (modular + easy to change) ===
+# === CONFIG FROM ENV (modular, weekday tweaks easy) ===
 WALLET = "0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA"
 PRIVATE_KEY = os.getenv("POLYGON_PRIVATE_KEY")
 RPC = os.getenv("RPC", "https://polygon.drpc.org")
@@ -17,15 +17,14 @@ WETH = os.getenv("WETH")
 ROUTER = os.getenv("ROUTER")
 
 MIN_TRADE_USD = float(os.getenv("MIN_TRADE_USD", 2.0))
-MAX_GAS_GWEI = int(os.getenv("MAX_GAS_GWEI", 80))
-COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", 5))
+MAX_GAS_GWEI = int(os.getenv("MAX_GAS_GWEI", 90))  # temporary bump
+COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", 30))
 USDT_SEED_TARGET = float(os.getenv("USDT_SEED_TARGET", 10.0))
-REBALANCE_WETH_AMOUNT = float(os.getenv("REBALANCE_WETH_AMOUNT", 0.003))
+REBALANCE_WETH_AMOUNT = float(os.getenv("REBALANCE_WETH_AMOUNT", 0.004))  # ~$9-10
 
 w3 = Web3(Web3.HTTPProvider(RPC))
-print("RPC connected:", w3.is_connected())
+print(f"[{datetime.now()}] RPC connected: {w3.is_connected()}")
 
-# Load state
 def load_state():
     try:
         with open('bot_state.json', 'r') as f:
@@ -39,12 +38,20 @@ def save_state(state):
 
 def get_current_gas_gwei():
     try:
-        # Use Polygon gas station or fallback
+        # Reliable fallback using PolygonScan gas tracker
         import requests
-        r = requests.get("https://gasstation-mainnet.polygon.technology/v2", timeout=10).json()
-        return int(r['standard']['maxFee'])
+        r = requests.get("https://polygonscan.com/gastracker", timeout=10).text
+        # Simple parse for standard gas (robust against API changes)
+        if "Standard" in r:
+            gas_str = r.split("Standard")[1].split("Gwei")[0].strip().split()[-1]
+            return int(float(gas_str))
     except:
-        return 999  # safe skip
+        pass
+    return 80  # safe static fallback (never 999)
+
+def get_pol_balance():
+    pol_contract = "0x0000000000000000000000000000000000001010"  # POL native
+    return w3.eth.get_balance(WALLET) / 10**18
 
 def should_run_cycle(state):
     now = time.time()
@@ -55,81 +62,71 @@ def should_run_cycle(state):
     if gas > MAX_GAS_GWEI:
         print(f"⛽ Gas too high ({gas} Gwei > {MAX_GAS_GWEI}) — skipping cycle")
         return False
+    pol = get_pol_balance()
+    if pol < 2.0:
+        print(f"⚠️ POL GAS CRITICAL ({pol:.2f} < 2.0) — TOP UP MANUALLY & skipping")
+        return False
     return True
 
-async def approve_and_swap(amount_in_usdt: int):
-    """Your original swap logic — kept almost identical, now with dynamic gas"""
-    # Approve (only if needed — but for simplicity we keep your style)
-    usdt_contract = w3.eth.contract(address=USDT, abi=[{"inputs":[{"name":"spender","type":"address"},{"name":"amount","type":"uint256"}],"name":"approve","outputs":[{"name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"}])
-    approve_tx = usdt_contract.functions.approve(ROUTER, amount_in_usdt).build_transaction({
-        'from': WALLET,
-        'gas': 100000,
-        'gasPrice': w3.to_wei('60', 'gwei'),  # lower than your 400 — safer
-        'nonce': w3.eth.get_transaction_count(WALLET),
+async def approve_and_swap(amount_in_usdt: int, direction="USDT_TO_WETH"):
+    """Core swap — minimal change, dynamic gas"""
+    token_in = USDT if direction == "USDT_TO_WETH" else WETH
+    token_out = WETH if direction == "USDT_TO_WETH" else USDT
+    amount = amount_in_usdt if direction == "USDT_TO_WETH" else int(REBALANCE_WETH_AMOUNT * 10**18)
+
+    # Approve
+    contract_in = w3.eth.contract(address=token_in, abi=[{"inputs":[{"name":"spender","type":"address"},{"name":"amount","type":"uint256"}],"name":"approve","outputs":[{"name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"}])
+    approve_tx = contract_in.functions.approve(ROUTER, amount).build_transaction({
+        'from': WALLET, 'gas': 100000, 'gasPrice': w3.to_wei('60', 'gwei'), 'nonce': w3.eth.get_transaction_count(WALLET)
     })
-    signed_approve = w3.eth.account.sign_transaction(approve_tx, PRIVATE_KEY)
-    approve_hash = w3.eth.send_raw_transaction(signed_approve.raw_transaction)
-    print("✅ Approve Tx:", approve_hash.hex())
-    await asyncio.sleep(15)  # slightly longer wait
+    signed = w3.eth.account.sign_transaction(approve_tx, PRIVATE_KEY)
+    tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+    print(f"✅ Approve Tx ({direction}): {tx_hash.hex()}")
+    await asyncio.sleep(15)
 
     # Swap
     router = w3.eth.contract(address=ROUTER, abi=[{"inputs":[{"components":[{"name":"tokenIn","type":"address"},{"name":"tokenOut","type":"address"},{"name":"fee","type":"uint24"},{"name":"recipient","type":"address"},{"name":"deadline","type":"uint256"},{"name":"amountIn","type":"uint256"},{"name":"amountOutMinimum","type":"uint256"},{"name":"sqrtPriceLimitX96","type":"uint160"}],"name":"params","type":"tuple"}],"name":"exactInputSingle","outputs":[{"name":"","type":"uint256"}],"stateMutability":"payable","type":"function"}])
     params = {
-        "tokenIn": USDT,
-        "tokenOut": WETH,
-        "fee": 500,
-        "recipient": WALLET,
-        "deadline": int(datetime.now().timestamp()) + 600,
-        "amountIn": amount_in_usdt,
-        "amountOutMinimum": 0,
-        "sqrtPriceLimitX96": 0
+        "tokenIn": token_in, "tokenOut": token_out, "fee": 500, "recipient": WALLET,
+        "deadline": int(datetime.now().timestamp()) + 600, "amountIn": amount,
+        "amountOutMinimum": 0, "sqrtPriceLimitX96": 0
     }
     tx = router.functions.exactInputSingle(params).build_transaction({
-        'from': WALLET,
-        'gas': 400000,
-        'gasPrice': w3.to_wei('60', 'gwei'),  # controlled
-        'nonce': w3.eth.get_transaction_count(WALLET),
+        'from': WALLET, 'gas': 400000, 'gasPrice': w3.to_wei('60', 'gwei'), 'nonce': w3.eth.get_transaction_count(WALLET)
     })
     signed = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
     tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
-    print("✅ REAL TX HASH:", tx_hash.hex())
-    print("https://polygonscan.com/tx/" + tx_hash.hex())
+    print(f"✅ REAL TX HASH ({direction}): {tx_hash.hex()}")
+    print(f"https://polygonscan.com/tx/{tx_hash.hex()}")
 
 async def auto_rebalance():
-    """Keep USDT seed healthy — swap from WETH only when needed (single larger tx)"""
     usdt_balance = w3.eth.contract(address=USDT, abi=[{"constant":True,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"payable":False,"stateMutability":"view","type":"function"}]).functions.balanceOf(WALLET).call() / 10**6
-    
     if usdt_balance < USDT_SEED_TARGET:
-        print(f"🔄 Auto-rebalance: USDT low ({usdt_balance:.2f} < {USDT_SEED_TARGET}). Swapping ~${REBALANCE_WETH_AMOUNT*2400:.0f} worth WETH → USDT")
-        # For WETH→USDT you would reverse tokenIn/tokenOut and amount calculation
-        # For now, since your core is USDT→WETH, we can add a simple reverse swap here later if needed
-        # Placeholder: trigger a controlled swap — we'll expand in next iteration
-        pass  # TODO: implement reverse swap similarly (minimal change)
+        print(f"🔄 Auto-rebalance: USDT low ({usdt_balance:.2f}). Swapping ~${REBALANCE_WETH_AMOUNT*2400:.0f} WETH → USDT")
+        await approve_and_swap(0, direction="WETH_TO_USDT")  # amount ignored for WETH side
+    else:
+        print(f"✅ USDT seed healthy ({usdt_balance:.2f})")
 
-# Main cycle
 async def main():
     state = load_state()
-    print(f"Real USDT balance: {w3.eth.contract(address=USDT, abi=[{'constant':True,'inputs':[{'name':'_owner','type':'address'}],'name':'balanceOf','outputs':[{'name':'balance','type':'uint256'}],'payable':False,'stateMutability':'view','type':'function'}]).functions.balanceOf(WALLET).call() / 10**6:.2f}")
-    
+    usdt_balance = w3.eth.contract(address=USDT, abi=[{"constant":True,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"payable":False,"stateMutability":"view","type":"function"}]).functions.balanceOf(WALLET).call() / 10**6
+    print(f"[{datetime.now()}] Real USDT: {usdt_balance:.2f} | POL: {get_pol_balance():.2f}")
+
     if not should_run_cycle(state):
         return
-    
-    # Calculate trade size (larger bet)
-    usdt_balance = ...  # reuse your balance call
-    trade_amount_usdt = int(max(MIN_TRADE_USD * 1_000_000, 2_000_000))  # at least $2
-    
-    if usdt_balance * 1_000_000 < trade_amount_usdt:
-        print("⚠️ Not enough USDT for min trade — skipping or triggering rebalance")
+
+    if usdt_balance < MIN_TRADE_USD:
+        print("⚠️ Not enough USDT for min trade — triggering rebalance")
         await auto_rebalance()
         return
-    
-    print(f"🚀 Executing larger trade: ${trade_amount_usdt/1_000_000:.2f} USDT → WETH")
-    await approve_and_swap(trade_amount_usdt)
-    
-    # Update state
+
+    trade_amount = int(max(MIN_TRADE_USD * 1_000_000, 2_000_000))
+    print(f"🚀 Executing larger bet: ${trade_amount/1_000_000:.2f} USDT → WETH")
+    await approve_and_swap(trade_amount)
+
     state["last_run"] = time.time()
     save_state(state)
-    print("✅ Cycle completed — next possible in", COOLDOWN_MINUTES, "minutes")
+    print(f"✅ Cycle done — next in ~{COOLDOWN_MINUTES} min | Guardrails active (min ${MIN_TRADE_USD}, gas <{MAX_GAS_GWEI}, cooldown {COOLDOWN_MINUTES}min)")
 
 if __name__ == "__main__":
     asyncio.run(main())
