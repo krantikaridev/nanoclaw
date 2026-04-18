@@ -175,7 +175,20 @@ async def main():
 
     state["last_run"] = time.time()
     save_state(state)
+    await asyncio.sleep(2)  # small delay
+    send_telegram(f"Cycle finished. USDT: {usdt_balance:.2f} | POL: {get_pol_balance():.2f} | WETH dominant. Next cycle in ~{COOLDOWN_MINUTES} min.")
     print(f"✅ Cycle done — next in ~{COOLDOWN_MINUTES} min | Guardrails active (min ${MIN_TRADE_USD}, gas <{MAX_GAS_GWEI}, cooldown {COOLDOWN_MINUTES}min)")
+
+def send_telegram(message):
+    try:
+        import requests
+        url = f"https://api.telegram.org/bot{os.getenv('TELEGRAM_BOT_TOKEN')}/sendMessage"
+        payload = {"chat_id": os.getenv("TELEGRAM_CHAT_ID"), "text": f"[{datetime.now().strftime('%H:%M')}] NanoClaw:\n{message}"}
+        r = requests.post(url, json=payload, timeout=10)
+        if r.json().get("ok"):
+            print("✅ Telegram notification sent")
+    except Exception as e:
+        print("Telegram send failed (non-critical):", str(e))
 
 if __name__ == "__main__":
     asyncio.run(main())
