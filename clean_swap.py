@@ -196,10 +196,15 @@ def send_telegram(message):
     try:
         import requests
         url = f"https://api.telegram.org/bot{os.getenv('TELEGRAM_BOT_TOKEN')}/sendMessage"
-        payload = {"chat_id": os.getenv("TELEGRAM_CHAT_ID"), "text": f"[{datetime.now().strftime('%H:%M')}] NanoClaw:\n{message}"}
+        payload = {
+            "chat_id": os.getenv("TELEGRAM_CHAT_ID"),
+            "text": f"[{datetime.now().strftime('%H:%M')}] NanoClaw:\n{message}"
+        }
         r = requests.post(url, json=payload, timeout=10)
         if r.json().get("ok"):
             print("✅ Telegram notification sent")
+        else:
+            print("❌ Telegram failed:", r.json())
     except Exception as e:
         print("Telegram send failed (non-critical):", str(e))
 
