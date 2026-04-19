@@ -55,12 +55,10 @@ def get_pol_balance():
     
 def has_pending_transactions():
     try:
-        pending_count = len(w3.eth.get_block('pending')['transactions'])  # rough check
-        # Better: check nonce difference
-        latest_nonce = w3.eth.get_transaction_count(WALLET, 'latest')
-        pending_nonce = w3.eth.get_transaction_count(WALLET, 'pending')
-        if pending_nonce > latest_nonce:
-            print(f"⏳ Pending transactions detected ({pending_nonce - latest_nonce} pending). Waiting...")
+        latest = w3.eth.get_transaction_count(WALLET, "latest")
+        pending = w3.eth.get_transaction_count(WALLET, "pending")
+        if pending > latest:
+            print(f"⏳ {pending - latest} pending transaction(s) detected — skipping rebalance this cycle")
             return True
         return False
     except:
