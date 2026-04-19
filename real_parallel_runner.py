@@ -93,7 +93,7 @@ Daily Loss : {daily_loss_today:.2f}/{MAX_DAILY_LOSS_USDT} USDT
 """)
 
     if strategy == "baseline":
-        from real_parallel_runner import run_real_trade as baseline_run
+        from strategy_momentum import run_real_trade as baseline_run
         await baseline_run()
     elif strategy == "polymarket":
         from strategy_polymarket import run_real_trade as polymarket_run
