@@ -177,7 +177,6 @@ async def main():
 
     if usdt_balance < MIN_TRADE_USD:
         if has_pending_transactions():
-            print("⚠️ Pending txs detected — skipping rebalance this cycle to avoid nonce conflicts")
             return
         print("⚠️ Not enough USDT for min trade — triggering rebalance")
         await auto_rebalance()
