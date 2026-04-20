@@ -18,7 +18,7 @@ ROUTER = os.getenv("ROUTER")
 
 MIN_TRADE_USD = float(os.getenv("MIN_TRADE_USD", 2.0))
 MAX_GAS_GWEI = int(os.getenv("MAX_GAS_GWEI", 90))  # temporary bump
-COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", 30))
+COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", 15))
 USDT_SEED_TARGET = float(os.getenv("USDT_SEED_TARGET", 10.0))
 REBALANCE_WETH_AMOUNT = float(os.getenv("REBALANCE_WETH_AMOUNT", 0.004))  # ~$9-10
 
