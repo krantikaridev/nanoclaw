@@ -161,8 +161,8 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
 
 async def auto_rebalance():
     usdt_balance = w3.eth.contract(address=USDT, abi=[{"constant":True,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"payable":False,"stateMutability":"view","type":"function"}]).functions.balanceOf(WALLET).call() / 10**6
-    if usdt_balance < USDT_SEED_TARGET:
-        print(f"🔄 Auto-rebalance: USDT low ({usdt_balance:.2f}). Swapping ~${REBALANCE_WETH_AMOUNT*2400:.0f} WETH → USDT")
+    if usdt_balance < 5.0:
+        print(f"🔄 Auto-rebalance: USDT low ({usdt_balance:.2f}). Swapping ~$15 WETH → USDT")
         await approve_and_swap(0, direction="WETH_TO_USDT")  # amount ignored for WETH side
     else:
         print(f"✅ USDT seed healthy ({usdt_balance:.2f})")
