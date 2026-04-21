@@ -26,10 +26,10 @@ ROUTER = os.getenv("ROUTER")
 # Strategy parameters
 MIN_TRADE_USD = float(os.getenv("MIN_TRADE_USD", 3.0))
 MAX_TRADE_USD = float(os.getenv("MAX_TRADE_USD", 8.0))
-MAX_GAS_GWEI = int(os.getenv("MAX_GAS_GWEI", 90))  # temporary bump
-COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", 15))
+MAX_GAS_GWEI = int(os.getenv("MAX_GAS_GWEI", 150))  # temporary bump
+COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", 20))
 USDT_SEED_TARGET = float(os.getenv("USDT_SEED_TARGET", 10.0))
-REBALANCE_WETH_AMOUNT = float(os.getenv("REBALANCE_WETH_AMOUNT", 0.004))  # ~$9-10
+REBALANCE_WETH_AMOUNT = float(os.getenv("REBALANCE_WETH_AMOUNT", 0.006))  # ~$9-10
 
 w3 = Web3(Web3.HTTPProvider(RPC))
 print(f"[{datetime.now()}] RPC connected: {w3.is_connected()}")
