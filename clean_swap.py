@@ -178,6 +178,7 @@ async def auto_rebalance():
         print(f"✅ USDT seed healthy ({usdt_balance:.2f})")
 
 async def main():
+    global MIN_TRADE_USD, MAX_TRADE_USD, COOLDOWN_MINUTES, USDT_SEED_TARGET
     state = load_state()
     usdt_balance = w3.eth.contract(address=USDT, abi=[{"constant":True,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"payable":False,"stateMutability":"view","type":"function"}]).functions.balanceOf(WALLET).call() / 10**6
     print(f"[{datetime.now()}] Real USDT: {usdt_balance:.2f} | POL: {get_pol_balance():.2f}")
