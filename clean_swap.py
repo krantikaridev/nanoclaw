@@ -1,4 +1,18 @@
+import os
+import time
+import sys
+import os
+import time
+import sys
 import asyncio
+import os
+import time
+import sys
+
+# Simple lock to prevent double execution in the same cycle
+import os
+import time
+import sys
 from web3 import Web3
 from dotenv import load_dotenv
 import os
@@ -210,3 +224,11 @@ def send_telegram(message):
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+
+# Simple lock to prevent double execution in the same cycle
+LOCK_FILE = "/tmp/nanoclaw.lock"
+if os.path.exists(LOCK_FILE) and (time.time() - os.path.getmtime(LOCK_FILE) < 300):  # 5 min
+    print("⛔ Lock active — skipping to avoid double-run")
+    sys.exit(0)
+open(LOCK_FILE, 'w').close()
