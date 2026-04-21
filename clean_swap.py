@@ -1,3 +1,4 @@
+import random
 import os
 import time
 import sys
@@ -31,6 +32,11 @@ COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", 20))
 USDT_SEED_TARGET = float(os.getenv("USDT_SEED_TARGET", 10.0))
 REBALANCE_WETH_AMOUNT = float(os.getenv("REBALANCE_WETH_AMOUNT", 0.006))  # ~$9-10
 print(f"Strategy params loaded: Min ${MIN_TRADE_USD} | Max ${MAX_TRADE_USD} | Cooldown {COOLDOWN_MINUTES} min")
+
+# Strat2 params (different for broader data - more runs, different size)
+STRAT2_WEIGHT = float(os.getenv("STRAT2_WEIGHT", 0.6))      # 60% runs for new strat
+STRAT2_MIN_BET_USD = float(os.getenv("STRAT2_MIN_BET_USD", 2.0))
+STRAT2_MAX_BET_USD = float(os.getenv("STRAT2_MAX_BET_USD", 6.0))
 
 w3 = Web3(Web3.HTTPProvider(RPC))
 print(f"[{datetime.now()}] RPC connected: {w3.is_connected()}")
@@ -193,13 +199,22 @@ async def main():
         await auto_rebalance()
         return
     
-    # Calculate trade amount with min/max
-    trade_amount_usd = max(MIN_TRADE_USD, min(MAX_TRADE_USD, 3.0))
-    trade_amount = int(trade_amount_usd * 1_000_000)
-    
-    print(f"🚀 Executing larger bet: ${trade_amount_usd:.2f} USDT → WETH")
-    await approve_and_swap(trade_amount)
+        # Choose strat for this cycle (Strat2 runs more for broader data)
+    if random.random() < STRAT2_WEIGHT:
+        min_bet = STRAT2_MIN_BET_USD
+        max_bet = STRAT2_MAX_BET_USD
+        strat_name = "STRAT2"
+    else:
+        min_bet = MIN_TRADE_USD
+        max_bet = MAX_TRADE_USD
+        strat_name = "STRAT1"
 
+    trade_amount_usd = max(min_bet, min(max_bet, 3.0))
+    trade_amount = int(trade_amount_usd * 1_000_000)
+
+    print(f"🚀 Executing {strat_name} bet: ${trade_amount_usd:.2f} USDT → WETH")
+    await approve_and_swap(trade_amount)
+    
     state["last_run"] = time.time()
     save_state(state)
     await asyncio.sleep(2)  # small delay
