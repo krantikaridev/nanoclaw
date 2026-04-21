@@ -31,11 +31,6 @@ COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", 15))
 USDT_SEED_TARGET = float(os.getenv("USDT_SEED_TARGET", 10.0))
 REBALANCE_WETH_AMOUNT = float(os.getenv("REBALANCE_WETH_AMOUNT", 0.004))  # ~$9-10
 
-# Calculate trade amount in USDT (with min/max)
-trade_amount_usd = max(MIN_TRADE_USD, min(MAX_TRADE_USD, 3.0))   # start with $3, respect min/max
-trade_amount = int(trade_amount_usd * 1_000_000)
-
-
 w3 = Web3(Web3.HTTPProvider(RPC))
 print(f"[{datetime.now()}] RPC connected: {w3.is_connected()}")
 
