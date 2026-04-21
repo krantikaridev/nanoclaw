@@ -190,10 +190,6 @@ async def main():
         print("⚠️ Not enough USDT for min trade — triggering rebalance")
         await auto_rebalance()
         return
-
-    # Trade size control with min/max
-    MIN_TRADE_USD = float(os.getenv("MIN_TRADE_USD", 3.0))
-    MAX_TRADE_USD = float(os.getenv("MAX_TRADE_USD", 8.0))
     
     # Calculate actual trade amount (start with $3, respect min/max)
     trade_amount_usd = max(MIN_TRADE_USD, min(MAX_TRADE_USD, 3.0))
