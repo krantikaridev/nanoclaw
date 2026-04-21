@@ -30,6 +30,7 @@ MAX_GAS_GWEI = int(os.getenv("MAX_GAS_GWEI", 150))  # temporary bump
 COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", 20))
 USDT_SEED_TARGET = float(os.getenv("USDT_SEED_TARGET", 10.0))
 REBALANCE_WETH_AMOUNT = float(os.getenv("REBALANCE_WETH_AMOUNT", 0.006))  # ~$9-10
+print(f"Strategy params loaded: Min ${MIN_TRADE_USD} | Max ${MAX_TRADE_USD} | Cooldown {COOLDOWN_MINUTES} min")
 
 w3 = Web3(Web3.HTTPProvider(RPC))
 print(f"[{datetime.now()}] RPC connected: {w3.is_connected()}")
@@ -191,7 +192,7 @@ async def main():
         await auto_rebalance()
         return
     
-    # Calculate actual trade amount (start with $3, respect min/max)
+    # Calculate trade amount with min/max
     trade_amount_usd = max(MIN_TRADE_USD, min(MAX_TRADE_USD, 3.0))
     trade_amount = int(trade_amount_usd * 1_000_000)
     
