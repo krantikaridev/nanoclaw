@@ -191,15 +191,15 @@ async def main():
         await auto_rebalance()
         return
 
-    # Trade size control
+    # Trade size control with min/max
     MIN_TRADE_USD = float(os.getenv("MIN_TRADE_USD", 3.0))
     MAX_TRADE_USD = float(os.getenv("MAX_TRADE_USD", 8.0))
     
-    # Calculate trade amount in USDT (with min/max)
-    trade_amount_usd = max(MIN_TRADE_USD, min(MAX_TRADE_USD, 3.0))   # start with $3, respect min/max
+    # Calculate actual trade amount (start with $3, respect min/max)
+    trade_amount_usd = max(MIN_TRADE_USD, min(MAX_TRADE_USD, 3.0))
     trade_amount = int(trade_amount_usd * 1_000_000)
     
-    print(f"🚀 Executing larger bet: ${trade_amount/1_000_000:.2f} USDT → WETH")
+    print(f"🚀 Executing larger bet: ${trade_amount_usd:.2f} USDT → WETH")
     await approve_and_swap(trade_amount)
 
     state["last_run"] = time.time()
