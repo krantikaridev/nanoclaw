@@ -223,7 +223,7 @@ async def main():
         return
     
     # === BRAIN AGENT + AUTO POL TOP-UP ===
-    await auto_topup_pol()
+    auto_topup_pol()
     
     decision = get_brain_decision(usdt_balance, pol_balance)
     
