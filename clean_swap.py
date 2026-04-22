@@ -198,7 +198,7 @@ async def main():
         print("⚠️ Not enough USDT for min trade — triggering rebalance")
         await auto_rebalance()
         return
-    
+        
     # Choose strat for this cycle
     if random.random() < STRAT2_WEIGHT:
         min_bet = STRAT2_MIN_BET_USD
@@ -211,8 +211,8 @@ async def main():
         strat_name = "STRAT1"
         use_strat2 = False
 
-    # Full respect of each strat's min/max (no hard cap at $3)
-    trade_amount_usd = max(min_bet, min(max_bet, 8.0))   # respect each strat's range
+    # FULL respect of each strat's min/max range (no hard cap at $3)
+    trade_amount_usd = max(min_bet, min(max_bet, 8.0))
     trade_amount = int(trade_amount_usd * 1_000_000)
 
     # Strat2 only executes when USDT seed is healthy
