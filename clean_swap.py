@@ -211,12 +211,13 @@ async def execute_trade(strat, size_usd):
     await approve_and_swap(trade_amount, direction="USDT_TO_WETH")
     
     print(f"✅ {strat} trade completed")
-    
+
 async def main():
     global MIN_TRADE_USD, MAX_TRADE_USD, COOLDOWN_MINUTES, USDT_SEED_TARGET
     state = load_state()
     usdt_balance = w3.eth.contract(address=USDT, abi=[{"constant":True,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"payable":False,"stateMutability":"view","type":"function"}]).functions.balanceOf(WALLET).call() / 10**6
-    print(f"[{datetime.now()}] Real USDT: {usdt_balance:.2f} | POL: {get_pol_balance():.2f}")
+    pol_balance = get_pol_balance()
+    print(f"[{datetime.now()}] Real USDT: {usdt_balance:.2f} | POL: {pol_balance:.2f}")
 
     if not should_run_cycle(state):
         return
@@ -240,32 +241,9 @@ async def main():
     else:
         print(f"Brain decision: {decision}")
         
-    # Choose strat for this cycle
-    if random.random() < STRAT2_WEIGHT:
-        min_bet = STRAT2_MIN_BET_USD
-        max_bet = STRAT2_MAX_BET_USD
-        strat_name = "STRAT2"
-        use_strat2 = True
-    else:
-        min_bet = MIN_TRADE_USD
-        max_bet = MAX_TRADE_USD
-        strat_name = "STRAT1"
-        use_strat2 = False
-
-    # FULL respect of each strat's min/max range (no hard cap at $3)
-    trade_amount_usd = max(min_bet, min(max_bet, 8.0))
-    trade_amount = int(trade_amount_usd * 1_000_000)
-
-    # Strat2 only executes when USDT seed is healthy
-    if use_strat2 and usdt_balance < 5.0:
-        print(f"⏳ STRAT2 skipped (USDT {usdt_balance:.2f} < 5.0)")
-    else:
-        print(f"🚀 Executing {strat_name} bet: ${trade_amount_usd:.2f} USDT → WETH")
-        await approve_and_swap(trade_amount)
-        
     state["last_run"] = time.time()
     save_state(state)
-    await asyncio.sleep(2)  # small delay
+    await asyncio.sleep(2)
     send_telegram(f"Cycle finished. USDT: {usdt_balance:.2f} | POL: {get_pol_balance():.2f} | WETH dominant. Next cycle in ~{COOLDOWN_MINUTES} min.")
     print(f"✅ Cycle done — next in ~{COOLDOWN_MINUTES} min | Guardrails active (min ${MIN_TRADE_USD}, gas <{MAX_GAS_GWEI}, cooldown {COOLDOWN_MINUTES}min)")
 
