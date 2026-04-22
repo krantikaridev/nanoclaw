@@ -1,3 +1,4 @@
+from brain_agent import BrainAgent
 import random
 import os
 import time
@@ -195,6 +196,29 @@ async def auto_rebalance():
     else:
         print(f"✅ USDT seed healthy ({usdt_balance:.2f})")
 
+def get_brain_decision(usdt_balance, pol_balance):
+    brain = BrainAgent(min_trade=3.0, max_trade=6.5, strat2_weight=0.75)
+    return brain.decide_action(usdt_balance, pol_balance)
+
+
+async def execute_trade(strat, size_usd):
+    """Execute trade with size decided by brain"""
+    print(f"🚀 Executing {strat} bet: ${size_usd:.2f} USDT → WETH")
+    
+    trade_amount = int(size_usd * 1_000_000)  # USDT has 6 decimals
+    
+    # Use your existing swap logic
+    await approve_and_swap(trade_amount, direction="USDT_TO_WETH")
+    
+    print(f"✅ {strat} trade completed")
+    
+async def auto_topup_pol():
+    pol_balance = get_pol_balance()
+    if pol_balance < 2.5:
+        print(f"⚠️ POL low ({pol_balance:.2f}) — auto top-up triggered")
+        print("🔄 Swapping 0.0015 WETH → POL (manual for now)...")
+        # Full auto swap will be added after you confirm it works
+
 async def main():
     global MIN_TRADE_USD, MAX_TRADE_USD, COOLDOWN_MINUTES, USDT_SEED_TARGET
     state = load_state()
@@ -204,12 +228,24 @@ async def main():
     if not should_run_cycle(state):
         return
 
-    if usdt_balance < MIN_TRADE_USD:
-        if has_pending_transactions():
-            return
-        print("⚠️ Not enough USDT for min trade — triggering rebalance")
-        await auto_rebalance()
-        return
+# === BRAIN AGENT + AUTO POL TOP-UP ===
+await auto_topup_pol()
+
+decision = get_brain_decision(usdt_balance, pol_balance)
+
+if decision == "REBALANCE":
+    print("🔄 Brain decided: REBALANCE")
+    await auto_rebalance()
+elif decision == "SKIP_POL_LOW":
+    print("⛔ Brain decided: Skip (POL low)")
+elif decision.startswith("TRADE_"):
+    parts = decision.split("_")
+    strat = parts[1]
+    size = float(parts[2])
+    print(f"🚀 Brain decided: {strat} ${size:.2f}")
+    await execute_trade(strat, size)
+else:
+    print(f"Brain decision: {decision}")
         
     # Choose strat for this cycle
     if random.random() < STRAT2_WEIGHT:
