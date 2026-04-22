@@ -199,7 +199,7 @@ async def main():
         await auto_rebalance()
         return
     
-    # Strat2 = different behavior: only bet when USDT seed is healthy (>5)
+    # Choose strat for this cycle
     if random.random() < STRAT2_WEIGHT:
         min_bet = STRAT2_MIN_BET_USD
         max_bet = STRAT2_MAX_BET_USD
@@ -211,15 +211,16 @@ async def main():
         strat_name = "STRAT1"
         use_strat2 = False
 
-    trade_amount_usd = max(min_bet, min(max_bet, 3.0))
+    # Full respect of each strat's min/max (no hard cap at $3)
+    trade_amount_usd = max(min_bet, min(max_bet, 8.0))   # respect each strat's range
     trade_amount = int(trade_amount_usd * 1_000_000)
 
-    # Strat2 only executes if USDT > 5 (different trigger = broader data)
+    # Strat2 only executes when USDT seed is healthy
     if use_strat2 and usdt_balance < 5.0:
         print(f"⏳ STRAT2 skipped (USDT {usdt_balance:.2f} < 5.0)")
     else:
         print(f"🚀 Executing {strat_name} bet: ${trade_amount_usd:.2f} USDT → WETH")
-        await approve_and_swap(trade_amount) 
+        await approve_and_swap(trade_amount)
         
     state["last_run"] = time.time()
     save_state(state)
