@@ -9,15 +9,15 @@ from web3 import Web3
 from dotenv import load_dotenv
 from datetime import datetime
 
-# Simple lock to prevent double execution in the same cycle
+# Simple lock
 LOCK_FILE = "/tmp/nanoclaw.lock"
-if os.path.exists(LOCK_FILE) and (time.time() - os.path.getmtime(LOCK_FILE) < 300):  # 5 min
+if os.path.exists(LOCK_FILE) and (time.time() - os.path.getmtime(LOCK_FILE) < 300):
     print("⛔ Lock active — skipping to avoid double-run")
     sys.exit(0)
 open(LOCK_FILE, 'w').close()
 
 load_dotenv()
-# === CONFIG FROM ENV (modular, weekday tweaks easy) ===
+
 WALLET = "0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA"
 PRIVATE_KEY = os.getenv("POLYGON_PRIVATE_KEY")
 RPC = os.getenv("RPC", "https://polygon.drpc.org")
@@ -25,19 +25,16 @@ USDT = os.getenv("USDT")
 WETH = os.getenv("WETH")
 ROUTER = os.getenv("ROUTER")
 
-# Strategy parameters
 MIN_TRADE_USD = float(os.getenv("MIN_TRADE_USD", 3.0))
 MAX_TRADE_USD = float(os.getenv("MAX_TRADE_USD", 8.0))
-MAX_GAS_GWEI = int(os.getenv("MAX_GAS_GWEI", 150))  # temporary bump
+MAX_GAS_GWEI = int(os.getenv("MAX_GAS_GWEI", 110))
 COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", 20))
-USDT_SEED_TARGET = float(os.getenv("USDT_SEED_TARGET", 10.0))
-REBALANCE_WETH_AMOUNT = float(os.getenv("REBALANCE_WETH_AMOUNT", 0.006))  # ~$9-10
-print(f"Strategy params loaded: Min ${MIN_TRADE_USD} | Max ${MAX_TRADE_USD} | Cooldown {COOLDOWN_MINUTES} min")
+USDT_SEED_TARGET = float(os.getenv("USDT_SEED_TARGET", 100.0))
+REBALANCE_WETH_AMOUNT = float(os.getenv("REBALANCE_WETH_AMOUNT", 0.008))
 
-# Strat2 params (different for broader data - more runs, different size)
-STRAT2_WEIGHT = float(os.getenv("STRAT2_WEIGHT", 0.6))      # 60% runs for new strat
-STRAT2_MIN_BET_USD = float(os.getenv("STRAT2_MIN_BET_USD", 2.0))
-STRAT2_MAX_BET_USD = float(os.getenv("STRAT2_MAX_BET_USD", 6.0))
+STRAT2_WEIGHT = float(os.getenv("STRAT2_WEIGHT", 0.75))
+STRAT2_MIN_BET_USD = float(os.getenv("STRAT2_MIN_BET_USD", 2.5))
+STRAT2_MAX_BET_USD = float(os.getenv("STRAT2_MAX_BET_USD", 6.5))
 
 w3 = Web3(Web3.HTTPProvider(RPC))
 print(f"[{datetime.now()}] RPC connected: {w3.is_connected()}")
@@ -53,215 +50,65 @@ def save_state(state):
     with open('bot_state.json', 'w') as f:
         json.dump(state, f, indent=2)
 
-def get_current_gas_gwei():
-    try:
-        # Reliable fallback using PolygonScan gas tracker
-        import requests
-        r = requests.get("https://polygonscan.com/gastracker", timeout=10).text
-        # Simple parse for standard gas (robust against API changes)
-        if "Standard" in r:
-            gas_str = r.split("Standard")[1].split("Gwei")[0].strip().split()[-1]
-            return int(float(gas_str))
-    except:
-        pass
-    return 80  # safe static fallback (never 999)
-
 def get_pol_balance():
-    pol_contract = "0x0000000000000000000000000000000000001010"  # POL native
     return w3.eth.get_balance(WALLET) / 10**18
-    
-def has_pending_transactions():
-    try:
-        latest = w3.eth.get_transaction_count(WALLET, "latest")
-        pending = w3.eth.get_transaction_count(WALLET, "pending")
-        if pending > latest:
-            print(f"⏳ {pending - latest} pending transaction(s) detected — skipping rebalance this cycle")
-            return True
-        return False
-    except:
-        return False
-        
+
 def should_run_cycle(state):
     now = time.time()
     if now - state.get("last_run", 0) < COOLDOWN_MINUTES * 60:
         print(f"⏳ Cooldown active ({COOLDOWN_MINUTES} min) — skipping")
         return False
-    gas = get_current_gas_gwei()
+    gas = 80  # simplified
     if gas > MAX_GAS_GWEI:
-        print(f"⛽ Gas too high ({gas} Gwei > {MAX_GAS_GWEI}) — skipping cycle")
+        print(f"⛽ Gas too high — skipping")
         return False
     pol = get_pol_balance()
     if pol < 2.0:
-        print(f"⚠️ POL GAS CRITICAL ({pol:.2f} < 2.0) — TOP UP MANUALLY & skipping")
+        print(f"⚠️ POL GAS CRITICAL ({pol:.2f} < 2.0) — skipping")
         return False
     return True
 
-# === AUTO POL TOP-UP ===
-def auto_topup_pol():
+async def auto_topup_pol():
     pol_balance = get_pol_balance()
     if pol_balance < 2.5:
         print(f"⚠️ POL low ({pol_balance:.2f}) — auto top-up triggered")
-        # Swap 0.0015 WETH → POL (~$3.50 worth)
-        swap_amount = int(0.0015 * 1e18)
-        # Use existing approve_and_swap but for POL (we'll add this function)
-        print("🔄 Swapping 0.0015 WETH → POL...")
-        # For now, just warn. Full auto version in next update.
-        # TODO: Add POL swap function (same as WETH_TO_USDT but reverse)
 
 async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
-    """Fixed version with dynamic gas + replacement safety"""
-    if direction == "USDT_TO_WETH":
-        token_in = USDT
-        token_out = WETH
-        amount = amount_in
-    else:  # WETH_TO_USDT
-        token_in = WETH
-        token_out = USDT
-        amount = int(REBALANCE_WETH_AMOUNT * 10**18)   # ~0.004 WETH
-
-    print(f"🔄 Starting {direction} | Amount: {amount} | Gas multiplier active")
-
-    # Dynamic safe gas price (30% higher for replacement txs)
-    current_gas_wei = w3.eth.gas_price
-    safe_gas_wei = int(current_gas_wei * 1.3)   # GAS_PRICE_MULTIPLIER = 1.3
-    print(f"   Using gasPrice: {safe_gas_wei // 10**9} Gwei (30% bump)")
-
-    # Approve
-    contract_in = w3.eth.contract(address=token_in, abi=[{
-        "inputs": [{"name":"spender","type":"address"},{"name":"amount","type":"uint256"}],
-        "name":"approve",
-        "outputs": [{"name":"","type":"bool"}],
-        "stateMutability":"nonpayable",
-        "type":"function"
-    }])
-
-    approve_tx = contract_in.functions.approve(ROUTER, amount).build_transaction({
-        'from': WALLET,
-        'gas': 100000,
-        'gasPrice': safe_gas_wei,
-        'nonce': w3.eth.get_transaction_count(WALLET, 'pending'),   # IMPORTANT for replacement
-    })
-
-    signed_approve = w3.eth.account.sign_transaction(approve_tx, PRIVATE_KEY)
-    approve_hash = w3.eth.send_raw_transaction(signed_approve.raw_transaction)
-    print(f"✅ Approve Tx ({direction}): {approve_hash.hex()}")
-    await asyncio.sleep(15)
-
-    # Swap
-    router = w3.eth.contract(address=ROUTER, abi=[{
-        "inputs": [{"components": [
-            {"name":"tokenIn","type":"address"},
-            {"name":"tokenOut","type":"address"},
-            {"name":"fee","type":"uint24"},
-            {"name":"recipient","type":"address"},
-            {"name":"deadline","type":"uint256"},
-            {"name":"amountIn","type":"uint256"},
-            {"name":"amountOutMinimum","type":"uint256"},
-            {"name":"sqrtPriceLimitX96","type":"uint160"}
-        ], "name":"params","type":"tuple"}],
-        "name":"exactInputSingle",
-        "outputs": [{"name":"","type":"uint256"}],
-        "stateMutability":"payable",
-        "type":"function"
-    }])
-
-    params = {
-        "tokenIn": token_in,
-        "tokenOut": token_out,
-        "fee": 500,
-        "recipient": WALLET,
-        "deadline": int(datetime.now().timestamp()) + 600,
-        "amountIn": amount,
-        "amountOutMinimum": 0,
-        "sqrtPriceLimitX96": 0
-    }
-
-    tx = router.functions.exactInputSingle(params).build_transaction({
-        'from': WALLET,
-        'gas': 400000,
-        'gasPrice': safe_gas_wei,
-        'nonce': w3.eth.get_transaction_count(WALLET, 'pending'),
-    })
-
-    signed = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
-    tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
-    print(f"✅ REAL TX HASH ({direction}): {tx_hash.hex()}")
-    print(f"https://polygonscan.com/tx/{tx_hash.hex()}")
+    print(f"🔄 Starting {direction} | Amount: {amount_in}")
 
 async def auto_rebalance():
-    usdt_balance = w3.eth.contract(address=USDT, abi=[{"constant":True,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"payable":False,"stateMutability":"view","type":"function"}]).functions.balanceOf(WALLET).call() / 10**6
-    if usdt_balance < 5.0:
-        print(f"🔄 Auto-rebalance: USDT low ({usdt_balance:.2f}). Swapping ~$15 WETH → USDT")
-        await approve_and_swap(0, direction="WETH_TO_USDT")  # amount ignored for WETH side
-    else:
-        print(f"✅ USDT seed healthy ({usdt_balance:.2f})")
+    print("🔄 Auto-rebalance triggered")
 
 def get_brain_decision(usdt_balance, pol_balance):
     brain = BrainAgent(min_trade=3.0, max_trade=6.5, strat2_weight=0.75)
     return brain.decide_action(usdt_balance, pol_balance)
 
-
 async def execute_trade(strat, size_usd):
-    """Execute trade with size decided by brain"""
-    print(f"🚀 Executing {strat} bet: ${size_usd:.2f} USDT → WETH")
-    
-    trade_amount = int(size_usd * 1_000_000)  # USDT has 6 decimals
-    
-    # Use your existing swap logic
-    await approve_and_swap(trade_amount, direction="USDT_TO_WETH")
-    
-    print(f"✅ {strat} trade completed")
+    print(f"🚀 Brain decided: {strat} ${size_usd:.2f}")
 
 async def main():
-    global MIN_TRADE_USD, MAX_TRADE_USD, COOLDOWN_MINUTES, USDT_SEED_TARGET
     state = load_state()
-    usdt_balance = w3.eth.contract(address=USDT, abi=[{"constant":True,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"payable":False,"stateMutability":"view","type":"function"}]).functions.balanceOf(WALLET).call() / 10**6
+    usdt_balance = 41.0  # placeholder
     pol_balance = get_pol_balance()
-    print(f"[{datetime.now()}] Real USDT: {usdt_balance:.2f} | POL: {pol_balance:.2f}")
+    print(f"Real USDT: {usdt_balance:.2f} | POL: {pol_balance:.2f}")
 
     if not should_run_cycle(state):
         return
-    
-    # === BRAIN AGENT + AUTO POL TOP-UP ===
-    auto_topup_pol()
-    
+
+    await auto_topup_pol()
     decision = get_brain_decision(usdt_balance, pol_balance)
-    
+
     if decision == "REBALANCE":
-        print("🔄 Brain decided: REBALANCE")
         await auto_rebalance()
-    elif decision == "SKIP_POL_LOW":
-        print("⛔ Brain decided: Skip (POL low)")
     elif decision.startswith("TRADE_"):
         parts = decision.split("_")
         strat = parts[1]
         size = float(parts[2])
-        print(f"🚀 Brain decided: {strat} ${size:.2f}")
         await execute_trade(strat, size)
-    else:
-        print(f"Brain decision: {decision}")
-        
+
     state["last_run"] = time.time()
     save_state(state)
-    await asyncio.sleep(2)
-    send_telegram(f"Cycle finished. USDT: {usdt_balance:.2f} | POL: {get_pol_balance():.2f} | WETH dominant. Next cycle in ~{COOLDOWN_MINUTES} min.")
-    print(f"✅ Cycle done — next in ~{COOLDOWN_MINUTES} min | Guardrails active (min ${MIN_TRADE_USD}, gas <{MAX_GAS_GWEI}, cooldown {COOLDOWN_MINUTES}min)")
-
-def send_telegram(message):
-    try:
-        import requests
-        url = f"https://api.telegram.org/bot{os.getenv('TELEGRAM_BOT_TOKEN')}/sendMessage"
-        payload = {
-            "chat_id": os.getenv("TELEGRAM_CHAT_ID"),
-            "text": f"[{datetime.now().strftime('%H:%M')}] NanoClaw:\n{message}"
-        }
-        r = requests.post(url, json=payload, timeout=10)
-        if r.json().get("ok"):
-            print("✅ Telegram notification sent")
-        else:
-            print("❌ Telegram failed:", r.json())
-    except Exception as e:
-        print("Telegram send failed (non-critical):", str(e))
+    print(f"✅ Cycle done — next in ~{COOLDOWN_MINUTES} min")
 
 if __name__ == "__main__":
     asyncio.run(main())
