@@ -227,25 +227,25 @@ async def main():
 
     if not should_run_cycle(state):
         return
-
-# === BRAIN AGENT + AUTO POL TOP-UP ===
-await auto_topup_pol()
-
-decision = get_brain_decision(usdt_balance, pol_balance)
-
-if decision == "REBALANCE":
-    print("🔄 Brain decided: REBALANCE")
-    await auto_rebalance()
-elif decision == "SKIP_POL_LOW":
-    print("⛔ Brain decided: Skip (POL low)")
-elif decision.startswith("TRADE_"):
-    parts = decision.split("_")
-    strat = parts[1]
-    size = float(parts[2])
-    print(f"🚀 Brain decided: {strat} ${size:.2f}")
-    await execute_trade(strat, size)
-else:
-    print(f"Brain decision: {decision}")
+    
+    # === BRAIN AGENT + AUTO POL TOP-UP ===
+    await auto_topup_pol()
+    
+    decision = get_brain_decision(usdt_balance, pol_balance)
+    
+    if decision == "REBALANCE":
+        print("🔄 Brain decided: REBALANCE")
+        await auto_rebalance()
+    elif decision == "SKIP_POL_LOW":
+        print("⛔ Brain decided: Skip (POL low)")
+    elif decision.startswith("TRADE_"):
+        parts = decision.split("_")
+        strat = parts[1]
+        size = float(parts[2])
+        print(f"🚀 Brain decided: {strat} ${size:.2f}")
+        await execute_trade(strat, size)
+    else:
+        print(f"Brain decision: {decision}")
         
     # Choose strat for this cycle
     if random.random() < STRAT2_WEIGHT:
