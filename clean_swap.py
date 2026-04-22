@@ -212,13 +212,6 @@ async def execute_trade(strat, size_usd):
     
     print(f"✅ {strat} trade completed")
     
-async def auto_topup_pol():
-    pol_balance = get_pol_balance()
-    if pol_balance < 2.5:
-        print(f"⚠️ POL low ({pol_balance:.2f}) — auto top-up triggered")
-        print("🔄 Swapping 0.0015 WETH → POL (manual for now)...")
-        # Full auto swap will be added after you confirm it works
-
 async def main():
     global MIN_TRADE_USD, MAX_TRADE_USD, COOLDOWN_MINUTES, USDT_SEED_TARGET
     state = load_state()
