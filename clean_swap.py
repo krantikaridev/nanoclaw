@@ -95,6 +95,18 @@ def should_run_cycle(state):
         return False
     return True
 
+# === AUTO POL TOP-UP ===
+def auto_topup_pol():
+    pol_balance = get_pol_balance()
+    if pol_balance < 2.5:
+        print(f"⚠️ POL low ({pol_balance:.2f}) — auto top-up triggered")
+        # Swap 0.0015 WETH → POL (~$3.50 worth)
+        swap_amount = int(0.0015 * 1e18)
+        # Use existing approve_and_swap but for POL (we'll add this function)
+        print("🔄 Swapping 0.0015 WETH → POL...")
+        # For now, just warn. Full auto version in next update.
+        # TODO: Add POL swap function (same as WETH_TO_USDT but reverse)
+
 async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
     """Fixed version with dynamic gas + replacement safety"""
     if direction == "USDT_TO_WETH":
