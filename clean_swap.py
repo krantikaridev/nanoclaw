@@ -79,13 +79,32 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
 async def auto_rebalance():
     print("🔄 Auto-rebalance triggered")
 
-def get_brain_decision(usdt_balance, pol_balance):
-    brain = BrainAgent(min_trade=3.0, max_trade=6.5, strat2_weight=0.75)
-    return brain.decide_action(usdt_balance, pol_balance)
-
+def get_brain_decision(usdt_balance, pol_balance, total_portfolio_value=131.0):
+    brain = BrainAgent(min_trade=3.0, max_trade=7.5, strat2_weight=0.75)
+    return brain.decide_action(usdt_balance, pol_balance, total_portfolio_value)
+    
 async def execute_trade(strat, size_usd):
     print(f"🚀 Brain decided: {strat} ${size_usd:.2f}")
 
+# === PERFORMANCE TRACKER ===
+trade_history = []  # stores last 10 trades: True = win, False = loss
+total_fees_paid = 0.0
+starting_usdt = 41.0  # update this after every capital top-up
+
+def update_performance(was_profitable: bool, fee_usd: float = 0.15):
+    global total_fees_paid
+    trade_history.append(was_profitable)
+    if len(trade_history) > 10:
+        trade_history.pop(0)
+    total_fees_paid += fee_usd
+
+def print_performance():
+    if not trade_history:
+        return
+    win_rate = (sum(trade_history) / len(trade_history)) * 100
+    net_pnl = (sum(trade_history) * 6.5) - total_fees_paid  # rough estimate
+    print(f"📊 Performance: Win Rate {win_rate:.1f}% | Est. Net PNL ${net_pnl:.2f} | Fees ${total_fees_paid:.2f}")
+    
 async def main():
     state = load_state()
     usdt_balance = 41.0  # placeholder
@@ -96,7 +115,8 @@ async def main():
         return
 
     await auto_topup_pol()
-    decision = get_brain_decision(usdt_balance, pol_balance)
+    total_portfolio = usdt_balance + 89.0  # USDT + current WETH value
+    decision = get_brain_decision(usdt_balance, pol_balance, total_portfolio)
 
     if decision == "REBALANCE":
         await auto_rebalance()
@@ -109,6 +129,7 @@ async def main():
     state["last_run"] = time.time()
     save_state(state)
     print(f"✅ Cycle done — next in ~{COOLDOWN_MINUTES} min")
+    print_performance()
 
 if __name__ == "__main__":
     asyncio.run(main())
