@@ -281,9 +281,13 @@ async def main():
     if decision.startswith("TRADE_"):
         parts = decision.split("_")
         strat = parts[1]
-        size = float(parts[2])
+        
+        # Dynamic sizing: 25% of current USDT, capped between $10 and $25
+        available_usdt = usdt_before  # Use actual USDT balance
+        size = max(10.0, min(25.0, available_usdt * 0.25))
+        
         trade_size = size
-        print(f"🚀 Brain decided: {strat} ${size:.2f}")
+        print(f"🚀 Brain decided: {strat} | Dynamic Size: ${size:.2f} (25% of ${available_usdt:.2f})")
         
         # Execute swap with error handling
         tx_hash = await approve_and_swap(int(size * 1_000_000))
