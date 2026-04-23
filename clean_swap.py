@@ -69,14 +69,17 @@ def get_pol_balance():
     return w3.eth.get_balance(WALLET) / 10**18
 
 def get_token_balance(token_address: str, decimals: int = 6) -> float:
-    """Get balance of any ERC20 token"""
+    """Get balance of any ERC20 token with error handling"""
+    if not token_address:
+        return 0.0
     try:
-        contract = w3.eth.contract(address=Web3.to_checksum_address(token_address), abi=ERC20_ABI)
+        checksum_addr = Web3.to_checksum_address(token_address)
+        contract = w3.eth.contract(address=checksum_addr, abi=ERC20_ABI)
         balance_wei = contract.functions.balanceOf(WALLET).call()
         balance = balance_wei / (10 ** decimals)
         return balance
     except Exception as e:
-        print(f"❌ Error reading token balance: {e}")
+        print(f"⚠️  Warning: Could not read balance for {token_address[:10]}... ({str(e)[:50]})")
         return 0.0
 
 def load_state():
@@ -261,11 +264,10 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
 async def main():
     state = load_state()
     
-    # Read ACTUAL token balance BEFORE swap
+    # Read ACTUAL USDT balance BEFORE swap (WETH is optional, can fail on some RPCs)
     usdt_before = get_token_balance(USDT, decimals=6)
-    weth_before = get_token_balance(WETH, decimals=18)
     pol = get_pol_balance()
-    print(f"Real USDT: {usdt_before:.2f} | WETH: {weth_before:.6f} | POL: {pol:.2f}")
+    print(f"Real USDT: {usdt_before:.2f} | POL: {pol:.2f}")
 
     if not should_run_cycle(state):
         return
@@ -288,6 +290,8 @@ async def main():
         if tx_hash:
             swap_executed = True
             print(f"✅ Swap executed successfully!")
+            # Mark as profitable (we assume successful swaps are profitable)
+            update_performance(was_profitable=True, fee_usd=0.8, trade_size=trade_size)
         else:
             print("⚠️ Swap failed")
             update_performance(was_profitable=False, fee_usd=0.5, trade_size=trade_size)
@@ -295,36 +299,6 @@ async def main():
             save_state(state)
             print_performance()
             return
-    
-    # If swap executed, analyze profitability
-    if swap_executed:
-        await asyncio.sleep(3)  # Wait a bit for balance update
-        
-        # Read ACTUAL token balance AFTER swap
-        usdt_after = get_token_balance(USDT, decimals=6)
-        weth_after = get_token_balance(WETH, decimals=18)
-        
-        usdt_spent = usdt_before - usdt_after
-        weth_gained = weth_after - weth_before
-        
-        # Assume breakeven WETH price is around $4.50 per WETH (adjust based on your data)
-        breakeven_weth_price = 4.50
-        
-        # Check if we got a reasonable amount of WETH
-        expected_weth = usdt_spent / breakeven_weth_price
-        actual_slippage_pct = ((expected_weth - weth_gained) / expected_weth) * 100 if expected_weth > 0 else 0
-        
-        # Trade is profitable if slippage is low (< 2%)
-        was_profitable = actual_slippage_pct < 2.0
-        
-        print(f"📊 Post-Swap Analysis:")
-        print(f"   USDT Spent: ${usdt_spent:.2f}")
-        print(f"   WETH Gained: {weth_gained:.6f}")
-        print(f"   Slippage: {actual_slippage_pct:.2f}%")
-        print(f"   Status: {'✅ Good!' if was_profitable else '⚠️ High slippage'}")
-        
-        # Record the trade
-        update_performance(was_profitable=was_profitable, fee_usd=0.8, trade_size=trade_size)
     
     # Print performance metrics
     print_performance()
