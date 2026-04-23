@@ -117,9 +117,8 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
             'gas': 100000,
             'gasPrice': w3.eth.gas_price * 13 // 10
         })
-        
         signed_approve = w3.eth.account.sign_transaction(approve_tx, PRIVATE_KEY)
-        approve_hash = w3.eth.send_raw_transaction(signed_approve.rawTransaction)
+        approve_hash = w3.eth.send_raw_transaction(signed_approve['rawTransaction'])
         print(f"✅ Approve Tx: {approve_hash.hex()}")
         
         # Wait for approve to confirm
@@ -150,7 +149,7 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
         })
         
         signed_swap = w3.eth.account.sign_transaction(swap_tx, PRIVATE_KEY)
-        swap_hash = w3.eth.send_raw_transaction(signed_swap.rawTransaction)
+        swap_hash = w3.eth.send_raw_transaction(signed_swap['rawTransaction'])
         print(f"✅ REAL TX HASH: {swap_hash.hex()}")
         print(f"https://polygonscan.com/tx/{swap_hash.hex()}")
         
