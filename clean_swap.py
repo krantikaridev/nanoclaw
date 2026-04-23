@@ -44,7 +44,21 @@ ERC20_ABI = [
         "type": "function",
     },
 ]
-
+QUICKSWAP_ROUTER_ABI = [
+    {
+        "inputs": [
+            {"internalType": "uint256", "name": "amountIn", "type": "uint256"},
+            {"internalType": "uint256", "name": "amountOutMin", "type": "uint256"},
+            {"internalType": "address[]", "name": "path", "type": "address[]"},
+            {"internalType": "address", "name": "to", "type": "address"},
+            {"internalType": "uint256", "name": "deadline", "type": "uint256"}
+        ],
+        "name": "swapExactTokensForTokens",
+        "outputs": [{"internalType": "uint256[]", "name": "amounts", "type": "uint256[]"}],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    }
+]
 def get_pol_balance():
     return w3.eth.get_balance(WALLET) / 10**18
 
@@ -123,7 +137,7 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
 
         # Swap - you'll need the router ABI
         # For now, placeholder - add your actual router ABI
-        swap_contract = w3.eth.contract(address=Web3.to_checksum_address(ROUTER), abi=[])  # ADD ROUTER ABI HERE
+        swap_contract = w3.eth.contract(address=Web3.to_checksum_address(ROUTER), abi=QUICKSWAP_ROUTER_ABI)  # ADD ROUTER ABI HERE
         path = [Web3.to_checksum_address(token_in), Web3.to_checksum_address(token_out)]
         
         swap_tx = swap_contract.functions.swapExactTokensForTokens(
