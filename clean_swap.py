@@ -8,7 +8,7 @@ from web3 import Web3
 from dotenv import load_dotenv
 
 LOCK_FILE = "/tmp/nanoclaw.lock"
-if os.path.exists(LOCK_FILE) and (time.time() - os.path.getmtime(LOCK_FILE) < 180):
+if os.path.exists(LOCK_FILE) and (time.time() - os.path.getmtime(LOCK_FILE) < 15):
     print("⛔ Lock active — skipping")
     sys.exit(0)
 open(LOCK_FILE, 'w').close()
