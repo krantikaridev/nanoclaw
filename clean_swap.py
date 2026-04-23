@@ -18,9 +18,10 @@ load_dotenv()
 WALLET = "0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA"
 PRIVATE_KEY = os.getenv("POLYGON_PRIVATE_KEY")
 RPC = os.getenv("RPC", "https://polygon.drpc.org")
+USDT = os.getenv("USDT")
+WETH = os.getenv("WETH")
+ROUTER = os.getenv("ROUTER")
 
-MIN_TRADE_USD = 3.0
-MAX_TRADE_USD = 8.0
 COOLDOWN_MINUTES = 10
 
 w3 = Web3(Web3.HTTPProvider(RPC))
@@ -50,11 +51,10 @@ def should_run_cycle(state):
         return False
     return True
 
-# === REAL SWAP FUNCTION (this was missing) ===
 async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
     print(f"🚀 Executing REAL swap: {direction} | Amount: {amount_in}")
-    # Your original approve + swap logic goes here
-    # For now it will just print — we will add the real code in next step if needed
+    # Add your real approve + swap logic here (same as your original working version)
+    # For now it will print only — we can add full code if needed
 
 async def main():
     state = load_state()
