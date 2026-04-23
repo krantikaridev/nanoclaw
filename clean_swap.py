@@ -106,46 +106,79 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
             token_in = WETH
             token_out = USDT
 
-        # Get current nonce once
+        # Checksum addresses
+        token_in = Web3.to_checksum_address(token_in)
+        token_out = Web3.to_checksum_address(token_out)
+        router = Web3.to_checksum_address(ROUTER)
+
+        # ERC20 ABI
+        erc20_abi = [
+            {
+                "constant": False,
+                "inputs": [{"name": "_spender", "type": "address"}, {"name": "_value", "type": "uint256"}],
+                "name": "approve",
+                "outputs": [{"name": "", "type": "bool"}],
+                "type": "function",
+            }
+        ]
+
+        # Get nonce
         nonce = w3.eth.get_transaction_count(WALLET)
 
-        # Approve
-        approve_contract = w3.eth.contract(address=Web3.to_checksum_address(token_in), abi=ERC20_ABI)
-        approve_tx = approve_contract.functions.approve(Web3.to_checksum_address(ROUTER), amount_in).build_transaction({
+        # === APPROVE ===
+        approve_contract = w3.eth.contract(address=token_in, abi=erc20_abi)
+        approve_tx = approve_contract.functions.approve(router, amount_in).build_transaction({
             'from': WALLET,
             'nonce': nonce,
             'gas': 100000,
-            'gasPrice': w3.eth.gas_price * 13 // 10
+            'gasPrice': w3.eth.gas_price * 13 // 10,
+            'chainId': 137  # Polygon chainId
         })
+        
         signed_approve = w3.eth.account.sign_transaction(approve_tx, PRIVATE_KEY)
+        # For web3.py 7.x, use:
         approve_hash = w3.eth.send_raw_transaction(signed_approve.rawTransaction)
         print(f"✅ Approve Tx: {approve_hash.hex()}")
         
-        # Wait for approve to confirm
-        approve_receipt = w3.eth.wait_for_transaction_receipt(approve_hash, timeout=300)
-        if approve_receipt['status'] == 0:
-            print("❌ Approve transaction failed!")
+        # Wait for approve
+        receipt = w3.eth.wait_for_transaction_receipt(approve_hash, timeout=300)
+        if receipt['status'] == 0:
+            print("❌ Approve failed!")
             return False
         print("✅ Approve confirmed!")
 
-        # Wait a moment before swap to avoid nonce issues
         await asyncio.sleep(2)
-        
-        # Get updated nonce for swap
-        nonce_swap = w3.eth.get_transaction_count(WALLET)
 
-        # Swap - you'll need the router ABI
-        # For now, placeholder - add your actual router ABI
-        swap_contract = w3.eth.contract(address=Web3.to_checksum_address(ROUTER), abi=QUICKSWAP_ROUTER_ABI)  # ADD ROUTER ABI HERE
-        path = [Web3.to_checksum_address(token_in), Web3.to_checksum_address(token_out)]
+        # === SWAP ===
+        # QuickSwap Router ABI
+        router_abi = [
+            {
+                "inputs": [
+                    {"internalType": "uint256", "name": "amountIn", "type": "uint256"},
+                    {"internalType": "uint256", "name": "amountOutMin", "type": "uint256"},
+                    {"internalType": "address[]", "name": "path", "type": "address[]"},
+                    {"internalType": "address", "name": "to", "type": "address"},
+                    {"internalType": "uint256", "name": "deadline", "type": "uint256"}
+                ],
+                "name": "swapExactTokensForTokens",
+                "outputs": [{"internalType": "uint256[]", "name": "amounts", "type": "uint256[]"}],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            }
+        ]
+
+        swap_contract = w3.eth.contract(address=router, abi=router_abi)
+        path = [token_in, token_out]
         
+        nonce_swap = w3.eth.get_transaction_count(WALLET)
         swap_tx = swap_contract.functions.swapExactTokensForTokens(
             amount_in, 0, path, WALLET, int(time.time()) + 300
         ).build_transaction({
             'from': WALLET,
             'nonce': nonce_swap,
             'gas': 200000,
-            'gasPrice': w3.eth.gas_price * 13 // 10
+            'gasPrice': w3.eth.gas_price * 13 // 10,
+            'chainId': 137
         })
         
         signed_swap = w3.eth.account.sign_transaction(swap_tx, PRIVATE_KEY)
@@ -153,18 +186,20 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
         print(f"✅ REAL TX HASH: {swap_hash.hex()}")
         print(f"https://polygonscan.com/tx/{swap_hash.hex()}")
         
-        # Wait for swap confirmation
-        swap_receipt = w3.eth.wait_for_transaction_receipt(swap_hash, timeout=300)
-        if swap_receipt['status'] == 0:
-            print("❌ Swap transaction failed!")
+        # Wait for swap
+        receipt = w3.eth.wait_for_transaction_receipt(swap_hash, timeout=300)
+        if receipt['status'] == 0:
+            print("❌ Swap failed!")
             return False
         print("✅ Swap confirmed!")
         return True
         
     except Exception as e:
         print(f"❌ Error in approve_and_swap: {e}")
+        import traceback
+        traceback.print_exc()
         return False
-
+    
 async def main():
     state = load_state()
     
