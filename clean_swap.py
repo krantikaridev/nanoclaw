@@ -28,7 +28,7 @@ w3 = Web3(Web3.HTTPProvider(RPC))
 print(f"RPC connected: {w3.is_connected()}")
 
 # === PERFORMANCE TRACKER ===
-trade_history = []      # True = profitable trade
+trade_history = []      # List of dicts: {profitable, fee, timestamp, trade_size}
 total_fees_paid = 0.0
 starting_usdt = 17.0    # Change this when you add more capital
 
@@ -84,7 +84,7 @@ def load_state():
         with open('bot_state.json', 'r') as f:
             return json.load(f)
     except:
-        return {"last_run": 0}
+        return {"last_run": 0, "trades": []}
 
 def save_state(state):
     with open('bot_state.json', 'w') as f:
@@ -100,23 +100,57 @@ def should_run_cycle(state):
         return False
     return True
 
-def update_performance(was_profitable: bool, fee_usd: float = 0.8):
-    """Record trade profitability and fees"""
+def update_performance(was_profitable: bool, fee_usd: float = 0.8, trade_size: float = 0.0):
+    """Record trade profitability and fees in persistent state"""
     global total_fees_paid
-    trade_history.append(was_profitable)
+    
+    trade_record = {
+        "profitable": was_profitable,
+        "fee": fee_usd,
+        "trade_size": trade_size,
+        "timestamp": time.time()
+    }
+    
+    trade_history.append(trade_record)
     if len(trade_history) > 10:
         trade_history.pop(0)
+    
     total_fees_paid += fee_usd
-    print(f"📈 Trade recorded: {'✅ Profitable' if was_profitable else '❌ Loss'} | Fee: ${fee_usd:.2f}")
+    
+    status = "✅ PROFIT" if was_profitable else "❌ LOSS"
+    print(f"📈 Trade Recorded: {status} | Size: ${trade_size:.2f} | Fee: ${fee_usd:.2f}")
+    
+    # Save to persistent state
+    state = load_state()
+    if "trades" not in state:
+        state["trades"] = []
+    state["trades"].append(trade_record)
+    if len(state["trades"]) > 20:  # Keep last 20 trades
+        state["trades"].pop(0)
+    save_state(state)
 
 def print_performance():
     """Display current performance metrics"""
     if not trade_history:
         print("📊 No trades yet - waiting for data...")
         return
-    win_rate = (sum(1 for x in trade_history if x) / len(trade_history)) * 100
-    net_pnl = (sum(1 for x in trade_history if x) * 6.0) - total_fees_paid
-    print(f"📊 Performance: Win Rate {win_rate:.1f}% | Est. Net PNL ${net_pnl:.2f} | Fees ${total_fees_paid:.2f}")
+    
+    wins = sum(1 for t in trade_history if t["profitable"])
+    total = len(trade_history)
+    win_rate = (wins / total) * 100 if total > 0 else 0
+    
+    # Assume $6 profit per winning trade (average)
+    estimated_profit_per_win = 6.0
+    gross_pnl = (wins * estimated_profit_per_win) - total_fees_paid
+    
+    total_traded = sum(t["trade_size"] for t in trade_history)
+    
+    print(f"┌─ 📊 PERFORMANCE METRICS")
+    print(f"├─ Win Rate: {win_rate:.1f}% ({wins}/{total})")
+    print(f"├─ Total Traded: ${total_traded:.2f}")
+    print(f"├─ Fees Paid: ${total_fees_paid:.2f}")
+    print(f"├─ Est. Gross PNL: ${gross_pnl:.2f}")
+    print(f"└─ Remaining Capital: ${starting_usdt + gross_pnl:.2f}")
 
 async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
     """Execute approve and swap transactions with error handling"""
@@ -160,7 +194,6 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
         })
         
         signed_approve = w3.eth.account.sign_transaction(approve_tx, PRIVATE_KEY)
-        # For web3.py 7.x, use:
         approve_hash = w3.eth.send_raw_transaction(signed_approve.raw_transaction)
         print(f"✅ Approve Tx: {approve_hash.hex()}")
         
@@ -168,13 +201,12 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
         receipt = w3.eth.wait_for_transaction_receipt(approve_hash, timeout=300)
         if receipt['status'] == 0:
             print("❌ Approve failed!")
-            return False
+            return None
         print("✅ Approve confirmed!")
 
         await asyncio.sleep(2)
 
         # === SWAP ===
-        # QuickSwap Router ABI
         router_abi = [
             {
                 "inputs": [
@@ -214,47 +246,85 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
         receipt = w3.eth.wait_for_transaction_receipt(swap_hash, timeout=300)
         if receipt['status'] == 0:
             print("❌ Swap failed!")
-            return False
+            return None
         print("✅ Swap confirmed!")
-        return True
+        
+        # Return the transaction hash for future tracking
+        return swap_hash.hex()
         
     except Exception as e:
         print(f"❌ Error in approve_and_swap: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        return None
     
 async def main():
     state = load_state()
     
-    # Read ACTUAL token balance instead of hardcoding
-    usdt = get_token_balance(USDT, decimals=6)  # USDT has 6 decimals
+    # Read ACTUAL token balance BEFORE swap
+    usdt_before = get_token_balance(USDT, decimals=6)
+    weth_before = get_token_balance(WETH, decimals=18)
     pol = get_pol_balance()
-    print(f"Real USDT: {usdt:.2f} | POL: {pol:.2f}")
+    print(f"Real USDT: {usdt_before:.2f} | WETH: {weth_before:.6f} | POL: {pol:.2f}")
 
     if not should_run_cycle(state):
         return
 
     brain = BrainAgent(min_trade=3.0, max_trade=8.0, strat2_weight=0.75)
-    decision = brain.decide_action(usdt, pol)
+    decision = brain.decide_action(usdt_before, pol)
 
+    swap_executed = False
+    trade_size = 0.0
+    
     if decision.startswith("TRADE_"):
         parts = decision.split("_")
         strat = parts[1]
         size = float(parts[2])
+        trade_size = size
         print(f"🚀 Brain decided: {strat} ${size:.2f}")
         
         # Execute swap with error handling
-        success = await approve_and_swap(int(size * 1_000_000))
-        if not success:
-            print("⚠️ Swap failed, not updating state")
-            # TODO: Implement logic to mark as loss
-            # update_performance(was_profitable=False, fee_usd=0.5)
+        tx_hash = await approve_and_swap(int(size * 1_000_000))
+        if tx_hash:
+            swap_executed = True
+            print(f"✅ Swap executed successfully!")
+        else:
+            print("⚠️ Swap failed")
+            update_performance(was_profitable=False, fee_usd=0.5, trade_size=trade_size)
+            state["last_run"] = time.time()
+            save_state(state)
+            print_performance()
             return
+    
+    # If swap executed, analyze profitability
+    if swap_executed:
+        await asyncio.sleep(3)  # Wait a bit for balance update
         
-        # TODO: After swap, determine if profitable based on WETH price impact
-        # For now, mark as potentially profitable (you can verify with PolygonScan)
-        # update_performance(was_profitable=True, fee_usd=0.8)
+        # Read ACTUAL token balance AFTER swap
+        usdt_after = get_token_balance(USDT, decimals=6)
+        weth_after = get_token_balance(WETH, decimals=18)
+        
+        usdt_spent = usdt_before - usdt_after
+        weth_gained = weth_after - weth_before
+        
+        # Assume breakeven WETH price is around $4.50 per WETH (adjust based on your data)
+        breakeven_weth_price = 4.50
+        
+        # Check if we got a reasonable amount of WETH
+        expected_weth = usdt_spent / breakeven_weth_price
+        actual_slippage_pct = ((expected_weth - weth_gained) / expected_weth) * 100 if expected_weth > 0 else 0
+        
+        # Trade is profitable if slippage is low (< 2%)
+        was_profitable = actual_slippage_pct < 2.0
+        
+        print(f"📊 Post-Swap Analysis:")
+        print(f"   USDT Spent: ${usdt_spent:.2f}")
+        print(f"   WETH Gained: {weth_gained:.6f}")
+        print(f"   Slippage: {actual_slippage_pct:.2f}%")
+        print(f"   Status: {'✅ Good!' if was_profitable else '⚠️ High slippage'}")
+        
+        # Record the trade
+        update_performance(was_profitable=was_profitable, fee_usd=0.8, trade_size=trade_size)
     
     # Print performance metrics
     print_performance()
