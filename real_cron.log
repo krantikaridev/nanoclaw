@@ -268,3 +268,283 @@ Real USDT balance: 0.36
 ✅ Approve Tx: 4426a60cec4a0c7aac8f0d0b4c4c317cd1206dcf4fa9e40b62b494ed69ba7f8e
 ✅ REAL TX HASH: 5b218784388198c02c2aa34e5349fb64afc0e262b0e704b8a617900ec9be2c82
 https://polygonscan.com/tx/5b218784388198c02c2aa34e5349fb64afc0e262b0e704b8a617900ec9be2c82
+Traceback (most recent call last):
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 7, in <module>
+    from web3 import Web3
+ModuleNotFoundError: No module named 'web3'
+Traceback (most recent call last):
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 7, in <module>
+    from web3 import Web3
+ModuleNotFoundError: No module named 'web3'
+Traceback (most recent call last):
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 7, in <module>
+    from web3 import Web3
+ModuleNotFoundError: No module named 'web3'
+Traceback (most recent call last):
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 7, in <module>
+    from web3 import Web3
+ModuleNotFoundError: No module named 'web3'
+Traceback (most recent call last):
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 7, in <module>
+    from web3 import Web3
+ModuleNotFoundError: No module named 'web3'
+Traceback (most recent call last):
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 7, in <module>
+    from web3 import Web3
+ModuleNotFoundError: No module named 'web3'
+Traceback (most recent call last):
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 7, in <module>
+    from web3 import Web3
+ModuleNotFoundError: No module named 'web3'
+Traceback (most recent call last):
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 7, in <module>
+    from web3 import Web3
+ModuleNotFoundError: No module named 'web3'
+Traceback (most recent call last):
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 7, in <module>
+    from web3 import Web3
+ModuleNotFoundError: No module named 'web3'
+Traceback (most recent call last):
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 7, in <module>
+    from web3 import Web3
+ModuleNotFoundError: No module named 'web3'
+Traceback (most recent call last):
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 7, in <module>
+    from web3 import Web3
+ModuleNotFoundError: No module named 'web3'
+Traceback (most recent call last):
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 7, in <module>
+    from web3 import Web3
+ModuleNotFoundError: No module named 'web3'
+Traceback (most recent call last):
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 7, in <module>
+    from web3 import Web3
+ModuleNotFoundError: No module named 'web3'
+Traceback (most recent call last):
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 7, in <module>
+    from web3 import Web3
+ModuleNotFoundError: No module named 'web3'
+⛔ Lock active — skipping
+RPC connected: True
+Real USDT: 41.00 | POL: 11.34
+⏳ Cooldown active (10 min) — skipping
+RPC connected: True
+Real USDT: 41.00 | POL: 11.34
+🚀 Brain decided: STRAT2 $4.10
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 4099999
+✅ Cycle done — next in ~10 min
+⛔ Lock active — skipping
+RPC connected: True
+Real USDT: 41.00 | POL: 11.34
+⏳ Cooldown active (10 min) — skipping
+RPC connected: True
+Real USDT: 41.00 | POL: 11.34
+⏳ Cooldown active (10 min) — skipping
+RPC connected: True
+Real USDT: 41.00 | POL: 11.34
+⏳ Cooldown active (10 min) — skipping
+RPC connected: True
+Real USDT: 41.00 | POL: 11.34
+⏳ Cooldown active (10 min) — skipping
+RPC connected: True
+Real USDT: 41.00 | POL: 11.34
+⏳ Cooldown active (10 min) — skipping
+RPC connected: True
+Real USDT: 41.00 | POL: 11.34
+🚀 Brain decided: STRAT2 $4.10
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 4099999
+Traceback (most recent call last):
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 117, in <module>
+    asyncio.run(main())
+  File "/usr/lib/python3.12/asyncio/runners.py", line 194, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/base_events.py", line 687, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 110, in main
+    await approve_and_swap(int(size * 1_000_000))
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 66, in approve_and_swap
+    approve_tx = approve_contract.functions.approve(ROUTER, amount_in).build_transaction({
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/contract/base_contract.py", line 855, in __call__
+    raise MismatchedABI(
+web3.exceptions.MismatchedABI: 
+ABI Not Found!
+Found 1 element(s) named `approve` that accept 2 argument(s).
+The provided arguments are not valid.
+Provided argument types: (NoneType,int)
+Provided keyword argument types: {}
+
+Tried to find a matching ABI element named `approve`, but encountered the following problems:
+Signature: approve(address,uint256), type: function
+Argument 1 value `None` is not compatible with type `address`.
+Argument 2 value `4099999` is valid.
+
+RPC connected: True
+Real USDT: 41.00 | POL: 11.34
+🚀 Brain decided: STRAT1 $4.92
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 4920000
+Traceback (most recent call last):
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 117, in <module>
+    asyncio.run(main())
+  File "/usr/lib/python3.12/asyncio/runners.py", line 194, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/base_events.py", line 687, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 110, in main
+    await approve_and_swap(int(size * 1_000_000))
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 66, in approve_and_swap
+    approve_tx = approve_contract.functions.approve(ROUTER, amount_in).build_transaction({
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/contract/base_contract.py", line 855, in __call__
+    raise MismatchedABI(
+web3.exceptions.MismatchedABI: 
+ABI Not Found!
+Found 1 element(s) named `approve` that accept 2 argument(s).
+The provided arguments are not valid.
+Provided argument types: (NoneType,int)
+Provided keyword argument types: {}
+
+Tried to find a matching ABI element named `approve`, but encountered the following problems:
+Signature: approve(address,uint256), type: function
+Argument 1 value `None` is not compatible with type `address`.
+Argument 2 value `4920000` is valid.
+
+RPC connected: True
+❌ Error reading token balance: Exactly one of the passed values can be specified. Instead, values were: (None,), {}
+Real USDT: 0.00 | POL: 11.34
+⏳ Cooldown active (10 min) — skipping
+RPC connected: True
+Real USDT: 17.00 | POL: 11.34
+⏳ Cooldown active (10 min) — skipping
+RPC connected: True
+Real USDT: 17.00 | POL: 11.34
+🚀 Brain decided: STRAT2 $3.00
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 3000000
+❌ Error in approve_and_swap: 'SignedTransaction' object has no attribute 'rawTransaction'
+⚠️ Swap failed, not updating state
+RPC connected: True
+Real USDT: 17.00 | POL: 11.33
+⏳ Cooldown active (10 min) — skipping
+RPC connected: True
+Real USDT: 17.00 | POL: 11.31
+⏳ Cooldown active (10 min) — skipping
+⛔ Lock active — skipping
+RPC connected: True
+Real USDT: 17.00 | POL: 11.30
+🚀 Brain decided: STRAT2 $3.00
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 3000000
+✅ Approve Tx: d9220f44cc013a6907671b2af0a5f132ccd758c0065420476b3dda7670e5807d
+✅ Approve confirmed!
+✅ REAL TX HASH: ec0e711de3472bc02c82c069bf9ce9a1e35c1360de1288b9b3d281c94396abde
+https://polygonscan.com/tx/ec0e711de3472bc02c82c069bf9ce9a1e35c1360de1288b9b3d281c94396abde
+✅ Swap confirmed!
+✅ Cycle done — next in ~10 min
+⛔ Lock active — skipping
+RPC connected: True
+Real USDT: 17.00 | POL: 11.29
+🚀 Brain decided: STRAT2 $3.00
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 3000000
+✅ Approve Tx: 93d73285bf7739dc8021ad823a0d0ac8d5f79d7db86fe48518a6580f17d6f5e2
+✅ Approve confirmed!
+✅ REAL TX HASH: e91712b1b48bc4143f4bf1603d7ce62170e70419e236a14e90161a6db5a6d109
+https://polygonscan.com/tx/e91712b1b48bc4143f4bf1603d7ce62170e70419e236a14e90161a6db5a6d109
+✅ Swap confirmed!
+✅ Cycle done — next in ~10 min
+⛔ Lock active — skipping
+RPC connected: True
+Real USDT: 17.00 | POL: 11.29
+🚀 Brain decided: STRAT2 $3.00
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 3000000
+✅ Approve Tx: c1159990a50bb58b5951e8fe6dc6164134e6fee0224fd66081863c2250e92563
+✅ Approve confirmed!
+✅ REAL TX HASH: a769cdc9b9ea1b68b732d7e07593fe57519144b322985f7c056d06702ad69d52
+https://polygonscan.com/tx/a769cdc9b9ea1b68b732d7e07593fe57519144b322985f7c056d06702ad69d52
+✅ Swap confirmed!
+✅ Cycle done — next in ~10 min
+⛔ Lock active — skipping
+RPC connected: True
+Real USDT: 17.00 | POL: 11.28
+🚀 Brain decided: STRAT1 $3.00
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 3000000
+✅ Approve Tx: fb34157b7677488d5241dd7c02eea5cc9b5fadd81c3250e047ded257cfc2586e
+✅ Approve confirmed!
+✅ REAL TX HASH: 00d4f86fc3c8fc2a74bca6df45a1be3a80608dcad231c90f30e5cf172e9872ef
+https://polygonscan.com/tx/00d4f86fc3c8fc2a74bca6df45a1be3a80608dcad231c90f30e5cf172e9872ef
+✅ Swap confirmed!
+✅ Cycle done — next in ~10 min
+⛔ Lock active — skipping
+RPC connected: True
+Real USDT: 17.00 | POL: 11.27
+🚀 Brain decided: STRAT2 $3.00
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 3000000
+✅ Approve Tx: 19de117da05365931c3ae9ac9883943e7ef32891b4f9a4efe2adb2d06299ad4d
+✅ Approve confirmed!
+✅ REAL TX HASH: 703fc500f86958112f9805f6bd927f3bd6b7b8ffb95dfb1a03b5d4edbf7704f2
+https://polygonscan.com/tx/703fc500f86958112f9805f6bd927f3bd6b7b8ffb95dfb1a03b5d4edbf7704f2
+✅ Swap confirmed!
+✅ Cycle done — next in ~10 min
+⛔ Lock active — skipping
+RPC connected: True
+Real USDT: 17.00 | POL: 11.26
+🚀 Brain decided: STRAT1 $3.00
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 3000000
+✅ Approve Tx: b592c43c3975b121cdde87bfac5c2f2fc9eed1d37aa92d0d81ce3a8a6d2cac64
+✅ Approve confirmed!
+✅ REAL TX HASH: 4fa6f8acb81c4cf8f3c8432944f5cc359cce76778987d1802f76148511fef64d
+https://polygonscan.com/tx/4fa6f8acb81c4cf8f3c8432944f5cc359cce76778987d1802f76148511fef64d
+✅ Swap confirmed!
+✅ Cycle done — next in ~10 min
+⛔ Lock active — skipping
+RPC connected: True
+Real USDT: 17.00 | POL: 11.24
+🚀 Brain decided: STRAT2 $3.00
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 3000000
+✅ Approve Tx: 435bcee4e9fa719abb88c1ba5056c8eb5e38bbf6b1b3ba5fdfc18821669d6480
+✅ Approve confirmed!
+✅ REAL TX HASH: 303d79311bcd88c36dc1e2a17527721a1dc1181c1a333b6b52c28d42a1c93a98
+https://polygonscan.com/tx/303d79311bcd88c36dc1e2a17527721a1dc1181c1a333b6b52c28d42a1c93a98
+✅ Swap confirmed!
+✅ Cycle done — next in ~10 min
+⛔ Lock active — skipping
+RPC connected: True
+Real USDT: 17.00 | POL: 11.23
+🚀 Brain decided: STRAT2 $3.00
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 3000000
+✅ Approve Tx: b40de1276760e3c98510874027fbf5f3fdd532aa1faee93518ffc8a69a557742
+✅ Approve confirmed!
+✅ REAL TX HASH: 1f37cd62347e79df662e5ca9ebfc3b291c0d3dfadbab97461808581fc834b8f1
+https://polygonscan.com/tx/1f37cd62347e79df662e5ca9ebfc3b291c0d3dfadbab97461808581fc834b8f1
+✅ Swap confirmed!
+✅ Cycle done — next in ~10 min
+⛔ Lock active — skipping
+RPC connected: True
+Real USDT: 17.00 | POL: 11.22
+🚀 Brain decided: STRAT2 $3.00
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 3000000
+✅ Approve Tx: 149dddcd4716a8445d18471af212123e0f4b4c30ad11c42e7f3411a10e52fc1f
+✅ Approve confirmed!
+✅ REAL TX HASH: c513da8f73fc18f72ef5630bf021afbedc9246cf1e560ee0df242847d724b7aa
+https://polygonscan.com/tx/c513da8f73fc18f72ef5630bf021afbedc9246cf1e560ee0df242847d724b7aa
+✅ Swap confirmed!
+✅ Cycle done — next in ~10 min
+⛔ Lock active — skipping
+RPC connected: True
+Real USDT: 17.00 | POL: 11.21
+🚀 Brain decided: STRAT2 $3.00
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 3000000
+✅ Approve Tx: 92c8b208f4139182252e326c51be8c209596752af52e8ab8794d65c9c50f9c7b
+✅ Approve confirmed!
+✅ REAL TX HASH: 4efab4ff9afbe81a0d61fa9256524458ebba97a44960bcbdf5aa27914b118db0
+https://polygonscan.com/tx/4efab4ff9afbe81a0d61fa9256524458ebba97a44960bcbdf5aa27914b118db0
+✅ Swap confirmed!
+✅ Cycle done — next in ~10 min
