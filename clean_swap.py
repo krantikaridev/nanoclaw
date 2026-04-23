@@ -27,6 +27,11 @@ COOLDOWN_MINUTES = 10
 w3 = Web3(Web3.HTTPProvider(RPC))
 print(f"RPC connected: {w3.is_connected()}")
 
+# === PERFORMANCE TRACKER ===
+trade_history = []      # True = profitable trade
+total_fees_paid = 0.0
+starting_usdt = 17.0    # Change this when you add more capital
+
 # ERC20 ABI for balance and approve
 ERC20_ABI = [
     {
@@ -59,6 +64,7 @@ QUICKSWAP_ROUTER_ABI = [
         "type": "function"
     }
 ]
+
 def get_pol_balance():
     return w3.eth.get_balance(WALLET) / 10**18
 
@@ -93,6 +99,24 @@ def should_run_cycle(state):
         print("⚠️ POL low — skipping")
         return False
     return True
+
+def update_performance(was_profitable: bool, fee_usd: float = 0.8):
+    """Record trade profitability and fees"""
+    global total_fees_paid
+    trade_history.append(was_profitable)
+    if len(trade_history) > 10:
+        trade_history.pop(0)
+    total_fees_paid += fee_usd
+    print(f"📈 Trade recorded: {'✅ Profitable' if was_profitable else '❌ Loss'} | Fee: ${fee_usd:.2f}")
+
+def print_performance():
+    """Display current performance metrics"""
+    if not trade_history:
+        print("📊 No trades yet - waiting for data...")
+        return
+    win_rate = (sum(1 for x in trade_history if x) / len(trade_history)) * 100
+    net_pnl = (sum(1 for x in trade_history if x) * 6.0) - total_fees_paid
+    print(f"📊 Performance: Win Rate {win_rate:.1f}% | Est. Net PNL ${net_pnl:.2f} | Fees ${total_fees_paid:.2f}")
 
 async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
     """Execute approve and swap transactions with error handling"""
@@ -224,7 +248,16 @@ async def main():
         success = await approve_and_swap(int(size * 1_000_000))
         if not success:
             print("⚠️ Swap failed, not updating state")
+            # TODO: Implement logic to mark as loss
+            # update_performance(was_profitable=False, fee_usd=0.5)
             return
+        
+        # TODO: After swap, determine if profitable based on WETH price impact
+        # For now, mark as potentially profitable (you can verify with PolygonScan)
+        # update_performance(was_profitable=True, fee_usd=0.8)
+    
+    # Print performance metrics
+    print_performance()
 
     state["last_run"] = time.time()
     save_state(state)
