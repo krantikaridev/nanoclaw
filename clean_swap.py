@@ -89,7 +89,6 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
     swap_hash = w3.eth.send_raw_transaction(signed_swap.rawTransaction)
     print(f"✅ REAL TX HASH: {swap_hash.hex()}")
     print(f"https://polygonscan.com/tx/{swap_hash.hex()}")
-    
 
 async def main():
     state = load_state()
