@@ -22,7 +22,7 @@ RPC = os.getenv("RPC", "https://polygon.drpc.org")
 USDT = os.getenv("USDT")
 WETH = os.getenv("WETH")
 ROUTER = os.getenv("ROUTER")
-COOLDOWN_MINUTES = 10
+COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", 10))
 
 w3 = Web3(Web3.HTTPProvider(RPC))
 print(f"RPC connected: {w3.is_connected()}")
@@ -30,7 +30,7 @@ print(f"RPC connected: {w3.is_connected()}")
 # === PERFORMANCE TRACKER ===
 trade_history = []      # List of dicts: {profitable, fee, timestamp, trade_size}
 total_fees_paid = 0.0
-starting_usdt = 17.0    # Change this when you add more capital
+starting_usdt = 120.0    # Change this when you add more capital
 
 # ERC20 ABI for balance and approve
 ERC20_ABI = [
@@ -132,7 +132,7 @@ def update_performance(was_profitable: bool, fee_usd: float = 0.8, trade_size: f
         state["trades"].pop(0)
     save_state(state)
 
-def print_performance():
+def print_performance_old():
     """Display current performance metrics"""
     if not trade_history:
         print("📊 No trades yet - waiting for data...")
@@ -152,6 +152,33 @@ def print_performance():
     print(f"├─ Win Rate: {win_rate:.1f}% ({wins}/{total})")
     print(f"├─ Total Traded: ${total_traded:.2f}")
     print(f"├─ Fees Paid: ${total_fees_paid:.2f}")
+    print(f"├─ Est. Gross PNL: ${gross_pnl:.2f}")
+    print(f"└─ Remaining Capital: ${starting_usdt + gross_pnl:.2f}")
+
+def print_performance():
+    """Display current performance metrics (V2.2 - FIXED)"""
+    state = load_state()
+    trades = state.get("trades", [])
+    
+    if not trades:
+        print("📊 No trades yet - waiting for data...")
+        return
+    
+    wins = sum(1 for t in trades if t.get("profitable", False))
+    total = len(trades)
+    win_rate = (wins / total) * 100 if total > 0 else 0
+    
+    total_fees = sum(t.get("fee", 0.8) for t in trades)
+    total_traded = sum(t.get("trade_size", 0) for t in trades)
+    
+    # Better PNL estimation
+    estimated_profit_per_win = 6.0
+    gross_pnl = (wins * estimated_profit_per_win) - total_fees
+    
+    print(f"┌─ 📊 PERFORMANCE METRICS (Last {total} trades)")
+    print(f"├─ Win Rate: {win_rate:.1f}% ({wins}/{total})")
+    print(f"├─ Total Traded: ${total_traded:.2f}")
+    print(f"├─ Fees Paid: ${total_fees:.2f}")
     print(f"├─ Est. Gross PNL: ${gross_pnl:.2f}")
     print(f"└─ Remaining Capital: ${starting_usdt + gross_pnl:.2f}")
 
@@ -192,7 +219,7 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
             'from': WALLET,
             'nonce': nonce,
             'gas': 100000,
-            'gasPrice': w3.eth.gas_price * 13 // 10,
+            'gasPrice': w3.eth.gas_price * 12 // 10,
             'chainId': 137  # Polygon chainId
         })
         
@@ -236,7 +263,7 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
             'from': WALLET,
             'nonce': nonce_swap,
             'gas': 200000,
-            'gasPrice': w3.eth.gas_price * 13 // 10,
+            'gasPrice': w3.eth.gas_price * 12 // 10,
             'chainId': 137
         })
         
