@@ -210,15 +210,19 @@ async def main():
     decision = brain.decide_action(usdt_balance, pol)
 
     if decision.startswith("TRADE_"):
-        # === DYNAMIC TRADE SIZE (15-35 USD) ===
+        # === DYNAMIC TRADE SIZE (15–35 USD) ===
+        usdt_balance = get_token_balance(USDT, decimals=6)
         trade_size = max(15.0, min(35.0, usdt_balance * 0.25))
         print(f"💰 Fresh USDT: ${usdt_balance:.2f} → Trade size: ${trade_size:.2f}")
-
-        # === BIDIRECTIONAL LOGIC ===
-        weth_balance = get_token_balance(WETH, decimals=18)
-        weth_value_usd = weth_balance * 2350
-
-        if weth_value_usd > 40:
+        
+        # === BIDIRECTIONAL LOGIC (safe version) ===
+        try:
+            weth_balance = get_token_balance(WETH, decimals=18)
+            weth_value_usd = weth_balance * 2350
+        except:
+            weth_value_usd = 0
+        
+        if weth_value_usd > 50:
             direction = "WETH_TO_USDT"
             amount_in = int(weth_balance * 0.35 * 1e18)
             print(f"🔄 Selling WETH → USDT (${weth_value_usd:.2f} in WETH)")
@@ -226,19 +230,13 @@ async def main():
             direction = "USDT_TO_WETH"
             amount_in = int(trade_size * 1_000_000)
             print(f"🔄 Buying WETH with USDT")
-
-        # Real fee calculation
-        gas_used = 185000
-        gas_price = w3.eth.gas_price
-        fee_usd = (gas_used * gas_price * 1.2 * 1e-9) * 2.35
-        fee_usd = max(0.70, min(1.20, fee_usd))
-
-        # Profit guard
+        
+        # Profit guard relaxed (only skip if clearly losing money)
+        fee_usd = 0.85
         estimated_net = (trade_size * 0.012) - fee_usd
-        if estimated_net < 0.30:
+        if estimated_net < -0.50:   # Only skip if losing more than 50 cents
             print(f"⏭️ Skipping - not profitable enough (est net ${estimated_net:.2f})")
             return
-
         tx_hash = await approve_and_swap(amount_in, direction=direction)
         if tx_hash:
             print("✅ Swap executed successfully!")
