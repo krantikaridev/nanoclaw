@@ -26,7 +26,6 @@ COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", 7))
 w3 = Web3(Web3.HTTPProvider(RPC))
 print(f"RPC connected: {w3.is_connected()}")
 
-# === ERC20 ABI ===
 ERC20_ABI = [
     {"constant": True, "inputs": [{"name": "_owner", "type": "address"}], "name": "balanceOf", "outputs": [{"name": "balance", "type": "uint256"}], "type": "function"},
     {"constant": False, "inputs": [{"name": "_spender", "type": "address"}, {"name": "_value", "type": "uint256"}], "name": "approve", "outputs": [{"name": "", "type": "bool"}], "type": "function"},
@@ -43,8 +42,7 @@ def get_token_balance(token_address: str, decimals: int = 6) -> float:
         contract = w3.eth.contract(address=checksum_addr, abi=ERC20_ABI)
         balance_wei = contract.functions.balanceOf(WALLET).call()
         return balance_wei / (10 ** decimals)
-    except Exception as e:
-        print(f"⚠️ Warning: Could not read balance ({str(e)[:60]})")
+    except:
         return 0.0
 
 def load_state():
@@ -130,7 +128,6 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
             {"constant": False, "inputs": [{"name": "_spender", "type": "address"}, {"name": "_value", "type": "uint256"}], "name": "approve", "outputs": [{"name": "", "type": "bool"}], "type": "function"}
         ]
 
-        # Approve
         nonce = w3.eth.get_transaction_count(WALLET)
         approve_contract = w3.eth.contract(address=token_in, abi=erc20_abi)
         approve_tx = approve_contract.functions.approve(router, amount_in).build_transaction({
@@ -150,7 +147,6 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
         print("✅ Approve confirmed!")
         await asyncio.sleep(2)
 
-        # Swap
         router_abi = [
             {
                 "inputs": [
@@ -198,7 +194,6 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
 async def main():
     state = load_state()
 
-    # Fresh balance every cycle
     usdt_balance = get_token_balance(USDT, decimals=6)
     pol = get_pol_balance()
     print(f"Real USDT: {usdt_balance:.2f} | POL: {pol:.2f}")
@@ -210,18 +205,15 @@ async def main():
     decision = brain.decide_action(usdt_balance, pol)
 
     if decision.startswith("TRADE_"):
-        # === DYNAMIC TRADE SIZE (15–35 USD) ===
-        usdt_balance = get_token_balance(USDT, decimals=6)
         trade_size = max(15.0, min(35.0, usdt_balance * 0.25))
         print(f"💰 Fresh USDT: ${usdt_balance:.2f} → Trade size: ${trade_size:.2f}")
-        
-        # === BIDIRECTIONAL LOGIC (safe version) ===
+
         try:
             weth_balance = get_token_balance(WETH, decimals=18)
             weth_value_usd = weth_balance * 2350
         except:
             weth_value_usd = 0
-        
+
         if weth_value_usd > 50:
             direction = "WETH_TO_USDT"
             amount_in = int(weth_balance * 0.35 * 1e18)
@@ -230,13 +222,13 @@ async def main():
             direction = "USDT_TO_WETH"
             amount_in = int(trade_size * 1_000_000)
             print(f"🔄 Buying WETH with USDT")
-        
-        # Profit guard relaxed (only skip if clearly losing money)
+
         fee_usd = 0.85
         estimated_net = (trade_size * 0.012) - fee_usd
-        if estimated_net < -0.50:   # Only skip if losing more than 50 cents
+        if estimated_net < -0.50:
             print(f"⏭️ Skipping - not profitable enough (est net ${estimated_net:.2f})")
             return
+
         tx_hash = await approve_and_swap(amount_in, direction=direction)
         if tx_hash:
             print("✅ Swap executed successfully!")
