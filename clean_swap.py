@@ -103,84 +103,49 @@ def should_run_cycle(state):
         return False
     return True
 
+# === PERFORMANCE TRACKER (Simple & Persistent) ===
+def load_performance():
+    try:
+        with open("performance.json", "r") as f:
+            return json.load(f)
+    except:
+        return {"trades": [], "total_fees": 0.0}
+
+def save_performance(data):
+    with open("performance.json", "w") as f:
+        json.dump(data, f, indent=2)
+
 def update_performance(was_profitable: bool, fee_usd: float = 0.8, trade_size: float = 0.0):
-    """Record trade profitability and fees in persistent state"""
-    global total_fees_paid
-    
-    trade_record = {
+    data = load_performance()
+    data["trades"].append({
         "profitable": was_profitable,
         "fee": fee_usd,
         "trade_size": trade_size,
         "timestamp": time.time()
-    }
-    
-    trade_history.append(trade_record)
-    if len(trade_history) > 10:
-        trade_history.pop(0)
-    
-    total_fees_paid += fee_usd
-    
-    status = "✅ PROFIT" if was_profitable else "❌ LOSS"
-    print(f"📈 Trade Recorded: {status} | Size: ${trade_size:.2f} | Fee: ${fee_usd:.2f}")
-    
-    # Save to persistent state
-    state = load_state()
-    if "trades" not in state:
-        state["trades"] = []
-    state["trades"].append(trade_record)
-    if len(state["trades"]) > 20:  # Keep last 20 trades
-        state["trades"].pop(0)
-    save_state(state)
-
-def print_performance_old():
-    """Display current performance metrics"""
-    if not trade_history:
-        print("📊 No trades yet - waiting for data...")
-        return
-    
-    wins = sum(1 for t in trade_history if t["profitable"])
-    total = len(trade_history)
-    win_rate = (wins / total) * 100 if total > 0 else 0
-    
-    # Assume $6 profit per winning trade (average)
-    estimated_profit_per_win = 6.0
-    gross_pnl = (wins * estimated_profit_per_win) - total_fees_paid
-    
-    total_traded = sum(t["trade_size"] for t in trade_history)
-    
-    print(f"┌─ 📊 PERFORMANCE METRICS")
-    print(f"├─ Win Rate: {win_rate:.1f}% ({wins}/{total})")
-    print(f"├─ Total Traded: ${total_traded:.2f}")
-    print(f"├─ Fees Paid: ${total_fees_paid:.2f}")
-    print(f"├─ Est. Gross PNL: ${gross_pnl:.2f}")
-    print(f"└─ Remaining Capital: ${starting_usdt + gross_pnl:.2f}")
+    })
+    if len(data["trades"]) > 50:
+        data["trades"].pop(0)
+    data["total_fees"] += fee_usd
+    save_performance(data)
 
 def print_performance():
-    """Display current performance metrics (V2.2 - FIXED)"""
-    state = load_state()
-    trades = state.get("trades", [])
-    
+    data = load_performance()
+    trades = data.get("trades", [])
     if not trades:
         print("📊 No trades yet - waiting for data...")
         return
-    
     wins = sum(1 for t in trades if t.get("profitable", False))
     total = len(trades)
     win_rate = (wins / total) * 100 if total > 0 else 0
-    
-    total_fees = sum(t.get("fee", 0.8) for t in trades)
+    total_fees = data.get("total_fees", 0.0)
     total_traded = sum(t.get("trade_size", 0) for t in trades)
-    
-    # Better PNL estimation
-    estimated_profit_per_win = 6.0
-    gross_pnl = (wins * estimated_profit_per_win) - total_fees
-    
+    estimated_profit = (wins * 6.0) - total_fees
     print(f"┌─ 📊 PERFORMANCE METRICS (Last {total} trades)")
     print(f"├─ Win Rate: {win_rate:.1f}% ({wins}/{total})")
     print(f"├─ Total Traded: ${total_traded:.2f}")
     print(f"├─ Fees Paid: ${total_fees:.2f}")
-    print(f"├─ Est. Gross PNL: ${gross_pnl:.2f}")
-    print(f"└─ Remaining Capital: ${starting_usdt + gross_pnl:.2f}")
+    print(f"├─ Est. Gross PNL: ${estimated_profit:.2f}")
+    print(f"└─ Remaining Capital: ${124.95 + estimated_profit:.2f}")
 
 async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
     """Execute approve and swap transactions with error handling"""
@@ -311,13 +276,35 @@ async def main():
         
         # Dynamic sizing: 25% of current USDT, capped between $10 and $25
         available_usdt = usdt_before  # Use actual USDT balance
-        size = max(10.0, min(25.0, available_usdt * 0.25))
-        
-        trade_size = size
+
+	# === DYNAMIC TRADE SIZE (re-reads balance every cycle) ===
+	usdt_balance = get_usdt_balance()  # fresh read every time
+	trade_size = max(15.0, min(35.0, usdt_balance * 0.25))
+	print(f"💰 Fresh USDT balance: ${usdt_balance:.2f} → Trade size: ${trade_size:.2f}")
+
+        # Only trade if estimated net profit > $0.30 (after fees)
+	estimated_net = (trade_size * 0.012) - fee_usd   # 1.2% expected gross
+
+	if estimated_net < 0.30:
+	    print(f"⏭️ Skipping - not profitable enough (est net ${estimated_net:.2f})")
+	    return
         print(f"🚀 Brain decided: {strat} | Dynamic Size: ${size:.2f} (25% of ${available_usdt:.2f})")
         
+	# === BIDIRECTIONAL LOGIC (make money both ways) ===
+	weth_balance = get_weth_balance()
+	weth_value_usd = weth_balance * 2350  # approx WETH price
+
+	if weth_value_usd > 30:   # If we have >$30 in WETH, sell some back
+	    direction = "WETH_TO_USDT"
+	    amount_in = int(weth_balance * 0.3 * 1e18)   # sell 30% of WETH
+	    print(f"🔄 Selling WETH back to USDT (we have ${weth_value_usd:.2f} in WETH)")
+	else:
+	    direction = "USDT_TO_WETH"
+	    amount_in = int(trade_size * 1_000_000)
+	    print(f"🔄 Buying WETH with USDT")
+
         # Execute swap with error handling
-        tx_hash = await approve_and_swap(int(size * 1_000_000))
+        tx_hash = await approve_and_swap(int(size * 1_000_000),direction=direction)
         if tx_hash:
             swap_executed = True
             print(f"✅ Swap executed successfully!")
