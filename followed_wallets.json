@@ -4,7 +4,6 @@
     "0x8a2d8a2d8a2d8a2d8a2d8a2d8a2d8a2d8a2d8a2d",
     "0x1f3e1f3e1f3e1f3e1f3e1f3e1f3e1f3e1f3e1f3e"
   ],
-  "min_win_rate": 0.65,
   "max_copy_ratio": 0.20,
   "enabled": true
 }
