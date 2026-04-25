@@ -15,7 +15,6 @@ load_dotenv()
 
 LOCK_FILE = "/tmp/nanoclaw.lock"
 COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", 7))
-COPY_COOLDOWN_MINUTES = int(os.getenv("COPY_COOLDOWN_MINUTES", 2))
 
 w3 = Web3(Web3.HTTPProvider(os.getenv("RPC")))
 
@@ -51,43 +50,46 @@ async def main():
     if os.path.exists(LOCK_FILE) and (time.time() - os.path.getmtime(LOCK_FILE) < 15):
         print("⛔ Lock active — skipping")
         return
-
     open(LOCK_FILE, 'w').close()
 
-    if not (time.time() - state.get("last_run", 0) > COOLDOWN_MINUTES * 60):
+    if time.time() - state.get("last_run", 0) < COOLDOWN_MINUTES * 60:
         print(f"⏳ Cooldown active — skipping")
         return
 
-    # === V2.5.1 Protection Check ===
+    # V2.5.1 Protection
     should_force_sell, reason = check_exit_conditions()
     if should_force_sell:
         direction = "WMATIC_TO_USDT"
-        amount_in = int(wmatic_balance * 0.28 * 1e18)
-        print(f"🛡️ PROTECTION TRIGGERED: {reason}")
+        amount_in = int(wmatic_balance * 0.30 * 1e18)
+        print(f"🛡️ PROTECTION TRIGGERED: {reason} — Force selling")
     else:
         # === 80/20 Decision ===
         if os.getenv("COPY_TRADING_ENABLED", "true").lower() == "true" and get_target_wallets():
             print("🔄 COPY TRADING MODE (20%) - TODO: Implement monitor")
-            # Placeholder for copy logic - we will expand this next
             direction = "USDT_TO_WMATIC"
-            trade_size = max(15.0, min(35.0, usdt_balance * 0.20))
+            trade_size = max(15.0, min(35.0, usdt_balance * get_copy_ratio()))
+            amount_in = int(trade_size * 1_000_000)
         else:
             print("🔄 MAIN STRATEGY MODE (80%)")
             trade_size = max(15.0, min(35.0, usdt_balance * 0.28))
             wmatic_value_usd = wmatic_balance * get_live_wmatic_price()
 
-            if usdt_balance < 40:
+            if usdt_balance < 25:
                 direction = "WMATIC_TO_USDT"
                 amount_in = int(wmatic_balance * 0.30 * 1e18)
-            elif wmatic_value_usd > 70:
+                print(f"🔄 USDT RESERVE PROTECTION: ${usdt_balance:.2f} < $45")
+            elif wmatic_value_usd > 60:
                 direction = "WMATIC_TO_USDT"
                 amount_in = int(wmatic_balance * 0.30 * 1e18)
+                print(f"🔄 Taking profit (WMATIC high: ${wmatic_value_usd:.2f})")
             elif wmatic_value_usd < 40 and wmatic_balance > 50:
                 direction = "WMATIC_TO_USDT"
                 amount_in = int(wmatic_balance * 0.28 * 1e18)
+                print(f"🔄 Cutting loss (WMATIC down: ${wmatic_value_usd:.2f})")
             else:
                 direction = "USDT_TO_WMATIC"
                 amount_in = int(trade_size * 1_000_000)
+                print(f"🔄 Buying WMATIC (hold preferred) | Size: ${trade_size:.2f}")
 
         if direction == "USDT_TO_WMATIC":
             current_price = get_live_wmatic_price()
