@@ -1,0 +1,14 @@
+RPC connected: True
+Real USDT: 74.37 | POL: 8.47
+⏳ Cooldown active (7 min) — skipping
+/bin/sh: 1: python: not found
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 117
+    print("✅ Swap executed successfully!
+          ^
+SyntaxError: unterminated string literal (detected at line 117)
+RPC connected: True
+Real USDT: 55.78 | POL: 8.44
+⏳ Cooldown active (7 min) — skipping
+RPC connected: True
+Real USDT: 65.85 | POL: 8.38
+⏳ Cooldown active (7 min) — skipping
