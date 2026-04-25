@@ -1,3 +1,4 @@
+from trade_logger import log_trade
 from brain_agent import BrainAgent
 import os
 import time
@@ -122,7 +123,6 @@ async def main():
 
 
 
-        from trade_logger import log_trade
         log_trade(direction, trade_size, tx_hash)
     state["last_run"] = time.time()
 
