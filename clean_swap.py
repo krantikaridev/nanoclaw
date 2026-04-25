@@ -112,7 +112,6 @@ def print_performance():
 
 
 async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
-    """Execute approve and swap transactions with proper error handling"""
     print(f"🚀 Executing REAL swap: {direction} | Amount: {amount_in}")
 
     try:
@@ -128,13 +127,7 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
         router = Web3.to_checksum_address(ROUTER)
 
         erc20_abi = [
-            {
-                "constant": False,
-                "inputs": [{"name": "_spender", "type": "address"}, {"name": "_value", "type": "uint256"}],
-                "name": "approve",
-                "outputs": [{"name": "", "type": "bool"}],
-                "type": "function",
-            }
+            {"constant": False, "inputs": [{"name": "_spender", "type": "address"}, {"name": "_value", "type": "uint256"}], "name": "approve", "outputs": [{"name": "", "type": "bool"}], "type": "function"}
         ]
 
         # === APPROVE ===
@@ -147,11 +140,9 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
             'gasPrice': w3.eth.gas_price * 13 // 10,
             'chainId': 137
         })
-
         signed_approve = w3.eth.account.sign_transaction(approve_tx, PRIVATE_KEY)
         approve_hash = w3.eth.send_raw_transaction(signed_approve.raw_transaction)
         print(f"✅ Approve Tx: {approve_hash.hex()}")
-
         receipt = w3.eth.wait_for_transaction_receipt(approve_hash, timeout=300)
         if receipt['status'] == 0:
             print("❌ Approve failed!")
@@ -179,23 +170,25 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
         swap_contract = w3.eth.contract(address=router, abi=router_abi)
         path = [token_in, token_out]
 
-        # Calculate minimum output (2% slippage tolerance)
+        # Calculate minimum output with 3% slippage tolerance
         if direction == "USDT_TO_WETH":
-            expected_out = int(amount_in * 0.98)  # rough estimate
+            # Rough estimate: 1 USDT ≈ 0.00042 WETH
+            expected_out = int(amount_in * 0.00042 * 0.97)
         else:
-            expected_out = int(amount_in * 0.98)
+            # Rough estimate: 1 WETH ≈ 2350 USDT
+            expected_out = int(amount_in * 2350 * 0.97)
 
         nonce_swap = w3.eth.get_transaction_count(WALLET)
         swap_tx = swap_contract.functions.swapExactTokensForTokens(
             amount_in,
-            expected_out,           # ← This is the fix (was 0 before)
+            expected_out,           # ← Proper minimum output (was 0 before)
             path,
             WALLET,
             int(time.time()) + 300
         ).build_transaction({
             'from': WALLET,
             'nonce': nonce_swap,
-            'gas': 220000,
+            'gas': 250000,
             'gasPrice': w3.eth.gas_price * 13 // 10,
             'chainId': 137
         })
