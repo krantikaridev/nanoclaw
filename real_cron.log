@@ -394,3 +394,29 @@ Copy ratio: 20.0% | Min win rate: 65.0%
 Ready for integration with main bot + protection layer
 Real USDT: 17.22 | WMATIC: 1141.91 | POL: 7.28
 ⛔ Lock active — skipping
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading Module Loaded
+Monitoring 3 wallets
+Copy ratio: 20.0% | Min win rate: 65.0%
+Ready for integration with main bot + protection layer
+Real USDT: 48.49 | WMATIC: 799.33 | POL: 7.25
+⏳ Cooldown active — skipping
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading Module ACTIVE
+Monitoring 3 wallets | Copy ratio: 20.0%
+Real USDT: 48.49 | WMATIC: 799.33 | POL: 7.25
+⏳ Cooldown active — skipping
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading Module ACTIVE
+Monitoring 3 wallets | Copy ratio: 20.0%
+Real USDT: 48.49 | WMATIC: 799.33 | POL: 7.25
+🔄 COPY TRADING MODE (20%) - TODO: Implement monitor
+🔒 Trade locked | Buy: $0.0912 | Target: $0.0985 (+8%)
+🚀 Executing REAL swap: USDT_TO_WMATIC | Amount: 15000000
+✅ Approve Tx: 4e1c1eb64ca7bcc37307e685bf4e30a54f66dd3f98b9d004eba739debdeb09d5
+✅ Approve confirmed!
+✅ REAL TX HASH: 956521b81457aba6af6d0e86083108376120df309eeb1c0b2417c041eea0f6a8
+https://polygonscan.com/tx/956521b81457aba6af6d0e86083108376120df309eeb1c0b2417c041eea0f6a8
+✅ Swap confirmed!
+✅ Swap executed successfully!
+✅ Cycle done — next in ~7 min
