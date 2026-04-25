@@ -3515,3 +3515,12 @@ https://polygonscan.com/tx/99d7992d160df89fe08d9bfec4f72eb8f104cc20fe3a40a632cc7
 ├─ Est. Gross PNL: $240.50
 └─ Remaining Capital: $365.45
 ✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.32
+⏳ Cooldown active (7 min) — skipping
+RPC connected: True
+Real USDT: 124.95 | POL: 9.30
+⏳ Cooldown active (7 min) — skipping
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 152
+    router_abi = [
+TabError: inconsistent use of tabs and spaces in indentation

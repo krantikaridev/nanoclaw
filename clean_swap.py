@@ -149,10 +149,9 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
         print("✅ Approve confirmed!")
         await asyncio.sleep(5)
 
-        # === SWAP with safe parameters ===
-        router_abi = [
-            {
-                "inputs": [
+	router_abi = [
+	    {
+		"inputs": [
                     {"internalType": "uint256", "name": "amountIn", "type": "uint256"},
                     {"internalType": "uint256", "name": "amountOutMin", "type": "uint256"},
                     {"internalType": "address[]", "name": "path", "type": "address[]"},
@@ -163,14 +162,25 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
                 "outputs": [{"internalType": "uint256[]", "name": "amounts", "type": "uint256[]"}],
                 "stateMutability": "nonpayable",
                 "type": "function"
+            },
+            {
+                "inputs": [
+                    {"internalType": "uint256", "name": "amountIn", "type": "uint256"},
+                    {"internalType": "address[]", "name": "path", "type": "address[]"}
+                ],
+                "name": "getAmountsOut",
+                "outputs": [{"internalType": "uint256[]", "name": "amounts", "type": "uint256[]"}],
+                "stateMutability": "view",
+                "type": "function"
             }
         ]
-
+ 
         swap_contract = w3.eth.contract(address=router, abi=router_abi)
         path = [token_in, token_out]
 
-        # Use 1 wei as minimum to prevent revert, but log warning
-        amount_out_min = 1
+        # Get REAL expected output from router (this fixes the revert)
+        amounts = swap_contract.functions.getAmountsOut(amount_in, path).call()
+        amount_out_min = int(amounts[1] * 0.97)   # 3% slippage tolerance
 
         nonce_swap = w3.eth.get_transaction_count(WALLET)
         swap_tx = swap_contract.functions.swapExactTokensForTokens(

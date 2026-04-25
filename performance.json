@@ -4,36 +4,6 @@
       "profitable": true,
       "fee": 0.85,
       "trade_size": 31.23650775,
-      "timestamp": 1777054519.6976044
-    },
-    {
-      "profitable": true,
-      "fee": 0.85,
-      "trade_size": 31.23650775,
-      "timestamp": 1777055425.295317
-    },
-    {
-      "profitable": true,
-      "fee": 0.85,
-      "trade_size": 31.23650775,
-      "timestamp": 1777056317.29756
-    },
-    {
-      "profitable": true,
-      "fee": 0.85,
-      "trade_size": 31.23650775,
-      "timestamp": 1777057239.5326655
-    },
-    {
-      "profitable": true,
-      "fee": 0.85,
-      "trade_size": 31.23650775,
-      "timestamp": 1777058131.7969291
-    },
-    {
-      "profitable": true,
-      "fee": 0.85,
-      "trade_size": 31.23650775,
       "timestamp": 1777059027.0882723
     },
     {
@@ -299,7 +269,37 @@
       "fee": 0.85,
       "trade_size": 31.23650775,
       "timestamp": 1777097727.2699916
+    },
+    {
+      "profitable": true,
+      "fee": 0.85,
+      "trade_size": 31.23650775,
+      "timestamp": 1777098474.6792028
+    },
+    {
+      "profitable": true,
+      "fee": 0.85,
+      "trade_size": 31.23650775,
+      "timestamp": 1777098718.8282135
+    },
+    {
+      "profitable": true,
+      "fee": 0.85,
+      "trade_size": 31.23650775,
+      "timestamp": 1777099203.0155628
+    },
+    {
+      "profitable": true,
+      "fee": 0.85,
+      "trade_size": 31.23650775,
+      "timestamp": 1777099539.2380214
+    },
+    {
+      "profitable": false,
+      "fee": 0.85,
+      "trade_size": 31.23650775,
+      "timestamp": 1777099853.871233
     }
   ],
-  "total_fees": 59.500000000000064
+  "total_fees": 63.75000000000007
 }
