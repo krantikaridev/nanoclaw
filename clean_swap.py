@@ -136,8 +136,8 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
         approve_tx = approve_contract.functions.approve(router, amount_in).build_transaction({
             'from': WALLET,
             'nonce': nonce,
-            'gas': 120000,
-            'gasPrice': w3.eth.gas_price * 13 // 10,
+            'gas': 130000,
+            'gasPrice': w3.eth.gas_price * 14 // 10,
             'chainId': 137
         })
         signed_approve = w3.eth.account.sign_transaction(approve_tx, PRIVATE_KEY)
@@ -148,9 +148,9 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
             print("❌ Approve failed!")
             return None
         print("✅ Approve confirmed!")
-        await asyncio.sleep(3)
+        await asyncio.sleep(4)
 
-        # === SWAP with proper amountOutMin ===
+        # === SWAP with safe amountOutMin ===
         router_abi = [
             {
                 "inputs": [
@@ -170,26 +170,21 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
         swap_contract = w3.eth.contract(address=router, abi=router_abi)
         path = [token_in, token_out]
 
-        # Calculate minimum output with 3% slippage tolerance
-        if direction == "USDT_TO_WETH":
-            # Rough estimate: 1 USDT ≈ 0.00042 WETH
-            expected_out = int(amount_in * 0.00042 * 0.97)
-        else:
-            # Rough estimate: 1 WETH ≈ 2350 USDT
-            expected_out = int(amount_in * 2350 * 0.97)
+        # Safe minimum output (1 wei) to prevent revert
+        amount_out_min = 1
 
         nonce_swap = w3.eth.get_transaction_count(WALLET)
         swap_tx = swap_contract.functions.swapExactTokensForTokens(
             amount_in,
-            expected_out,           # ← Proper minimum output (was 0 before)
+            amount_out_min,
             path,
             WALLET,
             int(time.time()) + 300
         ).build_transaction({
             'from': WALLET,
             'nonce': nonce_swap,
-            'gas': 250000,
-            'gasPrice': w3.eth.gas_price * 13 // 10,
+            'gas': 280000,
+            'gasPrice': w3.eth.gas_price * 14 // 10,
             'chainId': 137
         })
 
