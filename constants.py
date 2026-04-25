@@ -5,7 +5,7 @@ load_dotenv()
 
 WALLET = "0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA"
 USDT = os.getenv("USDT")
-WETH = os.getenv("WETH")
+WMATIC = "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270"
 ROUTER = "0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff"
 
 ROUTER_ABI = [
@@ -17,8 +17,8 @@ ROUTER_ABI = [
             {"internalType": "address", "name": "to", "type": "address"},
             {"internalType": "uint256", "name": "deadline", "type": "uint256"}
         ],
-        "name": "swapExactTokensForTokensSupportingFeeOnTransferTokens",
-        "outputs": [],
+        "name": "swapExactTokensForTokens",
+        "outputs": [{"internalType": "uint256[]", "name": "amounts", "type": "uint256[]"}],
         "stateMutability": "nonpayable",
         "type": "function"
     }

@@ -1,17 +1,17 @@
 import asyncio
 import time
 from web3 import Web3
-from constants import WALLET, USDT, WETH, ROUTER, ROUTER_ABI, ERC20_ABI
+from constants import WALLET, USDT, WMATIC, ROUTER, ROUTER_ABI, ERC20_ABI
 
-async def approve_and_swap(w3, private_key, amount_in: int, direction="USDT_TO_WETH"):
+async def approve_and_swap(w3, private_key, amount_in: int, direction="USDT_TO_WMATIC"):
     print(f"🚀 Executing REAL swap: {direction} | Amount: {amount_in}")
 
     try:
-        if direction == "USDT_TO_WETH":
+        if direction == "USDT_TO_WMATIC":
             token_in = USDT
-            token_out = WETH
+            token_out = WMATIC
         else:
-            token_in = WETH
+            token_in = WMATIC
             token_out = USDT
 
         token_in = Web3.to_checksum_address(token_in)
@@ -38,12 +38,12 @@ async def approve_and_swap(w3, private_key, amount_in: int, direction="USDT_TO_W
         print("✅ Approve confirmed!")
         await asyncio.sleep(5)
 
-        # Swap with fee-on-transfer + amount_out_min = 0
+        # Swap
         swap_contract = w3.eth.contract(address=router, abi=ROUTER_ABI)
         path = [token_in, token_out]
 
         nonce_swap = w3.eth.get_transaction_count(WALLET)
-        swap_tx = swap_contract.functions.swapExactTokensForTokensSupportingFeeOnTransferTokens(
+        swap_tx = swap_contract.functions.swapExactTokensForTokens(
             amount_in,
             0,
             path,

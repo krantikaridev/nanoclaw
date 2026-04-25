@@ -6,7 +6,7 @@ import asyncio
 import json
 from web3 import Web3
 from dotenv import load_dotenv
-from constants import WALLET, USDT, WETH, ROUTER, ROUTER_ABI, ERC20_ABI
+from constants import WALLET, USDT, WMATIC, ROUTER, ROUTER_ABI, ERC20_ABI
 from swap_executor import approve_and_swap
 
 LOCK_FILE = "/tmp/nanoclaw.lock"
@@ -69,20 +69,20 @@ async def main():
     decision = brain.decide_action(usdt_balance, pol)
 
     if decision.startswith("TRADE_"):
-        trade_size = max(15.0, min(25.0, usdt_balance * 0.25))
+        trade_size = max(15.0, min(25.0, usdt_balance * 0.20))  # Conservative 20%
         print(f"💰 Fresh USDT: ${usdt_balance:.2f} → Trade size: ${trade_size:.2f}")
 
-        weth_balance = get_token_balance(WETH, decimals=18)
-        weth_value_usd = weth_balance * 2350
+        wmatic_balance = get_token_balance(WMATIC, decimals=18)
+        wmatic_value_usd = wmatic_balance * 0.92  # approx WMATIC price
 
-        if weth_value_usd > 50:
-            direction = "WETH_TO_USDT"
-            amount_in = int(weth_balance * 0.35 * 1e18)
-            print(f"🔄 Selling WETH → USDT (${weth_value_usd:.2f} in WETH)")
+        if wmatic_value_usd > 40:
+            direction = "WMATIC_TO_USDT"
+            amount_in = int(wmatic_balance * 0.30 * 1e18)
+            print(f"🔄 Selling WMATIC → USDT (${wmatic_value_usd:.2f} in WMATIC)")
         else:
-            direction = "USDT_TO_WETH"
+            direction = "USDT_TO_WMATIC"
             amount_in = int(trade_size * 1_000_000)
-            print(f"🔄 Buying WETH with USDT")
+            print(f"🔄 Buying WMATIC with USDT")
 
         tx_hash = await approve_and_swap(w3, os.getenv("POLYGON_PRIVATE_KEY"), amount_in, direction=direction)
         if tx_hash:
