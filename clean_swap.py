@@ -98,7 +98,7 @@ async def main():
 
 
 
-            if usdt_balance < 35:   # Minimum USDT Reserve
+            if usdt_balance < 40:   # Minimum USDT Reserve
 
                 direction = "WMATIC_TO_USDT"
 
@@ -106,7 +106,7 @@ async def main():
 
                 print(f"🔄 USDT RESERVE PROTECTION: ${usdt_balance:.2f} < $35")
 
-            elif wmatic_value_usd > 75:
+            elif wmatic_value_usd > 70:
 
                 direction = "WMATIC_TO_USDT"
 
