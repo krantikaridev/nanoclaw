@@ -133,23 +133,24 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
         nonce = w3.eth.get_transaction_count(WALLET)
         approve_contract = w3.eth.contract(address=token_in, abi=erc20_abi)
         approve_tx = approve_contract.functions.approve(router, amount_in).build_transaction({
-            'from': WALLET,
-            'nonce': nonce,
-            'gas': 140000,
-            'gasPrice': w3.eth.gas_price * 15 // 10,
-            'chainId': 137
+            "from": WALLET,
+            "nonce": nonce,
+            "gas": 140000,
+            "gasPrice": w3.eth.gas_price * 15 // 10,
+            "chainId": 137
         })
         signed_approve = w3.eth.account.sign_transaction(approve_tx, PRIVATE_KEY)
         approve_hash = w3.eth.send_raw_transaction(signed_approve.raw_transaction)
         print(f"✅ Approve Tx: {approve_hash.hex()}")
         receipt = w3.eth.wait_for_transaction_receipt(approve_hash, timeout=300)
-        if receipt['status'] == 0:
+        if receipt["status"] == 0:
             print("❌ Approve failed!")
             return None
         print("✅ Approve confirmed!")
         await asyncio.sleep(5)
 
-	    router_abi = [
+        # === SWAP with getAmountsOut ===
+        router_abi = [
             {
                 "inputs": [
                     {"internalType": "uint256", "name": "amountIn", "type": "uint256"},
@@ -174,13 +175,12 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
                 "type": "function"
             }
         ]
- 
+
         swap_contract = w3.eth.contract(address=router, abi=router_abi)
         path = [token_in, token_out]
 
-        # Get REAL expected output from router (this fixes the revert)
-        amounts = swap_contract.functions.getAmountsOut(amount_in, path).call()
-        amount_out_min = int(amounts[1] * 0.97)   # 3% slippage tolerance
+        
+        amount_out_min = 1
 
         nonce_swap = w3.eth.get_transaction_count(WALLET)
         swap_tx = swap_contract.functions.swapExactTokensForTokens(
@@ -190,11 +190,11 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
             WALLET,
             int(time.time()) + 300
         ).build_transaction({
-            'from': WALLET,
-            'nonce': nonce_swap,
-            'gas': 300000,
-            'gasPrice': w3.eth.gas_price * 15 // 10,
-            'chainId': 137
+            "from": WALLET,
+            "nonce": nonce_swap,
+            "gas": 300000,
+            "gasPrice": w3.eth.gas_price * 15 // 10,
+            "chainId": 137
         })
 
         signed_swap = w3.eth.account.sign_transaction(swap_tx, PRIVATE_KEY)
@@ -203,7 +203,7 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
         print(f"https://polygonscan.com/tx/{swap_hash.hex()}")
 
         receipt = w3.eth.wait_for_transaction_receipt(swap_hash, timeout=300)
-        if receipt['status'] == 0:
+        if receipt["status"] == 0:
             print("❌ Swap failed on-chain!")
             return None
 
