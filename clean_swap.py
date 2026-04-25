@@ -60,7 +60,7 @@ async def main():
     should_force_sell, reason = check_exit_conditions()
     if should_force_sell:
         direction = "WMATIC_TO_USDT"
-        amount_in = int(wmatic_balance * 0.30 * 1e18)
+        amount_in = int(wmatic_balance * 0.35 * 1e18)
         print(f"🛡️ PROTECTION TRIGGERED: {reason} — Force selling")
     else:
         # === 80/20 Decision ===
@@ -76,11 +76,11 @@ async def main():
 
             if usdt_balance < 25:
                 direction = "WMATIC_TO_USDT"
-                amount_in = int(wmatic_balance * 0.30 * 1e18)
+                amount_in = int(wmatic_balance * 0.35 * 1e18)
                 print(f"🔄 USDT RESERVE PROTECTION: ${usdt_balance:.2f} < $45")
-            elif wmatic_value_usd > 60:
+            elif wmatic_value_usd > 55:
                 direction = "WMATIC_TO_USDT"
-                amount_in = int(wmatic_balance * 0.30 * 1e18)
+                amount_in = int(wmatic_balance * 0.35 * 1e18)
                 print(f"🔄 Taking profit (WMATIC high: ${wmatic_value_usd:.2f})")
             elif wmatic_value_usd < 40 and wmatic_balance > 50:
                 direction = "WMATIC_TO_USDT"
