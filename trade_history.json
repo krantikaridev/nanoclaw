@@ -198,5 +198,29 @@
     "tx_hash": "d07d4804448c4a68c348cd4dd4f83f3e2abe187a7cd6a6f01e8e0271cbab656e",
     "success": true,
     "note": ""
+  },
+  {
+    "timestamp": "2026-04-25T19:20:21.188172",
+    "direction": "USDT_TO_WMATIC",
+    "amount_usd": 15.0,
+    "tx_hash": "d2ac0e026de06a6d3f44177661a60f17a8263190894233052631c0b635449102",
+    "success": true,
+    "note": ""
+  },
+  {
+    "timestamp": "2026-04-25T19:28:45.604532",
+    "direction": "USDT_TO_WMATIC",
+    "amount_usd": 15.0,
+    "tx_hash": "939201735e6f43e4d2f084f4e0d5ed99c3b2e3d8fa349f5115e63a7d26365111",
+    "success": true,
+    "note": ""
+  },
+  {
+    "timestamp": "2026-04-25T19:45:23.619280",
+    "direction": "USDT_TO_WMATIC",
+    "amount_usd": 15.0,
+    "tx_hash": "4ee905457f6ad8235bcf3d2917ff33f321990543d08273468209da5c2966b239",
+    "success": true,
+    "note": ""
   }
 ]

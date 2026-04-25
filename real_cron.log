@@ -305,3 +305,92 @@ Real USDT: 67.06 | POL: 7.51
 RPC connected: True
 Real USDT: 48.28 | POL: 7.48
 ⏳ Cooldown active (7 min) — skipping
+✅ V2.5.1 Protection Module loaded successfully
+RPC connected: True
+Real USDT: 48.28 | POL: 7.48
+⏳ Cooldown active (7 min) — skipping
+✅ V2.5.1 Protection Module loaded successfully
+RPC connected: True
+Real USDT: 48.28 | POL: 7.48
+🔄 Buying WMATIC (hold preferred) | Size: $15.00
+🔄 Buying WMATIC (hold preferred) | Size: $15.00
+🚀 Executing REAL swap: USDT_TO_WMATIC | Amount: 15000000
+✅ Approve Tx: f1389bdab9da09a6a58e3376ea9744539657c5ff2d7edddc145f0a527facc8bf
+✅ Approve confirmed!
+✅ REAL TX HASH: d2ac0e026de06a6d3f44177661a60f17a8263190894233052631c0b635449102
+https://polygonscan.com/tx/d2ac0e026de06a6d3f44177661a60f17a8263190894233052631c0b635449102
+✅ Swap confirmed!
+✅ Swap executed successfully!
+📝 Trade logged: USDT_TO_WMATIC $15.00
+✅ Cycle done — next in ~7 min
+✅ V2.5.1 Protection Module loaded successfully
+RPC connected: True
+Real USDT: 18.28 | POL: 7.41
+⏳ Cooldown active (7 min) — skipping
+✅ V2.5.1 Protection Module loaded successfully
+⛔ Lock active — skipping
+✅ V2.5.1 Protection Module loaded successfully
+RPC connected: True
+Real USDT: 18.28 | POL: 7.41
+⚠️ FLUCTUATION PROTECTION: USDT $18.28 < $30 → Selling 25% WMATIC
+🛡️ PROTECTION TRIGGERED: FLUCTUATION — Force selling
+⚠️ FLUCTUATION PROTECTION: USDT $18.28 < $30 → Selling 25% WMATIC
+🛡️ PROTECTION TRIGGERED: FLUCTUATION — Force selling
+🚀 Executing REAL swap: WMATIC_TO_USDT | Amount: 317025657725749821440
+✅ Approve Tx: fc1800387e3adf67b8c66fd18215bc0afa8199c79127683518aabc9b172e7424
+✅ Approve confirmed!
+✅ REAL TX HASH: 3597961240cfee6e67dda45ba0824839b4547f95209ec217dde133fc53c0e9a3
+https://polygonscan.com/tx/3597961240cfee6e67dda45ba0824839b4547f95209ec217dde133fc53c0e9a3
+✅ Swap confirmed!
+✅ Swap executed successfully!
+Traceback (most recent call last):
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 161, in <module>
+    asyncio.run(main())
+  File "/usr/lib/python3.12/asyncio/runners.py", line 194, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/base_events.py", line 687, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 153, in main
+    log_trade(direction, trade_size, tx_hash)
+                         ^^^^^^^^^^
+UnboundLocalError: cannot access local variable 'trade_size' where it is not associated with a value
+✅ V2.5.1 Protection Module loaded successfully
+RPC connected: True
+Real USDT: 47.22 | POL: 7.37
+🔄 Taking profit (WMATIC high: $74.37)
+🔄 Buying WMATIC (hold preferred) | Size: $15.00
+🚀 Executing REAL swap: USDT_TO_WMATIC | Amount: 15000000
+✅ Approve Tx: cbfcc22e77441e6004a4841f787ff4b7f24c57b816aab876a145db3af1d24f65
+✅ Approve confirmed!
+✅ REAL TX HASH: 4ee905457f6ad8235bcf3d2917ff33f321990543d08273468209da5c2966b239
+https://polygonscan.com/tx/4ee905457f6ad8235bcf3d2917ff33f321990543d08273468209da5c2966b239
+✅ Swap confirmed!
+✅ Swap executed successfully!
+📝 Trade logged: USDT_TO_WMATIC $15.00
+✅ Cycle done — next in ~7 min
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading Module Loaded
+Monitoring 3 wallets
+Copy ratio: 8.0% | Min win rate: 65.0%
+Ready for integration with main bot + protection layer
+Real USDT: 32.22 | WMATIC: 978.60 | POL: 7.31
+⏳ Cooldown active — skipping
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading Module Loaded
+Monitoring 3 wallets
+Copy ratio: 20.0% | Min win rate: 65.0%
+Ready for integration with main bot + protection layer
+Real USDT: 17.22 | WMATIC: 1141.91 | POL: 7.28
+⏳ Cooldown active — skipping
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading Module Loaded
+Monitoring 3 wallets
+Copy ratio: 20.0% | Min win rate: 65.0%
+Ready for integration with main bot + protection layer
+Real USDT: 17.22 | WMATIC: 1141.91 | POL: 7.28
+⛔ Lock active — skipping

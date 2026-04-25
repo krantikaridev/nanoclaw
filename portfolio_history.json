@@ -70,5 +70,29 @@
     "usdt": 48.28,
     "wmatic": 806.46,
     "total_value": 122.06
+  },
+  {
+    "timestamp": "2026-04-25T19:28:49.549164",
+    "usdt": 18.28,
+    "wmatic": 1132.23,
+    "total_value": 121.98
+  },
+  {
+    "timestamp": "2026-04-25T19:58:26.782572",
+    "usdt": 17.22,
+    "wmatic": 1141.91,
+    "total_value": 121.5
+  },
+  {
+    "timestamp": "2026-04-25T20:00:15.413375",
+    "usdt": 17.22,
+    "wmatic": 1141.91,
+    "total_value": 121.5
+  },
+  {
+    "timestamp": "2026-04-25T20:01:08.541651",
+    "usdt": 17.22,
+    "wmatic": 1141.91,
+    "total_value": 121.5
   }
 ]
