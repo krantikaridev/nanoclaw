@@ -1,3 +1,4 @@
+from v25_protection import record_buy, check_exit_conditions, get_live_wmatic_price, get_safe_trade_size
 from pnl_tracker import calculate_pnl
 from trade_logger import log_trade
 from brain_agent import BrainAgent
@@ -67,12 +68,17 @@ async def main():
     if not should_run_cycle(state):
         return
 
+    should_force_sell, reason = check_exit_conditions()
+    if should_force_sell:
+        direction = "WMATIC_TO_USDT"
+        amount_in = int(get_token_balance(WMATIC, decimals=18) * 0.25 * 1e18)
+        print(f"🛡️ PROTECTION TRIGGERED: {reason} — Force selling")
     brain = BrainAgent(min_trade=3.0, max_trade=8.0, strat2_weight=0.75)
     decision = brain.decide_action(usdt_balance, pol)
 
     if decision.startswith("TRADE_"):
 
-        trade_size = max(15.0, min(30.0, usdt_balance * 0.25))
+        trade_size = max(15.0, min(30.0, usdt_balance * 0.28))
 
         wmatic_value_usd = get_token_balance(WMATIC, decimals=18) * 0.092
 
@@ -86,7 +92,7 @@ async def main():
 
             print(f"🔄 Selling WMATIC → USDT (USDT low: ${usdt_balance:.2f})")
 
-        elif wmatic_value_usd > 80:
+        elif wmatic_value_usd > 75:
 
             direction = "WMATIC_TO_USDT"
 
@@ -94,11 +100,11 @@ async def main():
 
             print(f"🔄 Taking profit (WMATIC high: ${wmatic_value_usd:.2f})")
 
-        elif wmatic_value_usd < 40 and get_token_balance(WMATIC, decimals=18) > 50:
+        elif wmatic_value_usd < 40 and get_token_balance(WMATIC, decimals=18) > 75:
 
             direction = "WMATIC_TO_USDT"
 
-            amount_in = int(get_token_balance(WMATIC, decimals=18) * 0.25 * 1e18)
+            amount_in = int(get_token_balance(WMATIC, decimals=18) * 0.28 * 1e18)
 
             print(f"🔄 Cutting loss (WMATIC down: ${wmatic_value_usd:.2f})")
 
