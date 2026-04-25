@@ -2281,3 +2281,1237 @@ https://polygonscan.com/tx/53fd445af62267454581040dd5bad907e900fc05dbd3b59be96d1
 ├─ Est. Gross PNL: $5.20
 └─ Remaining Capital: $125.20
 ✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.97
+🚀 Brain decided: STRAT2 | Dynamic Size: $25.00 (25% of $124.95)
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 25000000
+✅ Approve Tx: 405284d2b83e560f743157e80cedfbb3fff05327a4176b9aecf7cfd747283629
+✅ Approve confirmed!
+✅ REAL TX HASH: e809064e0a9208423866ef5aac12fd5c044b82148d42b42014955d1d29c892bc
+https://polygonscan.com/tx/e809064e0a9208423866ef5aac12fd5c044b82148d42b42014955d1d29c892bc
+✅ Swap confirmed!
+✅ Swap executed successfully!
+📈 Trade Recorded: ✅ PROFIT | Size: $25.00 | Fee: $0.80
+┌─ 📊 PERFORMANCE METRICS (Last 1 trades)
+├─ Win Rate: 100.0% (1/1)
+├─ Total Traded: $25.00
+├─ Fees Paid: $0.80
+├─ Est. Gross PNL: $5.20
+└─ Remaining Capital: $125.20
+✅ Cycle done — next in ~7 min
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 280
+    trade_size = max(15.0, min(35.0, usdt_balance * 0.25))
+TabError: inconsistent use of tabs and spaces in indentation
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 281
+    usdt_balance = get_usdt_balance()  # fresh read every time
+TabError: inconsistent use of tabs and spaces in indentation
+RPC connected: True
+Real USDT: 124.95 | POL: 9.96
+⏳ Cooldown active (7 min) — skipping
+RPC connected: True
+Real USDT: 124.95 | POL: 9.96
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 4a24c666d08eeea9c37dd61fd101b09e06421de256a6144de033f2fde63cbc87
+✅ Approve confirmed!
+✅ REAL TX HASH: 0f713754f140791e185166b662f0e1f1e418c5d7e9a1a3e119253bcd1c9852e1
+https://polygonscan.com/tx/0f713754f140791e185166b662f0e1f1e418c5d7e9a1a3e119253bcd1c9852e1
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 2 trades)
+├─ Win Rate: 100.0% (2/2)
+├─ Total Traded: $62.47
+├─ Fees Paid: $1.70
+├─ Est. Gross PNL: $10.30
+└─ Remaining Capital: $135.25
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.95
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: f45a7158a8f9c2ae1ae951324f3c07404ceba821d837da8d9db9c7d01adf71f2
+✅ Approve confirmed!
+✅ REAL TX HASH: 739be2232143276f8f42cc969de0a136dbc12105c118f4515310a5ff147c7279
+https://polygonscan.com/tx/739be2232143276f8f42cc969de0a136dbc12105c118f4515310a5ff147c7279
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 3 trades)
+├─ Win Rate: 100.0% (3/3)
+├─ Total Traded: $93.71
+├─ Fees Paid: $2.55
+├─ Est. Gross PNL: $15.45
+└─ Remaining Capital: $140.40
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.94
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 3500b418915d878fbea1733a9f05306d7cac909ff039a6869d308e4a7668bc54
+✅ Approve confirmed!
+✅ REAL TX HASH: c8fd45f898950e45c0f53164a9181cbdcb19ce50e57ac0979bfce42250309f30
+https://polygonscan.com/tx/c8fd45f898950e45c0f53164a9181cbdcb19ce50e57ac0979bfce42250309f30
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 4 trades)
+├─ Win Rate: 100.0% (4/4)
+├─ Total Traded: $124.95
+├─ Fees Paid: $3.40
+├─ Est. Gross PNL: $20.60
+└─ Remaining Capital: $145.55
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.93
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 96287beaddf1021307b81ad5cdf71fb4244e08f6fb6436d63714da33e9a413c2
+✅ Approve confirmed!
+✅ REAL TX HASH: 52ca3e9ac867feb13fd6f26c24e0b7d94755c8c8c80cb3cbc475ebc5baf31bcf
+https://polygonscan.com/tx/52ca3e9ac867feb13fd6f26c24e0b7d94755c8c8c80cb3cbc475ebc5baf31bcf
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 5 trades)
+├─ Win Rate: 100.0% (5/5)
+├─ Total Traded: $156.18
+├─ Fees Paid: $4.25
+├─ Est. Gross PNL: $25.75
+└─ Remaining Capital: $150.70
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.92
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: cc18b8f2d6a1d3ae3c532d643e0bc1fc8f24275a868c0e7a4f7a74e2857fa496
+✅ Approve confirmed!
+✅ REAL TX HASH: 66626561d2095a294c8c69a8c8675a0065a6eb2b13cdeb2ff9be15a8424a46ba
+https://polygonscan.com/tx/66626561d2095a294c8c69a8c8675a0065a6eb2b13cdeb2ff9be15a8424a46ba
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 6 trades)
+├─ Win Rate: 100.0% (6/6)
+├─ Total Traded: $187.42
+├─ Fees Paid: $5.10
+├─ Est. Gross PNL: $30.90
+└─ Remaining Capital: $155.85
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.91
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 554a4cd638d08435bad51fb8fdd019aaaf51e0b07fa4aa5cbde89ac87d425ec8
+✅ Approve confirmed!
+✅ REAL TX HASH: 5b13f0013fe71dbfb32af3db66da7e1f3a0fbc5179dbc1b1123b5f8f65b23336
+https://polygonscan.com/tx/5b13f0013fe71dbfb32af3db66da7e1f3a0fbc5179dbc1b1123b5f8f65b23336
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 7 trades)
+├─ Win Rate: 100.0% (7/7)
+├─ Total Traded: $218.66
+├─ Fees Paid: $5.95
+├─ Est. Gross PNL: $36.05
+└─ Remaining Capital: $161.00
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.90
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: d614d7425c2be3e5844bf313eb349a8b0d8d5d58c56f13403d2fc6491a171571
+✅ Approve confirmed!
+✅ REAL TX HASH: 3dce1683754a850c7620df6aee37d864d1becfdcab06b97ef4499fb981c96137
+https://polygonscan.com/tx/3dce1683754a850c7620df6aee37d864d1becfdcab06b97ef4499fb981c96137
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 8 trades)
+├─ Win Rate: 100.0% (8/8)
+├─ Total Traded: $249.89
+├─ Fees Paid: $6.80
+├─ Est. Gross PNL: $41.20
+└─ Remaining Capital: $166.15
+✅ Cycle done — next in ~7 min
+⛔ Lock active — skipping
+RPC connected: True
+Real USDT: 124.95 | POL: 9.89
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: b17becb513b5e1779f2f4b5c2a82efe6ede758a2aee7f1114d3381eda21f61fd
+✅ Approve confirmed!
+✅ REAL TX HASH: 8046f431aa6acecb2cd3edbe6909118293f62220958a083b85d2280020598aa2
+https://polygonscan.com/tx/8046f431aa6acecb2cd3edbe6909118293f62220958a083b85d2280020598aa2
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 10 trades)
+├─ Win Rate: 100.0% (10/10)
+├─ Total Traded: $312.37
+├─ Fees Paid: $8.50
+├─ Est. Gross PNL: $51.50
+└─ Remaining Capital: $176.45
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.88
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 0dfcd7bcc1682654be70b02108081a2b9243b25b02ce89ae67af2bab4c15594d
+✅ Approve confirmed!
+✅ REAL TX HASH: ddd6fe22436eda34834bcbfa164d4b3eae53f8ef0d906ef47610e70bf219b66a
+https://polygonscan.com/tx/ddd6fe22436eda34834bcbfa164d4b3eae53f8ef0d906ef47610e70bf219b66a
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 11 trades)
+├─ Win Rate: 100.0% (11/11)
+├─ Total Traded: $343.60
+├─ Fees Paid: $9.35
+├─ Est. Gross PNL: $56.65
+└─ Remaining Capital: $181.60
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.86
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 3709984f813780769c935a2f1563bbff00a581b7d70aa9e4e2d159e28d3f7bb7
+✅ Approve confirmed!
+✅ REAL TX HASH: 47d019262184a3c4cc68bb41ee21b9c13a22a552f17a15401b2b652fd0de122f
+https://polygonscan.com/tx/47d019262184a3c4cc68bb41ee21b9c13a22a552f17a15401b2b652fd0de122f
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 12 trades)
+├─ Win Rate: 100.0% (12/12)
+├─ Total Traded: $374.84
+├─ Fees Paid: $10.20
+├─ Est. Gross PNL: $61.80
+└─ Remaining Capital: $186.75
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.85
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: c84951ca6e60366cc43166f657c9ae53cff54f899584e13203368d22fdfc35ae
+✅ Approve confirmed!
+✅ REAL TX HASH: 21468cf3afcb6cf52f8f39a7d5e8a81fca47e024db2cf80e6ac8bb126d873641
+https://polygonscan.com/tx/21468cf3afcb6cf52f8f39a7d5e8a81fca47e024db2cf80e6ac8bb126d873641
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 13 trades)
+├─ Win Rate: 100.0% (13/13)
+├─ Total Traded: $406.07
+├─ Fees Paid: $11.05
+├─ Est. Gross PNL: $66.95
+└─ Remaining Capital: $191.90
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.84
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: bc023d6d569e6cdbad97f65d5cff8583c0890efcaddf52f8b8f250b13d0640b8
+✅ Approve confirmed!
+✅ REAL TX HASH: 146c73ecb0460b1bca892c5f09c9fe3f2bc208636c1ac0f7756a6e2a4ae04d9b
+https://polygonscan.com/tx/146c73ecb0460b1bca892c5f09c9fe3f2bc208636c1ac0f7756a6e2a4ae04d9b
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 14 trades)
+├─ Win Rate: 100.0% (14/14)
+├─ Total Traded: $437.31
+├─ Fees Paid: $11.90
+├─ Est. Gross PNL: $72.10
+└─ Remaining Capital: $197.05
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.84
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: b4ce9b8ce3a9d70e1d2bd1b15e48650643c0b08e210581d3e5f83a54dbc4e7ab
+✅ Approve confirmed!
+✅ REAL TX HASH: 6728b174d3562bf1c33229f34a86fe436c1e1bde12e4a17d2ab05a7939b52dfb
+https://polygonscan.com/tx/6728b174d3562bf1c33229f34a86fe436c1e1bde12e4a17d2ab05a7939b52dfb
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 15 trades)
+├─ Win Rate: 100.0% (15/15)
+├─ Total Traded: $468.55
+├─ Fees Paid: $12.75
+├─ Est. Gross PNL: $77.25
+└─ Remaining Capital: $202.20
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.83
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 74409e107781c0659aed60608b165ce1adc53e9d6f87542124d4f852f7e8e6d4
+✅ Approve confirmed!
+✅ REAL TX HASH: 75cd2cb00f60cef081bfdd8ffbf13016944b6291ab48f9fe52a98937f83c73d6
+https://polygonscan.com/tx/75cd2cb00f60cef081bfdd8ffbf13016944b6291ab48f9fe52a98937f83c73d6
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 16 trades)
+├─ Win Rate: 100.0% (16/16)
+├─ Total Traded: $499.78
+├─ Fees Paid: $13.60
+├─ Est. Gross PNL: $82.40
+└─ Remaining Capital: $207.35
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.82
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 920e0e3210892433b7a3b373015755f74a23066a2870de653af3e538ebd08699
+✅ Approve confirmed!
+✅ REAL TX HASH: 794248bfca80d1da3cbb904a4b48e32fdddc56156a2cd5f6137574deabb82207
+https://polygonscan.com/tx/794248bfca80d1da3cbb904a4b48e32fdddc56156a2cd5f6137574deabb82207
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 17 trades)
+├─ Win Rate: 100.0% (17/17)
+├─ Total Traded: $531.02
+├─ Fees Paid: $14.45
+├─ Est. Gross PNL: $87.55
+└─ Remaining Capital: $212.50
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.81
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: a06d1fc4edd1900eee19c36c801db861a75797488ba3d571ab798db8c798b539
+✅ Approve confirmed!
+✅ REAL TX HASH: abfec48bcc837e78d3de1ce7f53fee33ac3145ac4d39579adae47c0d64420ee3
+https://polygonscan.com/tx/abfec48bcc837e78d3de1ce7f53fee33ac3145ac4d39579adae47c0d64420ee3
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 18 trades)
+├─ Win Rate: 100.0% (18/18)
+├─ Total Traded: $562.26
+├─ Fees Paid: $15.30
+├─ Est. Gross PNL: $92.70
+└─ Remaining Capital: $217.65
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.80
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 11c2fe648154f670dd5cf1ab21a837b6c49c8a1bf1cf66cc4ca0ef19e2b65257
+✅ Approve confirmed!
+✅ REAL TX HASH: 1ebff7d8fa1c1f63428993f1ba0a74f122d78cc9a9a3cde5eb35754537bef654
+https://polygonscan.com/tx/1ebff7d8fa1c1f63428993f1ba0a74f122d78cc9a9a3cde5eb35754537bef654
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 19 trades)
+├─ Win Rate: 100.0% (19/19)
+├─ Total Traded: $593.49
+├─ Fees Paid: $16.15
+├─ Est. Gross PNL: $97.85
+└─ Remaining Capital: $222.80
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.79
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 2a5dd496d410ec39c77312732247242d83530194732191fadae4c95cb8ff77fd
+✅ Approve confirmed!
+✅ REAL TX HASH: ca7543bf334e409b676dabadc54cf7e9474d7b2863e3cccaf2831f61373683d6
+https://polygonscan.com/tx/ca7543bf334e409b676dabadc54cf7e9474d7b2863e3cccaf2831f61373683d6
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 20 trades)
+├─ Win Rate: 100.0% (20/20)
+├─ Total Traded: $624.73
+├─ Fees Paid: $17.00
+├─ Est. Gross PNL: $103.00
+└─ Remaining Capital: $227.95
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.78
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 9cf2fc40dbe8bc0a65a1af08187738863ec6098df3e3fc03fb58ded855f5664a
+✅ Approve confirmed!
+✅ REAL TX HASH: ee152218198324a2d86d7e6bd8d16e032e8d8391b0c2bb9315e27a100a9d241f
+https://polygonscan.com/tx/ee152218198324a2d86d7e6bd8d16e032e8d8391b0c2bb9315e27a100a9d241f
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 21 trades)
+├─ Win Rate: 100.0% (21/21)
+├─ Total Traded: $655.97
+├─ Fees Paid: $17.85
+├─ Est. Gross PNL: $108.15
+└─ Remaining Capital: $233.10
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.77
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: d94691b1beb4aca817360fdbed2bb3f6ef290548aca1dca9e3911ef5b0ea3caf
+✅ Approve confirmed!
+✅ REAL TX HASH: f3a810594507faa065e4272f582eb1b7156f994fb5a880c8df77d177310e6894
+https://polygonscan.com/tx/f3a810594507faa065e4272f582eb1b7156f994fb5a880c8df77d177310e6894
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 22 trades)
+├─ Win Rate: 100.0% (22/22)
+├─ Total Traded: $687.20
+├─ Fees Paid: $18.70
+├─ Est. Gross PNL: $113.30
+└─ Remaining Capital: $238.25
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.77
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 23f6cf0ee15a1142fcc14e6ae69bf92e5f50c2cd3fbae4a52943d26450e5ff7a
+✅ Approve confirmed!
+✅ REAL TX HASH: 1b7f7b3e9fa99b3ae437eb5167018dc3acd33a80cc2aceecbf0e07566b847259
+https://polygonscan.com/tx/1b7f7b3e9fa99b3ae437eb5167018dc3acd33a80cc2aceecbf0e07566b847259
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 23 trades)
+├─ Win Rate: 100.0% (23/23)
+├─ Total Traded: $718.44
+├─ Fees Paid: $19.55
+├─ Est. Gross PNL: $118.45
+└─ Remaining Capital: $243.40
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.76
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: de57e0a70eac129195030fa4222d12467d598391e006ba0d80f319e562bfd7e6
+✅ Approve confirmed!
+✅ REAL TX HASH: 1f5d663372a3308a9ba74ed0322365ab6350befac0d0cc0e618e509783514212
+https://polygonscan.com/tx/1f5d663372a3308a9ba74ed0322365ab6350befac0d0cc0e618e509783514212
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 24 trades)
+├─ Win Rate: 100.0% (24/24)
+├─ Total Traded: $749.68
+├─ Fees Paid: $20.40
+├─ Est. Gross PNL: $123.60
+└─ Remaining Capital: $248.55
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.75
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 05228b3c30d177a3e4cede934e29592ed4ad9368657beb55587c9b41d24084af
+✅ Approve confirmed!
+✅ REAL TX HASH: 414a8934cff51368b9a065cb2874e8f776077a3f036e12966260b0121e30003b
+https://polygonscan.com/tx/414a8934cff51368b9a065cb2874e8f776077a3f036e12966260b0121e30003b
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 25 trades)
+├─ Win Rate: 100.0% (25/25)
+├─ Total Traded: $780.91
+├─ Fees Paid: $21.25
+├─ Est. Gross PNL: $128.75
+└─ Remaining Capital: $253.70
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.74
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 8f3699fde2aac2b0e35a164ddba497da179b5066e0b907e8d6f4c907ac3b00fe
+✅ Approve confirmed!
+✅ REAL TX HASH: a1d56d947bc6728c5bb26e2a103f540682a956900a2f11bdd81944d5047dc956
+https://polygonscan.com/tx/a1d56d947bc6728c5bb26e2a103f540682a956900a2f11bdd81944d5047dc956
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 26 trades)
+├─ Win Rate: 100.0% (26/26)
+├─ Total Traded: $812.15
+├─ Fees Paid: $22.10
+├─ Est. Gross PNL: $133.90
+└─ Remaining Capital: $258.85
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.73
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 15d724c9dcd46e02274ad0edcb323962ba18f80619d512358ac241e3b89e774f
+✅ Approve confirmed!
+✅ REAL TX HASH: d3135540ee563df7e236d126c0041fdda22d8875d65cde43de57af6b9bd2362a
+https://polygonscan.com/tx/d3135540ee563df7e236d126c0041fdda22d8875d65cde43de57af6b9bd2362a
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 27 trades)
+├─ Win Rate: 100.0% (27/27)
+├─ Total Traded: $843.39
+├─ Fees Paid: $22.95
+├─ Est. Gross PNL: $139.05
+└─ Remaining Capital: $264.00
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.72
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: b9e722d1f0e0e841c7c8aa782f64fde16ad52bec8453236d96603f38abeee2b8
+✅ Approve confirmed!
+✅ REAL TX HASH: ced4a59d9543ddf93dd377618a8b536be69f2fa6439aea141445a7e94b80e9ca
+https://polygonscan.com/tx/ced4a59d9543ddf93dd377618a8b536be69f2fa6439aea141445a7e94b80e9ca
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 28 trades)
+├─ Win Rate: 100.0% (28/28)
+├─ Total Traded: $874.62
+├─ Fees Paid: $23.80
+├─ Est. Gross PNL: $144.20
+└─ Remaining Capital: $269.15
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.71
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 7a44e083b97fc8786812ba0ba8dc919c89a41f56d00e796b8a793edc172ef8a2
+✅ Approve confirmed!
+✅ REAL TX HASH: d52ba71eb46266ea3222524203252cb69391e6b53d9f39d8eb9ea2ea265d2e70
+https://polygonscan.com/tx/d52ba71eb46266ea3222524203252cb69391e6b53d9f39d8eb9ea2ea265d2e70
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 29 trades)
+├─ Win Rate: 100.0% (29/29)
+├─ Total Traded: $905.86
+├─ Fees Paid: $24.65
+├─ Est. Gross PNL: $149.35
+└─ Remaining Capital: $274.30
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.70
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: c717c6f4d0370b3cd376424f9ba2e27e4509703a8e10ea510fec671ea133f6f2
+✅ Approve confirmed!
+✅ REAL TX HASH: 2861a2df5d791c29dec0e6be98dc0895ec413d00b0662d57ae002bf700d59279
+https://polygonscan.com/tx/2861a2df5d791c29dec0e6be98dc0895ec413d00b0662d57ae002bf700d59279
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 30 trades)
+├─ Win Rate: 100.0% (30/30)
+├─ Total Traded: $937.10
+├─ Fees Paid: $25.50
+├─ Est. Gross PNL: $154.50
+└─ Remaining Capital: $279.45
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.69
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 54b7919594ba39755111bb19332bd82febf6a6ff89d317e125763188ba4483b5
+✅ Approve confirmed!
+✅ REAL TX HASH: 27c032654c814cd9d347b609ac7f67c937ed9744c9aa5e10fa959be4bec26b85
+https://polygonscan.com/tx/27c032654c814cd9d347b609ac7f67c937ed9744c9aa5e10fa959be4bec26b85
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 31 trades)
+├─ Win Rate: 100.0% (31/31)
+├─ Total Traded: $968.33
+├─ Fees Paid: $26.35
+├─ Est. Gross PNL: $159.65
+└─ Remaining Capital: $284.60
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.69
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 62e42dd8dc7744b97616ae526e8f13a1936a8ef41fdc227745a3de4f56a1c0f1
+✅ Approve confirmed!
+✅ REAL TX HASH: 7e1748949d01e053d694bf2acba8a7d6dae5fa37d6704300bb6a085bc3421423
+https://polygonscan.com/tx/7e1748949d01e053d694bf2acba8a7d6dae5fa37d6704300bb6a085bc3421423
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 32 trades)
+├─ Win Rate: 100.0% (32/32)
+├─ Total Traded: $999.57
+├─ Fees Paid: $27.20
+├─ Est. Gross PNL: $164.80
+└─ Remaining Capital: $289.75
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.68
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 2e2709919c8904863e801c20839948d20c2fb7444479f343fcfeacd8604fdb21
+✅ Approve confirmed!
+✅ REAL TX HASH: 355f87d9cf0a972d324452bcfd3eb6b09b68d6beb434abbcd701b4125b3058c5
+https://polygonscan.com/tx/355f87d9cf0a972d324452bcfd3eb6b09b68d6beb434abbcd701b4125b3058c5
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 33 trades)
+├─ Win Rate: 100.0% (33/33)
+├─ Total Traded: $1030.80
+├─ Fees Paid: $28.05
+├─ Est. Gross PNL: $169.95
+└─ Remaining Capital: $294.90
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.67
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: bed7d526a3a21adbc248df3e9e760ebb821b1194e53c73498dcbba3555ffd745
+✅ Approve confirmed!
+✅ REAL TX HASH: e1693def00794b958879c621a0ac07d9a9dee13e6173ba451b0942c6aed4ba9e
+https://polygonscan.com/tx/e1693def00794b958879c621a0ac07d9a9dee13e6173ba451b0942c6aed4ba9e
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 34 trades)
+├─ Win Rate: 100.0% (34/34)
+├─ Total Traded: $1062.04
+├─ Fees Paid: $28.90
+├─ Est. Gross PNL: $175.10
+└─ Remaining Capital: $300.05
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.66
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 45eee442fa14515f0bdd3b9f0fba31b5e6fcbadc3b56cce0d9cb819d2963c095
+✅ Approve confirmed!
+✅ REAL TX HASH: 9aa0a044bc9841518817884f1f3f61d7c966a779981f0525a40eb1e3c14c671a
+https://polygonscan.com/tx/9aa0a044bc9841518817884f1f3f61d7c966a779981f0525a40eb1e3c14c671a
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 35 trades)
+├─ Win Rate: 100.0% (35/35)
+├─ Total Traded: $1093.28
+├─ Fees Paid: $29.75
+├─ Est. Gross PNL: $180.25
+└─ Remaining Capital: $305.20
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.65
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 060ea3fe9ac985a5da15615f6deaa8e470c2e9b8123e8e69e47e7c6fa1d8e0a6
+✅ Approve confirmed!
+✅ REAL TX HASH: 77c330ae007eb0e93e1776e6e2a40dc2132c3d77db74fc83ec7c8bdf97f5dd7c
+https://polygonscan.com/tx/77c330ae007eb0e93e1776e6e2a40dc2132c3d77db74fc83ec7c8bdf97f5dd7c
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 36 trades)
+├─ Win Rate: 100.0% (36/36)
+├─ Total Traded: $1124.51
+├─ Fees Paid: $30.60
+├─ Est. Gross PNL: $185.40
+└─ Remaining Capital: $310.35
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.64
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 6231e2da915a35b907bc188af8d5b92cd8c14e67e0dc76e7679d55bc6c6d5354
+✅ Approve confirmed!
+✅ REAL TX HASH: 9a8914c96ab4c3572e1637aec0feea8c71a373b2f5af36e18cfe2d83607b5b55
+https://polygonscan.com/tx/9a8914c96ab4c3572e1637aec0feea8c71a373b2f5af36e18cfe2d83607b5b55
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 37 trades)
+├─ Win Rate: 100.0% (37/37)
+├─ Total Traded: $1155.75
+├─ Fees Paid: $31.45
+├─ Est. Gross PNL: $190.55
+└─ Remaining Capital: $315.50
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.63
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 7ce54adaacc4ee069a9c514858c4e3e4b131568b3ee09310fb529843bfc13527
+✅ Approve confirmed!
+✅ REAL TX HASH: 80abe02cd5260bfeb1dc4a6213989269348c99fe74baa83e9823e5e7f2611b8c
+https://polygonscan.com/tx/80abe02cd5260bfeb1dc4a6213989269348c99fe74baa83e9823e5e7f2611b8c
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 38 trades)
+├─ Win Rate: 100.0% (38/38)
+├─ Total Traded: $1186.99
+├─ Fees Paid: $32.30
+├─ Est. Gross PNL: $195.70
+└─ Remaining Capital: $320.65
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.63
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 1c3741d1fb392064a679ab6124f0aab11a7a09de8fa58d9fdf687202c5d3f89a
+✅ Approve confirmed!
+✅ REAL TX HASH: 464f3cd49b783db77cfb597de4d5c528da7ad5debe8df65b8bdaa2d43397d49b
+https://polygonscan.com/tx/464f3cd49b783db77cfb597de4d5c528da7ad5debe8df65b8bdaa2d43397d49b
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 39 trades)
+├─ Win Rate: 100.0% (39/39)
+├─ Total Traded: $1218.22
+├─ Fees Paid: $33.15
+├─ Est. Gross PNL: $200.85
+└─ Remaining Capital: $325.80
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.62
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 2ffdb7a8c3f324ab18995df89f72455bc4ad28b908070d790600e9f19f76bc89
+✅ Approve confirmed!
+✅ REAL TX HASH: b8bb9c9684c874632f852464cb4205a331ef2ddf7a6759a511e9df3efc05d404
+https://polygonscan.com/tx/b8bb9c9684c874632f852464cb4205a331ef2ddf7a6759a511e9df3efc05d404
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 40 trades)
+├─ Win Rate: 100.0% (40/40)
+├─ Total Traded: $1249.46
+├─ Fees Paid: $34.00
+├─ Est. Gross PNL: $206.00
+└─ Remaining Capital: $330.95
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.61
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 06bc5be3b20dbd04eb4b97077c5ef35a71d83edb2c2a30bdcf9aac21de72984e
+✅ Approve confirmed!
+✅ REAL TX HASH: 8649736ea73e9c02a48dab29f287217736737495705aebe7eb4023ddab8e7ac1
+https://polygonscan.com/tx/8649736ea73e9c02a48dab29f287217736737495705aebe7eb4023ddab8e7ac1
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 41 trades)
+├─ Win Rate: 100.0% (41/41)
+├─ Total Traded: $1280.70
+├─ Fees Paid: $34.85
+├─ Est. Gross PNL: $211.15
+└─ Remaining Capital: $336.10
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.60
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: bc97496262f6afaf8d7ea7d20d74521baf5a0d0020d540408d5b3b850939635d
+✅ Approve confirmed!
+✅ REAL TX HASH: 4a3efe615961dc4485f16ad8f1577ed2072c3d48b287d93a796e4e21e242e444
+https://polygonscan.com/tx/4a3efe615961dc4485f16ad8f1577ed2072c3d48b287d93a796e4e21e242e444
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 42 trades)
+├─ Win Rate: 100.0% (42/42)
+├─ Total Traded: $1311.93
+├─ Fees Paid: $35.70
+├─ Est. Gross PNL: $216.30
+└─ Remaining Capital: $341.25
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.59
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: a6e9375fc626da45fb40dafc825f2fb369e3eebb4e19ad7ff35d3dcec2f04602
+✅ Approve confirmed!
+✅ REAL TX HASH: b4cdd803d033d800e69bd231465a6cd4eb9e13c25806df1a47ad9ea1a659ef2b
+https://polygonscan.com/tx/b4cdd803d033d800e69bd231465a6cd4eb9e13c25806df1a47ad9ea1a659ef2b
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 43 trades)
+├─ Win Rate: 100.0% (43/43)
+├─ Total Traded: $1343.17
+├─ Fees Paid: $36.55
+├─ Est. Gross PNL: $221.45
+└─ Remaining Capital: $346.40
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.58
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 80ac93e8b6057ae841aa758e9ceb06a48f6989436022a16f4847559cdc71b7ac
+✅ Approve confirmed!
+✅ REAL TX HASH: f9a6bf87f9db1d52d605c819a62316dce98dd4676590cd3aebae8f440ab4c3a2
+https://polygonscan.com/tx/f9a6bf87f9db1d52d605c819a62316dce98dd4676590cd3aebae8f440ab4c3a2
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 44 trades)
+├─ Win Rate: 100.0% (44/44)
+├─ Total Traded: $1374.41
+├─ Fees Paid: $37.40
+├─ Est. Gross PNL: $226.60
+└─ Remaining Capital: $351.55
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.57
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: b3900a9a760ae34cbfa016e9d3f27fef6ffacef3df56712d8c58f36a9d9b87b2
+✅ Approve confirmed!
+✅ REAL TX HASH: b924821ffdf749fa97153126d58899e674aae5bf2e043979f80d6acd00ee32e2
+https://polygonscan.com/tx/b924821ffdf749fa97153126d58899e674aae5bf2e043979f80d6acd00ee32e2
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 45 trades)
+├─ Win Rate: 100.0% (45/45)
+├─ Total Traded: $1405.64
+├─ Fees Paid: $38.25
+├─ Est. Gross PNL: $231.75
+└─ Remaining Capital: $356.70
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.56
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 2d7fa37a39658181c699fafe832d92740cc174cfd0393e860416b863bd63221d
+✅ Approve confirmed!
+✅ REAL TX HASH: ee02d8a83f740b9bc54e65668b95b1c74977bdfdb1362080e615f654b2a589d1
+https://polygonscan.com/tx/ee02d8a83f740b9bc54e65668b95b1c74977bdfdb1362080e615f654b2a589d1
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 46 trades)
+├─ Win Rate: 100.0% (46/46)
+├─ Total Traded: $1436.88
+├─ Fees Paid: $39.10
+├─ Est. Gross PNL: $236.90
+└─ Remaining Capital: $361.85
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.55
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 4fcd0106a55c138cf0b093190e96f874966720f48c11573c53c2907e0877bcac
+✅ Approve confirmed!
+✅ REAL TX HASH: fff0bee4c172aabfded7dd6194d688a4113d7c2b0932686ebc2161a47ea6d2d8
+https://polygonscan.com/tx/fff0bee4c172aabfded7dd6194d688a4113d7c2b0932686ebc2161a47ea6d2d8
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 47 trades)
+├─ Win Rate: 100.0% (47/47)
+├─ Total Traded: $1468.12
+├─ Fees Paid: $39.95
+├─ Est. Gross PNL: $242.05
+└─ Remaining Capital: $367.00
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.54
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 89c6b511b7f36e69c01ec095da9686ef981893de4f54b6befdae397697f1bd67
+✅ Approve confirmed!
+✅ REAL TX HASH: b6d51391edd847fb1a6b340dd7d11406df0ba8e73c0243b3a67dd4bff36ea1e1
+https://polygonscan.com/tx/b6d51391edd847fb1a6b340dd7d11406df0ba8e73c0243b3a67dd4bff36ea1e1
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 48 trades)
+├─ Win Rate: 100.0% (48/48)
+├─ Total Traded: $1499.35
+├─ Fees Paid: $40.80
+├─ Est. Gross PNL: $247.20
+└─ Remaining Capital: $372.15
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.54
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 94dd425762729f01da57ddbb540ef46b72cbb35dff6dd11f7d24d0e043e301cf
+✅ Approve confirmed!
+✅ REAL TX HASH: 0d2805459dc96927d9bce939ef791a1ff0b78ab829d824483feeabaa8ccc5e66
+https://polygonscan.com/tx/0d2805459dc96927d9bce939ef791a1ff0b78ab829d824483feeabaa8ccc5e66
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 49 trades)
+├─ Win Rate: 100.0% (49/49)
+├─ Total Traded: $1530.59
+├─ Fees Paid: $41.65
+├─ Est. Gross PNL: $252.35
+└─ Remaining Capital: $377.30
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.53
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 1f683de35e3658543e8445f38b77af83b88f7797c4b13538046bc31b464ef25d
+✅ Approve confirmed!
+✅ REAL TX HASH: 621119cc474d229120ea906d366e78c01b274303f753ce3bc0dc6f1acdf94809
+https://polygonscan.com/tx/621119cc474d229120ea906d366e78c01b274303f753ce3bc0dc6f1acdf94809
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 50 trades)
+├─ Win Rate: 100.0% (50/50)
+├─ Total Traded: $1561.83
+├─ Fees Paid: $42.50
+├─ Est. Gross PNL: $257.50
+└─ Remaining Capital: $382.45
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.52
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 38f79edba875f3c7356dd106b7a28c56714db12c75c67dc752fffd0dc12d6493
+✅ Approve confirmed!
+✅ REAL TX HASH: e6a106677c6916f5ec77a769c8c7b2a60911411f2e75724791e36d07a63eacb9
+https://polygonscan.com/tx/e6a106677c6916f5ec77a769c8c7b2a60911411f2e75724791e36d07a63eacb9
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 50 trades)
+├─ Win Rate: 100.0% (50/50)
+├─ Total Traded: $1561.83
+├─ Fees Paid: $43.35
+├─ Est. Gross PNL: $256.65
+└─ Remaining Capital: $381.60
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.51
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: d8735dace5761d4a6b3b9520d1f1e42dac2efe3783e34a4d40beda70c00aa647
+✅ Approve confirmed!
+✅ REAL TX HASH: 7e4366c6c75f012da15832e0b175c8c0952d28a666ef109d5d5c5c39f9419ae0
+https://polygonscan.com/tx/7e4366c6c75f012da15832e0b175c8c0952d28a666ef109d5d5c5c39f9419ae0
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 50 trades)
+├─ Win Rate: 100.0% (50/50)
+├─ Total Traded: $1561.83
+├─ Fees Paid: $44.20
+├─ Est. Gross PNL: $255.80
+└─ Remaining Capital: $380.75
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.50
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 3265841f27986cd0c05cfbfbb924cf6dccb45924d448607fe7e757a2b0a89998
+✅ Approve confirmed!
+✅ REAL TX HASH: 3a197145ae87f8afc7e040905d744c315344d8b9906813d417100ea55822ce40
+https://polygonscan.com/tx/3a197145ae87f8afc7e040905d744c315344d8b9906813d417100ea55822ce40
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 50 trades)
+├─ Win Rate: 100.0% (50/50)
+├─ Total Traded: $1561.83
+├─ Fees Paid: $45.05
+├─ Est. Gross PNL: $254.95
+└─ Remaining Capital: $379.90
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.49
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 1b55a0b1d9a75639ca36b2d0e6f851b9d083525188ff36675aa0384639fdcea7
+✅ Approve confirmed!
+✅ REAL TX HASH: 2e7861dd342f96150cea43c27c9485e44413b41c699edeebf1a0b858ba27265c
+https://polygonscan.com/tx/2e7861dd342f96150cea43c27c9485e44413b41c699edeebf1a0b858ba27265c
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 50 trades)
+├─ Win Rate: 100.0% (50/50)
+├─ Total Traded: $1561.83
+├─ Fees Paid: $45.90
+├─ Est. Gross PNL: $254.10
+└─ Remaining Capital: $379.05
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.48
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: f98cf0a1d049ac135a5435f7bf9695a9ec9cb96b5618f9f207db71ee52c73e08
+✅ Approve confirmed!
+✅ REAL TX HASH: be612b6b7deb65120782b5622eb64492edef1569e1030b22e3caef774e3d7239
+https://polygonscan.com/tx/be612b6b7deb65120782b5622eb64492edef1569e1030b22e3caef774e3d7239
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 50 trades)
+├─ Win Rate: 100.0% (50/50)
+├─ Total Traded: $1561.83
+├─ Fees Paid: $46.75
+├─ Est. Gross PNL: $253.25
+└─ Remaining Capital: $378.20
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.47
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: ab3709640322ddf118f1e8536244a00b78c9d4fd1b5c250a75743bccabd21fc0
+✅ Approve confirmed!
+✅ REAL TX HASH: b7269ab81cc4a0d28d6a9b67692f6eb4d46cc6e368d00149a92bfa67c84aa2f2
+https://polygonscan.com/tx/b7269ab81cc4a0d28d6a9b67692f6eb4d46cc6e368d00149a92bfa67c84aa2f2
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 50 trades)
+├─ Win Rate: 100.0% (50/50)
+├─ Total Traded: $1561.83
+├─ Fees Paid: $47.60
+├─ Est. Gross PNL: $252.40
+└─ Remaining Capital: $377.35
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.46
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 9157f3e6b7e083efb99f9d6236c1df14ced3c7bc8d4bdb7b2784f1a6dc4674b8
+✅ Approve confirmed!
+✅ REAL TX HASH: 13db1275bc53a57ad7fe65e4acb6bced6c1771bdb9b0bc321aec5a673ec18768
+https://polygonscan.com/tx/13db1275bc53a57ad7fe65e4acb6bced6c1771bdb9b0bc321aec5a673ec18768
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 50 trades)
+├─ Win Rate: 100.0% (50/50)
+├─ Total Traded: $1561.83
+├─ Fees Paid: $48.45
+├─ Est. Gross PNL: $251.55
+└─ Remaining Capital: $376.50
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.46
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 06b99e81476b5ac91d017256b5768d9f0809882a31433a18411c8c333ba36428
+✅ Approve confirmed!
+✅ REAL TX HASH: 65ec4286d05876cf643329b423a343786c89e2c62d31c919532cfe993621b3a1
+https://polygonscan.com/tx/65ec4286d05876cf643329b423a343786c89e2c62d31c919532cfe993621b3a1
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 50 trades)
+├─ Win Rate: 100.0% (50/50)
+├─ Total Traded: $1561.83
+├─ Fees Paid: $49.30
+├─ Est. Gross PNL: $250.70
+└─ Remaining Capital: $375.65
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.45
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 0da5df0df800be1a0aa7324d1a3ca1d4ae2b672d40b00bf403f059e324e610bb
+✅ Approve confirmed!
+✅ REAL TX HASH: 9d5c8a464aa76cf64dbfc8918be250732eef90690f0176e05002b914430dcf0b
+https://polygonscan.com/tx/9d5c8a464aa76cf64dbfc8918be250732eef90690f0176e05002b914430dcf0b
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 50 trades)
+├─ Win Rate: 100.0% (50/50)
+├─ Total Traded: $1561.83
+├─ Fees Paid: $50.15
+├─ Est. Gross PNL: $249.85
+└─ Remaining Capital: $374.80
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.44
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: e4143c2824fccc21f087b1f415e2ed2738ccda70ba013992f0a6f14243222ad4
+✅ Approve confirmed!
+✅ REAL TX HASH: 1f268477f528b6ed9b2e195602f10901ef1834bc3cca64a40873cb2e0bfc19cc
+https://polygonscan.com/tx/1f268477f528b6ed9b2e195602f10901ef1834bc3cca64a40873cb2e0bfc19cc
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 50 trades)
+├─ Win Rate: 100.0% (50/50)
+├─ Total Traded: $1561.83
+├─ Fees Paid: $51.00
+├─ Est. Gross PNL: $249.00
+└─ Remaining Capital: $373.95
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.43
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: e36e33d66d8a5b60aeb09220e4637eaed3b7958ad511ab991b3b0e38cd2f3917
+✅ Approve confirmed!
+✅ REAL TX HASH: 43f4e564190057e1557c98af58ad998712aa2db59cb058eb69f5aeaf00dfba39
+https://polygonscan.com/tx/43f4e564190057e1557c98af58ad998712aa2db59cb058eb69f5aeaf00dfba39
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 50 trades)
+├─ Win Rate: 100.0% (50/50)
+├─ Total Traded: $1561.83
+├─ Fees Paid: $51.85
+├─ Est. Gross PNL: $248.15
+└─ Remaining Capital: $373.10
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.42
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: c1f690a930994add7ce8cd27227b310190386e3ac42f5406fb0c4bd6e19fdc47
+✅ Approve confirmed!
+✅ REAL TX HASH: cb2a0e6fd4e08da91a3a5addaa534ba3dc7e694293e2fe9fe80f138db0accb61
+https://polygonscan.com/tx/cb2a0e6fd4e08da91a3a5addaa534ba3dc7e694293e2fe9fe80f138db0accb61
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 50 trades)
+├─ Win Rate: 100.0% (50/50)
+├─ Total Traded: $1561.83
+├─ Fees Paid: $52.70
+├─ Est. Gross PNL: $247.30
+└─ Remaining Capital: $372.25
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.40
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: df467d4ef63f8982a9608445b641d15efc645e80188bcde2b00994e79cf7c677
+✅ Approve confirmed!
+✅ REAL TX HASH: 34f3ab4bc752f8b3db618c610b02fafb9d7421f3ddfe4afc72f2d24b264e7af5
+https://polygonscan.com/tx/34f3ab4bc752f8b3db618c610b02fafb9d7421f3ddfe4afc72f2d24b264e7af5
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 50 trades)
+├─ Win Rate: 100.0% (50/50)
+├─ Total Traded: $1561.83
+├─ Fees Paid: $54.40
+├─ Est. Gross PNL: $245.60
+└─ Remaining Capital: $370.55
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.39
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: ab88fe963d928dbd77b3b5fe8596a0778992561f434d7430622441ba80ee4c35
+✅ Approve confirmed!
+✅ REAL TX HASH: 9150169ba5f8f69d7a178458e2fcc518e0be71db5564911520d96b764abdc21b
+https://polygonscan.com/tx/9150169ba5f8f69d7a178458e2fcc518e0be71db5564911520d96b764abdc21b
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 50 trades)
+├─ Win Rate: 100.0% (50/50)
+├─ Total Traded: $1561.83
+├─ Fees Paid: $55.25
+├─ Est. Gross PNL: $244.75
+└─ Remaining Capital: $369.70
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.38
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 75880cb28d7f6ec663c9b460e3669ddae989a2c4a601ae0e6958c09b628333fe
+✅ Approve confirmed!
+✅ REAL TX HASH: 0a2d5becb069eea5d8539750613da7ce0c47f18f7624462720c6bc4ac0e8d735
+https://polygonscan.com/tx/0a2d5becb069eea5d8539750613da7ce0c47f18f7624462720c6bc4ac0e8d735
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 50 trades)
+├─ Win Rate: 100.0% (50/50)
+├─ Total Traded: $1561.83
+├─ Fees Paid: $56.10
+├─ Est. Gross PNL: $243.90
+└─ Remaining Capital: $368.85
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.37
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 44e9423b8cde5f505f9aea48218c7cd465540af5d9254f0a3a6f0a6c7a5a26b4
+✅ Approve confirmed!
+✅ REAL TX HASH: f60d7bdabb083375eadee48fac5f4d1d8969c017e1d4c5e5ffa2fba60b6221cd
+https://polygonscan.com/tx/f60d7bdabb083375eadee48fac5f4d1d8969c017e1d4c5e5ffa2fba60b6221cd
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 50 trades)
+├─ Win Rate: 100.0% (50/50)
+├─ Total Traded: $1561.83
+├─ Fees Paid: $56.95
+├─ Est. Gross PNL: $243.05
+└─ Remaining Capital: $368.00
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.36
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 1bc330aaae86f0ca9110705206c4005ca6d5f125c6b3504b8f156729b1df4ebe
+✅ Approve confirmed!
+✅ REAL TX HASH: b35206f01bcc3c715df2d4c132b54be2932e0f7993194413a6a54bb8b3e7f576
+https://polygonscan.com/tx/b35206f01bcc3c715df2d4c132b54be2932e0f7993194413a6a54bb8b3e7f576
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 50 trades)
+├─ Win Rate: 100.0% (50/50)
+├─ Total Traded: $1561.83
+├─ Fees Paid: $57.80
+├─ Est. Gross PNL: $242.20
+└─ Remaining Capital: $367.15
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.35
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: cfc40d4aa53ad19d41c29c4fc0d375ed55c4ac1e96aa51247fc78faf62ecdc96
+✅ Approve confirmed!
+✅ REAL TX HASH: c107395f9df97cf0fecf65fa32410601d791d9f62c0f44a211a1701e2da9563a
+https://polygonscan.com/tx/c107395f9df97cf0fecf65fa32410601d791d9f62c0f44a211a1701e2da9563a
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 50 trades)
+├─ Win Rate: 100.0% (50/50)
+├─ Total Traded: $1561.83
+├─ Fees Paid: $58.65
+├─ Est. Gross PNL: $241.35
+└─ Remaining Capital: $366.30
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 9.34
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: 1e0d8d03667d69893868c36ecb74b7d9582dc63a9a94dac46c6a546dd14330ed
+✅ Approve confirmed!
+✅ REAL TX HASH: 99d7992d160df89fe08d9bfec4f72eb8f104cc20fe3a40a632cc71d09e8957b2
+https://polygonscan.com/tx/99d7992d160df89fe08d9bfec4f72eb8f104cc20fe3a40a632cc71d09e8957b2
+✅ Swap confirmed!
+✅ Swap executed successfully!
+┌─ 📊 PERFORMANCE (Last 50 trades)
+├─ Win Rate: 100.0% (50/50)
+├─ Total Traded: $1561.83
+├─ Fees Paid: $59.50
+├─ Est. Gross PNL: $240.50
+└─ Remaining Capital: $365.45
+✅ Cycle done — next in ~7 min
