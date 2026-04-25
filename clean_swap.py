@@ -110,7 +110,6 @@ def print_performance():
     print(f"├─ Est. Gross PNL: ${estimated_profit:.2f}")
     print(f"└─ Remaining Capital: ${124.95 + estimated_profit:.2f}")
 
-
 async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
     print(f"🚀 Executing REAL swap: {direction} | Amount: {amount_in}")
 
@@ -136,8 +135,8 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
         approve_tx = approve_contract.functions.approve(router, amount_in).build_transaction({
             'from': WALLET,
             'nonce': nonce,
-            'gas': 130000,
-            'gasPrice': w3.eth.gas_price * 14 // 10,
+            'gas': 140000,
+            'gasPrice': w3.eth.gas_price * 15 // 10,
             'chainId': 137
         })
         signed_approve = w3.eth.account.sign_transaction(approve_tx, PRIVATE_KEY)
@@ -148,9 +147,9 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
             print("❌ Approve failed!")
             return None
         print("✅ Approve confirmed!")
-        await asyncio.sleep(4)
+        await asyncio.sleep(5)
 
-        # === SWAP with safe amountOutMin ===
+        # === SWAP with safe parameters ===
         router_abi = [
             {
                 "inputs": [
@@ -170,7 +169,7 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
         swap_contract = w3.eth.contract(address=router, abi=router_abi)
         path = [token_in, token_out]
 
-        # Safe minimum output (1 wei) to prevent revert
+        # Use 1 wei as minimum to prevent revert, but log warning
         amount_out_min = 1
 
         nonce_swap = w3.eth.get_transaction_count(WALLET)
@@ -183,8 +182,8 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
         ).build_transaction({
             'from': WALLET,
             'nonce': nonce_swap,
-            'gas': 280000,
-            'gasPrice': w3.eth.gas_price * 14 // 10,
+            'gas': 300000,
+            'gasPrice': w3.eth.gas_price * 15 // 10,
             'chainId': 137
         })
 
