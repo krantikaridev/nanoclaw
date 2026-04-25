@@ -179,8 +179,7 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
         swap_contract = w3.eth.contract(address=router, abi=router_abi)
         path = [token_in, token_out]
 
-        
-        amount_out_min = 1
+        amount_out_min = int(amount_in * 0.00042 * 0.97)   # Realistic for USDT → WETH (3% slippage)
 
         nonce_swap = w3.eth.get_transaction_count(WALLET)
         swap_tx = swap_contract.functions.swapExactTokensForTokens(
