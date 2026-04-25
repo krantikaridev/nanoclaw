@@ -1,38 +1,49 @@
 """
 V2.5.2 Copy Trading Module
-- Monitor authentic Polygon wallets
-- Copy profitable trades (any pair)
-- Small size (5-10% of their trade)
-- Win rate + consistency filter
+- Loads wallets from followed_wallets.json
+- Small size copy (configurable)
+- Basic filters (will expand)
 """
 
 import json
-import time
-from web3 import Web3
-from dotenv import load_dotenv
 import os
+from dotenv import load_dotenv
 
 load_dotenv()
 
-# === CONFIG ===
-TARGET_WALLETS = [
-    # Add 3-5 real wallets here (from your X research)
-    "0x...",  
-    "0x...",
-]
+CONFIG_FILE = "followed_wallets.json"
 
-COPY_RATIO = 0.08          # 8% of their trade size (safe start)
-MIN_PROFIT_PCT = 1.5       # Only copy if they made at least +1.5%
+def load_config():
+    if not os.path.exists(CONFIG_FILE):
+        print(f"⚠️ {CONFIG_FILE} not found. Creating default...")
+        default = {
+            "wallets": ["0x...", "0x..."],
+            "min_win_rate": 0.65,
+            "max_copy_ratio": 0.08,
+            "enabled": True
+        }
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(default, f, indent=2)
+        return default
+    with open(CONFIG_FILE) as f:
+        return json.load(f)
 
-def load_followed_wallets():
-    return TARGET_WALLETS
+def get_target_wallets():
+    config = load_config()
+    return config.get("wallets", [])
+
+def get_copy_ratio():
+    config = load_config()
+    return config.get("max_copy_ratio", 0.08)
 
 def should_copy_trade(tx_data):
-    """Basic filter - will be expanded"""
-    if tx_data.get("profit_pct", 0) < MIN_PROFIT_PCT:
-        return False
-    return True
+    """Basic filter - expand later with real profit calculation"""
+    profit_pct = tx_data.get("profit_pct", 0)
+    return profit_pct >= load_config().get("min_win_rate", 0.65)
 
-print("✅ V2.5.2 Copy Trading Module loaded")
-print(f"Monitoring {len(TARGET_WALLETS)} wallets | Copy ratio: {COPY_RATIO*100}%")
+# === Status ===
+config = load_config()
+print("✅ V2.5.2 Copy Trading Module Loaded")
+print(f"Monitoring {len(config.get('wallets', []))} wallets")
+print(f"Copy ratio: {get_copy_ratio()*100}% | Min win rate: {config.get('min_win_rate')*100}%")
 print("Ready for integration with main bot + protection layer")
