@@ -3569,3 +3569,104 @@ TabError: inconsistent use of tabs and spaces in indentation
   File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 152
     router_abi = [
 TabError: inconsistent use of tabs and spaces in indentation
+RPC connected: True
+Real USDT: 124.95 | POL: 9.27
+⏳ Cooldown active (7 min) — skipping
+RPC connected: True
+Real USDT: 124.95 | POL: 9.24
+⏳ Cooldown active (7 min) — skipping
+RPC connected: True
+Real USDT: 124.95 | POL: 9.19
+⏳ Cooldown active (7 min) — skipping
+RPC connected: True
+Real USDT: 124.95 | POL: 9.13
+💰 Fresh USDT: $124.95 → Trade size: $31.24
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 31236507
+✅ Approve Tx: f71d819df69d10f8ee4070abaf38c471870e037eff3bf5ab8e208bfebced00ed
+✅ Approve confirmed!
+✅ REAL TX HASH: 73ac8a43a0ad2729f9d8f5ee0d8e57e0d9e4286d821cb3172bdb6b7beded51ee
+https://polygonscan.com/tx/73ac8a43a0ad2729f9d8f5ee0d8e57e0d9e4286d821cb3172bdb6b7beded51ee
+❌ Swap failed on-chain!
+⚠️ Swap failed
+┌─ 📊 PERFORMANCE (Last 50 trades)
+├─ Win Rate: 86.0% (43/50)
+├─ Total Traded: $1561.83
+├─ Fees Paid: $77.35
+├─ Est. Gross PNL: $180.65
+└─ Remaining Capital: $305.60
+RPC connected: False
+Real USDT: 124.95 | POL: 9.03
+⏳ Cooldown active (7 min) — skipping
+RPC connected: True
+Real USDT: 124.95 | POL: 9.00
+💰 Fresh USDT: $124.95 → Trade size: $25.00
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 25000000
+✅ Approve Tx: 2007d4fafa94bdb993b1066652a2a871ec8e2e3e24fde395be771506db065da1
+✅ Approve confirmed!
+✅ REAL TX HASH: 8cc70ae4677eaa023493246e04609222767cffa1e1475d86b71208c15207378c
+https://polygonscan.com/tx/8cc70ae4677eaa023493246e04609222767cffa1e1475d86b71208c15207378c
+❌ Swap failed on-chain!
+⚠️ Swap failed
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 8.96
+💰 Fresh USDT: $124.95 → Trade size: $25.00
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 25000000
+✅ Approve Tx: d7306f9f29a09060c914412fa94be6e40042b82c4024a1004398c3363b78ca84
+✅ Approve confirmed!
+✅ REAL TX HASH: 597b580e932e439814e08bed8eeed096f8d53a005a58ed7c9ebe05daee5e35f5
+https://polygonscan.com/tx/597b580e932e439814e08bed8eeed096f8d53a005a58ed7c9ebe05daee5e35f5
+❌ Swap failed on-chain!
+⚠️ Swap failed
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 8.94
+💰 Fresh USDT: $124.95 → Trade size: $25.00
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 25000000
+✅ Approve Tx: d77c63d20c2e4bdd64eae925a035b50ecd04a61e2dd0251ca817f1f57e8dcd0a
+✅ Approve confirmed!
+✅ REAL TX HASH: 47c03e994d5fa6cfe08407271ada9d9ede9e6d6a9613b072d20f8c2458ce6535
+https://polygonscan.com/tx/47c03e994d5fa6cfe08407271ada9d9ede9e6d6a9613b072d20f8c2458ce6535
+❌ Swap failed on-chain!
+⚠️ Swap failed
+✅ Cycle done — next in ~7 min
+RPC connected: False
+Real USDT: 124.95 | POL: 8.91
+💰 Fresh USDT: $124.95 → Trade size: $25.00
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 25000000
+✅ Approve Tx: d2690c5f072abdae485b1efc5a97de9fcb69f991706fb70a2fdcdcc06a332f40
+✅ Approve confirmed!
+✅ REAL TX HASH: e68cf5064d3380f73dc42e6314d8cc5210325402933b180d985cfa7e409a0945
+https://polygonscan.com/tx/e68cf5064d3380f73dc42e6314d8cc5210325402933b180d985cfa7e409a0945
+❌ Swap failed on-chain!
+⚠️ Swap failed
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 8.86
+💰 Fresh USDT: $124.95 → Trade size: $25.00
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 25000000
+✅ Approve Tx: 10ba38b1543b53c9a28b83a6bf68733b88c588e459515304a08e21dda1a64378
+✅ Approve confirmed!
+✅ REAL TX HASH: 6704448c41453369a60ad960a77b88e408eae1be91c0d727a0b494a7a62c43ff
+https://polygonscan.com/tx/6704448c41453369a60ad960a77b88e408eae1be91c0d727a0b494a7a62c43ff
+❌ Swap failed on-chain!
+⚠️ Swap failed
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 124.95 | POL: 8.82
+💰 Fresh USDT: $124.95 → Trade size: $25.00
+🔄 Buying WETH with USDT
+🚀 Executing REAL swap: USDT_TO_WETH | Amount: 25000000
+✅ Approve Tx: b381b07a91622efb7cc668074312aad541e0d9204b0551dde1d642eff5e81443
+✅ Approve confirmed!
+✅ REAL TX HASH: ba6f4109a15be02b06e762d45f6d658ede80444870eca62c49f49813d3e773b8
+https://polygonscan.com/tx/ba6f4109a15be02b06e762d45f6d658ede80444870eca62c49f49813d3e773b8
+❌ Swap failed on-chain!
+⚠️ Swap failed
+✅ Cycle done — next in ~7 min
