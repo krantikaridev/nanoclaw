@@ -149,9 +149,9 @@ async def approve_and_swap(amount_in: int, direction="USDT_TO_WETH"):
         print("✅ Approve confirmed!")
         await asyncio.sleep(5)
 
-	router_abi = [
-	    {
-		"inputs": [
+	    router_abi = [
+            {
+                "inputs": [
                     {"internalType": "uint256", "name": "amountIn", "type": "uint256"},
                     {"internalType": "uint256", "name": "amountOutMin", "type": "uint256"},
                     {"internalType": "address[]", "name": "path", "type": "address[]"},
