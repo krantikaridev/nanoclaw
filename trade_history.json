@@ -126,5 +126,77 @@
     "tx_hash": "ea2f4976f79e22f94304b5fefc076861dc5e8cbc35ec9e139f91b7be23b86a2b",
     "success": true,
     "note": ""
+  },
+  {
+    "timestamp": "2026-04-25T17:50:16.786983",
+    "direction": "WMATIC_TO_USDT",
+    "amount_usd": 15.0,
+    "tx_hash": "2aae19e1a022f94e9cbfc84598f269b55498222f377585f4ce854b9e2544a3dd",
+    "success": true,
+    "note": ""
+  },
+  {
+    "timestamp": "2026-04-25T18:00:38.256754",
+    "direction": "USDT_TO_WMATIC",
+    "amount_usd": 17.26,
+    "tx_hash": "cf4c0e4722946ac56d20b4b82a0e5961cb6da00a6e080d3c00f679cb8d2e57a2",
+    "success": true,
+    "note": ""
+  },
+  {
+    "timestamp": "2026-04-25T18:10:19.171970",
+    "direction": "WMATIC_TO_USDT",
+    "amount_usd": 15.0,
+    "tx_hash": "48b2affd6a57365cc1ba2f3a19f14a39acb8b74b7791e27344a5e47176757a33",
+    "success": true,
+    "note": ""
+  },
+  {
+    "timestamp": "2026-04-25T18:20:20.638697",
+    "direction": "USDT_TO_WMATIC",
+    "amount_usd": 18.98,
+    "tx_hash": "b1de175e1e4675484969548dbcbba87d942b0d63cbc4a0955694fbb19babc3cd",
+    "success": true,
+    "note": ""
+  },
+  {
+    "timestamp": "2026-04-25T18:30:19.210179",
+    "direction": "USDT_TO_WMATIC",
+    "amount_usd": 15.0,
+    "tx_hash": "e7b5737607fc411114b25adfa9b14000f2b467f4e8c523658407fa0cf725dbf4",
+    "success": true,
+    "note": ""
+  },
+  {
+    "timestamp": "2026-04-25T18:40:18.958164",
+    "direction": "WMATIC_TO_USDT",
+    "amount_usd": 15.0,
+    "tx_hash": "cda86fc6d83cf4378bce8f8e0781bd7558a0d0741f4ea66d8737441b20f81b7e",
+    "success": true,
+    "note": ""
+  },
+  {
+    "timestamp": "2026-04-25T18:50:20.650786",
+    "direction": "USDT_TO_WMATIC",
+    "amount_usd": 16.9,
+    "tx_hash": "3303ad5fc6ce20ba1b74efa63597a3094228b8e4037a1ca06fcaa05bf293d1b0",
+    "success": true,
+    "note": ""
+  },
+  {
+    "timestamp": "2026-04-25T18:59:50.789595",
+    "direction": "WMATIC_TO_USDT",
+    "amount_usd": 15.0,
+    "tx_hash": "5be975b1e460ca98eb710266007d2e581fe2281e1585626f2536c8776ec5c86f",
+    "success": true,
+    "note": ""
+  },
+  {
+    "timestamp": "2026-04-25T19:08:59.232511",
+    "direction": "USDT_TO_WMATIC",
+    "amount_usd": 18.78,
+    "tx_hash": "d07d4804448c4a68c348cd4dd4f83f3e2abe187a7cd6a6f01e8e0271cbab656e",
+    "success": true,
+    "note": ""
   }
 ]

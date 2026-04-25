@@ -200,3 +200,108 @@ https://polygonscan.com/tx/ea2f4976f79e22f94304b5fefc076861dc5e8cbc35ec9e139f91b
 ✅ Swap executed successfully!
 📝 Trade logged: USDT_TO_WMATIC $15.00
 ✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 28.79 | POL: 7.84
+⏳ Cooldown active (7 min) — skipping
+RPC connected: True
+Real USDT: 28.79 | POL: 7.84
+🔄 Selling WMATIC → USDT (USDT low: $28.79)
+🚀 Executing REAL swap: WMATIC_TO_USDT | Amount: 358770862333359357952
+✅ Approve Tx: f0b2a43c4a2746956fcb36e708df025d6bcddca09d727602fd59b43dc09a8ad7
+✅ Approve confirmed!
+✅ REAL TX HASH: 2aae19e1a022f94e9cbfc84598f269b55498222f377585f4ce854b9e2544a3dd
+https://polygonscan.com/tx/2aae19e1a022f94e9cbfc84598f269b55498222f377585f4ce854b9e2544a3dd
+✅ Swap confirmed!
+✅ Swap executed successfully!
+📝 Trade logged: WMATIC_TO_USDT $15.00
+✅ Cycle done — next in ~7 min
+⛔ Lock active — skipping
+RPC connected: True
+Real USDT: 61.64 | POL: 7.81
+🔄 Buying WMATIC (hold preferred) | Size: $17.26
+🚀 Executing REAL swap: USDT_TO_WMATIC | Amount: 17258007
+✅ Approve Tx: 2d295157526180213e84810db4dc7d446b668643dbdc56501938aa8869d30779
+✅ Approve confirmed!
+✅ REAL TX HASH: cf4c0e4722946ac56d20b4b82a0e5961cb6da00a6e080d3c00f679cb8d2e57a2
+https://polygonscan.com/tx/cf4c0e4722946ac56d20b4b82a0e5961cb6da00a6e080d3c00f679cb8d2e57a2
+✅ Swap confirmed!
+✅ Swap executed successfully!
+📝 Trade logged: USDT_TO_WMATIC $17.26
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 44.38 | POL: 7.75
+🔄 Taking profit (WMATIC high: $78.58)
+🚀 Executing REAL swap: WMATIC_TO_USDT | Amount: 256230241382143393792
+✅ Approve Tx: a7833011443ddb82d26414d8b4ef3fb1b8cbae652f7103c7eb7e8d436cfd124c
+✅ Approve confirmed!
+✅ REAL TX HASH: 48b2affd6a57365cc1ba2f3a19f14a39acb8b74b7791e27344a5e47176757a33
+https://polygonscan.com/tx/48b2affd6a57365cc1ba2f3a19f14a39acb8b74b7791e27344a5e47176757a33
+✅ Swap confirmed!
+✅ Swap executed successfully!
+📝 Trade logged: WMATIC_TO_USDT $15.00
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 67.77 | POL: 7.72
+⏳ Cooldown active (7 min) — skipping
+RPC connected: True
+Real USDT: 67.77 | POL: 7.72
+🔄 Buying WMATIC (hold preferred) | Size: $18.98
+🚀 Executing REAL swap: USDT_TO_WMATIC | Amount: 18976714
+✅ Approve Tx: ac6cc1f9928385c5614705b3c6043081cf1cec9168a566c3b84ad8f297d58f6f
+✅ Approve confirmed!
+✅ REAL TX HASH: b1de175e1e4675484969548dbcbba87d942b0d63cbc4a0955694fbb19babc3cd
+https://polygonscan.com/tx/b1de175e1e4675484969548dbcbba87d942b0d63cbc4a0955694fbb19babc3cd
+✅ Swap confirmed!
+✅ Swap executed successfully!
+📝 Trade logged: USDT_TO_WMATIC $18.98
+✅ Cycle done — next in ~7 min
+⛔ Lock active — skipping
+RPC connected: True
+Real USDT: 48.80 | POL: 7.67
+🔄 Buying WMATIC (hold preferred) | Size: $15.00
+🚀 Executing REAL swap: USDT_TO_WMATIC | Amount: 15000000
+✅ Approve Tx: a75f3f14acf7d500975de39fb125434583a0534c726d2a8ebd3eda3e57c355bf
+✅ Approve confirmed!
+✅ REAL TX HASH: e7b5737607fc411114b25adfa9b14000f2b467f4e8c523658407fa0cf725dbf4
+https://polygonscan.com/tx/e7b5737607fc411114b25adfa9b14000f2b467f4e8c523658407fa0cf725dbf4
+✅ Swap confirmed!
+✅ Swap executed successfully!
+📝 Trade logged: USDT_TO_WMATIC $15.00
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 33.80 | POL: 7.63
+🔄 Taking profit (WMATIC high: $88.97)
+🚀 Executing REAL swap: WMATIC_TO_USDT | Amount: 290122328046739947520
+✅ Approve Tx: 5dcb249b4107b2594f023b2613d3a84812a5a796f78420a8360b98b9205ef498
+✅ Approve confirmed!
+✅ REAL TX HASH: cda86fc6d83cf4378bce8f8e0781bd7558a0d0741f4ea66d8737441b20f81b7e
+https://polygonscan.com/tx/cda86fc6d83cf4378bce8f8e0781bd7558a0d0741f4ea66d8737441b20f81b7e
+✅ Swap confirmed!
+✅ Swap executed successfully!
+📝 Trade logged: WMATIC_TO_USDT $15.00
+✅ Cycle done — next in ~7 min
+RPC connected: True
+Real USDT: 60.34 | POL: 7.58
+⏳ Cooldown active (7 min) — skipping
+RPC connected: True
+Real USDT: 60.34 | POL: 7.58
+🔄 Buying WMATIC (hold preferred) | Size: $16.90
+🚀 Executing REAL swap: USDT_TO_WMATIC | Amount: 16895309
+✅ Approve Tx: 3d3716d237abebd92b76a58f311ddb2213731d0c2d156a1885a9d8658845f389
+✅ Approve confirmed!
+✅ REAL TX HASH: 3303ad5fc6ce20ba1b74efa63597a3094228b8e4037a1ca06fcaa05bf293d1b0
+https://polygonscan.com/tx/3303ad5fc6ce20ba1b74efa63597a3094228b8e4037a1ca06fcaa05bf293d1b0
+✅ Swap confirmed!
+✅ Swap executed successfully!
+📝 Trade logged: USDT_TO_WMATIC $16.90
+✅ Cycle done — next in ~7 min
+✅ V2.5.1 Protection Module loaded successfully
+RPC connected: True
+Real USDT: 67.06 | POL: 7.51
+⏳ Cooldown active (7 min) — skipping
+✅ V2.5.1 Protection Module loaded successfully
+⛔ Lock active — skipping
+✅ V2.5.1 Protection Module loaded successfully
+RPC connected: True
+Real USDT: 48.28 | POL: 7.48
+⏳ Cooldown active (7 min) — skipping

@@ -1,0 +1,10 @@
+[
+  {
+    "timestamp": "2026-04-25T18:57:36.610563",
+    "buy_price": 0.0915,
+    "target_price": 0.09882,
+    "amount_usd": 15.0,
+    "tx_hash": "test_tx_001",
+    "status": "OPEN"
+  }
+]
