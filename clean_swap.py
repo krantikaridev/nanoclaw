@@ -78,37 +78,57 @@ async def main():
 
     if decision.startswith("TRADE_"):
 
-        trade_size = max(15.0, min(30.0, usdt_balance * 0.28))
+        # === V2.5.1 Improvements ===
 
-        wmatic_value_usd = get_token_balance(WMATIC, decimals=18) * 0.092
+        should_force_sell, reason = check_exit_conditions()
 
-
-
-        if usdt_balance < 30:
-
-            direction = "WMATIC_TO_USDT"
-
-            amount_in = int(get_token_balance(WMATIC, decimals=18) * 0.35 * 1e18)
-
-            print(f"🔄 Selling WMATIC → USDT (USDT low: ${usdt_balance:.2f})")
-
-        elif wmatic_value_usd > 75:
-
-            direction = "WMATIC_TO_USDT"
-
-            amount_in = int(get_token_balance(WMATIC, decimals=18) * 0.30 * 1e18)
-
-            print(f"🔄 Taking profit (WMATIC high: ${wmatic_value_usd:.2f})")
-
-        elif wmatic_value_usd < 40 and get_token_balance(WMATIC, decimals=18) > 75:
+        if should_force_sell:
 
             direction = "WMATIC_TO_USDT"
 
             amount_in = int(get_token_balance(WMATIC, decimals=18) * 0.28 * 1e18)
 
-            print(f"🔄 Cutting loss (WMATIC down: ${wmatic_value_usd:.2f})")
+            print(f"🛡️ PROTECTION TRIGGERED: {reason} — Force selling")
 
         else:
+
+            trade_size = max(15.0, min(35.0, usdt_balance * 0.28))
+
+            wmatic_value_usd = get_token_balance(WMATIC, decimals=18) * get_live_wmatic_price()
+
+
+
+            if usdt_balance < 35:   # Minimum USDT Reserve
+
+                direction = "WMATIC_TO_USDT"
+
+                amount_in = int(get_token_balance(WMATIC, decimals=18) * 0.30 * 1e18)
+
+                print(f"🔄 USDT RESERVE PROTECTION: ${usdt_balance:.2f} < $35")
+
+            elif wmatic_value_usd > 75:
+
+                direction = "WMATIC_TO_USDT"
+
+                amount_in = int(get_token_balance(WMATIC, decimals=18) * 0.30 * 1e18)
+
+                print(f"🔄 Taking profit (WMATIC high: ${wmatic_value_usd:.2f})")
+
+            elif wmatic_value_usd < 40 and get_token_balance(WMATIC, decimals=18) > 50:
+
+                direction = "WMATIC_TO_USDT"
+
+                amount_in = int(get_token_balance(WMATIC, decimals=18) * 0.28 * 1e18)
+
+                print(f"🔄 Cutting loss (WMATIC down: ${wmatic_value_usd:.2f})")
+
+            else:
+
+                direction = "USDT_TO_WMATIC"
+
+                amount_in = int(trade_size * 1_000_000)
+
+                print(f"🔄 Buying WMATIC (hold preferred) | Size: ${trade_size:.2f}")
 
             direction = "USDT_TO_WMATIC"
 
