@@ -69,29 +69,63 @@ async def main():
     decision = brain.decide_action(usdt_balance, pol)
 
     if decision.startswith("TRADE_"):
-        trade_size = max(15.0, min(25.0, usdt_balance * 0.20))  # Conservative 20%
-        print(f"💰 Fresh USDT: ${usdt_balance:.2f} → Trade size: ${trade_size:.2f}")
 
-        wmatic_balance = get_token_balance(WMATIC, decimals=18)
-        wmatic_value_usd = wmatic_balance * 0.92  # approx WMATIC price
+        trade_size = max(15.0, min(30.0, usdt_balance * 0.25))
 
-        if wmatic_value_usd > 40:
+        wmatic_value_usd = get_token_balance(WMATIC, decimals=18) * 0.092
+
+
+
+        if usdt_balance < 30:
+
             direction = "WMATIC_TO_USDT"
-            amount_in = int(wmatic_balance * 0.30 * 1e18)
-            print(f"🔄 Selling WMATIC → USDT (${wmatic_value_usd:.2f} in WMATIC)")
+
+            amount_in = int(get_token_balance(WMATIC, decimals=18) * 0.35 * 1e18)
+
+            print(f"🔄 Selling WMATIC → USDT (USDT low: ${usdt_balance:.2f})")
+
+        elif wmatic_value_usd > 80:
+
+            direction = "WMATIC_TO_USDT"
+
+            amount_in = int(get_token_balance(WMATIC, decimals=18) * 0.30 * 1e18)
+
+            print(f"🔄 Taking profit (WMATIC high: ${wmatic_value_usd:.2f})")
+
+        elif wmatic_value_usd < 40 and get_token_balance(WMATIC, decimals=18) > 50:
+
+            direction = "WMATIC_TO_USDT"
+
+            amount_in = int(get_token_balance(WMATIC, decimals=18) * 0.25 * 1e18)
+
+            print(f"🔄 Cutting loss (WMATIC down: ${wmatic_value_usd:.2f})")
+
         else:
+
             direction = "USDT_TO_WMATIC"
+
             amount_in = int(trade_size * 1_000_000)
-            print(f"🔄 Buying WMATIC with USDT")
+
+            print(f"🔄 Buying WMATIC (hold preferred) | Size: ${trade_size:.2f}")
+
+
 
         tx_hash = await approve_and_swap(w3, os.getenv("POLYGON_PRIVATE_KEY"), amount_in, direction=direction)
+
         if tx_hash:
+
             print("✅ Swap executed successfully!")
+
         else:
+
             print("⚠️ Swap failed")
 
+
+
     state["last_run"] = time.time()
+
     save_state(state)
+
     print(f"✅ Cycle done — next in ~{COOLDOWN_MINUTES} min")
 
 if __name__ == "__main__":
