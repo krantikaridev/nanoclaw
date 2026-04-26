@@ -17,7 +17,28 @@ LOCK_FILE = "/tmp/nanoclaw.lock"
 COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", 7))
 
 w3 = Web3(Web3.HTTPProvider(os.getenv("RPC")))
+# ==================== v2.6.2 TRAILING STOP + DYNAMIC TP ====================
+PEAK_PRICE = 0.0
+TRAILING_STOP_PCT = 5.0
+TAKE_PROFIT_PCT = 8.0
+STRONG_SIGNAL_TP = 12.0
 
+def check_trailing_stop(current_price):
+    global PEAK_PRICE
+    if PEAK_PRICE == 0:
+        PEAK_PRICE = current_price
+    if current_price > PEAK_PRICE:
+        PEAK_PRICE = current_price
+    drop = (PEAK_PRICE - current_price) / PEAK_PRICE * 100
+    if drop >= TRAILING_STOP_PCT:
+        return True, f"Trailing stop triggered ({drop:.1f}% drop from peak)"
+    return False, ""
+
+# ==================== v2.6.3 AUTO-SCALE TRADE SIZE ====================
+def get_dynamic_trade_size(usdt_balance):
+    pct = 0.12
+    size = usdt_balance * pct
+    return max(8.0, min(30.0, size))
 # ==================== v2.6 PER-WALLET COOLDOWN ====================
 WALLET_LAST_TRADE = {}
 
@@ -131,19 +152,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-# ==================== v2.6.2 TRAILING STOP + DYNAMIC TP ====================
-PEAK_PRICE = 0.0
-TRAILING_STOP_PCT = 5.0
-TAKE_PROFIT_PCT = 8.0
-STRONG_SIGNAL_TP = 12.0
-
-def check_trailing_stop(current_price):
-    global PEAK_PRICE
-    if PEAK_PRICE == 0:
-        PEAK_PRICE = current_price
-    if current_price > PEAK_PRICE:
-        PEAK_PRICE = current_price
-    drop = (PEAK_PRICE - current_price) / PEAK_PRICE * 100
-    if drop >= TRAILING_STOP_PCT:
-        return True, f"Trailing stop triggered ({drop:.1f}% drop from peak)"
-    return False, ""
