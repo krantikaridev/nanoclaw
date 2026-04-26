@@ -53,7 +53,7 @@ async def main():
     open(LOCK_FILE, 'w').close()
 
     if time.time() - state.get("last_run", 0) < COOLDOWN_MINUTES * 60:
-        print(f"⏳ Cooldown active — skipping")
+        print(f"⏳ Copy cooldown active (90s) — skipping")
         return
 
     # V2.5.1 Protection
@@ -67,7 +67,7 @@ async def main():
         if os.getenv("COPY_TRADING_ENABLED", "true").lower() == "true" and get_target_wallets():
             print("🔄 REAL POLYCOPY MODE (20%) - Monitoring live wallets")
             direction = "USDT_TO_WMATIC"
-            trade_size = max(15.0, min(35.0, usdt_balance * get_copy_ratio()))
+            trade_size = max(8.0, min(18.0, usdt_balance * 0.12))  # 12% rotation - capital rotates faster
             amount_in = int(trade_size * 1_000_000)
         else:
             print("🔄 MAIN STRATEGY MODE (80%)")

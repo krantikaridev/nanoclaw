@@ -2025,3 +2025,107 @@ Real USDT: 32.15 | WMATIC: 923.05 | POL: 3.20
 Monitoring 8 wallets | Copy ratio: 20.0%
 Real USDT: 17.15 | WMATIC: 1085.62 | POL: 3.16
 ⏳ Cooldown active — skipping
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+Real USDT: 17.15 | WMATIC: 1085.62 | POL: 3.16
+⛔ Lock active — skipping
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+Real USDT: 17.15 | WMATIC: 1085.62 | POL: 3.16
+⚠️ FLUCTUATION PROTECTION: USDT $17.15 < $30 → Selling 25% WMATIC
+🛡️ PROTECTION TRIGGERED: FLUCTUATION — Force selling
+🚀 Executing REAL swap: WMATIC_TO_USDT | Amount: 488529964594866356224
+✅ Approve Tx: 83f115effb1c7deba0f56b495e283090d887b03a95f2056b4504c868fbf93e92
+✅ Approve confirmed!
+✅ REAL TX HASH: 16b623bd04277d33c996aa9c34ea0da5b0246a6d57b45fa843e7d7231b52c107
+https://polygonscan.com/tx/16b623bd04277d33c996aa9c34ea0da5b0246a6d57b45fa843e7d7231b52c107
+✅ Swap confirmed!
+✅ Swap executed successfully!
+✅ Cycle done — next in ~7 min
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+Real USDT: 61.93 | WMATIC: 597.09 | POL: 3.11
+🔄 REAL POLYCOPY MODE (20%) - Monitoring live wallets
+🔒 Trade locked | Buy: $0.0917 | Target: $0.0990 (+8%)
+🚀 Executing REAL swap: USDT_TO_WMATIC | Amount: 15000000
+✅ Approve Tx: e4cc866abad216cbc0f4beb767815dc9d718508315effd94a30214b33c18439b
+✅ Approve confirmed!
+✅ REAL TX HASH: eca2d28a2210fee9d50c519ded5a7f8e69cd8dfbb0bcfe9ed2b13536931ca41a
+https://polygonscan.com/tx/eca2d28a2210fee9d50c519ded5a7f8e69cd8dfbb0bcfe9ed2b13536931ca41a
+✅ Swap confirmed!
+✅ Swap executed successfully!
+✅ Cycle done — next in ~7 min
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+Real USDT: 46.93 | WMATIC: 759.71 | POL: 3.03
+⏳ Cooldown active — skipping
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+Real USDT: 46.93 | WMATIC: 759.71 | POL: 3.03
+🔄 REAL POLYCOPY MODE (20%) - Monitoring live wallets
+🔒 Trade locked | Buy: $0.0917 | Target: $0.0991 (+8%)
+🚀 Executing REAL swap: USDT_TO_WMATIC | Amount: 15000000
+✅ Approve Tx: 950864bcdcbc4cd644dd1483969d9f75f3b8beeaa75523626d5e30c2e6ebeac3
+✅ Approve confirmed!
+✅ REAL TX HASH: 39072d40fd7b1a5f72f7536b51133dfe64ae6f50f0988f8080396c1cf5bf1020
+https://polygonscan.com/tx/39072d40fd7b1a5f72f7536b51133dfe64ae6f50f0988f8080396c1cf5bf1020
+✅ Swap confirmed!
+✅ Swap executed successfully!
+✅ Cycle done — next in ~7 min
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+Real USDT: 31.93 | WMATIC: 922.23 | POL: 2.96
+⛔ Lock active — skipping
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+Real USDT: 31.93 | WMATIC: 922.23 | POL: 2.96
+🔄 REAL POLYCOPY MODE (20%) - Monitoring live wallets
+🔒 Trade locked | Buy: $0.0918 | Target: $0.0991 (+8%)
+🚀 Executing REAL swap: USDT_TO_WMATIC | Amount: 15000000
+✅ Approve Tx: c03e4194d3f476ab4954d2097add8190e6d68008c1a48295826fe553640245c7
+✅ Approve confirmed!
+✅ REAL TX HASH: e4761a899903aa78d103eb5e00f2e004c9c41fc768f7285c43fd86790d8d721b
+https://polygonscan.com/tx/e4761a899903aa78d103eb5e00f2e004c9c41fc768f7285c43fd86790d8d721b
+✅ Swap confirmed!
+✅ Swap executed successfully!
+✅ Cycle done — next in ~7 min
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+Real USDT: 16.93 | WMATIC: 1084.67 | POL: 2.89
+⚠️ FLUCTUATION PROTECTION: USDT $16.93 < $30 → Selling 25% WMATIC
+🛡️ PROTECTION TRIGGERED: FLUCTUATION — Force selling
+🚀 Executing REAL swap: WMATIC_TO_USDT | Amount: 488101958861357252608
+✅ Approve Tx: 7f0344bb3b61c6e56263dbd0fb14b987e0963336edd801dbd4f6d38d410c6722
+✅ Approve confirmed!
+✅ REAL TX HASH: 754c41652166ced54012be699e1fa0802371b73bcb583fa01c85f0bffdcdb99d
+https://polygonscan.com/tx/754c41652166ced54012be699e1fa0802371b73bcb583fa01c85f0bffdcdb99d
+✅ Swap confirmed!
+✅ Swap executed successfully!
+✅ Cycle done — next in ~7 min
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+Real USDT: 61.71 | WMATIC: 596.57 | POL: 2.86
+⏳ Copy cooldown active (90s) — skipping
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+Real USDT: 61.71 | WMATIC: 596.57 | POL: 2.86
+🔄 REAL POLYCOPY MODE (20%) - Monitoring live wallets
+🔒 Trade locked | Buy: $0.0917 | Target: $0.0990 (+8%)
+🚀 Executing REAL swap: USDT_TO_WMATIC | Amount: 8000000
+✅ Approve Tx: 12aa510ffacc62d1050b2f685f341b2d34b08c54c0f5ffe5c069ef3ee649d2fc
+✅ Approve confirmed!
+✅ REAL TX HASH: 904d21db4ef692d65f6d9e454fe138919b60046dca910dda938103a1878245bc
+https://polygonscan.com/tx/904d21db4ef692d65f6d9e454fe138919b60046dca910dda938103a1878245bc
+✅ Swap confirmed!
+✅ Swap executed successfully!
+✅ Cycle done — next in ~7 min
