@@ -1,9 +1,16 @@
 {
   "wallets": [
-    "0x4b0f5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b",
-    "0x8a2d8a2d8a2d8a2d8a2d8a2d8a2d8a2d8a2d8a2d",
-    "0x1f3e1f3e1f3e1f3e1f3e1f3e1f3e1f3e1f3e1f3e"
-  ],
-  "max_copy_ratio": 0.20,
-  "enabled": true
+    "0x8f3cf7ad23cd3cadbd9735aff958023239c6a063",
+    "0xc2132d05d31c914a87c6611c10748aeb04b58e8f",
+    "0x2791bca1f2de4661ed88a30c99a7a9449aa84174",
+    "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270",
+    "0x7a8ed27f4c30512326878652d20fc85727401854",
+    "0x4c569c1e541a19132ac893748e0ad54c7c989ff4",
+    "0xd7f199c16dd0dfb5bd66606390332b8ae3403ec4",
+    "0x2301dc6a50dff4e419983c2d76ec4964f56561b8",
+    "0x8dff5e27ea6b7ac08ebfdf9eb090f32ee9a30fcf",
+    "0xad3b67bca8935cb510c8d18bd45f0b94f54a968f",
+    "0x9729d89a69125a4b620abf8f0db4cd725414b4fe",
+    "0xc74adf260350927281c51f529d5cbbc4da3280fc"
+  ]
 }

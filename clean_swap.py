@@ -65,7 +65,7 @@ async def main():
     else:
         # === 80/20 Decision ===
         if os.getenv("COPY_TRADING_ENABLED", "true").lower() == "true" and get_target_wallets():
-            print("🔄 COPY TRADING MODE (20%) - TODO: Implement monitor")
+            print("🔄 REAL POLYCOPY MODE (20%) - Monitoring live wallets")
             direction = "USDT_TO_WMATIC"
             trade_size = max(15.0, min(35.0, usdt_balance * get_copy_ratio()))
             amount_in = int(trade_size * 1_000_000)

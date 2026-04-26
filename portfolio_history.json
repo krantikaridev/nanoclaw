@@ -118,5 +118,53 @@
     "usdt": 48.49,
     "wmatic": 799.33,
     "total_value": 121.4
+  },
+  {
+    "timestamp": "2026-04-25T20:22:28.895344",
+    "usdt": 33.49,
+    "wmatic": 962.74,
+    "total_value": 121.36
+  },
+  {
+    "timestamp": "2026-04-25T20:26:15.389583",
+    "usdt": 33.49,
+    "wmatic": 962.74,
+    "total_value": 121.36
+  },
+  {
+    "timestamp": "2026-04-25T20:31:23.791311",
+    "usdt": 18.49,
+    "wmatic": 1126.05,
+    "total_value": 121.32
+  },
+  {
+    "timestamp": "2026-04-25T20:35:59.782064",
+    "usdt": 18.49,
+    "wmatic": 1126.05,
+    "total_value": 121.32
+  },
+  {
+    "timestamp": "2026-04-26T01:49:14.019595",
+    "usdt": 70.0,
+    "wmatic": 544.57,
+    "total_value": 119.55
+  },
+  {
+    "timestamp": "2026-04-26T13:16:45.900488",
+    "usdt": 17.46,
+    "wmatic": 1085.67,
+    "total_value": 116.97
+  },
+  {
+    "timestamp": "2026-04-26T14:14:13.282306",
+    "usdt": 62.15,
+    "wmatic": 597.12,
+    "total_value": 116.74
+  },
+  {
+    "timestamp": "2026-04-26T14:46:31.086594",
+    "usdt": 32.15,
+    "wmatic": 923.05,
+    "total_value": 116.78
   }
 ]
