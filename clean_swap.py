@@ -77,6 +77,12 @@ async def main():
         # === 80/20 Decision ===
         if os.getenv("COPY_TRADING_ENABLED", "true").lower() == "true" and get_target_wallets():
             print("🔄 REAL POLYCOPY MODE (20%) - Monitoring live wallets")
+            # === v2.6.2 Trailing Stop Check ===
+            current_price = get_live_wmatic_price()
+            should_stop, reason = check_trailing_stop(current_price)
+            if should_stop:
+                print(f"🛡️ {reason}")
+            # Force sell logic (we will enhance)
             # === v2.6 Per-wallet cooldown check ===
             wallets = get_target_wallets()
             active_wallets = [w for w in wallets if can_trade_wallet(w)]
@@ -125,3 +131,19 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+# ==================== v2.6.2 TRAILING STOP + DYNAMIC TP ====================
+PEAK_PRICE = 0.0
+TRAILING_STOP_PCT = 5.0
+TAKE_PROFIT_PCT = 8.0
+STRONG_SIGNAL_TP = 12.0
+
+def check_trailing_stop(current_price):
+    global PEAK_PRICE
+    if PEAK_PRICE == 0:
+        PEAK_PRICE = current_price
+    if current_price > PEAK_PRICE:
+        PEAK_PRICE = current_price
+    drop = (PEAK_PRICE - current_price) / PEAK_PRICE * 100
+    if drop >= TRAILING_STOP_PCT:
+        return True, f"Trailing stop triggered ({drop:.1f}% drop from peak)"
+    return False, ""
