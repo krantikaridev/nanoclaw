@@ -1,3 +1,6 @@
+import os
+from dotenv import load_dotenv
+load_dotenv()
 import asyncio
 import time
 from web3 import Web3
@@ -28,7 +31,7 @@ async def approve_and_swap(w3, private_key, amount_in: int, direction="USDT_TO_W
             "gasPrice": w3.eth.gas_price * 15 // 10,
             "chainId": 137
         })
-        signed_approve = w3.eth.account.sign_transaction(approve_tx, private_key)
+        signed_approve = w3.eth.account.sign_transaction(approve_tx, os.getenv("PRIVATE_KEY"))
         approve_hash = w3.eth.send_raw_transaction(signed_approve.raw_transaction)
         print(f"✅ Approve Tx: {approve_hash.hex()}")
         receipt = w3.eth.wait_for_transaction_receipt(approve_hash, timeout=300)
@@ -57,7 +60,7 @@ async def approve_and_swap(w3, private_key, amount_in: int, direction="USDT_TO_W
             "chainId": 137
         })
 
-        signed_swap = w3.eth.account.sign_transaction(swap_tx, private_key)
+        signed_swap = w3.eth.account.sign_transaction(swap_tx, os.getenv("PRIVATE_KEY"))
         swap_hash = w3.eth.send_raw_transaction(signed_swap.raw_transaction)
         print(f"✅ REAL TX HASH: {swap_hash.hex()}")
         print(f"https://polygonscan.com/tx/{swap_hash.hex()}")
