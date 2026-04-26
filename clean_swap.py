@@ -18,6 +18,17 @@ COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", 7))
 
 w3 = Web3(Web3.HTTPProvider(os.getenv("RPC")))
 
+# ==================== v2.6 PER-WALLET COOLDOWN ====================
+WALLET_LAST_TRADE = {}
+
+def can_trade_wallet(wallet_address):
+    last = WALLET_LAST_TRADE.get(wallet_address, 0)
+    return (time.time() - last) > 300  # 5 minutes independent per wallet
+
+def mark_wallet_traded(wallet_address):
+    WALLET_LAST_TRADE[wallet_address] = time.time()
+    print(f"📌 Wallet {wallet_address[:8]}... cooldown started (5 min)")
+
 def get_token_balance(token_address: str, decimals: int = 6) -> float:
     try:
         contract = w3.eth.contract(address=token_address, abi=ERC20_ABI)
@@ -66,6 +77,13 @@ async def main():
         # === 80/20 Decision ===
         if os.getenv("COPY_TRADING_ENABLED", "true").lower() == "true" and get_target_wallets():
             print("🔄 REAL POLYCOPY MODE (20%) - Monitoring live wallets")
+            # === v2.6 Per-wallet cooldown check ===
+            wallets = get_target_wallets()
+            active_wallets = [w for w in wallets if can_trade_wallet(w)]
+            if not active_wallets:
+                print("⏳ All 8 wallets in 5-min cooldown — waiting 30s...")
+                time.sleep(30)
+                return
             direction = "USDT_TO_WMATIC"
             trade_size = max(8.0, min(18.0, usdt_balance * 0.12))  # 12% rotation - capital rotates faster
             amount_in = int(trade_size * 1_000_000)
