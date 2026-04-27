@@ -98,6 +98,10 @@ async def main():
         # === 80/20 Decision ===
         if os.getenv("COPY_TRADING_ENABLED", "true").lower() == "true" and get_target_wallets():
             print("🔄 REAL POLYCOPY MODE (20%) - Monitoring live wallets")
+            if not has_enough_gas():
+                print("⛔ Low POL for gas — skipping cycle")
+                time.sleep(60)
+                return
             # === v2.6.2 Trailing Stop Check ===
             current_price = get_live_wmatic_price()
             should_stop, reason = check_trailing_stop(current_price)
@@ -152,3 +156,10 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+# ==================== GAS PROTECTION ====================
+MIN_POL_FOR_GAS = 0.05
+
+def has_enough_gas():
+    from constants import WALLET
+    pol_balance = w3.eth.get_balance(WALLET) / 10**18
+    return pol_balance >= MIN_POL_FOR_GAS
