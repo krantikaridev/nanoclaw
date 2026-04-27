@@ -190,5 +190,83 @@
     "usdt": 53.71,
     "wmatic": 683.31,
     "total_value": 116.37
+  },
+  {
+    "timestamp": "2026-04-26T17:28:59.571229",
+    "usdt": 37.71,
+    "wmatic": 856.7,
+    "total_value": 116.31
+  },
+  {
+    "timestamp": "2026-04-26T17:31:31.033130",
+    "usdt": 37.71,
+    "wmatic": 856.7,
+    "total_value": 116.31
+  },
+  {
+    "timestamp": "2026-04-26T18:27:15.605748",
+    "usdt": 36.41,
+    "wmatic": 868.29,
+    "total_value": 116.07
+  },
+  {
+    "timestamp": "2026-04-26T19:07:14.405843",
+    "usdt": 59.68,
+    "wmatic": 613.3,
+    "total_value": 116.02
+  },
+  {
+    "timestamp": "2026-04-26T19:11:36.322735",
+    "usdt": 51.68,
+    "wmatic": 699.84,
+    "total_value": 115.99
+  },
+  {
+    "timestamp": "2026-04-26T19:20:11.142267",
+    "usdt": 43.68,
+    "wmatic": 786.24,
+    "total_value": 116.06
+  },
+  {
+    "timestamp": "2026-04-26T19:23:05.059768",
+    "usdt": 43.68,
+    "wmatic": 786.24,
+    "total_value": 116.06
+  },
+  {
+    "timestamp": "2026-04-26T19:27:49.549129",
+    "usdt": 43.68,
+    "wmatic": 786.24,
+    "total_value": 116.06
+  },
+  {
+    "timestamp": "2026-04-26T19:30:15.277253",
+    "usdt": 35.68,
+    "wmatic": 872.61,
+    "total_value": 116.03
+  },
+  {
+    "timestamp": "2026-04-27T02:05:18.619795",
+    "usdt": 57.98,
+    "wmatic": 613.14,
+    "total_value": 114.69
+  },
+  {
+    "timestamp": "2026-04-27T02:06:00.249718",
+    "usdt": 57.98,
+    "wmatic": 613.14,
+    "total_value": 114.69
+  },
+  {
+    "timestamp": "2026-04-27T15:16:20.498421",
+    "usdt": 33.48,
+    "wmatic": 869.99,
+    "total_value": 113.31
+  },
+  {
+    "timestamp": "2026-04-27T15:30:43.063528",
+    "usdt": 33.48,
+    "wmatic": 864.99,
+    "total_value": 112.21
   }
 ]
