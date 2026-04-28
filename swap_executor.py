@@ -4,18 +4,25 @@ load_dotenv()
 import asyncio
 import time
 from web3 import Web3
-from constants import WALLET, USDT, WMATIC, ROUTER, ROUTER_ABI, ERC20_ABI
+from constants import WALLET, USDC, USDT, WMATIC, ROUTER, ROUTER_ABI, ERC20_ABI
 
 async def approve_and_swap(w3, private_key, amount_in: int, direction="USDT_TO_WMATIC"):
     print(f"🚀 Executing REAL swap: {direction} | Amount: {amount_in}")
 
     try:
         if direction == "USDT_TO_WMATIC":
-            token_in = USDT
-            token_out = WMATIC
+            token_in, token_out = USDT, WMATIC
+        elif direction == "WMATIC_TO_USDT":
+            token_in, token_out = WMATIC, USDT
+        elif direction == "USDC_TO_WMATIC":
+            token_in, token_out = USDC, WMATIC
+        elif direction == "WMATIC_TO_USDC":
+            token_in, token_out = WMATIC, USDC
         else:
-            token_in = WMATIC
-            token_out = USDT
+            raise ValueError(f"Unsupported direction: {direction}")
+
+        if not token_in or not token_out:
+            raise ValueError(f"Missing token address for direction {direction}. Check .env values (USDT/USDC).")
 
         token_in = Web3.to_checksum_address(token_in)
         token_out = Web3.to_checksum_address(token_out)

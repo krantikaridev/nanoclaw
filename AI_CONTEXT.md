@@ -26,6 +26,8 @@
 - ✅ Gas Protector module fully integrated (GasProtector.builder())
 - ✅ Profit-taking logic improved (8%/12% TP + 5% trailing)
 - ✅ Code cleanup + unit tests added
+- ✅ USDC Copy Strategy added (builder-based + gas-protected)
+- ✅ Token addresses + router/ABI made env-driven (ABI JSON files env-overridable)
 - ✅ Repo cleaned (old v25_*, memory/, skills/, xwatcher/ archived)
 
 **Current Status**:
@@ -47,4 +49,12 @@
 Paste this raw URL at the top:
 https://raw.githubusercontent.com/krantikaridev/nanoclaw/V2/AI_CONTEXT.md
 
-**Next Milestone**: Add USDC Copy Strategy + Better Wallet Scoring
+## Agent Feedback Loop
+
+- **Folder**: `agent_feedback/`
+- **Purpose**: capture what shipped, constraints, and next actions as a continuous improvement loop.
+- **Workflow**:
+  - Write immediate notes in `agent_feedback/latest.md`
+  - Capture each milestone as a short task log in `agent_feedback/*.md`
+
+**Next Milestone**: Better Wallet Scoring + More aggressive triggering

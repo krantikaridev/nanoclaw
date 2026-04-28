@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import time
+import tempfile
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
@@ -21,13 +22,14 @@ except ImportError:  # pragma: no cover - exercised in lightweight test environm
 
 from constants import ERC20_ABI, USDT, WALLET, WMATIC
 from nanoclaw.utils.gas_protector import GasProtector
+from nanoclaw.strategies.usdc_copy import USDCopyStrategy
 from swap_executor import approve_and_swap
 from copy_trading import get_target_wallets
 from protection import check_exit_conditions, get_live_wmatic_price, record_buy
 
 load_dotenv()
 
-LOCK_FILE = "/tmp/nanoclaw.lock"
+LOCK_FILE = os.path.join(tempfile.gettempdir(), "nanoclaw.lock")
 STATE_FILE = "bot_state.json"
 TRADE_LOG_FILE = "trade_exits.json"
 
@@ -40,6 +42,7 @@ TAKE_PROFIT_PCT = float(os.getenv("TAKE_PROFIT_PCT", "8.0"))
 STRONG_SIGNAL_TP = float(os.getenv("STRONG_SIGNAL_TP", "12.0"))
 TAKE_PROFIT_SELL_PCT = float(os.getenv("TAKE_PROFIT_SELL_PCT", "0.45"))
 STRONG_TP_SELL_PCT = float(os.getenv("STRONG_TP_SELL_PCT", "0.60"))
+ENABLE_USDC_COPY = os.getenv("ENABLE_USDC_COPY", "false").lower() == "true"
 
 WALLET_LAST_TRADE: Dict[str, float] = {}
 
@@ -47,6 +50,7 @@ WALLET_LAST_TRADE: Dict[str, float] = {}
 @dataclass(frozen=True)
 class Balances:
     usdt: float
+    usdc: float
     wmatic: float
     pol: float
 
@@ -143,6 +147,7 @@ def get_gas_status(
 def get_balances() -> Balances:
     return Balances(
         usdt=get_token_balance(USDT, 6),
+        usdc=get_token_balance(os.getenv("USDC", ""), 6) if os.getenv("USDC") else 0.0,
         wmatic=get_token_balance(WMATIC, 18),
         pol=get_pol_balance(),
     )
@@ -333,6 +338,46 @@ def select_copy_trade(balances: Balances, wallets: list[str]) -> TradeDecision:
     )
 
 
+def build_usdc_copy_strategy(protector: GasProtector = GAS_PROTECTOR) -> USDCopyStrategy:
+    return (
+        USDCopyStrategy.builder()
+        .with_enabled(ENABLE_USDC_COPY)
+        .with_copy_trade_pct(COPY_TRADE_PCT)
+        .with_per_wallet_cooldown_seconds(PER_WALLET_COOLDOWN)
+        .with_min_pol_for_gas(MIN_POL_FOR_GAS)
+        .with_gas_protector(protector)
+        .build()
+    )
+
+
+async def evaluate_usdc_copy_trade(
+    balances: Balances,
+    wallets: list[str],
+    *,
+    strategy: Optional[USDCopyStrategy] = None,
+) -> TradeDecision:
+    if not ENABLE_USDC_COPY:
+        return TradeDecision(message="ℹ️ USDC copy disabled")
+
+    usdc_strategy = strategy or build_usdc_copy_strategy()
+    plan = usdc_strategy.build_plan(
+        usdc_balance=balances.usdc,
+        wallets=wallets,
+        wallet_address_for_gas=WALLET,
+        can_trade_wallet=can_trade_wallet,
+        mark_wallet_traded=mark_wallet_traded,
+    )
+    if not plan:
+        return TradeDecision(message="ℹ️ No USDC-copy trade this cycle")
+
+    return TradeDecision(
+        direction="USDC_TO_WMATIC",
+        amount_in=plan.amount_in,
+        trade_size=plan.trade_size,
+        message=plan.message,
+    )
+
+
 def select_main_strategy_trade(
     balances: Balances,
     current_price: float,
@@ -397,7 +442,10 @@ async def main() -> None:
     state = load_state()
     balances = get_balances()
 
-    print(f"Real USDT: {balances.usdt:.2f} | WMATIC: {balances.wmatic:.2f} | POL: {balances.pol:.2f}")
+    print(
+        f"Real USDT: {balances.usdt:.2f} | USDC: {balances.usdc:.2f} | "
+        f"WMATIC: {balances.wmatic:.2f} | POL: {balances.pol:.2f}"
+    )
 
     if has_active_lock():
         print("⛔ Lock active — skipping")
@@ -419,7 +467,17 @@ async def main() -> None:
             return
 
         current_price = get_live_wmatic_price()
-        decision = determine_trade_decision(state, balances, current_price)
+        target_wallets = get_target_wallets()
+        wmatic_task = asyncio.create_task(
+            asyncio.to_thread(determine_trade_decision, state, balances, current_price)
+        )
+        usdc_task = asyncio.create_task(evaluate_usdc_copy_trade(balances, target_wallets))
+        wmatic_decision, usdc_decision = await asyncio.gather(wmatic_task, usdc_task)
+
+        # Single on-chain action per cycle (nonce safety). Exits have priority.
+        decision = wmatic_decision
+        if not decision.should_execute and usdc_decision.should_execute:
+            decision = usdc_decision
         save_state(state)
 
         if decision.message:
