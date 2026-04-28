@@ -21,7 +21,7 @@
 - STRONG_SIGNAL_TP=12.0
 - RPC=https://polygon.publicnode.com
 - ENABLE_USDC_COPY=true
-- refer .env.local for details
+- refer `.env.example` for details
 
 **Recent Improvements**:
 - ✅ Gas Protector module fully integrated (GasProtector.builder())

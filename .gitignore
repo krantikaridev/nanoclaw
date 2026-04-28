@@ -13,4 +13,5 @@ xwatcher/xwatcher_env/
 .venv/
 .env
 *.env
+.env.local
 real_cron.log
