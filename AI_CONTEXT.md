@@ -35,7 +35,7 @@
 **Current Status**:
 - Bot running on VM with **MAX_GWEI=450**
 - Local development in Cursor + periodic `git pull` on VM
-- Aggression increased to 25%. X-Signal Equity Trader skeleton added. Real profit +$72 in 3 hours.
+- X-Signal Equity Trader fully integrated and firing. 3 test assets added. Aggression at 25%. Realized profit +$74 in USDT.
 - Tokenized equity opportunity remains high-priority (earnings week volatility play)
 
 ## Development Workflow
