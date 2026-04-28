@@ -4,7 +4,7 @@ import os
 import time
 import tempfile
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Sequence
 
 from dotenv import load_dotenv
 import argparse

@@ -32,11 +32,22 @@
 - ✅ Tokenized Equity + X-Signal multi-asset trader scaffolded (dynamic asset list + per-asset cooldown + gas-protected)
 
 **Current Status**:
-- Bot running cleanly on cron every 10 min
-- No more RPC crashes
-- Realized profit still low (needs more aggressive triggering + high-vol assets)
-- **USDCopyStrategy NOT YET INTEGRATED into main loop** (critical blocker)
-- **NEW OPPORTUNITY**: Tokenized equity trading (GOOGLON, MSFTON, APPLON, AMZNON) now available on the same DEX – earnings week volatility play
+- Bot running on VM with **MAX_GWEI=450**
+- Local development in Cursor + periodic `git pull` on VM
+- **USDCopyStrategy partially wired**: `ENABLE_USDC_COPY` + `build_plan` working (still not fully end-to-end in main runtime path)
+- **X-Signal Equity Trader still missing** (next immediate task)
+- Tokenized equity opportunity remains high-priority (earnings week volatility play)
+
+## Development Workflow
+
+- Local Cursor → implement changes → run required checks → **single commit**
+- Review locally → push manually
+- VM: `git stash` → `git pull` → re-apply stash (as needed) → restart cron/runtime
+
+## Automation Plan
+
+- Telegram **PnL** notifications
+- Telegram **trade alerts** (entries/exits + gas status)
 
 ## Tokenized Equity + X-Signal Multi-Asset Trader
 
@@ -67,5 +78,4 @@ Paste this raw URL at the top:
 https://raw.githubusercontent.com/krantikaridev/nanoclaw/V2/AI_CONTEXT.md
 
 **Next Milestone**:
-- Full X-Signal Equity Trader live + Wallet Scoring v2 + Scale to $400+ this week
-- X-Signal Multi-Asset Equity Trader live + Telegram PnL alerts
+- X-Signal Equity Trader live + Agent Feedback auto-generation + Telegram notifications + First real tokenized stock trade this week
