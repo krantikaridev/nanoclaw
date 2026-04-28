@@ -20,6 +20,7 @@
 - TAKE_PROFIT_PCT=8.0
 - STRONG_SIGNAL_TP=12.0
 - RPC=https://polygon.publicnode.com
+- ENABLE_USDC_COPY=true
 - refer .env.local for details
 
 **Recent Improvements**:
