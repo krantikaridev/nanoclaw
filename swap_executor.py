@@ -18,6 +18,9 @@ async def approve_and_swap(
     print(f"🚀 Executing REAL swap: {direction} | Amount: {amount_in}")
 
     try:
+        resolved_key = private_key or os.getenv("POLYGON_PRIVATE_KEY") or os.getenv("PRIVATE_KEY")
+        if not resolved_key:
+            raise ValueError("Missing private key (set POLYGON_PRIVATE_KEY)")
         if token_in is None or token_out is None:
             if direction == "USDT_TO_WMATIC":
                 token_in, token_out = USDT, WMATIC
@@ -47,7 +50,7 @@ async def approve_and_swap(
             "gasPrice": w3.eth.gas_price * 15 // 10,
             "chainId": 137
         })
-        signed_approve = w3.eth.account.sign_transaction(approve_tx, os.getenv("PRIVATE_KEY"))
+        signed_approve = w3.eth.account.sign_transaction(approve_tx, resolved_key)
         approve_hash = w3.eth.send_raw_transaction(signed_approve.raw_transaction)
         print(f"✅ Approve Tx: {approve_hash.hex()}")
         receipt = w3.eth.wait_for_transaction_receipt(approve_hash, timeout=300)
@@ -76,7 +79,7 @@ async def approve_and_swap(
             "chainId": 137
         })
 
-        signed_swap = w3.eth.account.sign_transaction(swap_tx, os.getenv("PRIVATE_KEY"))
+        signed_swap = w3.eth.account.sign_transaction(swap_tx, resolved_key)
         swap_hash = w3.eth.send_raw_transaction(signed_swap.raw_transaction)
         print(f"✅ REAL TX HASH: {swap_hash.hex()}")
         print(f"https://polygonscan.com/tx/{swap_hash.hex()}")

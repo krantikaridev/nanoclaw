@@ -659,7 +659,7 @@ async def main(*, dry_run: bool = False) -> None:
 
         tx_hash = await approve_and_swap(
             w3,
-            os.getenv("POLYGON_PRIVATE_KEY"),
+            os.getenv("POLYGON_PRIVATE_KEY") or os.getenv("PRIVATE_KEY"),
             decision.amount_in,
             direction=decision.direction,
             token_in=decision.token_in,
