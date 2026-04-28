@@ -501,13 +501,6 @@ def determine_trade_decision(state: dict, balances: Balances, current_price: flo
             open_trade=get_latest_open_trade(),
         )
 
-    should_take_profit, profit_signal = evaluate_take_profit(current_price, state)
-    if should_take_profit and profit_signal and balances.wmatic > 0:
-        return build_profit_exit_decision(profit_signal, balances.wmatic)
-
-    if profit_signal and profit_signal["reason"] == "HOLD":
-        print(f"📈 {profit_signal['message']}")
-
     x_plan = evaluate_x_signal_equity_trade(balances)
     if x_plan:
         print(f"🟪 X-SIGNAL EQUITY ACTIVE | Asset: {x_plan.symbol}")
@@ -519,6 +512,13 @@ def determine_trade_decision(state: dict, balances: Balances, current_price: flo
             token_in=x_plan.token_in,
             token_out=x_plan.token_out,
         )
+
+    should_take_profit, profit_signal = evaluate_take_profit(current_price, state)
+    if should_take_profit and profit_signal and balances.wmatic > 0:
+        return build_profit_exit_decision(profit_signal, balances.wmatic)
+
+    if profit_signal and profit_signal["reason"] == "HOLD":
+        print(f"📈 {profit_signal['message']}")
 
     target_wallets = get_target_wallets()
     if is_copy_trading_enabled() and target_wallets:

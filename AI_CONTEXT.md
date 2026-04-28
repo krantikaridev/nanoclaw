@@ -35,8 +35,7 @@
 **Current Status**:
 - Bot running on VM with **MAX_GWEI=450**
 - Local development in Cursor + periodic `git pull` on VM
-- USDC Copy now executing real trades. USDT +$72 in 3 hours. Gas protection still too strict.
-- **X-Signal Equity Trader still missing** (next immediate task)
+- Aggression increased to 25%. X-Signal Equity Trader skeleton added. Real profit +$72 in 3 hours.
 - Tokenized equity opportunity remains high-priority (earnings week volatility play)
 
 ## Development Workflow

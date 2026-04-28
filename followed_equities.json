@@ -7,14 +7,24 @@
       "env_token_address": "GOOGLON",
       "decimals": 18,
       "signal_strength": 0.92,
-      "earnings_days": 2
+      "earnings_days": 2,
+      "current_price_usd": 0
+    },
+    {
+      "symbol": "NVDAON",
+      "env_token_address": "NVDAON",
+      "decimals": 18,
+      "signal_strength": 0.90,
+      "earnings_days": 3,
+      "current_price_usd": 0
     },
     {
       "symbol": "MSFTON",
       "env_token_address": "MSFTON",
       "decimals": 18,
-      "signal_strength": 0.88,
-      "earnings_days": 1
+      "signal_strength": 0.86,
+      "earnings_days": 1,
+      "current_price_usd": 0
     }
   ]
 }
