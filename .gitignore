@@ -18,3 +18,4 @@ real_cron.log
 bot_state.json
 portfolio_history.json
 trade_exits.json
+trade_history.json
