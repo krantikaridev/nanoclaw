@@ -1,9 +1,0 @@
-{
-  "tier1": [
-    "@WatcherGuru", "@whale_alert", "@saylor", "@VitalikButerin",
-    "@CryptoCobain", "@cobie", "@blknoiz06", "@DeepBlueBase",
-    "@Polymarket", "@PolymarketTrade", "@PolymarketMoney"
-  ],
-  "keywords": "Polymarket OR ZK OR whale OR flash OR swarm OR Hyrve OR prediction market OR nanoclaw",
-  "min_score": 75
-}
