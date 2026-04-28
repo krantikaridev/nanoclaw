@@ -50,9 +50,9 @@ WALLET_LAST_TRADE: Dict[str, float] = {}
 @dataclass(frozen=True)
 class Balances:
     usdt: float
-    usdc: float
     wmatic: float
     pol: float
+    usdc: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -147,9 +147,9 @@ def get_gas_status(
 def get_balances() -> Balances:
     return Balances(
         usdt=get_token_balance(USDT, 6),
-        usdc=get_token_balance(os.getenv("USDC", ""), 6) if os.getenv("USDC") else 0.0,
         wmatic=get_token_balance(WMATIC, 18),
         pol=get_pol_balance(),
+        usdc=get_token_balance(os.getenv("USDC", ""), 6) if os.getenv("USDC") else 0.0,
     )
 
 
