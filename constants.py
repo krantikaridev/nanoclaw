@@ -24,7 +24,7 @@ def _default_abi_path(relative_to_repo: str) -> str:
 
 # Deployment-specific addresses should be env-driven.
 WALLET = os.getenv("WALLET", "0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA")
-USDT = os.getenv("USDT")
+USDT = os.getenv("USDT", "0xc2132D05D31c914a87C6611C10748AEb04B58e8F")
 USDC = os.getenv("USDC", "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174")
 WMATIC = os.getenv("WMATIC", "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270")
 ROUTER = os.getenv("ROUTER", "0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff")
