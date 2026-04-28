@@ -9,21 +9,26 @@ import json
 from web3 import Web3
 from dotenv import load_dotenv
 from constants import WALLET, USDT, WMATIC, ROUTER, ROUTER_ABI, ERC20_ABI
+from nanoclaw.utils.gas_protector import GasProtector
 from swap_executor import approve_and_swap
 
 load_dotenv()
 
 LOCK_FILE = "/tmp/nanoclaw.lock"
 COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", 7))
+MIN_POL_FOR_GAS = float(os.getenv("MIN_POL_FOR_GAS", "0.05"))
 
 w3 = Web3(Web3.HTTPProvider(os.getenv("RPC")))
-# ==================== GAS PROTECTION ====================
-MIN_POL_FOR_GAS = 0.05
-
-def has_enough_gas():
-    from constants import WALLET
-    pol_balance = w3.eth.get_balance(WALLET) / 10**18
-    return pol_balance >= MIN_POL_FOR_GAS
+GAS_PROTECTOR = (
+    GasProtector.builder()
+    .with_max_gwei(float(os.getenv("MAX_GWEI", "80")))
+    .with_urgent_gwei(float(os.getenv("URGENT_GWEI", "120")))
+    .with_min_pol_balance(MIN_POL_FOR_GAS)
+    .with_primary_rpc(os.getenv("RPC"))
+    .with_fallback_rpcs(os.getenv("RPC_FALLBACKS", "").split(","))
+    .with_retry_attempts(int(os.getenv("GAS_RPC_RETRY_ATTEMPTS", "2")))
+    .build()
+)
 
 # ==================== v2.6.2 TRAILING STOP + DYNAMIC TP ====================
 PEAK_PRICE = 0.0
@@ -66,7 +71,15 @@ def get_token_balance(token_address: str, decimals: int = 6) -> float:
         return 0.0
 
 def get_pol_balance():
-    return w3.eth.get_balance(WALLET) / 10**18
+    return GAS_PROTECTOR.get_pol_balance(WALLET)
+
+
+def get_gas_status(urgent=False):
+    return GAS_PROTECTOR.get_safe_status(
+        address=WALLET,
+        urgent=urgent,
+        min_pol=MIN_POL_FOR_GAS,
+    )
 
 def load_state():
     try:
@@ -96,6 +109,15 @@ async def main():
         print(f"⏳ Copy cooldown active (90s) — skipping")
         return
 
+    gas_status = get_gas_status()
+    if not gas_status["ok"]:
+        print(
+            "⛔ Gas protection active "
+            f"(gas {gas_status['gas_gwei']:.2f}/{gas_status['max_gwei']:.2f} gwei, "
+            f"POL {gas_status['pol_balance']:.4f}/{gas_status['min_pol_balance']:.4f})"
+        )
+        return
+
     # V2.5.1 Protection
     should_force_sell, reason = check_exit_conditions()
     if should_force_sell:
@@ -106,10 +128,6 @@ async def main():
         # === 80/20 Decision ===
         if os.getenv("COPY_TRADING_ENABLED", "true").lower() == "true" and get_target_wallets():
             print("🔄 REAL POLYCOPY MODE (20%) - Monitoring live wallets")
-            if not has_enough_gas():
-                print("⛔ Low POL for gas — skipping cycle")
-                time.sleep(60)
-                return
             # === v2.6.2 Trailing Stop Check ===
             current_price = get_live_wmatic_price()
             should_stop, reason = check_trailing_stop(current_price)
