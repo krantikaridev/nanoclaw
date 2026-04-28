@@ -32,7 +32,7 @@
 - ✅ Repo cleaned (old v25_*, memory/, skills/, xwatcher/ archived)
 
 **Current Status**:
-- Bot running cleanly on cron every 10 min
+- Bot running cleanly on cron every 10 min (USDC Copy Strategy fully integrated in main loop)
 - No more RPC crashes
 - Realized profit still low (needs more aggressive triggering)
 
@@ -58,4 +58,4 @@ https://raw.githubusercontent.com/krantikaridev/nanoclaw/V2/AI_CONTEXT.md
   - Write immediate notes in `agent_feedback/latest.md`
   - Capture each milestone as a short task log in `agent_feedback/*.md`
 
-**Next Milestone**: Better Wallet Scoring + More aggressive triggering
+**Next Milestone**: Better Wallet Scoring + Multi-Signal Agent Feedback Loop (target: >35% win rate on copied trades)

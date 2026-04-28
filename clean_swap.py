@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
 from dotenv import load_dotenv
+import argparse
 
 try:
     from web3 import Web3
@@ -20,7 +21,7 @@ except ImportError:  # pragma: no cover - exercised in lightweight test environm
             self.provider = provider
             self.eth = None
 
-from constants import ERC20_ABI, USDT, WALLET, WMATIC
+from constants import ERC20_ABI, USDC, USDT, WALLET, WMATIC
 from nanoclaw.utils.gas_protector import GasProtector
 from nanoclaw.strategies.usdc_copy import USDCopyStrategy
 from swap_executor import approve_and_swap
@@ -149,7 +150,7 @@ def get_balances() -> Balances:
         usdt=get_token_balance(USDT, 6),
         wmatic=get_token_balance(WMATIC, 18),
         pol=get_pol_balance(),
-        usdc=get_token_balance(os.getenv("USDC", ""), 6) if os.getenv("USDC") else 0.0,
+        usdc=get_token_balance(USDC, 6),
     )
 
 
@@ -433,12 +434,30 @@ def determine_trade_decision(state: dict, balances: Balances, current_price: flo
 
     target_wallets = get_target_wallets()
     if is_copy_trading_enabled() and target_wallets:
+        usdc_strategy = USDCopyStrategy.builder().with_gas_protector(GAS_PROTECTOR).build()
+        plan = usdc_strategy.build_plan(
+            usdc_balance=balances.usdc,
+            wallets=target_wallets,
+            wallet_address_for_gas=WALLET,
+            can_trade_wallet=can_trade_wallet,
+            mark_wallet_traded=mark_wallet_traded,
+        )
+        if plan:
+            print("🟦 USDC COPY STRATEGY ACTIVE")
+            return TradeDecision(
+                direction="USDC_TO_WMATIC",
+                amount_in=plan.amount_in,
+                trade_size=plan.trade_size,
+                message=plan.message,
+            )
+
+        # Fallback: legacy USDT-based copy logic
         return select_copy_trade(balances, target_wallets)
 
     return select_main_strategy_trade(balances, current_price)
 
 
-async def main() -> None:
+async def main(*, dry_run: bool = False) -> None:
     state = load_state()
     balances = get_balances()
 
@@ -467,17 +486,7 @@ async def main() -> None:
             return
 
         current_price = get_live_wmatic_price()
-        target_wallets = get_target_wallets()
-        wmatic_task = asyncio.create_task(
-            asyncio.to_thread(determine_trade_decision, state, balances, current_price)
-        )
-        usdc_task = asyncio.create_task(evaluate_usdc_copy_trade(balances, target_wallets))
-        wmatic_decision, usdc_decision = await asyncio.gather(wmatic_task, usdc_task)
-
-        # Single on-chain action per cycle (nonce safety). Exits have priority.
-        decision = wmatic_decision
-        if not decision.should_execute and usdc_decision.should_execute:
-            decision = usdc_decision
+        decision = await asyncio.to_thread(determine_trade_decision, state, balances, current_price)
         save_state(state)
 
         if decision.message:
@@ -485,6 +494,10 @@ async def main() -> None:
 
         if not decision.should_execute:
             print("ℹ️ No actionable trade this cycle")
+            return
+
+        if dry_run:
+            print(f"🧪 DRY RUN: would execute {decision.direction} for amount_in={decision.amount_in}")
             return
 
         if decision.direction == "USDT_TO_WMATIC":
@@ -509,4 +522,7 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dry-run", action="store_true", help="Evaluate decision-making without submitting swaps")
+    args = parser.parse_args()
+    asyncio.run(main(dry_run=args.dry_run))
