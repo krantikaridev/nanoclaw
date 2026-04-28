@@ -68,3 +68,4 @@ https://raw.githubusercontent.com/krantikaridev/nanoclaw/V2/AI_CONTEXT.md
 
 **Next Milestone**:
 - Full X-Signal Equity Trader live + Wallet Scoring v2 + Scale to $400+ this week
+- X-Signal Multi-Asset Equity Trader live + Telegram PnL alerts
