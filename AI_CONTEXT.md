@@ -1,12 +1,12 @@
 # Nanoclaw v2 - AI Context (Single Source of Truth)
 
 **Repo**: https://github.com/krantikaridev/nanoclaw  
-**Active Branch**: V2 (short & stable)  
+**Active Branch**: V2  
 **Date**: 28 April 2026
 
 **Current Portfolio Snapshot**:
 - Total ≈ $113
-- WMATIC: ~77% ($79.54 / 865 WMATIC)
+- WMATIC: ~77% ($79.54)
 - USDT: $33.48
 - POL: $5.00
 
@@ -19,22 +19,23 @@
 - TRAILING_STOP_PCT=5.0
 - TAKE_PROFIT_PCT=8.0
 - STRONG_SIGNAL_TP=12.0
-- RPC=https://polygon.publicnode.com (stable free endpoint)
+- RPC=https://polygon.publicnode.com
+- refer .env.local for details
+
+**Recent Improvements**:
+- ✅ Gas Protector module fully integrated (GasProtector.builder())
+- ✅ Profit-taking logic improved (8%/12% TP + 5% trailing)
+- ✅ Code cleanup + unit tests added
+- ✅ Repo cleaned (old v25_*, memory/, skills/, xwatcher/ archived)
+
+**Current Status**:
+- Bot running cleanly on cron every 10 min
+- No more RPC crashes
+- Realized profit still low (needs more aggressive triggering)
 
 **Environment Notes**:
 - Use the project virtualenv before running Python commands: `cd ~/.nanobot/workspace/nanoclaw && source .venv/bin/activate`
 - Prefer venv-backed commands for manual runs/tests so project dependencies resolve correctly
-
-**Current Status**:
-- ✅ Cron fixed (clean_swap.py runs without errors)
-- ✅ Protection module + copy trading active
-- Profit-taking logic now functional (8%/12% TP + 5% trailing)
-
-**Pending**:
-- Realized profit still low
-- Heavy WMATIC concentration
-- No USDC strategy yet
-- Gas protection needs proper implementation
 
 **Design Rules**:
 - Builder Pattern + Functional Composition
@@ -43,9 +44,7 @@
 - Risk-first
 
 **How to Continue in Any New Thread**:
-Paste this raw URL at the very top:
+Paste this raw URL at the top:
 https://raw.githubusercontent.com/krantikaridev/nanoclaw/V2/AI_CONTEXT.md
 
-Then describe what you want to do next.
-
-**Next Milestone**: Clean modular v2.7 + Cursor development
+**Next Milestone**: Add USDC Copy Strategy + Better Wallet Scoring

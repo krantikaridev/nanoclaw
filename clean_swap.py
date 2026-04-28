@@ -22,8 +22,8 @@ except ImportError:  # pragma: no cover - exercised in lightweight test environm
 from constants import ERC20_ABI, USDT, WALLET, WMATIC
 from nanoclaw.utils.gas_protector import GasProtector
 from swap_executor import approve_and_swap
-from v25_copy_trading import get_target_wallets
-from v25_protection import check_exit_conditions, get_live_wmatic_price, record_buy
+from copy_trading import get_target_wallets
+from protection import check_exit_conditions, get_live_wmatic_price, record_buy
 
 load_dotenv()
 
