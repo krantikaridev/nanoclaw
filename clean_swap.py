@@ -17,6 +17,14 @@ LOCK_FILE = "/tmp/nanoclaw.lock"
 COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", 7))
 
 w3 = Web3(Web3.HTTPProvider(os.getenv("RPC")))
+# ==================== GAS PROTECTION ====================
+MIN_POL_FOR_GAS = 0.05
+
+def has_enough_gas():
+    from constants import WALLET
+    pol_balance = w3.eth.get_balance(WALLET) / 10**18
+    return pol_balance >= MIN_POL_FOR_GAS
+
 # ==================== v2.6.2 TRAILING STOP + DYNAMIC TP ====================
 PEAK_PRICE = 0.0
 TRAILING_STOP_PCT = 5.0
@@ -156,10 +164,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-# ==================== GAS PROTECTION ====================
-MIN_POL_FOR_GAS = 0.05
-
-def has_enough_gas():
-    from constants import WALLET
-    pol_balance = w3.eth.get_balance(WALLET) / 10**18
-    return pol_balance >= MIN_POL_FOR_GAS
