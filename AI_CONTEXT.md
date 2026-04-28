@@ -3,6 +3,7 @@
 **Repo**: https://github.com/krantikaridev/nanoclaw  
 **Active Branch**: V2  
 **Date**: 28 April 2026
+**Wallet**: 0x6e291a7180bd198d67eeb792bb3262324d3e64aa
 
 **Current Portfolio Snapshot**:
 - Total ≈ $113
@@ -13,7 +14,7 @@
 **Goal**: $100,000 by 31 May 2026 with max 20% drawdown.
 
 **Key .env Settings**:
-- COPY_TRADE_PCT=0.12 (12%)
+- COPY_TRADE_PCT=0.25 (25%)
 - COPY_COOLDOWN=90
 - MAX_EXPOSURE_PCT=65
 - TRAILING_STOP_PCT=5.0
@@ -34,7 +35,7 @@
 **Current Status**:
 - Bot running on VM with **MAX_GWEI=450**
 - Local development in Cursor + periodic `git pull` on VM
-- **USDCopyStrategy partially wired**: `ENABLE_USDC_COPY` + `build_plan` working (still not fully end-to-end in main runtime path)
+- USDC Copy now executing real trades. USDT +$72 in 3 hours. Gas protection still too strict.
 - **X-Signal Equity Trader still missing** (next immediate task)
 - Tokenized equity opportunity remains high-priority (earnings week volatility play)
 

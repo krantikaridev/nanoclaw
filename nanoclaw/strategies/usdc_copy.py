@@ -33,10 +33,10 @@ class USDCopyPlan:
 class USDCopyStrategyBuilder:
     def __init__(self) -> None:
         self._enabled = os.getenv("ENABLE_USDC_COPY", "false").lower() == "true"
-        self._copy_trade_pct = float(os.getenv("COPY_TRADE_PCT", "0.12"))
+        self._copy_trade_pct = float(os.getenv("COPY_TRADE_PCT", "0.25"))
         self._min_trade_usdc = float(os.getenv("USDC_COPY_MIN_TRADE", "5.0"))
         self._max_trade_usdc = float(os.getenv("USDC_COPY_MAX_TRADE", "15.0"))
-        self._per_wallet_cooldown_seconds = int(os.getenv("PER_WALLET_COOLDOWN", "300"))
+        self._per_wallet_cooldown_seconds = int(os.getenv("PER_WALLET_COOLDOWN", "180"))
         self._min_pol_for_gas = float(os.getenv("MIN_POL_FOR_GAS", "0.05"))
         self._gas_protector: Optional[GasProtector] = None
 

@@ -37,8 +37,8 @@ TRADE_LOG_FILE = "trade_exits.json"
 
 COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", 7))
 MIN_POL_FOR_GAS = float(os.getenv("MIN_POL_FOR_GAS", "0.05"))
-COPY_TRADE_PCT = float(os.getenv("COPY_TRADE_PCT", "0.12"))
-PER_WALLET_COOLDOWN = int(os.getenv("PER_WALLET_COOLDOWN", "300"))
+COPY_TRADE_PCT = float(os.getenv("COPY_TRADE_PCT", "0.25"))
+PER_WALLET_COOLDOWN = int(os.getenv("PER_WALLET_COOLDOWN", "180"))
 TRAILING_STOP_PCT = float(os.getenv("TRAILING_STOP_PCT", "5.0"))
 TAKE_PROFIT_PCT = float(os.getenv("TAKE_PROFIT_PCT", "8.0"))
 STRONG_SIGNAL_TP = float(os.getenv("STRONG_SIGNAL_TP", "12.0"))
@@ -566,12 +566,16 @@ async def main(*, dry_run: bool = False) -> None:
 
         gas_status = get_gas_status()
         if not gas_status["ok"]:
-            print(
-                "⛔ Gas protection active "
-                f"(gas {gas_status['gas_gwei']:.2f}/{gas_status['max_gwei']:.2f} gwei, "
-                f"POL {gas_status['pol_balance']:.4f}/{gas_status['min_pol_balance']:.4f})"
-            )
-            return
+            gas_gwei = float(gas_status.get("gas_gwei") or 0.0)
+            if gas_gwei <= 400.0:
+                print("⚠️ High gas but forcing trade (urgent mode)")
+            else:
+                print(
+                    "⛔ Gas protection active "
+                    f"(gas {gas_status['gas_gwei']:.2f}/{gas_status['max_gwei']:.2f} gwei, "
+                    f"POL {gas_status['pol_balance']:.4f}/{gas_status['min_pol_balance']:.4f})"
+                )
+                return
 
         current_price = get_live_wmatic_price()
         decision = await asyncio.to_thread(determine_trade_decision, state, balances, current_price)
