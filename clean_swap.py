@@ -1,119 +1,207 @@
-from v25_protection import check_exit_conditions, record_buy, get_live_wmatic_price
-from v25_copy_trading import get_target_wallets, get_copy_ratio
-from brain_agent import BrainAgent
-import os
-import time
-import sys
 import asyncio
 import json
-from web3 import Web3
+import os
+import time
+from dataclasses import dataclass
+from typing import Dict, Optional, Tuple
+
 from dotenv import load_dotenv
-from constants import WALLET, USDT, WMATIC, ROUTER, ROUTER_ABI, ERC20_ABI
+
+try:
+    from web3 import Web3
+except ImportError:  # pragma: no cover - exercised in lightweight test environments
+    class Web3:  # type: ignore[override]
+        class HTTPProvider:  # type: ignore[override]
+            def __init__(self, endpoint_uri: str | None) -> None:
+                self.endpoint_uri = endpoint_uri
+
+        def __init__(self, provider: "Web3.HTTPProvider") -> None:
+            self.provider = provider
+            self.eth = None
+
+from constants import ERC20_ABI, USDT, WALLET, WMATIC
 from nanoclaw.utils.gas_protector import GasProtector
 from swap_executor import approve_and_swap
+from v25_copy_trading import get_target_wallets
+from v25_protection import check_exit_conditions, get_live_wmatic_price, record_buy
 
 load_dotenv()
 
 LOCK_FILE = "/tmp/nanoclaw.lock"
+STATE_FILE = "bot_state.json"
+TRADE_LOG_FILE = "trade_exits.json"
+
 COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", 7))
 MIN_POL_FOR_GAS = float(os.getenv("MIN_POL_FOR_GAS", "0.05"))
 COPY_TRADE_PCT = float(os.getenv("COPY_TRADE_PCT", "0.12"))
 PER_WALLET_COOLDOWN = int(os.getenv("PER_WALLET_COOLDOWN", "300"))
-
-w3 = Web3(Web3.HTTPProvider(os.getenv("RPC")))
-GAS_PROTECTOR = (
-    GasProtector.builder()
-    .with_max_gwei(float(os.getenv("MAX_GWEI", "80")))
-    .with_urgent_gwei(float(os.getenv("URGENT_GWEI", "120")))
-    .with_min_pol_balance(MIN_POL_FOR_GAS)
-    .with_primary_rpc(os.getenv("RPC"))
-    .with_fallback_rpcs(os.getenv("RPC_FALLBACKS", "").split(","))
-    .with_retry_attempts(int(os.getenv("GAS_RPC_RETRY_ATTEMPTS", "2")))
-    .build()
-)
-
-# ==================== v2.6.2 TRAILING STOP + DYNAMIC TP ====================
-PEAK_PRICE = 0.0
 TRAILING_STOP_PCT = float(os.getenv("TRAILING_STOP_PCT", "5.0"))
 TAKE_PROFIT_PCT = float(os.getenv("TAKE_PROFIT_PCT", "8.0"))
 STRONG_SIGNAL_TP = float(os.getenv("STRONG_SIGNAL_TP", "12.0"))
 TAKE_PROFIT_SELL_PCT = float(os.getenv("TAKE_PROFIT_SELL_PCT", "0.45"))
 STRONG_TP_SELL_PCT = float(os.getenv("STRONG_TP_SELL_PCT", "0.60"))
-TRADE_LOG_FILE = "trade_exits.json"
 
-def check_trailing_stop(current_price):
-    global PEAK_PRICE
-    if PEAK_PRICE == 0:
-        PEAK_PRICE = current_price
-    if current_price > PEAK_PRICE:
-        PEAK_PRICE = current_price
-    drop = (PEAK_PRICE - current_price) / PEAK_PRICE * 100
-    if drop >= TRAILING_STOP_PCT:
-        return True, f"Trailing stop triggered ({drop:.1f}% drop from peak)"
-    return False, ""
+WALLET_LAST_TRADE: Dict[str, float] = {}
 
-# ==================== v2.6.3 AUTO-SCALE TRADE SIZE ====================
-def get_dynamic_trade_size(usdt_balance):
-    pct = 0.12
-    size = usdt_balance * pct
-    return max(8.0, min(30.0, size))
-# ==================== v2.6 PER-WALLET COOLDOWN ====================
-WALLET_LAST_TRADE = {}
 
-def can_trade_wallet(wallet_address):
+@dataclass(frozen=True)
+class Balances:
+    usdt: float
+    wmatic: float
+    pol: float
+
+
+@dataclass(frozen=True)
+class TradeDecision:
+    direction: Optional[str]
+    amount_in: int = 0
+    trade_size: float = 0.0
+    message: str = ""
+
+    @property
+    def should_execute(self) -> bool:
+        return bool(self.direction and self.amount_in > 0)
+
+
+def build_web3_client(rpc_url: Optional[str] = None) -> Web3:
+    return Web3(Web3.HTTPProvider(rpc_url or os.getenv("RPC")))
+
+
+def build_gas_protector() -> GasProtector:
+    return (
+        GasProtector.builder()
+        .with_max_gwei(float(os.getenv("MAX_GWEI", "80")))
+        .with_urgent_gwei(float(os.getenv("URGENT_GWEI", "120")))
+        .with_min_pol_balance(MIN_POL_FOR_GAS)
+        .with_primary_rpc(os.getenv("RPC"))
+        .with_fallback_rpcs(os.getenv("RPC_FALLBACKS", "").split(","))
+        .with_retry_attempts(int(os.getenv("GAS_RPC_RETRY_ATTEMPTS", "2")))
+        .build()
+    )
+
+
+w3 = build_web3_client()
+GAS_PROTECTOR = build_gas_protector()
+
+
+def is_copy_trading_enabled() -> bool:
+    return os.getenv("COPY_TRADING_ENABLED", "true").lower() == "true"
+
+
+def can_trade_wallet(
+    wallet_address: str,
+    now: Optional[float] = None,
+    cooldown_seconds: int = PER_WALLET_COOLDOWN,
+) -> bool:
+    current_time = time.time() if now is None else now
     last = WALLET_LAST_TRADE.get(wallet_address, 0)
-    return (time.time() - last) > PER_WALLET_COOLDOWN
+    return (current_time - last) > cooldown_seconds
 
-def mark_wallet_traded(wallet_address):
-    WALLET_LAST_TRADE[wallet_address] = time.time()
-    print(f"📌 Wallet {wallet_address[:8]}... cooldown started ({PER_WALLET_COOLDOWN}s)")
 
-def get_token_balance(token_address: str, decimals: int = 6) -> float:
+def mark_wallet_traded(
+    wallet_address: str,
+    now: Optional[float] = None,
+    cooldown_seconds: int = PER_WALLET_COOLDOWN,
+) -> None:
+    WALLET_LAST_TRADE[wallet_address] = time.time() if now is None else now
+    print(f"📌 Wallet {wallet_address[:8]}... cooldown started ({cooldown_seconds}s)")
+
+
+def get_token_balance(
+    token_address: str,
+    decimals: int = 6,
+    web3_client: Optional[Web3] = None,
+    wallet_address: str = WALLET,
+) -> float:
+    client = web3_client or w3
     try:
-        contract = w3.eth.contract(address=token_address, abi=ERC20_ABI)
-        return contract.functions.balanceOf(WALLET).call() / (10 ** decimals)
-    except:
+        contract = client.eth.contract(address=token_address, abi=ERC20_ABI)
+        return contract.functions.balanceOf(wallet_address).call() / (10**decimals)
+    except Exception:
         return 0.0
 
-def get_pol_balance():
-    return GAS_PROTECTOR.get_pol_balance(WALLET)
+
+def get_pol_balance(
+    protector: GasProtector = GAS_PROTECTOR,
+    wallet_address: str = WALLET,
+) -> float:
+    return protector.get_pol_balance(wallet_address)
 
 
-def get_gas_status(urgent=False):
-    return GAS_PROTECTOR.get_safe_status(
-        address=WALLET,
+def get_gas_status(
+    urgent: bool = False,
+    protector: GasProtector = GAS_PROTECTOR,
+    wallet_address: str = WALLET,
+) -> dict:
+    return protector.get_safe_status(
+        address=wallet_address,
         urgent=urgent,
         min_pol=MIN_POL_FOR_GAS,
     )
 
-def load_state():
+
+def get_balances() -> Balances:
+    return Balances(
+        usdt=get_token_balance(USDT, 6),
+        wmatic=get_token_balance(WMATIC, 18),
+        pol=get_pol_balance(),
+    )
+
+
+def load_state(path: str = STATE_FILE) -> dict:
     try:
-        with open('bot_state.json', 'r') as f:
-            return json.load(f)
-    except:
+        with open(path, "r", encoding="utf-8") as file_handle:
+            return json.load(file_handle)
+    except Exception:
         return {"last_run": 0}
 
-def save_state(state):
-    with open('bot_state.json', 'w') as f:
-        json.dump(state, f, indent=2)
 
-def get_latest_open_trade():
-    if not os.path.exists(TRADE_LOG_FILE):
+def save_state(state: dict, path: str = STATE_FILE) -> None:
+    with open(path, "w", encoding="utf-8") as file_handle:
+        json.dump(state, file_handle, indent=2)
+
+
+def has_active_lock(lock_file: str = LOCK_FILE, now: Optional[float] = None, lock_seconds: int = 15) -> bool:
+    if not os.path.exists(lock_file):
+        return False
+    current_time = time.time() if now is None else now
+    return (current_time - os.path.getmtime(lock_file)) < lock_seconds
+
+
+def create_lock(lock_file: str = LOCK_FILE) -> None:
+    with open(lock_file, "w", encoding="utf-8"):
+        pass
+
+
+def release_lock(lock_file: str = LOCK_FILE) -> None:
+    if os.path.exists(lock_file):
+        os.remove(lock_file)
+
+
+def is_global_cooldown_active(
+    state: dict,
+    cooldown_minutes: int = COOLDOWN_MINUTES,
+    now: Optional[float] = None,
+) -> bool:
+    current_time = time.time() if now is None else now
+    return (current_time - state.get("last_run", 0)) < (cooldown_minutes * 60)
+
+
+def get_latest_open_trade(trade_log_file: str = TRADE_LOG_FILE) -> Optional[dict]:
+    if not os.path.exists(trade_log_file):
         return None
 
     try:
-        with open(TRADE_LOG_FILE, "r") as f:
-            trades = json.load(f)
+        with open(trade_log_file, "r", encoding="utf-8") as file_handle:
+            trades = json.load(file_handle)
     except Exception:
         return None
 
     open_trades = [trade for trade in trades if trade.get("status") == "OPEN" and trade.get("buy_price")]
-    if not open_trades:
-        return None
+    return open_trades[-1] if open_trades else None
 
-    return open_trades[-1]
 
-def evaluate_take_profit(current_price, state):
+def evaluate_take_profit(current_price: float, state: dict) -> Tuple[bool, Optional[dict]]:
     trade = get_latest_open_trade()
     tracking = state.setdefault("profit_tracking", {})
 
@@ -191,118 +279,176 @@ def evaluate_take_profit(current_price, state):
         "pullback_pct": pullback_pct,
     }
 
-async def main():
-    state = load_state()
-    direction = None
-    amount_in = 0
-    trade_size = 0.0
-    usdt_balance = get_token_balance(USDT, 6)
-    wmatic_balance = get_token_balance(WMATIC, 18)
-    pol = get_pol_balance()
 
-    print(f"Real USDT: {usdt_balance:.2f} | WMATIC: {wmatic_balance:.2f} | POL: {pol:.2f}")
+def build_protection_exit_decision(
+    reason: str,
+    current_price: float,
+    wmatic_balance: float,
+    open_trade: Optional[dict],
+) -> TradeDecision:
+    sell_fraction = 0.45
 
-    if os.path.exists(LOCK_FILE) and (time.time() - os.path.getmtime(LOCK_FILE) < 15):
-        print("⛔ Lock active — skipping")
-        return
-    open(LOCK_FILE, 'w').close()
-
-    if time.time() - state.get("last_run", 0) < COOLDOWN_MINUTES * 60:
-        print(f"⏳ Copy cooldown active (90s) — skipping")
-        return
-
-    gas_status = get_gas_status()
-    if not gas_status["ok"]:
-        print(
-            "⛔ Gas protection active "
-            f"(gas {gas_status['gas_gwei']:.2f}/{gas_status['max_gwei']:.2f} gwei, "
-            f"POL {gas_status['pol_balance']:.4f}/{gas_status['min_pol_balance']:.4f})"
+    if reason == "PER_TRADE_EXIT" and open_trade:
+        buy_price = float(open_trade["buy_price"])
+        gain_pct = ((current_price - buy_price) / buy_price) * 100 if buy_price > 0 else 0.0
+        sell_fraction = STRONG_TP_SELL_PCT if gain_pct >= STRONG_SIGNAL_TP else TAKE_PROFIT_SELL_PCT
+        message = (
+            f"🛡️ PROTECTION EXIT: {'strong TP hit' if gain_pct >= STRONG_SIGNAL_TP else 'TP hit'} | "
+            f"buy ${buy_price:.4f} -> now ${current_price:.4f} "
+            f"({gain_pct:.2f}%) | selling {sell_fraction * 100:.0f}% WMATIC"
         )
-        return
+    else:
+        message = f"🛡️ PROTECTION TRIGGERED: {reason} — Force selling"
 
-    # V2.5.1 Protection
+    return TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(wmatic_balance * sell_fraction * 1e18),
+        message=message,
+    )
+
+
+def build_profit_exit_decision(profit_signal: dict, wmatic_balance: float) -> TradeDecision:
+    sell_fraction = min(1.0, max(0.1, float(profit_signal["sell_fraction"])))
+    return TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(wmatic_balance * sell_fraction * 1e18),
+        message=(
+            f"💰 EXIT SIGNAL: {profit_signal['reason']} | {profit_signal['message']} | "
+            f"selling {sell_fraction * 100:.0f}% WMATIC"
+        ),
+    )
+
+
+def select_copy_trade(balances: Balances, wallets: list[str]) -> TradeDecision:
+    active_wallets = [wallet for wallet in wallets if can_trade_wallet(wallet)]
+    if not active_wallets:
+        return TradeDecision(message=f"⏳ All wallets in {PER_WALLET_COOLDOWN}s cooldown — skipping")
+
+    trade_size = max(8.0, min(18.0, balances.usdt * COPY_TRADE_PCT))
+    return TradeDecision(
+        direction="USDT_TO_WMATIC",
+        amount_in=int(trade_size * 1_000_000),
+        trade_size=trade_size,
+        message="🔄 REAL POLYCOPY MODE (20%) - Monitoring live wallets",
+    )
+
+
+def select_main_strategy_trade(
+    balances: Balances,
+    current_price: float,
+) -> TradeDecision:
+    trade_size = max(15.0, min(35.0, balances.usdt * 0.28))
+    wmatic_value_usd = balances.wmatic * current_price
+
+    if balances.usdt < 25:
+        return TradeDecision(
+            direction="WMATIC_TO_USDT",
+            amount_in=int(balances.wmatic * 0.45 * 1e18),
+            message=f"🔄 USDT RESERVE PROTECTION: ${balances.usdt:.2f} < $25",
+        )
+
+    if wmatic_value_usd > 52:
+        return TradeDecision(
+            direction="WMATIC_TO_USDT",
+            amount_in=int(balances.wmatic * 0.45 * 1e18),
+            message=f"🔄 Taking profit (WMATIC high: ${wmatic_value_usd:.2f})",
+        )
+
+    if wmatic_value_usd < 40 and balances.wmatic > 50:
+        return TradeDecision(
+            direction="WMATIC_TO_USDT",
+            amount_in=int(balances.wmatic * 0.28 * 1e18),
+            message=f"🔄 Cutting loss (WMATIC down: ${wmatic_value_usd:.2f})",
+        )
+
+    return TradeDecision(
+        direction="USDT_TO_WMATIC",
+        amount_in=int(trade_size * 1_000_000),
+        trade_size=trade_size,
+        message=f"🔄 Buying WMATIC (hold preferred) | Size: ${trade_size:.2f}",
+    )
+
+
+def determine_trade_decision(state: dict, balances: Balances, current_price: float) -> TradeDecision:
     should_force_sell, reason = check_exit_conditions()
     if should_force_sell:
-        direction = "WMATIC_TO_USDT"
-        sell_fraction = 0.45
-        current_price = get_live_wmatic_price()
-        open_trade = get_latest_open_trade()
-        if reason == "PER_TRADE_EXIT" and open_trade:
-            buy_price = float(open_trade["buy_price"])
-            gain_pct = ((current_price - buy_price) / buy_price) * 100 if buy_price > 0 else 0.0
-            sell_fraction = STRONG_TP_SELL_PCT if gain_pct >= STRONG_SIGNAL_TP else TAKE_PROFIT_SELL_PCT
-            amount_in = int(wmatic_balance * sell_fraction * 1e18)
+        return build_protection_exit_decision(
+            reason=reason or "UNKNOWN",
+            current_price=current_price,
+            wmatic_balance=balances.wmatic,
+            open_trade=get_latest_open_trade(),
+        )
+
+    should_take_profit, profit_signal = evaluate_take_profit(current_price, state)
+    if should_take_profit and profit_signal and balances.wmatic > 0:
+        return build_profit_exit_decision(profit_signal, balances.wmatic)
+
+    if profit_signal and profit_signal["reason"] == "HOLD":
+        print(f"📈 {profit_signal['message']}")
+
+    target_wallets = get_target_wallets()
+    if is_copy_trading_enabled() and target_wallets:
+        return select_copy_trade(balances, target_wallets)
+
+    return select_main_strategy_trade(balances, current_price)
+
+
+async def main() -> None:
+    state = load_state()
+    balances = get_balances()
+
+    print(f"Real USDT: {balances.usdt:.2f} | WMATIC: {balances.wmatic:.2f} | POL: {balances.pol:.2f}")
+
+    if has_active_lock():
+        print("⛔ Lock active — skipping")
+        return
+
+    create_lock()
+    try:
+        if is_global_cooldown_active(state):
+            print(f"⏳ Copy cooldown active ({COOLDOWN_MINUTES * 60}s) — skipping")
+            return
+
+        gas_status = get_gas_status()
+        if not gas_status["ok"]:
             print(
-                f"🛡️ PROTECTION EXIT: {'strong TP hit' if gain_pct >= STRONG_SIGNAL_TP else 'TP hit'} | "
-                f"buy ${buy_price:.4f} -> now ${current_price:.4f} "
-                f"({gain_pct:.2f}%) | selling {sell_fraction * 100:.0f}% WMATIC"
+                "⛔ Gas protection active "
+                f"(gas {gas_status['gas_gwei']:.2f}/{gas_status['max_gwei']:.2f} gwei, "
+                f"POL {gas_status['pol_balance']:.4f}/{gas_status['min_pol_balance']:.4f})"
             )
-        else:
-            amount_in = int(wmatic_balance * sell_fraction * 1e18)
-            print(f"🛡️ PROTECTION TRIGGERED: {reason} — Force selling")
-    else:
+            return
+
         current_price = get_live_wmatic_price()
-        should_take_profit, profit_signal = evaluate_take_profit(current_price, state)
+        decision = determine_trade_decision(state, balances, current_price)
         save_state(state)
-        if should_take_profit and wmatic_balance > 0:
-            sell_fraction = min(1.0, max(0.1, float(profit_signal["sell_fraction"])))
-            direction = "WMATIC_TO_USDT"
-            amount_in = int(wmatic_balance * sell_fraction * 1e18)
-            print(
-                f"💰 EXIT SIGNAL: {profit_signal['reason']} | {profit_signal['message']} | "
-                f"selling {sell_fraction * 100:.0f}% WMATIC"
-            )
+
+        if decision.message:
+            print(decision.message)
+
+        if not decision.should_execute:
+            print("ℹ️ No actionable trade this cycle")
+            return
+
+        if decision.direction == "USDT_TO_WMATIC":
+            record_buy(current_price, decision.trade_size, "pending")
+
+        tx_hash = await approve_and_swap(
+            w3,
+            os.getenv("POLYGON_PRIVATE_KEY"),
+            decision.amount_in,
+            direction=decision.direction,
+        )
+        if tx_hash:
+            print("✅ Swap executed successfully!")
         else:
-            if profit_signal and profit_signal["reason"] == "HOLD":
-                print(f"📈 {profit_signal['message']}")
-        # === 80/20 Decision ===
-        if not direction:
-            if os.getenv("COPY_TRADING_ENABLED", "true").lower() == "true" and get_target_wallets():
-                print("🔄 REAL POLYCOPY MODE (20%) - Monitoring live wallets")
-                # === v2.6 Per-wallet cooldown check ===
-                wallets = get_target_wallets()
-                active_wallets = [w for w in wallets if can_trade_wallet(w)]
-                if not active_wallets:
-                    print(f"⏳ All wallets in {PER_WALLET_COOLDOWN}s cooldown — waiting 30s...")
-                    time.sleep(30)
-                    return
-                direction = "USDT_TO_WMATIC"
-                trade_size = max(8.0, min(18.0, usdt_balance * COPY_TRADE_PCT))
-                amount_in = int(trade_size * 1_000_000)
-            else:
-                print("🔄 MAIN STRATEGY MODE (80%)")
-                trade_size = max(15.0, min(35.0, usdt_balance * 0.28))
-                wmatic_value_usd = wmatic_balance * current_price
+            print("⚠️ Swap failed")
 
-                if usdt_balance < 25:
-                    direction = "WMATIC_TO_USDT"
-                    amount_in = int(wmatic_balance * 0.45 * 1e18)
-                    print(f"🔄 USDT RESERVE PROTECTION: ${usdt_balance:.2f} < $45")
-                elif wmatic_value_usd > 52:
-                    direction = "WMATIC_TO_USDT"
-                    amount_in = int(wmatic_balance * 0.45 * 1e18)
-                    print(f"🔄 Taking profit (WMATIC high: ${wmatic_value_usd:.2f})")
-                elif wmatic_value_usd < 40 and wmatic_balance > 50:
-                    direction = "WMATIC_TO_USDT"
-                    amount_in = int(wmatic_balance * 0.28 * 1e18)
-                    print(f"🔄 Cutting loss (WMATIC down: ${wmatic_value_usd:.2f})")
-                else:
-                    direction = "USDT_TO_WMATIC"
-                    amount_in = int(trade_size * 1_000_000)
-                    print(f"🔄 Buying WMATIC (hold preferred) | Size: ${trade_size:.2f}")
+        state["last_run"] = time.time()
+        save_state(state)
+        print(f"✅ Cycle done — next in ~{COOLDOWN_MINUTES} min")
+    finally:
+        release_lock()
 
-        if direction == "USDT_TO_WMATIC":
-            record_buy(current_price, trade_size, "pending")
-
-    tx_hash = await approve_and_swap(w3, os.getenv("POLYGON_PRIVATE_KEY"), amount_in, direction=direction)
-    if tx_hash:
-        print("✅ Swap executed successfully!")
-    else:
-        print("⚠️ Swap failed")
-
-    state["last_run"] = time.time()
-    save_state(state)
-    print(f"✅ Cycle done — next in ~{COOLDOWN_MINUTES} min")
 
 if __name__ == "__main__":
     asyncio.run(main())

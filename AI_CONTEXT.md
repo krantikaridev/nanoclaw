@@ -21,6 +21,10 @@
 - STRONG_SIGNAL_TP=12.0
 - RPC=https://polygon.publicnode.com (stable free endpoint)
 
+**Environment Notes**:
+- Use the project virtualenv before running Python commands: `cd ~/.nanobot/workspace/nanoclaw && source .venv/bin/activate`
+- Prefer venv-backed commands for manual runs/tests so project dependencies resolve correctly
+
 **Current Status**:
 - ✅ Cron fixed (clean_swap.py runs without errors)
 - ✅ Protection module + copy trading active
