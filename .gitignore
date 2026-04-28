@@ -15,3 +15,6 @@ xwatcher/xwatcher_env/
 *.env
 .env.local
 real_cron.log
+bot_state.json
+portfolio_history.json
+trade_exits.json
