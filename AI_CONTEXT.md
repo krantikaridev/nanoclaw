@@ -20,21 +20,29 @@
 - TAKE_PROFIT_PCT=8.0
 - STRONG_SIGNAL_TP=12.0
 - RPC=https://polygon.publicnode.com
-- ENABLE_USDC_COPY=true
-- refer `.env.example` for details
+- refer .env.local for details
 
 **Recent Improvements**:
 - ✅ Gas Protector module fully integrated (GasProtector.builder())
 - ✅ Profit-taking logic improved (8%/12% TP + 5% trailing)
 - ✅ Code cleanup + unit tests added
-- ✅ USDC Copy Strategy added (builder-based + gas-protected)
-- ✅ Token addresses + router/ABI made env-driven (ABI JSON files env-overridable)
 - ✅ Repo cleaned (old v25_*, memory/, skills/, xwatcher/ archived)
+- ✅ USDCopyStrategy module completed (builder + gas-protected + per-wallet cooldown)
+- ✅ Agent Feedback Loop completed
 
 **Current Status**:
-- Bot running cleanly on cron every 10 min (USDC Copy Strategy fully integrated in main loop)
+- Bot running cleanly on cron every 10 min
 - No more RPC crashes
-- Realized profit still low (needs more aggressive triggering)
+- Realized profit still low (needs more aggressive triggering + high-vol assets)
+- **USDCopyStrategy NOT YET INTEGRATED into main loop** (critical blocker)
+- **NEW OPPORTUNITY**: Tokenized equity trading (GOOGLON, MSFTON, APPLON, AMZNON) now available on the same DEX – earnings week volatility play
+
+**Tokenized Equity Opportunity (28 Apr 2026)**:
+- GOOGLON / MSFTON / APPLON / AMZNON = on-chain synthetic US stocks
+- This week = major earnings (GOOGL, MSFT, AAPL, AMZN)
+- 15-40% moves expected → perfect for our TP engine
+- Same execution path (USDT/USDC → XXXXON)
+- New milestone: Add Earnings Trader strategy + earnings calendar
 
 **Environment Notes**:
 - Use the project virtualenv before running Python commands: `cd ~/.nanobot/workspace/nanoclaw && source .venv/bin/activate`
@@ -50,12 +58,8 @@
 Paste this raw URL at the top:
 https://raw.githubusercontent.com/krantikaridev/nanoclaw/V2/AI_CONTEXT.md
 
-## Agent Feedback Loop
-
-- **Folder**: `agent_feedback/`
-- **Purpose**: capture what shipped, constraints, and next actions as a continuous improvement loop.
-- **Workflow**:
-  - Write immediate notes in `agent_feedback/latest.md`
-  - Capture each milestone as a short task log in `agent_feedback/*.md`
-
-**Next Milestone**: Better Wallet Scoring + Multi-Signal Agent Feedback Loop (target: >35% win rate on copied trades)
+**Next Milestone**: 
+1. Integrate USDCopyStrategy into clean_swap.py (immediate)
+2. Add Tokenized Equity / Earnings Trader strategy (GOOGLON etc.)
+3. Wallet scoring v2 (earnings performance + volume)
+4. Scale to $300-500 this week
