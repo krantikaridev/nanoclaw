@@ -5682,3 +5682,215 @@ Traceback (most recent call last):
     if not has_enough_gas():
            ^^^^^^^^^^^^^^
 NameError: name 'has_enough_gas' is not defined
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+Real USDT: 33.48 | WMATIC: 864.99 | POL: 5.01
+⏳ Copy cooldown active (90s) — skipping
+Traceback (most recent call last):
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/swap_executor.py", line 37, in approve_and_swap
+    receipt = w3.eth.wait_for_transaction_receipt(approve_hash, timeout=300)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/eth/eth.py", line 505, in wait_for_transaction_receipt
+    tx_receipt = self._transaction_receipt(transaction_hash)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/module.py", line 112, in caller
+    result = w3.manager.request_blocking(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/manager.py", line 232, in request_blocking
+    response = self._make_request(method, params)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/manager.py", line 163, in _make_request
+    return request_func(method, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/middleware/base.py", line 56, in middleware
+    return self.response_processor(method, make_request(method, params))
+                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/middleware/base.py", line 56, in middleware
+    return self.response_processor(method, make_request(method, params))
+                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/middleware/base.py", line 56, in middleware
+    return self.response_processor(method, make_request(method, params))
+                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  [Previous line repeated 2 more times]
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/_utils/caching/caching_utils.py", line 261, in wrapper
+    return func(provider, method, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/providers/rpc/rpc.py", line 166, in make_request
+    raw_response = self._make_request(method, request_data)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/providers/rpc/rpc.py", line 153, in _make_request
+    raise e
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/providers/rpc/rpc.py", line 143, in _make_request
+    return self._request_session_manager.make_post_request(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/_utils/http_session_manager.py", line 155, in make_post_request
+    response.raise_for_status()
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/requests/models.py", line 1028, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 429 Client Error: Too Many Requests for url: https://1rpc.io/matic
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+Real USDT: 33.48 | WMATIC: 864.99 | POL: 5.01
+🔄 REAL POLYCOPY MODE (20%) - Monitoring live wallets
+🔒 Trade locked | Buy: $0.0915 | Target: $0.0989 (+8%)
+🚀 Executing REAL swap: USDT_TO_WMATIC | Amount: 8000000
+✅ Approve Tx: 4a5f2148bb747f5660ee2a79660dbb8a6b454588fdf4efc7535fe0f43a046222
+❌ Error in approve_and_swap: 429 Client Error: Too Many Requests for url: https://1rpc.io/matic
+⚠️ Swap failed
+✅ Cycle done — next in ~7 min
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+Traceback (most recent call last):
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 166, in <module>
+    asyncio.run(main())
+  File "/usr/lib/python3.12/asyncio/runners.py", line 194, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/base_events.py", line 687, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 86, in main
+    pol = get_pol_balance()
+          ^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 69, in get_pol_balance
+    return w3.eth.get_balance(WALLET) / 10**18
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/eth/eth.py", line 442, in get_balance
+    return self._get_balance(account, block_identifier)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/module.py", line 112, in caller
+    result = w3.manager.request_blocking(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/manager.py", line 233, in request_blocking
+    return self.formatted_response(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/manager.py", line 199, in formatted_response
+    validate_rpc_response_and_raise_if_error(
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/_utils/validation.py", line 401, in validate_rpc_response_and_raise_if_error
+    raise web3_rpc_error
+web3.exceptions.Web3RPCError: {'code': -32000, 'message': 'Unauthorized: You must authenticate your request with an API key. Create an account on https://www.ankr.com/rpc/ and generate your personal API key for free.'}
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+Real USDT: 33.48 | WMATIC: 864.99 | POL: 5.00
+⛔ Lock active — skipping
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+Real USDT: 33.48 | WMATIC: 864.99 | POL: 5.00
+🔄 REAL POLYCOPY MODE (20%) - Monitoring live wallets
+🔒 Trade locked | Buy: $0.0915 | Target: $0.0988 (+8%)
+🚀 Executing REAL swap: USDT_TO_WMATIC | Amount: 8000000
+✅ Approve Tx: 779380542ab080ddd2655c3a8000bccfb515f5358f0ec8efe0a4af8beeef9b03
+✅ Approve confirmed!
+✅ REAL TX HASH: 7c502f33e2275d2079e329dbf4da0c2721b792726f249ae762bc7a3ef8b7ad6f
+https://polygonscan.com/tx/7c502f33e2275d2079e329dbf4da0c2721b792726f249ae762bc7a3ef8b7ad6f
+✅ Swap confirmed!
+✅ Swap executed successfully!
+✅ Cycle done — next in ~7 min
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+Real USDT: 25.48 | WMATIC: 951.89 | POL: 4.97
+⚠️ FLUCTUATION PROTECTION: USDT $25.48 < $30 → Selling 25% WMATIC
+🛡️ PROTECTION TRIGGERED: FLUCTUATION — Force selling
+🚀 Executing REAL swap: WMATIC_TO_USDT | Amount: 428352552101823578112
+✅ Approve Tx: 43c15424ed0284edba28436ed2021fea977e5c2683c5a19f57ac0efa20a49230
+✅ Approve confirmed!
+✅ REAL TX HASH: 95802c7c2b0c50645045c7c32e416a6807ecac5efb2ad9039cf0cc62856189fb
+https://polygonscan.com/tx/95802c7c2b0c50645045c7c32e416a6807ecac5efb2ad9039cf0cc62856189fb
+✅ Swap confirmed!
+✅ Swap executed successfully!
+✅ Cycle done — next in ~7 min
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+Real USDT: 64.65 | WMATIC: 523.54 | POL: 4.91
+⏳ Copy cooldown active (90s) — skipping
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+Real USDT: 64.65 | WMATIC: 523.54 | POL: 4.91
+🔄 REAL POLYCOPY MODE (20%) - Monitoring live wallets
+🔒 Trade locked | Buy: $0.0914 | Target: $0.0987 (+8%)
+🚀 Executing REAL swap: USDT_TO_WMATIC | Amount: 8000000
+✅ Approve Tx: 5a425f8dafb9ad54e5da7a22ddabc26a897916abbfbf5ca7bd75ba2b5ecd5a68
+✅ Approve confirmed!
+✅ REAL TX HASH: fe2ed5b9bff18f29120c2987c3bad5e2dd56754cd3aff744ae6ddf18073270ac
+https://polygonscan.com/tx/fe2ed5b9bff18f29120c2987c3bad5e2dd56754cd3aff744ae6ddf18073270ac
+✅ Swap confirmed!
+✅ Swap executed successfully!
+✅ Cycle done — next in ~7 min
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+Real USDT: 56.65 | WMATIC: 610.54 | POL: 4.88
+⛔ Lock active — skipping
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+Real USDT: 56.65 | WMATIC: 610.54 | POL: 4.88
+🔄 REAL POLYCOPY MODE (20%) - Monitoring live wallets
+🔒 Trade locked | Buy: $0.0914 | Target: $0.0987 (+8%)
+🚀 Executing REAL swap: USDT_TO_WMATIC | Amount: 8000000
+✅ Approve Tx: 896b2e8a17899f7e6dfcece9d11d2dd1f8a778c4efad725250f1caa930eb25fa
+✅ Approve confirmed!
+✅ REAL TX HASH: 75aa3b59dc7968cc1748fcbc891aa6118ecda504254745723617cc993b4a90ab
+https://polygonscan.com/tx/75aa3b59dc7968cc1748fcbc891aa6118ecda504254745723617cc993b4a90ab
+✅ Swap confirmed!
+✅ Swap executed successfully!
+✅ Cycle done — next in ~7 min
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+Real USDT: 48.65 | WMATIC: 697.52 | POL: 4.79
+🔄 REAL POLYCOPY MODE (20%) - Monitoring live wallets
+🔒 Trade locked | Buy: $0.0914 | Target: $0.0988 (+8%)
+🚀 Executing REAL swap: USDT_TO_WMATIC | Amount: 8000000
+✅ Approve Tx: eb9cc32ec6b50b28b921aa52c1274bf3712160104286ec4bd9eb6af2f519cc29
+✅ Approve confirmed!
+✅ REAL TX HASH: a82fe8d4d443619e3e1af735364f022b60ff51f771886f8068fdf8833c9d42b4
+https://polygonscan.com/tx/a82fe8d4d443619e3e1af735364f022b60ff51f771886f8068fdf8833c9d42b4
+✅ Swap confirmed!
+✅ Swap executed successfully!
+✅ Cycle done — next in ~7 min
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+Real USDT: 40.65 | WMATIC: 784.47 | POL: 4.76
+⏳ Copy cooldown active (90s) — skipping
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+Real USDT: 40.65 | WMATIC: 784.47 | POL: 4.76
+🔄 REAL POLYCOPY MODE (20%) - Monitoring live wallets
+🔒 Trade locked | Buy: $0.0915 | Target: $0.0988 (+8%)
+🚀 Executing REAL swap: USDT_TO_WMATIC | Amount: 8000000
+✅ Approve Tx: 370c1458e9c0ddcdd9eae425b3c134656e41edfac3b77e2833cb5a292d49e7cf
+✅ Approve confirmed!
+✅ REAL TX HASH: 59d78094cac0894bbf0124b06193146d2743fbc70a6694cb1c6373c4120bae2a
+https://polygonscan.com/tx/59d78094cac0894bbf0124b06193146d2743fbc70a6694cb1c6373c4120bae2a
+✅ Swap confirmed!
+✅ Swap executed successfully!
+✅ Cycle done — next in ~7 min
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+Real USDT: 32.65 | WMATIC: 871.40 | POL: 4.72
+⛔ Gas protection active (gas 339.68/80.00 gwei, POL 4.7182/0.0500)
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+Real USDT: 32.65 | WMATIC: 871.40 | POL: 4.72
+⛔ Gas protection active (gas 137.22/80.00 gwei, POL 4.7182/0.0500)
+✅ V2.5.1 Protection Module loaded successfully
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+Real USDT: 32.65 | WMATIC: 871.40 | POL: 4.72
+⛔ Gas protection active (gas 344.68/80.00 gwei, POL 4.7182/0.0500)
