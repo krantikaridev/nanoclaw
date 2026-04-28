@@ -24,7 +24,7 @@ except ImportError:  # pragma: no cover - exercised in lightweight test environm
 from constants import ERC20_ABI, USDC, USDT, WALLET, WMATIC
 from nanoclaw.utils.gas_protector import GasProtector
 from nanoclaw.strategies.usdc_copy import USDCopyStrategy
-from nanoclaw.strategies.signal_equity_trader import EquityTradePlan, SignalEquityTrader
+from nanoclaw.strategies.signal_equity_trader import EquityTradePlan, SignalEquityTrader, FollowedEquity
 from swap_executor import approve_and_swap
 from copy_trading import get_target_wallets
 from protection import check_exit_conditions, get_live_wmatic_price, record_buy
@@ -377,24 +377,11 @@ def select_copy_trade(balances: Balances, wallets: list[str]) -> TradeDecision:
         message="🔄 REAL POLYCOPY MODE (20%) - Monitoring live wallets",
     )
 
-def load_followed_equities(path: str = FOLLOWED_EQUITIES_PATH) -> list[dict]:
-    try:
-        with open(path, "r", encoding="utf-8") as file_handle:
-            data = json.load(file_handle)
-    except Exception:
-        return []
-    assets = data.get("assets", []) if isinstance(data, dict) else []
-    return [a for a in assets if isinstance(a, dict)]
-
-
-def _pick_strongest_equity_signal(assets: list[dict]) -> Optional[dict]:
-    best: Optional[dict] = None
+def _pick_strongest_equity_signal(assets: Sequence[FollowedEquity]) -> Optional[FollowedEquity]:
+    best: Optional[FollowedEquity] = None
     best_strength = 0.0
     for a in assets:
-        try:
-            strength = abs(float(a.get("signal_strength", 0.0) or 0.0))
-        except Exception:
-            continue
+        strength = abs(float(a.signal_strength))
         if strength > best_strength:
             best_strength = strength
             best = a
@@ -409,7 +396,7 @@ def evaluate_x_signal_equity_trade(
     if not ENABLE_X_SIGNAL_EQUITY:
         return None
 
-    assets = load_followed_equities()
+    assets = trader.load_followed_equities()
     if not assets:
         return None
 
@@ -417,18 +404,12 @@ def evaluate_x_signal_equity_trade(
     if not best:
         return None
 
-    symbol = str(best.get("symbol", "")).strip()
-    env_token_address = str(best.get("env_token_address", symbol)).strip() or symbol
-    token_address = str(os.getenv(env_token_address, "")).strip()
-    if not symbol or not token_address:
-        return None
-
-    decimals = int(best.get("decimals", 18) or 18)
-    signal_strength = float(best.get("signal_strength", 0.0) or 0.0)
-    earnings_days = best.get("earnings_days", None)
-    earnings_days_f = float(earnings_days) if earnings_days is not None else None
-    current_price = best.get("current_price_usd", None)
-    current_price_f = float(current_price) if current_price is not None else None
+    symbol = str(best.symbol).strip()
+    token_address = str(best.token_address).strip()
+    decimals = int(best.decimals)
+    signal_strength = float(best.signal_strength)
+    earnings_days_f = best.earnings_days
+    current_price_f = best.current_price_usd
 
     equity_balance = get_token_balance(token_address, decimals)
     return trader.build_plan(
