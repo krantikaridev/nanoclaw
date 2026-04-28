@@ -29,6 +29,7 @@
 - ✅ Repo cleaned (old v25_*, memory/, skills/, xwatcher/ archived)
 - ✅ USDCopyStrategy module completed (builder + gas-protected + per-wallet cooldown)
 - ✅ Agent Feedback Loop completed
+- ✅ Tokenized Equity + X-Signal multi-asset trader scaffolded (dynamic asset list + per-asset cooldown + gas-protected)
 
 **Current Status**:
 - Bot running cleanly on cron every 10 min
@@ -36,6 +37,13 @@
 - Realized profit still low (needs more aggressive triggering + high-vol assets)
 - **USDCopyStrategy NOT YET INTEGRATED into main loop** (critical blocker)
 - **NEW OPPORTUNITY**: Tokenized equity trading (GOOGLON, MSFTON, APPLON, AMZNON) now available on the same DEX – earnings week volatility play
+
+## Tokenized Equity + X-Signal Multi-Asset Trader
+
+- **What**: On-chain tokenized equities (e.g., `GOOGLON`, `MSFTON`, `APPLON`, `AMZNON`) traded via the same router path.
+- **Input**: X-Signal “expert” strength per asset + earnings proximity; no fixed “4-stock” limit (dynamic list from `followed_equities.json`).
+- **Behavior**: Protection/Profit always win; then strong X-Signal equity entries/exits; then USDC-copy; then legacy logic.
+- **Risk controls**: Gas-protected + per-asset cooldown; higher strong TP target (15%) due to equity volatility.
 
 **Tokenized Equity Opportunity (28 Apr 2026)**:
 - GOOGLON / MSFTON / APPLON / AMZNON = on-chain synthetic US stocks
@@ -58,8 +66,5 @@
 Paste this raw URL at the top:
 https://raw.githubusercontent.com/krantikaridev/nanoclaw/V2/AI_CONTEXT.md
 
-**Next Milestone**: 
-1. Integrate USDCopyStrategy into clean_swap.py (immediate)
-2. Add Tokenized Equity / Earnings Trader strategy (GOOGLON etc.)
-3. Wallet scoring v2 (earnings performance + volume)
-4. Scale to $300-500 this week
+**Next Milestone**:
+- Full X-Signal Equity Trader live + Wallet Scoring v2 + Scale to $400+ this week

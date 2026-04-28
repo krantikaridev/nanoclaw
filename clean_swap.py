@@ -24,6 +24,7 @@ except ImportError:  # pragma: no cover - exercised in lightweight test environm
 from constants import ERC20_ABI, USDC, USDT, WALLET, WMATIC
 from nanoclaw.utils.gas_protector import GasProtector
 from nanoclaw.strategies.usdc_copy import USDCopyStrategy
+from nanoclaw.strategies.signal_equity_trader import EquityTradePlan, SignalEquityTrader
 from swap_executor import approve_and_swap
 from copy_trading import get_target_wallets
 from protection import check_exit_conditions, get_live_wmatic_price, record_buy
@@ -44,8 +45,11 @@ STRONG_SIGNAL_TP = float(os.getenv("STRONG_SIGNAL_TP", "12.0"))
 TAKE_PROFIT_SELL_PCT = float(os.getenv("TAKE_PROFIT_SELL_PCT", "0.45"))
 STRONG_TP_SELL_PCT = float(os.getenv("STRONG_TP_SELL_PCT", "0.60"))
 ENABLE_USDC_COPY = os.getenv("ENABLE_USDC_COPY", "false").lower() == "true"
+ENABLE_X_SIGNAL_EQUITY = os.getenv("ENABLE_X_SIGNAL_EQUITY", "false").lower() == "true"
+FOLLOWED_EQUITIES_PATH = os.getenv("FOLLOWED_EQUITIES_PATH", "followed_equities.json")
 
 WALLET_LAST_TRADE: Dict[str, float] = {}
+ASSET_LAST_TRADE: Dict[str, float] = {}
 
 
 @dataclass(frozen=True)
@@ -62,6 +66,8 @@ class TradeDecision:
     amount_in: int = 0
     trade_size: float = 0.0
     message: str = ""
+    token_in: Optional[str] = None
+    token_out: Optional[str] = None
 
     @property
     def should_execute(self) -> bool:
@@ -85,8 +91,29 @@ def build_gas_protector() -> GasProtector:
     )
 
 
+def build_usdc_copy_strategy(protector: GasProtector) -> USDCopyStrategy:
+    return (
+        USDCopyStrategy.builder()
+        .with_enabled(ENABLE_USDC_COPY)
+        .with_copy_trade_pct(COPY_TRADE_PCT)
+        .with_per_wallet_cooldown_seconds(PER_WALLET_COOLDOWN)
+        .with_min_pol_for_gas(MIN_POL_FOR_GAS)
+        .with_gas_protector(protector)
+        .build()
+    )
+
+
 w3 = build_web3_client()
 GAS_PROTECTOR = build_gas_protector()
+USDC_COPY_STRATEGY = build_usdc_copy_strategy(GAS_PROTECTOR)
+X_SIGNAL_EQUITY_TRADER = (
+    SignalEquityTrader.builder()
+    .with_enabled(ENABLE_X_SIGNAL_EQUITY)
+    .with_followed_equities_path(FOLLOWED_EQUITIES_PATH)
+    .with_usdc_address(USDC)
+    .with_gas_protector(GAS_PROTECTOR)
+    .build()
+)
 
 
 def is_copy_trading_enabled() -> bool:
@@ -110,6 +137,18 @@ def mark_wallet_traded(
 ) -> None:
     WALLET_LAST_TRADE[wallet_address] = time.time() if now is None else now
     print(f"📌 Wallet {wallet_address[:8]}... cooldown started ({cooldown_seconds}s)")
+
+
+def can_trade_asset(symbol: str, now: Optional[float] = None, cooldown_seconds: int = 0) -> bool:
+    current_time = time.time() if now is None else now
+    last = ASSET_LAST_TRADE.get(symbol, 0)
+    return (current_time - last) > int(cooldown_seconds)
+
+
+def mark_asset_traded(symbol: str, now: Optional[float] = None, cooldown_seconds: int = 0) -> None:
+    ASSET_LAST_TRADE[symbol] = time.time() if now is None else now
+    if cooldown_seconds:
+        print(f"📌 Asset {symbol} cooldown started ({int(cooldown_seconds)}s)")
 
 
 def get_token_balance(
@@ -338,16 +377,72 @@ def select_copy_trade(balances: Balances, wallets: list[str]) -> TradeDecision:
         message="🔄 REAL POLYCOPY MODE (20%) - Monitoring live wallets",
     )
 
+def load_followed_equities(path: str = FOLLOWED_EQUITIES_PATH) -> list[dict]:
+    try:
+        with open(path, "r", encoding="utf-8") as file_handle:
+            data = json.load(file_handle)
+    except Exception:
+        return []
+    assets = data.get("assets", []) if isinstance(data, dict) else []
+    return [a for a in assets if isinstance(a, dict)]
 
-def build_usdc_copy_strategy(protector: GasProtector = GAS_PROTECTOR) -> USDCopyStrategy:
-    return (
-        USDCopyStrategy.builder()
-        .with_enabled(ENABLE_USDC_COPY)
-        .with_copy_trade_pct(COPY_TRADE_PCT)
-        .with_per_wallet_cooldown_seconds(PER_WALLET_COOLDOWN)
-        .with_min_pol_for_gas(MIN_POL_FOR_GAS)
-        .with_gas_protector(protector)
-        .build()
+
+def _pick_strongest_equity_signal(assets: list[dict]) -> Optional[dict]:
+    best: Optional[dict] = None
+    best_strength = 0.0
+    for a in assets:
+        try:
+            strength = abs(float(a.get("signal_strength", 0.0) or 0.0))
+        except Exception:
+            continue
+        if strength > best_strength:
+            best_strength = strength
+            best = a
+    return best
+
+
+def evaluate_x_signal_equity_trade(
+    balances: Balances,
+    *,
+    trader: SignalEquityTrader = X_SIGNAL_EQUITY_TRADER,
+) -> Optional[EquityTradePlan]:
+    if not ENABLE_X_SIGNAL_EQUITY:
+        return None
+
+    assets = load_followed_equities()
+    if not assets:
+        return None
+
+    best = _pick_strongest_equity_signal(assets)
+    if not best:
+        return None
+
+    symbol = str(best.get("symbol", "")).strip()
+    env_token_address = str(best.get("env_token_address", symbol)).strip() or symbol
+    token_address = str(os.getenv(env_token_address, "")).strip()
+    if not symbol or not token_address:
+        return None
+
+    decimals = int(best.get("decimals", 18) or 18)
+    signal_strength = float(best.get("signal_strength", 0.0) or 0.0)
+    earnings_days = best.get("earnings_days", None)
+    earnings_days_f = float(earnings_days) if earnings_days is not None else None
+    current_price = best.get("current_price_usd", None)
+    current_price_f = float(current_price) if current_price is not None else None
+
+    equity_balance = get_token_balance(token_address, decimals)
+    return trader.build_plan(
+        symbol=symbol,
+        token_address=token_address,
+        token_decimals=decimals,
+        signal_strength=signal_strength,
+        earnings_proximity_days=earnings_days_f,
+        current_price_usd=current_price_f,
+        usdc_balance=balances.usdc,
+        equity_balance=equity_balance,
+        wallet_address_for_gas=WALLET,
+        can_trade_asset=can_trade_asset,
+        mark_asset_traded=mark_asset_traded,
     )
 
 
@@ -432,27 +527,39 @@ def determine_trade_decision(state: dict, balances: Balances, current_price: flo
     if profit_signal and profit_signal["reason"] == "HOLD":
         print(f"📈 {profit_signal['message']}")
 
+    x_plan = evaluate_x_signal_equity_trade(balances)
+    if x_plan:
+        print(f"🟪 X-SIGNAL EQUITY ACTIVE | Asset: {x_plan.symbol}")
+        return TradeDecision(
+            direction=x_plan.direction,
+            amount_in=x_plan.amount_in,
+            trade_size=x_plan.trade_size,
+            message=x_plan.message,
+            token_in=x_plan.token_in,
+            token_out=x_plan.token_out,
+        )
+
     target_wallets = get_target_wallets()
     if is_copy_trading_enabled() and target_wallets:
-        usdc_strategy = USDCopyStrategy.builder().with_gas_protector(GAS_PROTECTOR).build()
-        plan = usdc_strategy.build_plan(
-            usdc_balance=balances.usdc,
-            wallets=target_wallets,
-            wallet_address_for_gas=WALLET,
-            can_trade_wallet=can_trade_wallet,
-            mark_wallet_traded=mark_wallet_traded,
-        )
-        if plan:
-            print("🟦 USDC COPY STRATEGY ACTIVE")
-            return TradeDecision(
-                direction="USDC_TO_WMATIC",
-                amount_in=plan.amount_in,
-                trade_size=plan.trade_size,
-                message=plan.message,
+        if ENABLE_USDC_COPY:
+            plan = USDC_COPY_STRATEGY.build_plan(
+                usdc_balance=balances.usdc,
+                wallets=target_wallets,
+                wallet_address_for_gas=WALLET,
+                can_trade_wallet=can_trade_wallet,
+                mark_wallet_traded=mark_wallet_traded,
             )
-
-        # Fallback: legacy USDT-based copy logic
-        return select_copy_trade(balances, target_wallets)
+            if plan:
+                print(f"🟦 USDC COPY ACTIVE | Size: ${plan.trade_size:.2f}")
+                return TradeDecision(
+                    direction="USDC_TO_WMATIC",
+                    amount_in=plan.amount_in,
+                    trade_size=plan.trade_size,
+                    message=plan.message,
+                )
+            print("🟦 USDC COPY ACTIVE | No eligible copy-trade this cycle")
+        else:
+            return select_copy_trade(balances, target_wallets)
 
     return select_main_strategy_trade(balances, current_price)
 
@@ -508,6 +615,8 @@ async def main(*, dry_run: bool = False) -> None:
             os.getenv("POLYGON_PRIVATE_KEY"),
             decision.amount_in,
             direction=decision.direction,
+            token_in=decision.token_in,
+            token_out=decision.token_out,
         )
         if tx_hash:
             print("✅ Swap executed successfully!")
