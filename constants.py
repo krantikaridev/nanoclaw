@@ -29,6 +29,12 @@ USDC = os.getenv("USDC", "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174")
 WMATIC = os.getenv("WMATIC", "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270")
 ROUTER = os.getenv("ROUTER", "0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff")
 
+# Tokenized equities (placeholders; set real addresses in .env)
+GOOGLON = os.getenv("GOOGLON", "")
+MSFTON = os.getenv("MSFTON", "")
+APPLON = os.getenv("APPLON", "")
+AMZNON = os.getenv("AMZNON", "")
+
 # ABIs are versioned protocol definitions. Keep defaults in-repo, but allow env overrides.
 ERC20_ABI_PATH = os.getenv("ERC20_ABI_PATH", _default_abi_path("nanoclaw/abi/erc20.json"))
 ROUTER_ABI_PATH = os.getenv(

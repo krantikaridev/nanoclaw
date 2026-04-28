@@ -6,20 +6,29 @@ import time
 from web3 import Web3
 from constants import WALLET, USDC, USDT, WMATIC, ROUTER, ROUTER_ABI, ERC20_ABI
 
-async def approve_and_swap(w3, private_key, amount_in: int, direction="USDT_TO_WMATIC"):
+async def approve_and_swap(
+    w3,
+    private_key,
+    amount_in: int,
+    direction: str = "USDT_TO_WMATIC",
+    *,
+    token_in: str | None = None,
+    token_out: str | None = None,
+):
     print(f"🚀 Executing REAL swap: {direction} | Amount: {amount_in}")
 
     try:
-        if direction == "USDT_TO_WMATIC":
-            token_in, token_out = USDT, WMATIC
-        elif direction == "WMATIC_TO_USDT":
-            token_in, token_out = WMATIC, USDT
-        elif direction == "USDC_TO_WMATIC":
-            token_in, token_out = USDC, WMATIC
-        elif direction == "WMATIC_TO_USDC":
-            token_in, token_out = WMATIC, USDC
-        else:
-            raise ValueError(f"Unsupported direction: {direction}")
+        if token_in is None or token_out is None:
+            if direction == "USDT_TO_WMATIC":
+                token_in, token_out = USDT, WMATIC
+            elif direction == "WMATIC_TO_USDT":
+                token_in, token_out = WMATIC, USDT
+            elif direction == "USDC_TO_WMATIC":
+                token_in, token_out = USDC, WMATIC
+            elif direction == "WMATIC_TO_USDC":
+                token_in, token_out = WMATIC, USDC
+            else:
+                raise ValueError(f"Unsupported direction: {direction} (and no token_in/token_out provided)")
 
         if not token_in or not token_out:
             raise ValueError(f"Missing token address for direction {direction}. Check .env values (USDT/USDC).")
