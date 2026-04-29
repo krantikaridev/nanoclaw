@@ -58,6 +58,22 @@ Load order: `.env` then `.env.local` (`override=True`).
 
 - Local Cursor → tests (`pytest`) → dry-run (`python clean_swap.py --dry-run`; on Windows set `PYTHONIOENCODING=utf-8` if the console rejects emoji prints from legacy modules).
 
+## Urgent delta checklist (do not skip)
+
+- Lock a branch matrix before editing:
+  - Use generic state toggles and outcomes (for example: feature flag on/off, balance above/below threshold, retry success/fail, signal present/absent).
+- For each matrix branch, verify both:
+  - control flow (return/continue/skip actually happens)
+  - user-facing logs (message reason matches branch cause)
+- Add focused unit tests for the matrix above, especially branch behavior and emitted reason strings.
+- Never rely on one boolean when multiple block causes exist; store explicit reason text/code and reuse it in skip summaries.
+- Prefer explicit enums/reason codes for block states instead of plain booleans when multiple causes can lead to the same skip/block action.
+- For future delta requests: keep edits minimal, but first pin a short acceptance checklist and verify each branch in one pass before finalizing.
+- After each delta touching guards/logs, run:
+  - `python -m compileall -q .`
+  - `python -m pytest -q`
+- Python note for reviewers: `if/else` blocks do not create local scope. `nonlocal` is required only for assignments inside nested functions/closures.
+
 ## Tokenized equities (conceptual roadmap)
 
 Replace proxy addresses when Ondo/other issuers publish **Polygon POS** deployments; validate pool depth (`getAmountsOut`) before size-up. Optional later: earnings-calendar-driven filters—not required for baseline execution.

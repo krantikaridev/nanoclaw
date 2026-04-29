@@ -43,6 +43,8 @@ TRADE_LOG_FILE = "trade_exits.json"
 
 COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", 7))
 MIN_POL_FOR_GAS = float(os.getenv("MIN_POL_FOR_GAS", "0.025"))
+AUTO_TOPUP_POL = os.getenv("AUTO_TOPUP_POL", "true").lower() == "true"
+POL_TOPUP_AMOUNT = float(os.getenv("POL_TOPUP_AMOUNT", "0.03"))
 COPY_TRADE_PCT = float(os.getenv("COPY_TRADE_PCT", "0.25"))
 PER_WALLET_COOLDOWN = int(os.getenv("PER_WALLET_COOLDOWN", "180"))
 TRAILING_STOP_PCT = float(os.getenv("TRAILING_STOP_PCT", "5.0"))
@@ -238,7 +240,7 @@ def ensure_pol_for_trade(min_pol: float = 0.025) -> bool:
         return False
 
     # Prefer unwrapping WMATIC -> POL (native) as the cheapest/most direct top-up.
-    target_pol = 0.03
+    target_pol = float(POL_TOPUP_AMOUNT)
     balances = get_balances()
     needed_pol = max(0.0, float(min_pol) - pol)
     unwrap_pol = min(max(target_pol, needed_pol + 0.002), float(balances.wmatic) * 0.95)
@@ -670,6 +672,9 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
     decision: Optional[TradeDecision] = None
     result: Optional[str] = None
     eligible_count = 0
+    # Python if/else blocks do not create a new local scope; assignments below mutate this function-local flag.
+    buy_paths_allowed = True
+    buy_paths_block_reason = f"pol<{MIN_POL_FOR_GAS:.4f} and AUTO_TOPUP_POL=false"
 
     def _polygon_chain_hint(sym: str, token_address: str) -> Optional[str]:
         t = (token_address or "").strip().lower()
@@ -741,6 +746,26 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                     min_wmatic_value=float(X_SIGNAL_WMATIC_MIN_VALUE),
                 )
                 balances = get_balances()
+                if float(balances.pol) < float(MIN_POL_FOR_GAS):
+                    if AUTO_TOPUP_POL:
+                        if ensure_pol_for_trade(min_pol=float(MIN_POL_FOR_GAS)):
+                            balances = get_balances()
+                        else:
+                            print(
+                                f"{_nanolog()}AUTO-POL failed during X-SIGNAL prep "
+                                f"(pol<{MIN_POL_FOR_GAS:.4f}) — BUY paths skipped"
+                            )
+                            buy_paths_allowed = False
+                            buy_paths_block_reason = (
+                                f"pol<{MIN_POL_FOR_GAS:.4f} and AUTO_TOPUP_POL=true (auto-topup failed)"
+                            )
+                    else:
+                        print(
+                            f"{_nanolog()}POL low (pol≈{float(balances.pol):.4f} < {MIN_POL_FOR_GAS:.4f}) "
+                            f"and AUTO_TOPUP_POL=false — BUY paths skipped"
+                        )
+                        buy_paths_allowed = False
+                        buy_paths_block_reason = f"pol<{MIN_POL_FOR_GAS:.4f} and AUTO_TOPUP_POL=false"
             if balances.usdc >= max(force_floor, min_trade_usdc):
                 if dry_run:
                     print(
@@ -769,6 +794,9 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
             print(
                 f"🟦 X-SIGNAL EQUITY ACTIVE | {sym} | Strength {sig:.3f} | Action: {action_label}"
             )
+            if sig > 0 and not buy_paths_allowed:
+                reason_parts.append(f"{sym}: buy_skipped ({buy_paths_block_reason})")
+                continue
             if sig > 0 and balances.usdc < max(float(X_SIGNAL_USDC_MIN), min_trade_usdc):
                 reason_parts.append(
                     f"{sym}: buy_skipped (USDC ${balances.usdc:.2f} < min_trade_usdc ${min_trade_usdc:.2f})"
@@ -1092,9 +1120,17 @@ async def main(*, dry_run: bool = False) -> None:
 
     create_lock()
     try:
-        if not ensure_pol_for_trade(min_pol=float(MIN_POL_FOR_GAS)):
-            print(f"{_nanolog()}AUTO-POL failed — skipping cycle (pol<{MIN_POL_FOR_GAS:.3f})")
-            return
+        pol_now = float(get_pol_balance())
+        if pol_now < float(MIN_POL_FOR_GAS):
+            if AUTO_TOPUP_POL:
+                if not ensure_pol_for_trade(min_pol=float(MIN_POL_FOR_GAS)):
+                    print(f"{_nanolog()}AUTO-POL failed — skipping cycle (pol<{MIN_POL_FOR_GAS:.3f})")
+                    return
+            else:
+                print(
+                    f"{_nanolog()}POL low (pol≈{pol_now:.4f} < {MIN_POL_FOR_GAS:.4f}) and AUTO_TOPUP_POL=false — skipping cycle"
+                )
+                return
         if is_global_cooldown_active(state):
             lr = float(state.get("last_run") or 0.0)
             elapsed_s = max(0.0, time.time() - lr)
