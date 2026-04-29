@@ -2,89 +2,69 @@
 
 **Repo**: https://github.com/krantikaridev/nanoclaw  
 **Active Branch**: V2  
-**Date**: 29 April 2026
+**Date**: 29 April 2026  
 **Wallet**: 0x6e291a7180bd198d67eeb792bb3262324d3e64aa
 
-**Current Portfolio Snapshot**:
+**Current Portfolio Snapshot** (historical baseline; reconcile with balances on-chain):
 - Total ≈ $113
-- WMATIC: ~77% ($79.54)
-- USDT: $33.48
-- POL: $5.00
+- WMATIC: ~77%
+- Mix of USDT / POL as configured in live `.env`
 
-**Goal**: $100,000 by 31 May 2026 with max 20% drawdown.
+**Goal**: Growth with strict risk controls (`protection.py`, GasProtector, take-profit tiers).
 
-**Key .env Settings**:
-- COPY_TRADE_PCT=0.25 (25%)
-- COPY_COOLDOWN=90
-- MAX_EXPOSURE_PCT=65
-- TRAILING_STOP_PCT=5.0
-- TAKE_PROFIT_PCT=8.0
-- STRONG_SIGNAL_TP=12.0
-- RPC=https://polygon.publicnode.com
-- ENABLE_X_SIGNAL_EQUITY=true
-- X_SIGNAL_EQUITY_MIN_STRENGTH=0.70
-- refer .env.local for overrides
+## Core strategy (`clean_swap.py` precedence)
 
-**Recent Improvements**:
-- ✅ Gas Protector module fully integrated (GasProtector.builder())
-- ✅ Profit-taking logic improved (8%/12% TP + 5% trailing)
-- ✅ Code cleanup + unit tests added
-- ✅ Repo cleaned (old v25_*, memory/, skills/, xwatcher/ archived)
-- ✅ USDCopyStrategy module completed (builder + gas-protected + per-wallet cooldown)
-- ✅ Agent Feedback Loop completed
-- ✅ Tokenized Equity + X-Signal multi-asset trader scaffolded (dynamic asset list + per-asset cooldown + gas-protected)
+Protection → Profit take (`evaluate_take_profit`) → **X-Signal equities** (`try_x_signal_equity_decision`) → USDC copy → polycopy/target wallets → main USDT↔WMATIC logic.
 
-**Current issues addressed (2026-04-29 — uncommitted change set)**:
-- **X-Signal equity**: `SignalEquityTrader` is now invoked from `determine_trade_decision` via `try_x_signal_equity_decision()`: loads `followed_equities.json`, filters by `min_signal_strength` vs `X_SIGNAL_EQUITY_MIN_STRENGTH`, iterates eligible assets by strength, and returns the first valid `EquityTradePlan` (highest signal first). Previously the module object existed but decision flow did not consistently call it with the same rules as the JSON list.
-- **followed_equities.json**: Removed invalid placeholder addresses; filled with canonical **Ethereum** Ondo Global Markets ERC-20s (GOOGLON, NVDAON, MSFTON) per Etherscan/CoinGecko references, plus `_polygon_note` explaining that these tickers are not officially deployed on Polygon POS yet—override `address` (or env) with Polygon contracts when executing purely on chain 137.
-- **Observability**: Balance snapshot at each decision, explicit `🔍 DECISION PATH` tags (PROTECTION, PROFIT_TAKE, X_SIGNAL_EQUITY, USDC_COPY, POLYCOPY, MAIN_STRATEGY), and structured X-Signal logs (`X-SIGNAL EQUITY CHECK | …`, `ACTIVE | …`, `No valid plan … (reason: …)`).
-- **Env**: `ENABLE_X_SIGNAL_EQUITY` and `X_SIGNAL_EQUITY_MIN_STRENGTH` added to `.env`, `.env.example`, and `.env.local`; `load_dotenv(".env.local", override=True)` so local flags load after `.env`.
-- **USDT↔WMATIC only**: Root cause was X-Signal path not driving decisions and/or zero USDC / wrong token addresses; equity legs need USDC for buys and valid `token_in`/`token_out` for `approve_and_swap`. Main strategy remains USDT/WMATIC when no higher-priority path fires.
+Operational focus: correctness of this precedence, USDC liquidity for equity **buys**, and execution on Polygon **chain ID 137** only.
 
-**Current Status**:
-- Bot running on VM with **MAX_GWEI=450**
-- Local development in Cursor + periodic `git pull` on VM
-- X-Signal equity path is wired into `determine_trade_decision` with logging; production behavior still depends on USDC balance, gas guard, cooldowns, and Polygon-appropriate equity contract addresses when swapping on 137.
-- Tokenized equity opportunity remains high-priority (earnings week volatility play)
+## Execution & observability
 
-## Development Workflow
+- **`followed_equities.json`**: `min_signal_strength` in JSON and `X_SIGNAL_EQUITY_MIN_STRENGTH` in env both apply — **effective floor = max(JSON, env)**. Logged each X-Signal check as `[nanoclaw] X-Signal threshold …`.
+- **Polygon test proxies**: current repo config uses Polygon-native staples (WMATIC / WETH / WBTC) plus `_note` where Ondo tickers remain off-chain-Polygon until official listings; replace `address` when real Polygon contracts exist.
+- **Logs**: `[nanoclaw]` prefix via env `LOG_PREFIX`; cycle banner; path tags (`🔍 DECISION PATH`). X-Signal emits threshold line, ACTIVE lines, SUMMARY line, and (when a plan exists) checksum `token_in` / `token_out` before swap.
+- **Cooldowns**: per-asset and per-wallet marks run **after a successful on-chain swap** (`approve_and_swap` returns tx hash), not when a plan is merely built (`SignalEquityTrader.build_plan`, `USDCopyStrategy.build_plan`).
+- **Global cooldown**: skips full cycle until `COOLDOWN_MINUTES` since `last_run`; log prints approximate seconds remaining.
 
-- Local Cursor → implement changes → run required checks → **single commit**
-- Review locally → push manually
-- VM: `git stash` → `git pull` → re-apply stash (as needed) → restart cron/runtime
+## **`swap_executor.approve_and_swap`**
 
-## Automation Plan
+- Rejects **`token_in == token_out`** (misconfiguration / wrong `USDC` env).
+- **`getAmountsOut`** quote on Router with combined ABI (`ROUTER_SWAP_AND_QUOTE_ABI`); tries **direct** path first, then **WMATIC hop**, then **USDC hop** between non-endpoint intermediates (`build_polygon_swap_path_candidates`).
+- **`swapExactTokensForTokens`** uses **`amount_out_min`** from quoted output × `(1 - SWAP_SLIPPAGE_BPS/10000)` (default slippage 1%; env `SWAP_SLIPPAGE_BPS`). Longer paths use higher gas limits.
+- **Directions** without explicit tokens: backward-compatible resolutions for USDT/WPOL paths; equity directions supply `token_in` / `token_out` from plans.
 
-- Telegram **PnL** notifications
-- Telegram **trade alerts** (entries/exits + gas status)
+## **Strategies**
 
-## Tokenized Equity + X-Signal Multi-Asset Trader
+- **`SignalEquityTrader`**: Loads dynamic `followed_equities.json`; BUY = `USDC_TO_EQUITY`, SELL = `EQUITY_TO_USDC`; no optimistic cooldown mark inside `build_plan`.
+- **`USDCopyStrategy`**: Mirrors USDC→WMATIC from followed wallets without marking cooldown until swap success.
+- **`evaluate_x_signal_equity_trade`** uses the **same eligibility and sort order** as `try_x_signal_equity_decision` (silent helper for tooling/tests).
 
-- **What**: On-chain tokenized equities (e.g., `GOOGLON`, `MSFTON`, `APPLON`, `AMZNON`) traded via the same router path.
-- **Input**: X-Signal “expert” strength per asset + earnings proximity; no fixed “4-stock” limit (dynamic list from `followed_equities.json`).
-- **Behavior**: Protection/Profit always win; then strong X-Signal equity entries/exits; then USDC-copy; then legacy logic.
-- **Risk controls**: Gas-protected + per-asset cooldown; higher strong TP target (15%) due to equity volatility.
+## **Key `.env`** (defaults in `.env.example`; production overrides freely)
 
-**Tokenized Equity Opportunity (28 Apr 2026)**:
-- GOOGLON / MSFTON / APPLON / AMZNON = on-chain synthetic US stocks
-- This week = major earnings (GOOGL, MSFT, AAPL, AMZN)
-- 15-40% moves expected → perfect for our TP engine
-- Same execution path (USDT/USDC → XXXXON)
-- New milestone: Add Earnings Trader strategy + earnings calendar
+Examples: `RPC`, `COOLDOWN_MINUTES`, `ENABLE_X_SIGNAL_EQUITY`, `X_SIGNAL_EQUITY_MIN_STRENGTH` **(default template 0.60; tighten in prod if desired)**,
+`SWAP_SLIPPAGE_BPS`, `LOG_PREFIX`, Polygon token addresses (`USDC`, `WMATIC`, `ROUTER`).
 
-**Environment Notes**:
-- Use the project virtualenv before running Python commands: `cd ~/.nanobot/workspace/nanoclaw && source .venv/bin/activate`
-- Prefer venv-backed commands for manual runs/tests so project dependencies resolve correctly
+Load order: `.env` then `.env.local` (`override=True`).
 
-**Design Rules**:
-- Builder Pattern + Functional Composition
-- 100% .env driven
-- Unit testable from day one
-- Risk-first
+## Recent implementation notes (April 2026)
 
-**How to Continue in Any New Thread**:
-Paste this raw URL at the top:
-https://raw.githubusercontent.com/krantikaridev/nanoclaw/V2/AI_CONTEXT.md
+- Unit tests for take-profit paths, swap path candidates, and X-Signal threshold helper (`tests/unit/`).
+- No non-core alerting layers in-scope; prioritize strategy code and deterministic logs.
 
-**Next Milestone**:
-- Harden Polygon-native or bridged contract addresses for followed equities (per-asset `address` or env when Ondo/bridge lists them for chain 137), validate router path (USDC→equity may need multi-hop), Agent Feedback auto-generation, Telegram notifications, first live tokenized equity swap on Polygon after liquidity checks
+## Development workflow
+
+- Local Cursor → tests (`pytest`) → dry-run (`python clean_swap.py --dry-run`; on Windows set `PYTHONIOENCODING=utf-8` if the console rejects emoji prints from legacy modules).
+
+## Tokenized equities (conceptual roadmap)
+
+Replace proxy addresses when Ondo/other issuers publish **Polygon POS** deployments; validate pool depth (`getAmountsOut`) before size-up. Optional later: earnings-calendar-driven filters—not required for baseline execution.
+
+## Design rules
+
+- Builder pattern where used; `.env`-driven; risk-first.
+
+**How to continue in any new thread**  
+Paste raw: https://raw.githubusercontent.com/krantikaridev/nanoclaw/V2/AI_CONTEXT.md
+
+**Next milestone**  
+Swap-size validation against quoted `amount_out_min` under stress, hardened Polygon ticker addresses when published, shallow integration test with mocked `Web3` for `approve_and_swap` success path only.

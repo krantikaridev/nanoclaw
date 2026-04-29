@@ -47,7 +47,6 @@ class EquityTradePlan:
 
 
 AssetCooldownGetFn = Callable[[str, Optional[float], int], bool]
-AssetCooldownMarkFn = Callable[[str, Optional[float], int], None]
 
 
 class SignalEquityTraderBuilder:
@@ -213,7 +212,6 @@ class SignalEquityTrader:
         equity_balance: float,
         wallet_address_for_gas: str,
         can_trade_asset: AssetCooldownGetFn,
-        mark_asset_traded: AssetCooldownMarkFn,
         now: Optional[float] = None,
         urgent_gas: bool = False,
     ) -> Optional[EquityTradePlan]:
@@ -243,15 +241,12 @@ class SignalEquityTrader:
         if not strong:
             return None
 
-        current_time = time.time() if now is None else now
-
         if strength > 0:
             if usdc_balance <= 0:
                 return None
             trade_size = self._compute_trade_size(usdc_balance)
             if trade_size <= 0 or trade_size > usdc_balance:
                 return None
-            mark_asset_traded(sym, current_time, self.config.per_asset_cooldown_seconds)
             tp = float(self.config.strong_take_profit_pct)
             price_note = f" @ ${current_price_usd:.2f}" if isinstance(current_price_usd, (int, float)) else ""
             earn_note = (
@@ -282,7 +277,6 @@ class SignalEquityTrader:
         if amount_in_units <= 0:
             return None
 
-        mark_asset_traded(sym, current_time, self.config.per_asset_cooldown_seconds)
         price_note = f" @ ${current_price_usd:.2f}" if isinstance(current_price_usd, (int, float)) else ""
         earn_note = (
             f" | Earnings in ~{earnings_proximity_days:.1f}d"

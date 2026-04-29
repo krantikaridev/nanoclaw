@@ -9,7 +9,6 @@ from nanoclaw.utils.gas_protector import GasProtector
 
 
 WalletCooldownFn = Callable[[str, Optional[float], int], bool]
-WalletMarkFn = Callable[[str, Optional[float], int], None]
 
 
 @dataclass(frozen=True)
@@ -118,7 +117,6 @@ class USDCopyStrategy:
         wallets: Iterable[str],
         wallet_address_for_gas: str,
         can_trade_wallet: WalletCooldownFn,
-        mark_wallet_traded: WalletMarkFn,
         now: Optional[float] = None,
         urgent_gas: bool = False,
     ) -> Optional[USDCopyPlan]:
@@ -148,8 +146,6 @@ class USDCopyStrategy:
         trade_size = self._compute_trade_size(usdc_balance)
         if trade_size <= 0 or trade_size > usdc_balance:
             return None
-
-        mark_wallet_traded(chosen_wallet, current_time, self.config.per_wallet_cooldown_seconds)
 
         return USDCopyPlan(
             amount_in=int(trade_size * 1_000_000),

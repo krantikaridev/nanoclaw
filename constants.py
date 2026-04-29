@@ -22,6 +22,25 @@ def _default_abi_path(relative_to_repo: str) -> str:
     return str(repo_root / relative_to_repo)
 
 
+def _abi_fragment_to_entry_list(fragment: object) -> list:
+    """Normalize JSON-loaded ABI snippets for web3.eth.contract ABI=.
+
+    - In-repo router JSON lists are `[{...}]` (already a proper list fragment).
+    - Some contract ABIs expose a single function as `{...}` dict without an outer array.
+    - Never wrap an existing list in another `[...]` — that would nest `[[{...}]]` and break calls.
+    """
+    if fragment is None:
+        return []
+    if isinstance(fragment, dict):
+        return [fragment]
+    if isinstance(fragment, (list, tuple)):
+        return list(fragment)
+    return []
+
+
+# Log prefix for actionable lines (set empty to omit).
+LOG_PREFIX = os.getenv("LOG_PREFIX", "[nanoclaw]").strip()
+
 # Deployment-specific addresses should be env-driven.
 WALLET = os.getenv("WALLET", "0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA")
 USDT = os.getenv("USDT", "0xc2132D05D31c914a87C6611C10748AEb04B58e8F")
@@ -49,3 +68,7 @@ GET_AMOUNTS_OUT_ABI_PATH = os.getenv(
 ERC20_ABI = _load_json(ERC20_ABI_PATH)
 ROUTER_ABI = _load_json(ROUTER_ABI_PATH)
 GET_AMOUNTS_OUT_ABI = _load_json(GET_AMOUNTS_OUT_ABI_PATH)
+
+# Combined QuickSwap/Uniswap V2 Router (swap + getAmountsOut on Polygon).
+_ROUTER_AMOUNT_OUT_ENTRIES: list = _abi_fragment_to_entry_list(GET_AMOUNTS_OUT_ABI)
+ROUTER_SWAP_AND_QUOTE_ABI: list = list(ROUTER_ABI) + _ROUTER_AMOUNT_OUT_ENTRIES

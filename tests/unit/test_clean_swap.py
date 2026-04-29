@@ -1,4 +1,20 @@
+import asyncio
+
 import clean_swap
+
+
+def test_evaluate_usdc_copy_trade_defaults_strategy_without_build_call(monkeypatch):
+    monkeypatch.setattr(clean_swap, "ENABLE_USDC_COPY", True)
+
+    async def _once():
+        return await clean_swap.evaluate_usdc_copy_trade(
+            clean_swap.Balances(usdt=0.0, wmatic=0.0, pol=1.0, usdc=0.0),
+            wallets=[],
+            strategy=None,
+        )
+
+    out = asyncio.run(_once())
+    assert "ℹ️" in (out.message or "")
 
 
 def test_evaluate_take_profit_hits_strong_take_profit(monkeypatch):

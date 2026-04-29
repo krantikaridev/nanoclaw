@@ -21,7 +21,7 @@ except ImportError:  # pragma: no cover - exercised in lightweight test environm
             self.provider = provider
             self.eth = None
 
-from constants import ERC20_ABI, USDC, USDT, WALLET, WMATIC
+from constants import ERC20_ABI, LOG_PREFIX, USDC, USDT, WALLET, WMATIC
 from nanoclaw.utils.gas_protector import GasProtector
 from nanoclaw.strategies.usdc_copy import USDCopyStrategy
 from nanoclaw.strategies.signal_equity_trader import (
@@ -52,8 +52,43 @@ TAKE_PROFIT_SELL_PCT = float(os.getenv("TAKE_PROFIT_SELL_PCT", "0.45"))
 STRONG_TP_SELL_PCT = float(os.getenv("STRONG_TP_SELL_PCT", "0.60"))
 ENABLE_USDC_COPY = os.getenv("ENABLE_USDC_COPY", "false").lower() == "true"
 ENABLE_X_SIGNAL_EQUITY = os.getenv("ENABLE_X_SIGNAL_EQUITY", "false").lower() == "true"
-X_SIGNAL_EQUITY_MIN_STRENGTH = float(os.getenv("X_SIGNAL_EQUITY_MIN_STRENGTH", "0.70"))
+X_SIGNAL_EQUITY_MIN_STRENGTH = float(os.getenv("X_SIGNAL_EQUITY_MIN_STRENGTH", "0.60"))
 FOLLOWED_EQUITIES_PATH = os.getenv("FOLLOWED_EQUITIES_PATH", "followed_equities.json")
+
+
+def _nanolog() -> str:
+    p = (LOG_PREFIX or "").strip()
+    return f"{p} " if p else ""
+
+
+def _load_followed_equities_json_dict() -> dict:
+    try:
+        with open(FOLLOWED_EQUITIES_PATH, "r", encoding="utf-8") as fh:
+            raw = json.load(fh) or {}
+            return raw if isinstance(raw, dict) else {}
+    except Exception:
+        return {}
+
+
+def _effective_equity_signal_min(cfg: dict) -> float:
+    json_floor = float(
+        cfg.get("min_signal_strength", X_SIGNAL_EQUITY_MIN_STRENGTH) or X_SIGNAL_EQUITY_MIN_STRENGTH
+    )
+    return max(json_floor, X_SIGNAL_EQUITY_MIN_STRENGTH)
+
+
+def _sorted_and_eligible_equities(
+    assets_seq: Sequence[FollowedEquity],
+    min_strength: float,
+) -> tuple[list[FollowedEquity], list[FollowedEquity]]:
+    assets_list = sorted(
+        assets_seq,
+        key=lambda a: abs(float(a.signal_strength)),
+        reverse=True,
+    )
+    eligible = [a for a in assets_list if abs(float(a.signal_strength)) >= float(min_strength)]
+    return assets_list, eligible
+
 
 WALLET_LAST_TRADE: Dict[str, float] = {}
 ASSET_LAST_TRADE: Dict[str, float] = {}
@@ -69,12 +104,14 @@ class Balances:
 
 @dataclass(frozen=True)
 class TradeDecision:
-    direction: Optional[str]
+    direction: Optional[str] = None
     amount_in: int = 0
     trade_size: float = 0.0
     message: str = ""
     token_in: Optional[str] = None
     token_out: Optional[str] = None
+    cooldown_asset: Optional[Tuple[str, int]] = None
+    cooldown_wallet: Optional[Tuple[str, int]] = None
 
     @property
     def should_execute(self) -> bool:
@@ -384,17 +421,6 @@ def select_copy_trade(balances: Balances, wallets: list[str]) -> TradeDecision:
         message="🔄 REAL POLYCOPY MODE (20%) - Monitoring live wallets",
     )
 
-def _pick_strongest_equity_signal(assets: Sequence[FollowedEquity]) -> Optional[FollowedEquity]:
-    best: Optional[FollowedEquity] = None
-    best_strength = 0.0
-    for a in assets:
-        strength = abs(float(a.signal_strength))
-        if strength > best_strength:
-            best_strength = strength
-            best = a
-    return best
-
-
 def _tuned_signal_equity_trader(min_signal_strength: float) -> SignalEquityTrader:
     base_cfg = X_SIGNAL_EQUITY_TRADER.config
     tuned_cfg = SignalEquityTraderConfig(
@@ -435,24 +461,16 @@ def try_x_signal_equity_decision(balances: Balances) -> Optional[TradeDecision]:
         )
         return None
 
-    cfg: dict = {}
-    try:
-        with open(FOLLOWED_EQUITIES_PATH, "r", encoding="utf-8") as file_handle:
-            cfg = json.load(file_handle) or {}
-    except Exception:
-        cfg = {}
-
+    cfg = _load_followed_equities_json_dict()
     cfg_enabled = bool(cfg.get("enabled", True)) if isinstance(cfg, dict) else True
-    json_min = float(cfg.get("min_signal_strength", X_SIGNAL_EQUITY_MIN_STRENGTH) or X_SIGNAL_EQUITY_MIN_STRENGTH)
-    min_strength = max(json_min, X_SIGNAL_EQUITY_MIN_STRENGTH)
+    min_strength = _effective_equity_signal_min(cfg)
+    print(
+        f"{_nanolog()}X-Signal threshold (max(followed_equities.min_signal_strength, "
+        f"env X_SIGNAL_EQUITY_MIN_STRENGTH)) = {min_strength:.4f}"
+    )
 
     assets_seq = X_SIGNAL_EQUITY_TRADER.load_followed_equities()
-    assets = sorted(
-        assets_seq,
-        key=lambda a: abs(float(a.signal_strength)),
-        reverse=True,
-    )
-    eligible = [a for a in assets if abs(float(a.signal_strength)) >= min_strength]
+    assets, eligible = _sorted_and_eligible_equities(assets_seq, min_strength)
     eligible_count = len(eligible)
 
     print(f"🟦 X-SIGNAL EQUITY CHECK | Checking {len(assets)} assets")
@@ -500,9 +518,16 @@ def try_x_signal_equity_decision(balances: Balances) -> Optional[TradeDecision]:
                 equity_balance=equity_bal,
                 wallet_address_for_gas=WALLET,
                 can_trade_asset=can_trade_asset,
-                mark_asset_traded=mark_asset_traded,
             )
             if plan:
+                _checksum = getattr(Web3, "to_checksum_address", lambda x: x)
+                tin_p = _checksum(str(plan.token_in).strip())
+                tout_p = _checksum(str(plan.token_out).strip())
+                print(
+                    f"{_nanolog()}X-Signal swap intent | {plan.direction} | "
+                    f"{sym} | token_in={tin_p} token_out={tout_p}"
+                )
+                secs = int(trader.config.per_asset_cooldown_seconds)
                 decision = TradeDecision(
                     direction=plan.direction,
                     amount_in=plan.amount_in,
@@ -510,6 +535,7 @@ def try_x_signal_equity_decision(balances: Balances) -> Optional[TradeDecision]:
                     message=plan.message,
                     token_in=plan.token_in,
                     token_out=plan.token_out,
+                    cooldown_asset=(sym, secs),
                 )
                 result = decision.message or (decision.direction or "TRADE")
                 break
@@ -601,43 +627,37 @@ def evaluate_x_signal_equity_trade(
     *,
     trader: SignalEquityTrader = X_SIGNAL_EQUITY_TRADER,
 ) -> Optional[EquityTradePlan]:
+    """Same eligibility + sorting as `try_x_signal_equity_decision` without diagnostic prints."""
     if not ENABLE_X_SIGNAL_EQUITY:
         return None
-
-    assets = trader.load_followed_equities()
-    if not assets:
+    cfg = _load_followed_equities_json_dict()
+    cfg_enabled = bool(cfg.get("enabled", True)) if isinstance(cfg, dict) else True
+    if not cfg_enabled:
         return None
-
-    best = _pick_strongest_equity_signal(assets)
-    if not best:
+    min_strength = _effective_equity_signal_min(cfg)
+    assets_seq = trader.load_followed_equities()
+    _, eligible = _sorted_and_eligible_equities(assets_seq, min_strength)
+    if not eligible:
         return None
-
-    symbol = str(best.symbol).strip()
-    token_address = str(best.token_address).strip()
-    decimals = int(best.decimals)
-    signal_strength = float(best.signal_strength)
-    earnings_days_f = best.earnings_days
-    current_price_f = best.current_price_usd
-
-    equity_balance = get_token_balance(token_address, decimals)
-    min_s = max(
-        float(trader.config.strong_signal_threshold),
-        X_SIGNAL_EQUITY_MIN_STRENGTH,
-    )
-    tuned = _tuned_signal_equity_trader(min_s)
-    return tuned.build_plan(
-        symbol=symbol,
-        token_address=token_address,
-        token_decimals=decimals,
-        signal_strength=signal_strength,
-        earnings_proximity_days=earnings_days_f,
-        current_price_usd=current_price_f,
-        usdc_balance=balances.usdc,
-        equity_balance=equity_balance,
-        wallet_address_for_gas=WALLET,
-        can_trade_asset=can_trade_asset,
-        mark_asset_traded=mark_asset_traded,
-    )
+    tuned = _tuned_signal_equity_trader(min_strength)
+    for a in eligible:
+        equity_balance = get_token_balance(a.token_address, int(a.decimals))
+        sym = str(a.symbol).strip()
+        plan = tuned.build_plan(
+            symbol=sym,
+            token_address=str(a.token_address).strip(),
+            token_decimals=int(a.decimals),
+            signal_strength=float(a.signal_strength),
+            earnings_proximity_days=a.earnings_days,
+            current_price_usd=a.current_price_usd,
+            usdc_balance=balances.usdc,
+            equity_balance=equity_balance,
+            wallet_address_for_gas=WALLET,
+            can_trade_asset=can_trade_asset,
+        )
+        if plan:
+            return plan
+    return None
 
 
 async def evaluate_usdc_copy_trade(
@@ -649,22 +669,26 @@ async def evaluate_usdc_copy_trade(
     if not ENABLE_USDC_COPY:
         return TradeDecision(message="ℹ️ USDC copy disabled")
 
-    usdc_strategy = strategy or build_usdc_copy_strategy()
+    usdc_strategy = strategy if strategy is not None else USDC_COPY_STRATEGY
     plan = usdc_strategy.build_plan(
         usdc_balance=balances.usdc,
         wallets=wallets,
         wallet_address_for_gas=WALLET,
         can_trade_wallet=can_trade_wallet,
-        mark_wallet_traded=mark_wallet_traded,
     )
     if not plan:
         return TradeDecision(message="ℹ️ No USDC-copy trade this cycle")
 
+    cw = (
+        str(plan.wallet).strip(),
+        int(usdc_strategy.config.per_wallet_cooldown_seconds),
+    ) if plan.wallet else None
     return TradeDecision(
         direction="USDC_TO_WMATIC",
         amount_in=plan.amount_in,
         trade_size=plan.trade_size,
         message=plan.message,
+        cooldown_wallet=cw,
     )
 
 
@@ -706,7 +730,7 @@ def select_main_strategy_trade(
 
 def determine_trade_decision(state: dict, balances: Balances, current_price: float) -> TradeDecision:
     print(
-        f"\n=== CYCLE {int(time.time())} | BALANCES: USDT=${balances.usdt:.2f} "
+        f"\n{_nanolog()}=== CYCLE {int(time.time())} | BALANCES: USDT=${balances.usdt:.2f} "
         f"USDC=${balances.usdc:.2f} WMATIC=${balances.wmatic:.2f} ==="
     )
     target_wallets_prelude = get_target_wallets()
@@ -755,16 +779,20 @@ def determine_trade_decision(state: dict, balances: Balances, current_price: flo
                 wallets=target_wallets,
                 wallet_address_for_gas=WALLET,
                 can_trade_wallet=can_trade_wallet,
-                mark_wallet_traded=mark_wallet_traded,
             )
             if plan:
                 print(f"🔍 DECISION PATH: USDC_COPY | Size ~${plan.trade_size:.2f}")
                 print(f"🟦 USDC COPY ACTIVE | Size: ${plan.trade_size:.2f}")
+                cw_usdc = (
+                    str(plan.wallet).strip(),
+                    int(USDC_COPY_STRATEGY.config.per_wallet_cooldown_seconds),
+                ) if plan.wallet else None
                 return TradeDecision(
                     direction="USDC_TO_WMATIC",
                     amount_in=plan.amount_in,
                     trade_size=plan.trade_size,
                     message=plan.message,
+                    cooldown_wallet=cw_usdc,
                 )
             print("🟦 USDC COPY ACTIVE | No eligible copy-trade this cycle")
         else:
@@ -791,7 +819,13 @@ async def main(*, dry_run: bool = False) -> None:
     create_lock()
     try:
         if is_global_cooldown_active(state):
-            print(f"⏳ Copy cooldown active ({COOLDOWN_MINUTES * 60}s) — skipping")
+            lr = float(state.get("last_run") or 0.0)
+            elapsed_s = max(0.0, time.time() - lr)
+            remain_s = max(0.0, COOLDOWN_MINUTES * 60 - elapsed_s)
+            print(
+                f"{_nanolog()}skip cycle — global cooldown ~{remain_s:.0f}s left "
+                f"(COOLDOWN_MINUTES={COOLDOWN_MINUTES}; last_run was {elapsed_s:.0f}s ago)"
+            )
             return
 
         gas_status = get_gas_status()
@@ -835,8 +869,14 @@ async def main(*, dry_run: bool = False) -> None:
         )
         if tx_hash:
             print("✅ Swap executed successfully!")
+            if decision.cooldown_asset:
+                sym_ca, secs_a = decision.cooldown_asset
+                mark_asset_traded(sym_ca, cooldown_seconds=int(secs_a))
+            if decision.cooldown_wallet and decision.cooldown_wallet[0]:
+                wal_cw, secs_w = decision.cooldown_wallet
+                mark_wallet_traded(str(wal_cw).strip(), cooldown_seconds=int(secs_w))
         else:
-            print("⚠️ Swap failed")
+            print(f"{_nanolog()}Swap failed — per-asset/per-wallet cooldown not applied")
 
         state["last_run"] = time.time()
         save_state(state)

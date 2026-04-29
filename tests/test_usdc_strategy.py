@@ -28,20 +28,13 @@ def test_disabled_strategy_returns_no_plan():
         wallets=["0xabc"],
         wallet_address_for_gas="0xwallet",
         can_trade_wallet=lambda w, now, cooldown: True,
-        mark_wallet_traded=lambda w, now, cooldown: None,
         now=1000.0,
     )
 
     assert plan is None
 
 
-def test_enabled_strategy_builds_plan_and_marks_wallet():
-    marked = {"count": 0, "wallet": None}
-
-    def mark(wallet, now, cooldown):
-        marked["count"] += 1
-        marked["wallet"] = wallet
-
+def test_enabled_strategy_builds_plan_without_immediate_wallet_mark():
     strat = (
         USDCopyStrategy.builder()
         .with_enabled(True)
@@ -59,7 +52,6 @@ def test_enabled_strategy_builds_plan_and_marks_wallet():
         wallets=["0xaaa", "0xbbb"],
         wallet_address_for_gas="0xwallet",
         can_trade_wallet=lambda w, now, cooldown: w == "0xbbb",
-        mark_wallet_traded=mark,
         now=1000.0,
     )
 
@@ -67,8 +59,7 @@ def test_enabled_strategy_builds_plan_and_marks_wallet():
     assert plan.trade_size == 12.0
     assert plan.amount_in == 12_000_000
     assert "USDC COPY" in plan.message
-    assert marked["count"] == 1
-    assert marked["wallet"] == "0xbbb"
+    assert plan.wallet == "0xbbb"
 
 
 def test_gas_protection_blocks_plan():
@@ -79,7 +70,6 @@ def test_gas_protection_blocks_plan():
         wallets=["0xabc"],
         wallet_address_for_gas="0xwallet",
         can_trade_wallet=lambda w, now, cooldown: True,
-        mark_wallet_traded=lambda w, now, cooldown: None,
         now=1000.0,
     )
 
