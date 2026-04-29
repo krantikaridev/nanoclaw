@@ -54,6 +54,8 @@ ENABLE_USDC_COPY = os.getenv("ENABLE_USDC_COPY", "false").lower() == "true"
 ENABLE_X_SIGNAL_EQUITY = os.getenv("ENABLE_X_SIGNAL_EQUITY", "false").lower() == "true"
 X_SIGNAL_EQUITY_MIN_STRENGTH = float(os.getenv("X_SIGNAL_EQUITY_MIN_STRENGTH", "0.60"))
 FOLLOWED_EQUITIES_PATH = os.getenv("FOLLOWED_EQUITIES_PATH", "followed_equities.json")
+AUTO_USDC_FOR_X_SIGNAL_MIN_USDC = float(os.getenv("AUTO_USDC_FOR_X_SIGNAL_MIN_USDC", "8.0"))
+AUTO_USDC_FOR_X_SIGNAL_MIN_WMATIC_VALUE = float(os.getenv("AUTO_USDC_FOR_X_SIGNAL_MIN_WMATIC_VALUE", "15.0"))
 
 
 def _nanolog() -> str:
@@ -421,6 +423,165 @@ def select_copy_trade(balances: Balances, wallets: list[str]) -> TradeDecision:
         message="🔄 REAL POLYCOPY MODE (20%) - Monitoring live wallets",
     )
 
+def _strong_x_signal_buy_present() -> bool:
+    """True if followed_equities has a BUY with strength ≥ X_SIGNAL_STRONG_THRESHOLD (same bar as equity trades)."""
+    cfg = _load_followed_equities_json_dict()
+    if not bool(cfg.get("enabled", True)):
+        return False
+    min_strength = _effective_equity_signal_min(cfg)
+    strong_thr = float(os.getenv("X_SIGNAL_STRONG_THRESHOLD", "0.85"))
+    assets_seq = X_SIGNAL_EQUITY_TRADER.load_followed_equities()
+    _, eligible = _sorted_and_eligible_equities(assets_seq, min_strength)
+    return any(
+        float(a.signal_strength) > 0 and float(a.signal_strength) >= strong_thr for a in eligible
+    )
+
+
+def ensure_usdc_for_x_signal(min_usdc: float = 8.0, min_wmatic_value: float = 15.0) -> bool:
+    """If USDC is below ``min_usdc`` and a strong X-Signal BUY is active, swap WMATIC→USDC (preferred) or USDT→USDC."""
+    balances = get_balances()
+    if balances.usdc >= min_usdc:
+        return True
+    if not _strong_x_signal_buy_present():
+        return False
+
+    gst = GAS_PROTECTOR.get_safe_status(address=WALLET, urgent=False, min_pol=MIN_POL_FOR_GAS)
+    if not gst.get("ok", False):
+        print(f"{_nanolog()}AUTO-USDC skipped — gas/POL guard")
+        return False
+
+    key = os.getenv("POLYGON_PRIVATE_KEY") or os.getenv("PRIVATE_KEY")
+    if not key:
+        print(f"{_nanolog()}AUTO-USDC skipped — no private key")
+        return False
+
+    try:
+        wmatic_price = float(get_live_wmatic_price())
+    except Exception:
+        wmatic_price = 0.0
+    if wmatic_price <= 0:
+        print(f"{_nanolog()}AUTO-USDC skipped — WMATIC price unavailable")
+        return False
+
+    shortfall = max(0.0, float(min_usdc) - float(balances.usdc))
+    target_usd = max(shortfall * 1.05, 0.25)
+    wmatic_usd = balances.wmatic * wmatic_price
+
+    async def _swap_wmatic(amount_wei: int) -> bool:
+        if amount_wei <= 0:
+            return False
+        h = await approve_and_swap(
+            w3,
+            key,
+            amount_wei,
+            direction="WMATIC_TO_USDC",
+        )
+        return h is not None
+
+    async def _swap_usdt(amount_units: int) -> bool:
+        if amount_units <= 0:
+            return False
+        h = await approve_and_swap(
+            w3,
+            key,
+            amount_units,
+            direction="USDT_TO_USDC",
+        )
+        return h is not None
+
+    def _run(coro):
+        return asyncio.run(coro)
+
+    use_wmatic_first = wmatic_usd >= float(min_wmatic_value)
+    if use_wmatic_first:
+        wmatic_to_swap = min(balances.wmatic * 0.95, target_usd / wmatic_price)
+        amount_wei = int(wmatic_to_swap * 1e18)
+        if amount_wei > 0:
+            print("🔄 AUTO-USDC | Using WMATIC path (gas optimized)")
+            ok = _run(_swap_wmatic(amount_wei))
+            if ok and get_balances().usdc >= min_usdc:
+                return True
+        after = get_balances()
+        if after.usdt >= 0.5:
+            print("🔄 AUTO-USDC | Using USDT path (fallback)")
+            usdt_amt = min(after.usdt * 0.95, target_usd)
+            ok2 = _run(_swap_usdt(int(usdt_amt * 1_000_000)))
+            return ok2 and get_balances().usdc >= min_usdc
+        return get_balances().usdc >= min_usdc
+
+    print("🔄 AUTO-USDC | Using USDT path (fallback)")
+    after = get_balances()
+    usdt_amt = min(after.usdt * 0.95, target_usd)
+    ok = _run(_swap_usdt(int(usdt_amt * 1_000_000)))
+    return ok and get_balances().usdc >= min_usdc
+
+
+def _project_balances_after_auto_usdc(
+    balances: Balances,
+    *,
+    min_usdc: float,
+    min_wmatic_value: float,
+) -> Balances:
+    """Mirror ``ensure_usdc_for_x_signal`` guards and sizing without swaps (dry-run fair USDC for equity plans)."""
+    if balances.usdc >= min_usdc:
+        return balances
+    if not _strong_x_signal_buy_present():
+        return balances
+
+    gst = GAS_PROTECTOR.get_safe_status(address=WALLET, urgent=False, min_pol=MIN_POL_FOR_GAS)
+    if not gst.get("ok", False):
+        return balances
+
+    key = os.getenv("POLYGON_PRIVATE_KEY") or os.getenv("PRIVATE_KEY")
+    if not key:
+        return balances
+
+    try:
+        wmatic_price = float(get_live_wmatic_price())
+    except Exception:
+        return balances
+    if wmatic_price <= 0:
+        return balances
+
+    shortfall = max(0.0, float(min_usdc) - float(balances.usdc))
+    target_usd = max(shortfall * 1.05, 0.25)
+    wmatic_usd = balances.wmatic * wmatic_price
+
+    use_wmatic_first = wmatic_usd >= float(min_wmatic_value)
+    if use_wmatic_first:
+        wmatic_to_swap = min(balances.wmatic * 0.95, target_usd / wmatic_price)
+        if wmatic_to_swap > 0:
+            est_usdc_out = min(wmatic_to_swap * wmatic_price, target_usd)
+            if balances.usdc + est_usdc_out >= min_usdc:
+                return Balances(
+                    usdt=balances.usdt,
+                    wmatic=balances.wmatic - wmatic_to_swap,
+                    pol=balances.pol,
+                    usdc=balances.usdc + est_usdc_out,
+                )
+        if balances.usdt >= 0.5:
+            usdt_amt = min(balances.usdt * 0.95, target_usd)
+            if usdt_amt > 0 and balances.usdc + usdt_amt >= min_usdc:
+                return Balances(
+                    usdt=balances.usdt - usdt_amt,
+                    wmatic=balances.wmatic,
+                    pol=balances.pol,
+                    usdc=balances.usdc + usdt_amt,
+                )
+        return balances
+
+    if balances.usdt >= 0.5:
+        usdt_amt = min(balances.usdt * 0.95, target_usd)
+        if usdt_amt > 0 and balances.usdc + usdt_amt >= min_usdc:
+            return Balances(
+                usdt=balances.usdt - usdt_amt,
+                wmatic=balances.wmatic,
+                pol=balances.pol,
+                usdc=balances.usdc + usdt_amt,
+            )
+    return balances
+
+
 def _tuned_signal_equity_trader(min_signal_strength: float) -> SignalEquityTrader:
     base_cfg = X_SIGNAL_EQUITY_TRADER.config
     tuned_cfg = SignalEquityTraderConfig(
@@ -437,7 +598,7 @@ def _tuned_signal_equity_trader(min_signal_strength: float) -> SignalEquityTrade
     )
 
 
-def try_x_signal_equity_decision(balances: Balances) -> Optional[TradeDecision]:
+def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -> Optional[TradeDecision]:
     """Highest-priority iteration: eligible assets × SignalEquityTrader.build_plan; first plan wins."""
     decision: Optional[TradeDecision] = None
     result: Optional[str] = None
@@ -490,6 +651,32 @@ def try_x_signal_equity_decision(balances: Balances) -> Optional[TradeDecision]:
             f"(reason: no_asset_above_threshold (>={min_strength:.2f}))"
         )
     else:
+        strong_thr = float(os.getenv("X_SIGNAL_STRONG_THRESHOLD", "0.85"))
+        has_strong_buy = any(
+            float(a.signal_strength) > 0 and float(a.signal_strength) >= strong_thr for a in eligible
+        )
+        if has_strong_buy and balances.usdc < AUTO_USDC_FOR_X_SIGNAL_MIN_USDC:
+            if dry_run:
+                balances = _project_balances_after_auto_usdc(
+                    balances,
+                    min_usdc=AUTO_USDC_FOR_X_SIGNAL_MIN_USDC,
+                    min_wmatic_value=AUTO_USDC_FOR_X_SIGNAL_MIN_WMATIC_VALUE,
+                )
+            else:
+                ensure_usdc_for_x_signal(
+                    min_usdc=AUTO_USDC_FOR_X_SIGNAL_MIN_USDC,
+                    min_wmatic_value=AUTO_USDC_FOR_X_SIGNAL_MIN_WMATIC_VALUE,
+                )
+                balances = get_balances()
+            trader_gate = _tuned_signal_equity_trader(min_strength)
+            if balances.usdc >= float(trader_gate.config.min_trade_usdc):
+                if dry_run:
+                    print(
+                        "🟦 X-SIGNAL EQUITY | DRY-RUN: projected post auto-USDC | Proceeding with BUY analysis"
+                    )
+                else:
+                    print("🟦 X-SIGNAL EQUITY | USDC ensured via WMATIC/USDT | Proceeding with BUY")
+
         trader = _tuned_signal_equity_trader(min_strength)
         reason_parts: list[str] = []
         chain_notes: list[str] = []
@@ -728,7 +915,13 @@ def select_main_strategy_trade(
     )
 
 
-def determine_trade_decision(state: dict, balances: Balances, current_price: float) -> TradeDecision:
+def determine_trade_decision(
+    state: dict,
+    balances: Balances,
+    current_price: float,
+    *,
+    dry_run: bool = False,
+) -> TradeDecision:
     print(
         f"\n{_nanolog()}=== CYCLE {int(time.time())} | BALANCES: USDT=${balances.usdt:.2f} "
         f"USDC=${balances.usdc:.2f} WMATIC=${balances.wmatic:.2f} ==="
@@ -766,7 +959,7 @@ def determine_trade_decision(state: dict, balances: Balances, current_price: flo
         print(f"📈 {profit_signal['message']}")
 
     if ENABLE_X_SIGNAL_EQUITY:
-        xd = try_x_signal_equity_decision(balances)
+        xd = try_x_signal_equity_decision(balances, dry_run=dry_run)
         if xd and xd.should_execute:
             print("🔍 DECISION PATH: X_SIGNAL_EQUITY")
             return xd
@@ -842,7 +1035,9 @@ async def main(*, dry_run: bool = False) -> None:
                 return
 
         current_price = get_live_wmatic_price()
-        decision = await asyncio.to_thread(determine_trade_decision, state, balances, current_price)
+        decision = await asyncio.to_thread(
+            lambda: determine_trade_decision(state, balances, current_price, dry_run=dry_run)
+        )
         save_state(state)
 
         if decision.message:

@@ -111,6 +111,8 @@ async def approve_and_swap(
                 token_in, token_out = USDC, WMATIC
             elif direction == "WMATIC_TO_USDC":
                 token_in, token_out = WMATIC, USDC
+            elif direction == "USDT_TO_USDC":
+                token_in, token_out = USDT, USDC
             elif direction == "USDC_TO_EQUITY":
                 raise ValueError("USDC_TO_EQUITY requires token_out (equity contract)")
             elif direction == "EQUITY_TO_USDC":

@@ -5,6 +5,9 @@
 **Date**: 29 April 2026  
 **Wallet**: 0x6e291a7180bd198d67eeb792bb3262324d3e64aa
 
+**Current Status**:
+- Smart USDC population added (WMATIC → USDC priority for gas optimization). X-Signal now self-sufficient.
+
 **Current Portfolio Snapshot** (historical baseline; reconcile with balances on-chain):
 - Total ≈ $113
 - WMATIC: ~77%
