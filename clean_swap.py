@@ -655,6 +655,9 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
         has_strong_buy = any(
             float(a.signal_strength) > 0 and float(a.signal_strength) >= strong_thr for a in eligible
         )
+        trader = _tuned_signal_equity_trader(min_strength)
+        min_trade_usdc = float(trader.config.min_trade_usdc)
+
         if has_strong_buy and balances.usdc < AUTO_USDC_FOR_X_SIGNAL_MIN_USDC:
             if dry_run:
                 balances = _project_balances_after_auto_usdc(
@@ -668,16 +671,19 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                     min_wmatic_value=AUTO_USDC_FOR_X_SIGNAL_MIN_WMATIC_VALUE,
                 )
                 balances = get_balances()
-            trader_gate = _tuned_signal_equity_trader(min_strength)
-            if balances.usdc >= float(trader_gate.config.min_trade_usdc):
+            if balances.usdc >= min_trade_usdc:
                 if dry_run:
                     print(
                         "🟦 X-SIGNAL EQUITY | DRY-RUN: projected post auto-USDC | Proceeding with BUY analysis"
                     )
                 else:
                     print("🟦 X-SIGNAL EQUITY | USDC ensured via WMATIC/USDT | Proceeding with BUY")
+            else:
+                print(
+                    f"🟦 X-SIGNAL EQUITY | Auto-USDC insufficient for BUY equity "
+                    f"(USDC ${balances.usdc:.2f} < min_trade ${min_trade_usdc:.2f}) — BUY paths skipped"
+                )
 
-        trader = _tuned_signal_equity_trader(min_strength)
         reason_parts: list[str] = []
         chain_notes: list[str] = []
 
@@ -693,6 +699,11 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
             print(
                 f"🟦 X-SIGNAL EQUITY ACTIVE | {sym} | Strength {sig:.3f} | Action: {action_label}"
             )
+            if sig > 0 and balances.usdc < min_trade_usdc:
+                reason_parts.append(
+                    f"{sym}: buy_skipped (USDC ${balances.usdc:.2f} < min_trade_usdc ${min_trade_usdc:.2f})"
+                )
+                continue
             equity_bal = get_token_balance(a.token_address, int(a.decimals))
             plan = trader.build_plan(
                 symbol=sym,
