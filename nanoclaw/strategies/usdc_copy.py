@@ -18,7 +18,7 @@ class USDCopyConfig:
     min_trade_usdc: float = 5.0
     max_trade_usdc: float = 15.0
     per_wallet_cooldown_seconds: int = 300
-    min_pol_for_gas: float = 0.05
+    min_pol_for_gas: float = 0.025
 
 
 @dataclass(frozen=True)
@@ -36,7 +36,7 @@ class USDCopyStrategyBuilder:
         self._min_trade_usdc = float(os.getenv("USDC_COPY_MIN_TRADE", "5.0"))
         self._max_trade_usdc = float(os.getenv("USDC_COPY_MAX_TRADE", "15.0"))
         self._per_wallet_cooldown_seconds = int(os.getenv("PER_WALLET_COOLDOWN", "180"))
-        self._min_pol_for_gas = float(os.getenv("MIN_POL_FOR_GAS", "0.05"))
+        self._min_pol_for_gas = float(os.getenv("MIN_POL_FOR_GAS", "0.025"))
         self._gas_protector: Optional[GasProtector] = None
 
     def with_enabled(self, enabled: bool) -> "USDCopyStrategyBuilder":

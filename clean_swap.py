@@ -42,7 +42,7 @@ STATE_FILE = "bot_state.json"
 TRADE_LOG_FILE = "trade_exits.json"
 
 COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", 7))
-MIN_POL_FOR_GAS = float(os.getenv("MIN_POL_FOR_GAS", "0.05"))
+MIN_POL_FOR_GAS = float(os.getenv("MIN_POL_FOR_GAS", "0.025"))
 COPY_TRADE_PCT = float(os.getenv("COPY_TRADE_PCT", "0.25"))
 PER_WALLET_COOLDOWN = int(os.getenv("PER_WALLET_COOLDOWN", "180"))
 TRAILING_STOP_PCT = float(os.getenv("TRAILING_STOP_PCT", "5.0"))
@@ -54,8 +54,17 @@ ENABLE_USDC_COPY = os.getenv("ENABLE_USDC_COPY", "false").lower() == "true"
 ENABLE_X_SIGNAL_EQUITY = os.getenv("ENABLE_X_SIGNAL_EQUITY", "false").lower() == "true"
 X_SIGNAL_EQUITY_MIN_STRENGTH = float(os.getenv("X_SIGNAL_EQUITY_MIN_STRENGTH", "0.60"))
 FOLLOWED_EQUITIES_PATH = os.getenv("FOLLOWED_EQUITIES_PATH", "followed_equities.json")
-AUTO_USDC_FOR_X_SIGNAL_MIN_USDC = float(os.getenv("AUTO_USDC_FOR_X_SIGNAL_MIN_USDC", "8.0"))
-AUTO_USDC_FOR_X_SIGNAL_MIN_WMATIC_VALUE = float(os.getenv("AUTO_USDC_FOR_X_SIGNAL_MIN_WMATIC_VALUE", "15.0"))
+# Iron-fenced USDC population to prevent zero-USDC blocker
+X_SIGNAL_USDC_MIN = float(os.getenv("X_SIGNAL_USDC_MIN", os.getenv("AUTO_USDC_FOR_X_SIGNAL_MIN_USDC", "5.0")))
+X_SIGNAL_WMATIC_MIN_VALUE = float(
+    os.getenv("X_SIGNAL_WMATIC_MIN_VALUE", os.getenv("AUTO_USDC_FOR_X_SIGNAL_MIN_WMATIC_VALUE", "15.0"))
+)
+AUTO_POPULATE_USDC_AMOUNT = float(os.getenv("AUTO_POPULATE_USDC_AMOUNT", "20.0"))
+# Back-compat aliases (older env names referenced in docs/tests).
+AUTO_USDC_FOR_X_SIGNAL_MIN_USDC = float(os.getenv("AUTO_USDC_FOR_X_SIGNAL_MIN_USDC", str(X_SIGNAL_USDC_MIN)))
+AUTO_USDC_FOR_X_SIGNAL_MIN_WMATIC_VALUE = float(
+    os.getenv("AUTO_USDC_FOR_X_SIGNAL_MIN_WMATIC_VALUE", str(X_SIGNAL_WMATIC_MIN_VALUE))
+)
 
 
 def _nanolog() -> str:
@@ -216,6 +225,59 @@ def get_pol_balance(
     wallet_address: str = WALLET,
 ) -> float:
     return protector.get_pol_balance(wallet_address)
+
+
+def ensure_pol_for_trade(min_pol: float = 0.025) -> bool:
+    pol = float(get_pol_balance())
+    if pol >= float(min_pol):
+        return True
+
+    key = os.getenv("POLYGON_PRIVATE_KEY") or os.getenv("PRIVATE_KEY")
+    if not key:
+        print(f"{_nanolog()}AUTO-POL skipped — no private key")
+        return False
+
+    # Prefer unwrapping WMATIC -> POL (native) as the cheapest/most direct top-up.
+    target_pol = 0.03
+    balances = get_balances()
+    needed_pol = max(0.0, float(min_pol) - pol)
+    unwrap_pol = min(max(target_pol, needed_pol + 0.002), float(balances.wmatic) * 0.95)
+
+    if unwrap_pol <= 0:
+        print(f"{_nanolog()}AUTO-POL skipped — insufficient WMATIC to unwrap")
+        return False
+
+    try:
+        withdraw_abi = [
+            {
+                "constant": False,
+                "inputs": [{"name": "wad", "type": "uint256"}],
+                "name": "withdraw",
+                "outputs": [],
+                "payable": False,
+                "stateMutability": "nonpayable",
+                "type": "function",
+            }
+        ]
+        amount_wei = int(unwrap_pol * 1e18)
+        contract = w3.eth.contract(address=WMATIC, abi=withdraw_abi)
+        nonce = w3.eth.get_transaction_count(WALLET)
+        tx = contract.functions.withdraw(amount_wei).build_transaction(
+            {
+                "from": WALLET,
+                "nonce": nonce,
+                "chainId": int(getattr(w3.eth, "chain_id", 137) or 137),
+                "gas": 140_000,
+                "gasPrice": int(w3.eth.gas_price),
+            }
+        )
+        signed = w3.eth.account.sign_transaction(tx, private_key=key)
+        w3.eth.send_raw_transaction(signed.rawTransaction)
+        print(f"🔄 AUTO-POL | Topping up {unwrap_pol:.3f} POL for gas")
+        return True
+    except Exception as e:
+        print(f"{_nanolog()}AUTO-POL failed — {e}")
+        return False
 
 
 def get_gas_status(
@@ -464,7 +526,8 @@ def ensure_usdc_for_x_signal(min_usdc: float = 8.0, min_wmatic_value: float = 15
         return False
 
     shortfall = max(0.0, float(min_usdc) - float(balances.usdc))
-    target_usd = max(shortfall * 1.05, 0.25)
+    # Gas-optimized: if we need to populate, do a meaningful swap (avoid $0.40 USDC drips).
+    target_usd = max(shortfall * 1.05, float(AUTO_POPULATE_USDC_AMOUNT))
     wmatic_usd = balances.wmatic * wmatic_price
 
     async def _swap_wmatic(amount_wei: int) -> bool:
@@ -494,11 +557,14 @@ def ensure_usdc_for_x_signal(min_usdc: float = 8.0, min_wmatic_value: float = 15
 
     use_wmatic_first = wmatic_usd >= float(min_wmatic_value)
     if use_wmatic_first:
-        wmatic_to_swap = min(balances.wmatic * 0.95, target_usd / wmatic_price)
+        swap_usd = min(wmatic_usd * 0.95, target_usd)
+        wmatic_to_swap = min(balances.wmatic * 0.95, swap_usd / wmatic_price)
         amount_wei = int(wmatic_to_swap * 1e18)
         if amount_wei > 0:
-            print("🔄 AUTO-USDC | Using WMATIC path (gas optimized)")
+            print(f"🔄 AUTO-USDC | Swapping ${swap_usd:.2f} from WMATIC → USDC (gas optimized)")
             ok = _run(_swap_wmatic(amount_wei))
+            if ok:
+                print(f"🔄 AUTO-USDC | Swapped ${swap_usd:.2f} from WMATIC → USDC (gas optimized)")
             if ok and get_balances().usdc >= min_usdc:
                 return True
         after = get_balances()
@@ -544,14 +610,15 @@ def _project_balances_after_auto_usdc(
         return balances
 
     shortfall = max(0.0, float(min_usdc) - float(balances.usdc))
-    target_usd = max(shortfall * 1.05, 0.25)
+    target_usd = max(shortfall * 1.05, float(AUTO_POPULATE_USDC_AMOUNT))
     wmatic_usd = balances.wmatic * wmatic_price
 
     use_wmatic_first = wmatic_usd >= float(min_wmatic_value)
     if use_wmatic_first:
-        wmatic_to_swap = min(balances.wmatic * 0.95, target_usd / wmatic_price)
+        swap_usd = min(wmatic_usd * 0.95, target_usd)
+        wmatic_to_swap = min(balances.wmatic * 0.95, swap_usd / wmatic_price)
         if wmatic_to_swap > 0:
-            est_usdc_out = min(wmatic_to_swap * wmatic_price, target_usd)
+            est_usdc_out = min(wmatic_to_swap * wmatic_price, swap_usd)
             if balances.usdc + est_usdc_out >= min_usdc:
                 return Balances(
                     usdt=balances.usdt,
@@ -658,22 +725,23 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
         trader = _tuned_signal_equity_trader(min_strength)
         min_trade_usdc = float(trader.config.min_trade_usdc)
         # Align auto-USDC with equity sizing: never aim below min_trade_usdc (env X_SIGNAL_EQUITY_MIN_TRADE).
-        auto_usdc_target = max(AUTO_USDC_FOR_X_SIGNAL_MIN_USDC, min_trade_usdc)
+        auto_usdc_target = max(float(X_SIGNAL_USDC_MIN), min_trade_usdc)
 
-        if has_strong_buy and balances.usdc < auto_usdc_target:
+        force_floor = float(X_SIGNAL_USDC_MIN)
+        if has_strong_buy and balances.usdc < max(force_floor, auto_usdc_target):
             if dry_run:
                 balances = _project_balances_after_auto_usdc(
                     balances,
-                    min_usdc=auto_usdc_target,
-                    min_wmatic_value=AUTO_USDC_FOR_X_SIGNAL_MIN_WMATIC_VALUE,
+                    min_usdc=max(force_floor, auto_usdc_target),
+                    min_wmatic_value=float(X_SIGNAL_WMATIC_MIN_VALUE),
                 )
             else:
                 ensure_usdc_for_x_signal(
-                    min_usdc=auto_usdc_target,
-                    min_wmatic_value=AUTO_USDC_FOR_X_SIGNAL_MIN_WMATIC_VALUE,
+                    min_usdc=max(force_floor, auto_usdc_target),
+                    min_wmatic_value=float(X_SIGNAL_WMATIC_MIN_VALUE),
                 )
                 balances = get_balances()
-            if balances.usdc >= min_trade_usdc:
+            if balances.usdc >= max(force_floor, min_trade_usdc):
                 if dry_run:
                     print(
                         "🟦 X-SIGNAL EQUITY | DRY-RUN: projected post auto-USDC | Proceeding with BUY analysis"
@@ -683,7 +751,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
             else:
                 print(
                     f"🟦 X-SIGNAL EQUITY | Auto-USDC insufficient for BUY equity "
-                    f"(USDC ${balances.usdc:.2f} < min_trade ${min_trade_usdc:.2f}) — BUY paths skipped"
+                    f"(USDC ${balances.usdc:.2f} < ${max(force_floor, min_trade_usdc):.2f}) — BUY paths skipped"
                 )
 
         reason_parts: list[str] = []
@@ -701,7 +769,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
             print(
                 f"🟦 X-SIGNAL EQUITY ACTIVE | {sym} | Strength {sig:.3f} | Action: {action_label}"
             )
-            if sig > 0 and balances.usdc < min_trade_usdc:
+            if sig > 0 and balances.usdc < max(float(X_SIGNAL_USDC_MIN), min_trade_usdc):
                 reason_parts.append(
                     f"{sym}: buy_skipped (USDC ${balances.usdc:.2f} < min_trade_usdc ${min_trade_usdc:.2f})"
                 )
@@ -1024,6 +1092,9 @@ async def main(*, dry_run: bool = False) -> None:
 
     create_lock()
     try:
+        if not ensure_pol_for_trade(min_pol=float(MIN_POL_FOR_GAS)):
+            print(f"{_nanolog()}AUTO-POL failed — skipping cycle (pol<{MIN_POL_FOR_GAS:.3f})")
+            return
         if is_global_cooldown_active(state):
             lr = float(state.get("last_run") or 0.0)
             elapsed_s = max(0.0, time.time() - lr)

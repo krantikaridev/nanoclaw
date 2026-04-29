@@ -27,10 +27,10 @@ class SignalEquityTraderConfig:
     strong_signal_threshold: float = 0.85
     max_earnings_days: float = 5.0
     trade_pct_of_usdc: float = 0.18
-    min_trade_usdc: float = 8.0
+    min_trade_usdc: float = 5.0
     max_trade_usdc: float = 28.0
     per_asset_cooldown_seconds: int = 6 * 60 * 60
-    min_pol_for_gas: float = 0.05
+    min_pol_for_gas: float = 0.025
     strong_take_profit_pct: float = 15.0
 
 
@@ -56,10 +56,10 @@ class SignalEquityTraderBuilder:
         self._strong_signal_threshold = float(os.getenv("X_SIGNAL_STRONG_THRESHOLD", "0.85"))
         self._max_earnings_days = float(os.getenv("X_SIGNAL_MAX_EARNINGS_DAYS", "5.0"))
         self._trade_pct_of_usdc = float(os.getenv("X_SIGNAL_EQUITY_TRADE_PCT", "0.18"))
-        self._min_trade_usdc = float(os.getenv("X_SIGNAL_EQUITY_MIN_TRADE", "8.0"))
+        self._min_trade_usdc = float(os.getenv("X_SIGNAL_EQUITY_MIN_TRADE", "5.0"))
         self._max_trade_usdc = float(os.getenv("X_SIGNAL_EQUITY_MAX_TRADE", "28.0"))
         self._per_asset_cooldown_seconds = int(os.getenv("X_SIGNAL_EQUITY_COOLDOWN_SECONDS", str(6 * 60 * 60)))
-        self._min_pol_for_gas = float(os.getenv("MIN_POL_FOR_GAS", "0.05"))
+        self._min_pol_for_gas = float(os.getenv("MIN_POL_FOR_GAS", "0.025"))
         self._strong_take_profit_pct = float(os.getenv("X_SIGNAL_EQUITY_STRONG_TP_PCT", "15.0"))
         self._gas_protector: Optional[GasProtector] = None
         self._usdc_address: Optional[str] = os.getenv("USDC")

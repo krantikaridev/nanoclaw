@@ -41,6 +41,9 @@ def _abi_fragment_to_entry_list(fragment: object) -> list:
 # Log prefix for actionable lines (set empty to omit).
 LOG_PREFIX = os.getenv("LOG_PREFIX", "[nanoclaw]").strip()
 
+# Native POL floor for gas (used by multiple modules; can be overridden via env MIN_POL_FOR_GAS).
+MIN_POL_FOR_GAS = float(os.getenv("MIN_POL_FOR_GAS", "0.025"))
+
 # Deployment-specific addresses should be env-driven.
 WALLET = os.getenv("WALLET", "0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA")
 USDT = os.getenv("USDT", "0xc2132D05D31c914a87C6611C10748AEb04B58e8F")
