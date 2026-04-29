@@ -657,17 +657,19 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
         )
         trader = _tuned_signal_equity_trader(min_strength)
         min_trade_usdc = float(trader.config.min_trade_usdc)
+        # Align auto-USDC with equity sizing: never aim below min_trade_usdc (env X_SIGNAL_EQUITY_MIN_TRADE).
+        auto_usdc_target = max(AUTO_USDC_FOR_X_SIGNAL_MIN_USDC, min_trade_usdc)
 
-        if has_strong_buy and balances.usdc < AUTO_USDC_FOR_X_SIGNAL_MIN_USDC:
+        if has_strong_buy and balances.usdc < auto_usdc_target:
             if dry_run:
                 balances = _project_balances_after_auto_usdc(
                     balances,
-                    min_usdc=AUTO_USDC_FOR_X_SIGNAL_MIN_USDC,
+                    min_usdc=auto_usdc_target,
                     min_wmatic_value=AUTO_USDC_FOR_X_SIGNAL_MIN_WMATIC_VALUE,
                 )
             else:
                 ensure_usdc_for_x_signal(
-                    min_usdc=AUTO_USDC_FOR_X_SIGNAL_MIN_USDC,
+                    min_usdc=auto_usdc_target,
                     min_wmatic_value=AUTO_USDC_FOR_X_SIGNAL_MIN_WMATIC_VALUE,
                 )
                 balances = get_balances()
