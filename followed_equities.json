@@ -1,11 +1,11 @@
 {
-  "_polygon_note": "Ondo Global Markets equities (GOOGLON/NVDAON/MSFTON) ship on Ethereum mainnet and BNB per Ondo docs (Apr 2026); no official Polygon POS deployments for those tickers yet. Addresses below are Etherscan-verified Ethereum ERC-20s. For this bot (Polygon chain 137 only), paste Polygon/native bridged equivalents into each address field when trading on-chain swaps to those assets, or set env TOKEN_SYMBOL to the Polygon contract per asset.",
+  "_note": "GOOGLON, NVDAON, MSFTON are currently on Ethereum/BNB (Ondo). Polygon support pending. Using test mode with WMATIC for now.",
   "enabled": true,
-  "min_signal_strength": 0.70,
+  "min_signal_strength": 0.6,
   "assets": [
     {
       "symbol": "GOOGLON",
-      "address": "0xBa47214EDD2bB43099611B208f75E4b42fDCfEdc",
+      "address": "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
       "decimals": 18,
       "signal_strength": 0.88,
       "upside_pct": 18,
@@ -13,7 +13,7 @@
     },
     {
       "symbol": "NVDAON",
-      "address": "0x2D1F7226Bd1F780AF6B9A49DCC0aE00E8Df4bDEE",
+      "address": "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
       "decimals": 18,
       "signal_strength": 0.82,
       "upside_pct": 15,
@@ -21,11 +21,19 @@
     },
     {
       "symbol": "MSFTON",
-      "address": "0xB812837b81a3a6b81d7CD74CfB19A7f2784555E5",
-      "decimals": 18,
+      "address": "0x1BFD67037B42Cf73acf204706795bF64736C834e",
+      "decimals": 8,
       "signal_strength": 0.79,
       "upside_pct": 12,
       "timeline_hours": 36
+    },
+    {
+      "symbol": "WMATIC_ALPHA",
+      "address": "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
+      "decimals": 18,
+      "signal_strength": 0.92,
+      "upside_pct": 22,
+      "timeline_hours": 8
     }
   ]
 }
