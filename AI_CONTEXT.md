@@ -2,7 +2,7 @@
 
 **Repo**: https://github.com/krantikaridev/nanoclaw  
 **Active Branch**: V2  
-**Date**: 28 April 2026
+**Date**: 29 April 2026
 **Wallet**: 0x6e291a7180bd198d67eeb792bb3262324d3e64aa
 
 **Current Portfolio Snapshot**:
@@ -21,7 +21,9 @@
 - TAKE_PROFIT_PCT=8.0
 - STRONG_SIGNAL_TP=12.0
 - RPC=https://polygon.publicnode.com
-- refer .env.local for details
+- ENABLE_X_SIGNAL_EQUITY=true
+- X_SIGNAL_EQUITY_MIN_STRENGTH=0.70
+- refer .env.local for overrides
 
 **Recent Improvements**:
 - ✅ Gas Protector module fully integrated (GasProtector.builder())
@@ -32,10 +34,17 @@
 - ✅ Agent Feedback Loop completed
 - ✅ Tokenized Equity + X-Signal multi-asset trader scaffolded (dynamic asset list + per-asset cooldown + gas-protected)
 
+**Current issues addressed (2026-04-29 — uncommitted change set)**:
+- **X-Signal equity**: `SignalEquityTrader` is now invoked from `determine_trade_decision` via `try_x_signal_equity_decision()`: loads `followed_equities.json`, filters by `min_signal_strength` vs `X_SIGNAL_EQUITY_MIN_STRENGTH`, iterates eligible assets by strength, and returns the first valid `EquityTradePlan` (highest signal first). Previously the module object existed but decision flow did not consistently call it with the same rules as the JSON list.
+- **followed_equities.json**: Removed invalid placeholder addresses; filled with canonical **Ethereum** Ondo Global Markets ERC-20s (GOOGLON, NVDAON, MSFTON) per Etherscan/CoinGecko references, plus `_polygon_note` explaining that these tickers are not officially deployed on Polygon POS yet—override `address` (or env) with Polygon contracts when executing purely on chain 137.
+- **Observability**: Balance snapshot at each decision, explicit `🔍 DECISION PATH` tags (PROTECTION, PROFIT_TAKE, X_SIGNAL_EQUITY, USDC_COPY, POLYCOPY, MAIN_STRATEGY), and structured X-Signal logs (`X-SIGNAL EQUITY CHECK | …`, `ACTIVE | …`, `No valid plan … (reason: …)`).
+- **Env**: `ENABLE_X_SIGNAL_EQUITY` and `X_SIGNAL_EQUITY_MIN_STRENGTH` added to `.env`, `.env.example`, and `.env.local`; `load_dotenv(".env.local", override=True)` so local flags load after `.env`.
+- **USDT↔WMATIC only**: Root cause was X-Signal path not driving decisions and/or zero USDC / wrong token addresses; equity legs need USDC for buys and valid `token_in`/`token_out` for `approve_and_swap`. Main strategy remains USDT/WMATIC when no higher-priority path fires.
+
 **Current Status**:
 - Bot running on VM with **MAX_GWEI=450**
 - Local development in Cursor + periodic `git pull` on VM
-- X-Signal Equity Trader fully integrated and firing. 3 test assets added. Aggression at 25%. Realized profit +$74 in USDT.
+- X-Signal equity path is wired into `determine_trade_decision` with logging; production behavior still depends on USDC balance, gas guard, cooldowns, and Polygon-appropriate equity contract addresses when swapping on 137.
 - Tokenized equity opportunity remains high-priority (earnings week volatility play)
 
 ## Development Workflow
@@ -78,4 +87,4 @@ Paste this raw URL at the top:
 https://raw.githubusercontent.com/krantikaridev/nanoclaw/V2/AI_CONTEXT.md
 
 **Next Milestone**:
-- X-Signal Equity Trader live + Agent Feedback auto-generation + Telegram notifications + First real tokenized stock trade this week
+- Harden Polygon-native or bridged contract addresses for followed equities (per-asset `address` or env when Ondo/bridge lists them for chain 137), validate router path (USDC→equity may need multi-hop), Agent Feedback auto-generation, Telegram notifications, first live tokenized equity swap on Polygon after liquidity checks

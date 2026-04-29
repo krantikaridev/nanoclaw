@@ -161,8 +161,10 @@ class SignalEquityTrader:
             if not isinstance(item, dict):
                 continue
             symbol = str(item.get("symbol", "")).strip()
-            env_token_address = str(item.get("env_token_address", symbol)).strip() or symbol
-            token_address = str(os.getenv(env_token_address, "")).strip()
+            env_key = str(item.get("env_token_address", symbol)).strip() or symbol
+            explicit_address = item.get("address")
+            explicit = str(explicit_address).strip() if explicit_address is not None else ""
+            token_address = explicit or str(os.getenv(env_key, "")).strip()
             if not symbol or not token_address:
                 continue
             decimals = int(item.get("decimals", 18) or 18)

@@ -35,6 +35,7 @@ from copy_trading import get_target_wallets
 from protection import check_exit_conditions, get_live_wmatic_price, record_buy
 
 load_dotenv()
+load_dotenv(".env.local", override=True)
 
 LOCK_FILE = os.path.join(tempfile.gettempdir(), "nanoclaw.lock")
 STATE_FILE = "bot_state.json"
@@ -51,6 +52,7 @@ TAKE_PROFIT_SELL_PCT = float(os.getenv("TAKE_PROFIT_SELL_PCT", "0.45"))
 STRONG_TP_SELL_PCT = float(os.getenv("STRONG_TP_SELL_PCT", "0.60"))
 ENABLE_USDC_COPY = os.getenv("ENABLE_USDC_COPY", "false").lower() == "true"
 ENABLE_X_SIGNAL_EQUITY = os.getenv("ENABLE_X_SIGNAL_EQUITY", "false").lower() == "true"
+X_SIGNAL_EQUITY_MIN_STRENGTH = float(os.getenv("X_SIGNAL_EQUITY_MIN_STRENGTH", "0.70"))
 FOLLOWED_EQUITIES_PATH = os.getenv("FOLLOWED_EQUITIES_PATH", "followed_equities.json")
 
 WALLET_LAST_TRADE: Dict[str, float] = {}
@@ -393,6 +395,120 @@ def _pick_strongest_equity_signal(assets: Sequence[FollowedEquity]) -> Optional[
     return best
 
 
+def _tuned_signal_equity_trader(min_signal_strength: float) -> SignalEquityTrader:
+    base_cfg = X_SIGNAL_EQUITY_TRADER.config
+    tuned_cfg = SignalEquityTraderConfig(
+        **{
+            **base_cfg.__dict__,
+            "enabled": True,
+            "strong_signal_threshold": float(min_signal_strength),
+        }
+    )
+    return SignalEquityTrader(
+        config=tuned_cfg,
+        gas_protector=X_SIGNAL_EQUITY_TRADER.gas_protector,
+        usdc_address=X_SIGNAL_EQUITY_TRADER.usdc_address,
+    )
+
+
+def try_x_signal_equity_decision(balances: Balances) -> Optional[TradeDecision]:
+    """Highest-priority iteration: eligible assets × SignalEquityTrader.build_plan; first plan wins."""
+    if not ENABLE_X_SIGNAL_EQUITY:
+        return None
+
+    cfg: dict = {}
+    try:
+        with open(FOLLOWED_EQUITIES_PATH, "r", encoding="utf-8") as file_handle:
+            cfg = json.load(file_handle) or {}
+    except Exception:
+        cfg = {}
+
+    cfg_enabled = bool(cfg.get("enabled", True)) if isinstance(cfg, dict) else True
+    json_min = float(cfg.get("min_signal_strength", X_SIGNAL_EQUITY_MIN_STRENGTH) or X_SIGNAL_EQUITY_MIN_STRENGTH)
+    min_strength = max(json_min, X_SIGNAL_EQUITY_MIN_STRENGTH)
+
+    assets_seq = X_SIGNAL_EQUITY_TRADER.load_followed_equities()
+    assets = sorted(
+        assets_seq,
+        key=lambda a: abs(float(a.signal_strength)),
+        reverse=True,
+    )
+    eligible = [a for a in assets if abs(float(a.signal_strength)) >= min_strength]
+
+    print(f"🟦 X-SIGNAL EQUITY CHECK | Checking {len(assets)} assets")
+    if not cfg_enabled:
+        print(f"🟦 X-SIGNAL EQUITY | No valid plan this cycle (reason: disabled in {FOLLOWED_EQUITIES_PATH})")
+        return None
+    if not assets:
+        print(f"🟦 X-SIGNAL EQUITY | No valid plan this cycle (reason: no assets loaded)")
+        return None
+    if not eligible:
+        print(
+            f"🟦 X-SIGNAL EQUITY | No valid plan this cycle "
+            f"(reason: no_asset_above_threshold (>={min_strength:.2f}))"
+        )
+        return None
+
+    trader = _tuned_signal_equity_trader(min_strength)
+    reason_parts: list[str] = []
+
+    for a in eligible:
+        sym = str(a.symbol).strip()
+        sig = float(a.signal_strength)
+        action_label = "BUY" if sig > 0 else "SELL"
+        print(
+            f"🟦 X-SIGNAL EQUITY ACTIVE | {sym} | Strength {sig:.3f} | Action: {action_label}"
+        )
+        equity_bal = get_token_balance(a.token_address, int(a.decimals))
+        plan = trader.build_plan(
+            symbol=sym,
+            token_address=str(a.token_address).strip(),
+            token_decimals=int(a.decimals),
+            signal_strength=sig,
+            earnings_proximity_days=a.earnings_days,
+            current_price_usd=a.current_price_usd,
+            usdc_balance=balances.usdc,
+            equity_balance=equity_bal,
+            wallet_address_for_gas=WALLET,
+            can_trade_asset=can_trade_asset,
+            mark_asset_traded=mark_asset_traded,
+        )
+        if plan:
+            return TradeDecision(
+                direction=plan.direction,
+                amount_in=plan.amount_in,
+                trade_size=plan.trade_size,
+                message=plan.message,
+                token_in=plan.token_in,
+                token_out=plan.token_out,
+            )
+        hints: list[str] = []
+        if balances.usdc <= 0 and sig > 0:
+            hints.append("zero_usdc_for_buy_path")
+        if equity_bal <= 0 and sig < 0:
+            hints.append("zero_equity_balance_for_sell_path")
+        if not trader.gas_protector.get_safe_status(
+            address=WALLET, urgent=False, min_pol=float(trader.config.min_pol_for_gas)
+        ).get("ok", False):
+            hints.append("gas_or_pol_guard_blocked")
+        if not can_trade_asset(
+            sym,
+            now=None,
+            cooldown_seconds=int(trader.config.per_asset_cooldown_seconds),
+        ):
+            hints.append(f"cooldown_seconds={trader.config.per_asset_cooldown_seconds}s")
+        if not hints:
+            hints.append(f"risk_filters_or_router_none_for_{sym}")
+        reason_parts.append("; ".join(dict.fromkeys(hints)))
+
+    reason = (
+        " | ".join(reason_parts[:3])
+        + (f" …(+{len(reason_parts)-3}_more)" if len(reason_parts) > 3 else "")
+    )
+    print(f"🟦 X-SIGNAL EQUITY | No valid plan this cycle (reason: {reason})")
+    return None
+
+
 def evaluate_x_signal_equity_trade(
     balances: Balances,
     *,
@@ -417,7 +533,12 @@ def evaluate_x_signal_equity_trade(
     current_price_f = best.current_price_usd
 
     equity_balance = get_token_balance(token_address, decimals)
-    return trader.build_plan(
+    min_s = max(
+        float(trader.config.strong_signal_threshold),
+        X_SIGNAL_EQUITY_MIN_STRENGTH,
+    )
+    tuned = _tuned_signal_equity_trader(min_s)
+    return tuned.build_plan(
         symbol=symbol,
         token_address=token_address,
         token_decimals=decimals,
@@ -497,11 +618,23 @@ def select_main_strategy_trade(
 
 
 def determine_trade_decision(state: dict, balances: Balances, current_price: float) -> TradeDecision:
+    target_wallets_prelude = get_target_wallets()
+    print(
+        f"🔍 BALANCES | USDT=${balances.usdt:.2f} USDC=${balances.usdc:.2f} "
+        f"WMATIC≈{(balances.wmatic * current_price):.2f} USD | POL={balances.pol:.4f} "
+        f"| copy_targets={len(target_wallets_prelude)}"
+    )
+    print(
+        "🔍 DECISION PATH | precedence: "
+        "PROTECTION → PROFIT_TAKE → X_SIGNAL_EQUITY → USDC_COPY | POLYCOPY → MAIN_STRATEGY"
+    )
+
     if COPY_TRADE_PCT >= 0.20:
         print(f"🔥 AGGRESSIVE MODE ACTIVE | COPY_TRADE_PCT={COPY_TRADE_PCT:.2f}")
 
     should_force_sell, reason = check_exit_conditions()
     if should_force_sell:
+        print(f"🔍 DECISION PATH: PROTECTION ({reason})")
         return build_protection_exit_decision(
             reason=reason or "UNKNOWN",
             current_price=current_price,
@@ -511,78 +644,19 @@ def determine_trade_decision(state: dict, balances: Balances, current_price: flo
 
     should_take_profit, profit_signal = evaluate_take_profit(current_price, state)
     if should_take_profit and profit_signal and balances.wmatic > 0:
+        print(f"🔍 DECISION PATH: PROFIT_TAKE ({profit_signal.get('reason','')})")
         return build_profit_exit_decision(profit_signal, balances.wmatic)
 
     if profit_signal and profit_signal["reason"] == "HOLD":
         print(f"📈 {profit_signal['message']}")
 
     if ENABLE_X_SIGNAL_EQUITY:
-        cfg: dict = {}
-        try:
-            with open(FOLLOWED_EQUITIES_PATH, "r", encoding="utf-8") as file_handle:
-                cfg = json.load(file_handle) or {}
-        except Exception:
-            cfg = {}
+        xd = try_x_signal_equity_decision(balances)
+        if xd and xd.should_execute:
+            print("🔍 DECISION PATH: X_SIGNAL_EQUITY")
+            return xd
 
-        cfg_enabled = bool(cfg.get("enabled", True)) if isinstance(cfg, dict) else True
-        min_strength = float(cfg.get("min_signal_strength", 0.70) or 0.70) if isinstance(cfg, dict) else 0.70
-        raw_assets = cfg.get("assets", []) if isinstance(cfg, dict) else []
-        candidates = [
-            a
-            for a in raw_assets
-            if isinstance(a, dict) and float(a.get("signal_strength", 0.0) or 0.0) >= 0.70
-        ]
-
-        if cfg_enabled and candidates:
-            best = max(candidates, key=lambda a: float(a.get("signal_strength", 0.0) or 0.0))
-            symbol = str(best.get("symbol", "")).strip()
-            token_address = str(best.get("address", "")).strip()
-            strength = float(best.get("signal_strength", 0.0) or 0.0)
-
-            if symbol and token_address:
-                print(f"🟦 X-SIGNAL EQUITY ACTIVE | {symbol} | Strength {strength:.2f}")
-                equity_balance = get_token_balance(token_address, 18)
-
-                base_cfg = X_SIGNAL_EQUITY_TRADER.config
-                tuned_cfg = SignalEquityTraderConfig(
-                    **{
-                        **base_cfg.__dict__,
-                        "enabled": True,
-                        "strong_signal_threshold": float(min_strength),
-                    }
-                )
-                tuned_trader = SignalEquityTrader(
-                    config=tuned_cfg,
-                    gas_protector=X_SIGNAL_EQUITY_TRADER.gas_protector,
-                    usdc_address=X_SIGNAL_EQUITY_TRADER.usdc_address,
-                )
-
-                x_plan = tuned_trader.build_plan(
-                    symbol=symbol,
-                    token_address=token_address,
-                    token_decimals=18,
-                    signal_strength=strength,
-                    earnings_proximity_days=None,
-                    current_price_usd=None,
-                    usdc_balance=balances.usdc,
-                    equity_balance=equity_balance,
-                    wallet_address_for_gas=WALLET,
-                    can_trade_asset=can_trade_asset,
-                    mark_asset_traded=mark_asset_traded,
-                )
-                if x_plan:
-                    return TradeDecision(
-                        direction=x_plan.direction,
-                        amount_in=x_plan.amount_in,
-                        trade_size=x_plan.trade_size,
-                        message=x_plan.message,
-                        token_in=x_plan.token_in,
-                        token_out=x_plan.token_out,
-                    )
-        else:
-            print("🟦 X-SIGNAL EQUITY | No high-signal assets this cycle")
-
-    target_wallets = get_target_wallets()
+    target_wallets = target_wallets_prelude or get_target_wallets()
     if is_copy_trading_enabled() and target_wallets:
         if ENABLE_USDC_COPY:
             plan = USDC_COPY_STRATEGY.build_plan(
@@ -593,6 +667,7 @@ def determine_trade_decision(state: dict, balances: Balances, current_price: flo
                 mark_wallet_traded=mark_wallet_traded,
             )
             if plan:
+                print(f"🔍 DECISION PATH: USDC_COPY | Size ~${plan.trade_size:.2f}")
                 print(f"🟦 USDC COPY ACTIVE | Size: ${plan.trade_size:.2f}")
                 return TradeDecision(
                     direction="USDC_TO_WMATIC",
@@ -602,8 +677,10 @@ def determine_trade_decision(state: dict, balances: Balances, current_price: flo
                 )
             print("🟦 USDC COPY ACTIVE | No eligible copy-trade this cycle")
         else:
+            print("🔍 DECISION PATH: POLYCOPY_TARGET_WALLETS")
             return select_copy_trade(balances, target_wallets)
 
+    print(f"🔍 DECISION PATH: MAIN_STRATEGY (WMATIC≈${current_price:.4f})")
     return select_main_strategy_trade(balances, current_price)
 
 
