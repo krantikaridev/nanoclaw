@@ -230,8 +230,8 @@ def get_pol_balance(
 
 
 def ensure_pol_for_trade(min_pol: float = 0.025) -> bool:
-    pol = float(get_pol_balance())
-    if pol >= float(min_pol):
+    current_pol = float(get_pol_balance())
+    if current_pol >= float(min_pol):
         return True
 
     key = os.getenv("POLYGON_PRIVATE_KEY") or os.getenv("PRIVATE_KEY")
@@ -239,14 +239,37 @@ def ensure_pol_for_trade(min_pol: float = 0.025) -> bool:
         print(f"{_nanolog()}AUTO-POL skipped — no private key")
         return False
 
-    # Prefer unwrapping WMATIC -> POL (native) as the cheapest/most direct top-up.
+    print(f"🔄 AUTO-POL | Topping up 0.03 POL (current: {current_pol})")
     target_pol = float(POL_TOPUP_AMOUNT)
+    needed_pol = max(0.0, float(min_pol) - current_pol)
+    # Ensure we target enough unwrap to clear the runtime min_pol floor, not just POL_TOPUP_AMOUNT.
+    desired_topup_pol = max(target_pol, needed_pol + 0.002)
     balances = get_balances()
-    needed_pol = max(0.0, float(min_pol) - pol)
-    unwrap_pol = min(max(target_pol, needed_pol + 0.002), float(balances.wmatic) * 0.95)
+    usdt_swap_amount = min(8.0, float(balances.usdt) * 0.95)
 
+    async def _swap_usdt_to_wmatic(amount_units: int) -> bool:
+        if amount_units <= 0:
+            return False
+        tx_hash = await approve_and_swap(
+            w3,
+            key,
+            amount_units,
+            direction="USDT_TO_WMATIC",
+        )
+        return tx_hash is not None
+
+    def _run(coro):
+        return asyncio.run(coro)
+
+    if balances.wmatic < desired_topup_pol and usdt_swap_amount >= 6.0:
+        ok = _run(_swap_usdt_to_wmatic(int(usdt_swap_amount * 1_000_000)))
+        if not ok:
+            print(f"{_nanolog()}AUTO-POL warn — USDT→WMATIC leg failed, trying WMATIC unwrap fallback")
+        balances = get_balances()
+
+    unwrap_pol = min(desired_topup_pol, float(balances.wmatic) * 0.95)
     if unwrap_pol <= 0:
-        print(f"{_nanolog()}AUTO-POL skipped — insufficient WMATIC to unwrap")
+        print(f"{_nanolog()}AUTO-POL skipped — insufficient WMATIC/USDT for top-up")
         return False
 
     try:
@@ -274,9 +297,20 @@ def ensure_pol_for_trade(min_pol: float = 0.025) -> bool:
             }
         )
         signed = w3.eth.account.sign_transaction(tx, private_key=key)
-        w3.eth.send_raw_transaction(signed.rawTransaction)
-        print(f"🔄 AUTO-POL | Topping up {unwrap_pol:.3f} POL for gas")
-        return True
+        tx_hash = w3.eth.send_raw_transaction(signed.rawTransaction)
+        receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=300)
+        if int(receipt.get("status", 0)) != 1:
+            print(f"{_nanolog()}AUTO-POL failed — WMATIC unwrap reverted")
+            return False
+        final_pol = float(get_pol_balance())
+        if final_pol >= float(min_pol):
+            print("✅ AUTO-POL | Top-up successful")
+            return True
+        print(
+            f"{_nanolog()}AUTO-POL failed — POL still low "
+            f"(pol≈{final_pol:.4f}, need≥{float(min_pol):.4f})"
+        )
+        return False
     except Exception as e:
         print(f"{_nanolog()}AUTO-POL failed — {e}")
         return False
@@ -778,6 +812,35 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                     f"🟦 X-SIGNAL EQUITY | Auto-USDC insufficient for BUY equity "
                     f"(USDC ${balances.usdc:.2f} < ${max(force_floor, min_trade_usdc):.2f}) — BUY paths skipped"
                 )
+
+        if not dry_run and eligible:
+            balances = get_balances()
+            if float(balances.pol) < float(MIN_POL_FOR_GAS):
+                if AUTO_TOPUP_POL:
+                    if ensure_pol_for_trade(min_pol=float(MIN_POL_FOR_GAS)):
+                        balances = get_balances()
+                        if float(balances.pol) >= float(MIN_POL_FOR_GAS):
+                            # Recover BUY paths if a prior top-up attempt failed but this one succeeds.
+                            buy_paths_allowed = True
+                            buy_paths_block_reason = (
+                                f"pol recovered to >= {MIN_POL_FOR_GAS:.4f} after AUTO_TOPUP_POL=true retry"
+                            )
+                    else:
+                        print(
+                            f"{_nanolog()}AUTO-POL failed during X-SIGNAL prep "
+                            f"(pol<{MIN_POL_FOR_GAS:.4f}) — BUY paths skipped"
+                        )
+                        buy_paths_allowed = False
+                        buy_paths_block_reason = (
+                            f"pol<{MIN_POL_FOR_GAS:.4f} and AUTO_TOPUP_POL=true (auto-topup failed)"
+                        )
+                else:
+                    print(
+                        f"{_nanolog()}POL low (pol≈{float(balances.pol):.4f} < {MIN_POL_FOR_GAS:.4f}) "
+                        f"and AUTO_TOPUP_POL=false — BUY paths skipped"
+                    )
+                    buy_paths_allowed = False
+                    buy_paths_block_reason = f"pol<{MIN_POL_FOR_GAS:.4f} and AUTO_TOPUP_POL=false"
 
         reason_parts: list[str] = []
         chain_notes: list[str] = []
