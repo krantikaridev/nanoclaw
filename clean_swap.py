@@ -780,26 +780,6 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                     min_wmatic_value=float(X_SIGNAL_WMATIC_MIN_VALUE),
                 )
                 balances = get_balances()
-                if float(balances.pol) < float(MIN_POL_FOR_GAS):
-                    if AUTO_TOPUP_POL:
-                        if ensure_pol_for_trade(min_pol=float(MIN_POL_FOR_GAS)):
-                            balances = get_balances()
-                        else:
-                            print(
-                                f"{_nanolog()}AUTO-POL failed during X-SIGNAL prep "
-                                f"(pol<{MIN_POL_FOR_GAS:.4f}) — BUY paths skipped"
-                            )
-                            buy_paths_allowed = False
-                            buy_paths_block_reason = (
-                                f"pol<{MIN_POL_FOR_GAS:.4f} and AUTO_TOPUP_POL=true (auto-topup failed)"
-                            )
-                    else:
-                        print(
-                            f"{_nanolog()}POL low (pol≈{float(balances.pol):.4f} < {MIN_POL_FOR_GAS:.4f}) "
-                            f"and AUTO_TOPUP_POL=false — BUY paths skipped"
-                        )
-                        buy_paths_allowed = False
-                        buy_paths_block_reason = f"pol<{MIN_POL_FOR_GAS:.4f} and AUTO_TOPUP_POL=false"
             if balances.usdc >= max(force_floor, min_trade_usdc):
                 if dry_run:
                     print(
@@ -1186,7 +1166,12 @@ async def main(*, dry_run: bool = False) -> None:
         pol_now = float(get_pol_balance())
         if pol_now < float(MIN_POL_FOR_GAS):
             if AUTO_TOPUP_POL:
-                if not ensure_pol_for_trade(min_pol=float(MIN_POL_FOR_GAS)):
+                # Run sync top-up off the active event loop (ensure_pol_for_trade uses asyncio.run internally).
+                topup_ok = await asyncio.to_thread(
+                    ensure_pol_for_trade,
+                    float(MIN_POL_FOR_GAS),
+                )
+                if not topup_ok:
                     print(f"{_nanolog()}AUTO-POL failed — skipping cycle (pol<{MIN_POL_FOR_GAS:.3f})")
                     return
             else:
