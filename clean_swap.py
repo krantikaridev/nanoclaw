@@ -56,8 +56,14 @@ ENABLE_USDC_COPY = os.getenv("ENABLE_USDC_COPY", "false").lower() == "true"
 ENABLE_X_SIGNAL_EQUITY = os.getenv("ENABLE_X_SIGNAL_EQUITY", "false").lower() == "true"
 X_SIGNAL_EQUITY_MIN_STRENGTH = float(os.getenv("X_SIGNAL_EQUITY_MIN_STRENGTH", "0.60"))
 FOLLOWED_EQUITIES_PATH = os.getenv("FOLLOWED_EQUITIES_PATH", "followed_equities.json")
-# Iron-fenced USDC population to prevent zero-USDC blocker
-X_SIGNAL_USDC_MIN = float(os.getenv("X_SIGNAL_USDC_MIN", os.getenv("AUTO_USDC_FOR_X_SIGNAL_MIN_USDC", "5.0")))
+# Iron-fenced USDC population to prevent zero-USDC blocker.
+# Keep env precedence aligned with SignalEquityTraderBuilder to avoid sizing mismatches.
+X_SIGNAL_USDC_MIN = float(
+    os.getenv(
+        "X_SIGNAL_EQUITY_MIN_TRADE",
+        os.getenv("X_SIGNAL_USDC_MIN", os.getenv("AUTO_USDC_FOR_X_SIGNAL_MIN_USDC", "5.0")),
+    )
+)
 X_SIGNAL_WMATIC_MIN_VALUE = float(
     os.getenv("X_SIGNAL_WMATIC_MIN_VALUE", os.getenv("AUTO_USDC_FOR_X_SIGNAL_MIN_WMATIC_VALUE", "15.0"))
 )
@@ -764,10 +770,12 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
         )
         trader = _tuned_signal_equity_trader(min_strength)
         min_trade_usdc = float(trader.config.min_trade_usdc)
-        # Align auto-USDC with equity sizing: never aim below min_trade_usdc (env X_SIGNAL_EQUITY_MIN_TRADE).
-        auto_usdc_target = max(float(X_SIGNAL_USDC_MIN), min_trade_usdc)
+        min_usdc = float(X_SIGNAL_USDC_MIN)
+        required_usdc_floor = max(float(min_usdc), min_trade_usdc)
+        # Align auto-USDC with equity sizing: never aim below min_trade_usdc.
+        auto_usdc_target = required_usdc_floor
 
-        force_floor = float(X_SIGNAL_USDC_MIN)
+        force_floor = float(min_usdc)
         if has_strong_buy and balances.usdc < max(force_floor, auto_usdc_target):
             if dry_run:
                 balances = _project_balances_after_auto_usdc(
@@ -841,9 +849,10 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
             if sig > 0 and not buy_paths_allowed:
                 reason_parts.append(f"{sym}: buy_skipped ({buy_paths_block_reason})")
                 continue
-            if sig > 0 and balances.usdc < max(float(X_SIGNAL_USDC_MIN), min_trade_usdc):
+            if sig > 0 and balances.usdc < required_usdc_floor:
                 reason_parts.append(
-                    f"{sym}: buy_skipped (USDC ${balances.usdc:.2f} < min_trade_usdc ${min_trade_usdc:.2f})"
+                    f"{sym}: buy_skipped (USDC ${balances.usdc:.2f} < required_floor ${required_usdc_floor:.2f}; "
+                    f"min_trade_usdc ${min_trade_usdc:.2f})"
                 )
                 continue
             equity_bal = get_token_balance(a.token_address, int(a.decimals))
