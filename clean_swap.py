@@ -297,7 +297,8 @@ def ensure_pol_for_trade(min_pol: float = 0.025) -> bool:
             }
         )
         signed = w3.eth.account.sign_transaction(tx, private_key=key)
-        tx_hash = w3.eth.send_raw_transaction(signed.rawTransaction)
+        raw_tx = signed.raw_transaction
+        tx_hash = w3.eth.send_raw_transaction(raw_tx)
         receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=300)
         if int(receipt.get("status", 0)) != 1:
             print(f"{_nanolog()}AUTO-POL failed — WMATIC unwrap reverted")
