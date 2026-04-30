@@ -793,7 +793,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                     f"(USDC ${balances.usdc:.2f} < ${max(force_floor, min_trade_usdc):.2f}) — BUY paths skipped"
                 )
 
-        if not dry_run and eligible:
+        if not dry_run and has_strong_buy:
             balances = get_balances()
             if float(balances.pol) < float(MIN_POL_FOR_GAS):
                 if AUTO_TOPUP_POL:
