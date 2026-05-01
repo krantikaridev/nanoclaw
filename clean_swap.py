@@ -825,7 +825,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
         float(a.signal_strength) >= 0.88 for a in eligible if float(a.signal_strength) > 0
     )
     if high_conviction:
-        print("🚀 HIGH-CONVICTION MODE ACTIVE — 0.88+ signal present, gas protection relaxed for this cycle")
+        print("🚀 HIGH-CONVICTION MODE ACTIVE — 0.80+ signal present, gas protection relaxed for this cycle")
 
     print(f"🟦 X-SIGNAL EQUITY CHECK | Checking {len(assets)} assets")
     if not cfg_enabled:
@@ -847,7 +847,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
         # === PnL+ SPRINT OVERRIDE (high-conviction bypass) ===
         if high_conviction:
             print(
-                "🚀 HIGH-CONVICTION GAS OVERRIDE | 0.88+ strength detected — bypassing 450 gwei limit "
+                "🚀 HIGH-CONVICTION GAS OVERRIDE | 0.80+ strength detected — bypassing 450 gwei limit "
                 "(PnL+ Sprint Mode, high return high conviction, net expected positive)"
             )
             # Force USDC top-up for high-conviction.
@@ -981,7 +981,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                 reason_parts.append(f"{sym}: buy_skipped ({buy_paths_block_reason})")
                 _log_trade_skipped(f"POL low ({sym} buy blocked)")
                 continue
-            if sig >= 0.88:
+            if sig >= 0.80:
                 print(f"🚀 HIGH-CONVICTION BYPASS | Strength {sig:.2f} — forcing trade even on high gas/low USDC (PnL+ Sprint Mode)")
             if sig > 0 and balances.usdc < required_usdc_floor:
                 reason_parts.append(
@@ -1114,7 +1114,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
             )
             if high_conviction:
                 summary_bits.append(
-                    "gas override active (0.88+ high conviction; bypassing max_gwei block)"
+                    "gas override active (0.80+ high conviction; bypassing max_gwei block)"
                 )
             elif not bool(gst.get("gas_ok", False)):
                 summary_bits.append(

@@ -15,7 +15,7 @@
       "symbol": "WETH",
       "address": "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
       "decimals": 18,
-      "min_signal_strength": 0.7,
+      "min_signal_strength": 0.6,
       "signal_strength": 0.87,
       "upside_pct": 16,
       "timeline_hours": 24
@@ -24,7 +24,7 @@
       "symbol": "USDC",
       "address": "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
       "decimals": 6,
-      "min_signal_strength": 0.75,
+      "min_signal_strength": 0.6,
       "signal_strength": 0.8,
       "upside_pct": 8,
       "timeline_hours": 12

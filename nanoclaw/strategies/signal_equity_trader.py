@@ -25,7 +25,7 @@ class FollowedEquity:
 class SignalEquityTraderConfig:
     enabled: bool = False
     followed_equities_path: str = "followed_equities.json"
-    strong_signal_threshold: float = 0.85
+    strong_signal_threshold: float = 0.80
     max_earnings_days: float = 5.0
     trade_pct_of_usdc: float = 0.18
     min_trade_usdc: float = 5.0
