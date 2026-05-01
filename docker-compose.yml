@@ -1,0 +1,13 @@
+services:
+  nanoclaw:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nanoclaw
+    restart: unless-stopped
+    env_file:
+      - .env
+    command: ["python", "clean_swap.py"]
+    working_dir: /app
+    volumes:
+      - ./:/app

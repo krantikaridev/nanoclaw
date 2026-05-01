@@ -13,9 +13,10 @@ xwatcher/xwatcher_env/
 .venv/
 .env
 *.env
+# Legacy/optional local env files (defense-in-depth: keep ignored even if not used at runtime)
+.env.local
 .env.stage
 .env.prod
-.env.local
 real_cron.log
 bot_state.json
 portfolio_history.json

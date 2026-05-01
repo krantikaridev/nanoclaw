@@ -37,7 +37,6 @@ from copy_trading import get_target_wallets
 from protection import check_exit_conditions, get_live_wmatic_price, record_buy
 
 load_dotenv()
-load_dotenv(".env.local", override=True)
 
 LOCK_FILE = os.path.join(tempfile.gettempdir(), "nanoclaw.lock")
 STATE_FILE = "bot_state.json"

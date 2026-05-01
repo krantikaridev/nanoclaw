@@ -48,7 +48,7 @@ Operational focus: correctness of this precedence, USDC liquidity for equity **b
 Examples: `RPC`, `COOLDOWN_MINUTES`, `ENABLE_X_SIGNAL_EQUITY`, `X_SIGNAL_EQUITY_MIN_STRENGTH` **(default template 0.60; tighten in prod if desired)**,
 `SWAP_SLIPPAGE_BPS`, `LOG_PREFIX`, Polygon token addresses (`USDC`, `WMATIC`, `ROUTER`).
 
-Load order: `.env` then `.env.local` (`override=True`).
+Load order: `.env` only.
 
 ## Recent implementation notes (April 2026)
 
@@ -115,15 +115,26 @@ Load order: `.env` then `.env.local` (`override=True`).
 - Deployment readiness:
   - Do not rely on `git stash -a && pull && stash pop` in VM for normal deploys.
   - Deploy from a clean checkout/branch and restart bot from known commit.
+  - Never run two write-enabled bot instances against the same wallet/private key (nonce/conflict risk).
 
 ## Security red flags (must warn and stop)
 
 - Never paste or share private keys, seed phrases, or full `.env` contents in chat.
-- Never commit `.env`, `.env.stage`, `.env.prod`, or any credential-bearing file.
+- Never commit `.env` or any credential-bearing file.
 - If a request asks to expose secrets (directly or indirectly), agent must refuse and provide a safer alternative.
 - Agent should work from `.env.example` + placeholders unless runtime secret access is explicitly required.
 - Use separate wallets for stage vs production; rotate keys before moving to production capital.
 - Any detected secret-like value in diffs/logs should be treated as a blocker until removed/rotated.
+
+## Operator workflow (for future agents)
+
+- Human operator is the bottleneck; optimize for "deploy once, gather data continuously, iterate in parallel".
+- Default mode: keep stage bot running to collect data while code/design iteration continues in Cursor/Grok threads.
+- Priority order:
+  1) Keep data collection live and stable
+  2) Preserve safety/risk limits
+  3) Improve PnL with minimal, tested deltas
+- If asked for "fastest path", prefer operationally safe one-command flows over broad refactors.
 
 ## Tokenized equities (conceptual roadmap)
 

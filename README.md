@@ -26,6 +26,12 @@ Run the pre-commit gate before commit/push:
 ./scripts/pre_commit_gate.sh
 ```
 
+PowerShell (Windows):
+
+```powershell
+./scripts/pre_commit_gate.ps1
+```
+
 Checklist reference:
 
 - `docs/CLEAN_STATE_CHECKLIST.md`
@@ -76,24 +82,49 @@ This script enforces:
 - local verification (`compileall` + `pytest`)
 - controlled bot restart
 
-## Docker Compose (stage/prod split)
+## Stage pre-pull safety (accounts.db)
 
-Create env files locally (ignored by git):
-
-```bash
-cp .env.example .env.stage
-cp .env.example .env.prod
-```
-
-Run stage:
+Before removing `accounts.db`, verify it is safe:
 
 ```bash
-NANOCLAW_ENV_FILE=.env.stage docker compose up -d --build
+./scripts/check_accounts_db.sh
 ```
 
-Run production:
+Policy:
+
+- zero rows -> safe to delete
+- non-zero rows -> investigate before delete
+
+## VM fix script env target
+
+`scripts/fix_vm.sh` now writes gas overrides into `.env` (not `.env.local`).
+Override env file path if needed:
 
 ```bash
-NANOCLAW_ENV_FILE=.env.prod docker compose up -d --build
+NANOCLAW_ENV_PATH=/path/to/.env ./scripts/fix_vm.sh
 ```
+
+## Docker Compose
+
+Use `.env` as the single runtime env file:
+
+```bash
+cp .env.example .env
+docker compose up -d --build
+```
+
+## Share runtime artifacts for AI review
+
+Create a non-secret analysis bundle:
+
+```bash
+./scripts/package_runtime_artifacts.sh
+```
+
+Then upload the generated `artifacts/share/*.tar.gz` to Drive and share the link.
+
+## Wallet safety
+
+Do not run two trading bots with the same wallet/private key at the same time.
+Use one writer bot per wallet (second instance only in dry-run/read-only mode).
 

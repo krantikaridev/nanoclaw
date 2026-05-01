@@ -7,9 +7,18 @@ set -euo pipefail
 #   ./scripts/deploy_vm_safe.sh V2
 
 BRANCH="${1:-V2}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+cd "${REPO_ROOT}"
+if [[ ! -f "clean_swap.py" ]]; then
+  echo "❌ clean_swap.py not found in repo root: ${REPO_ROOT}"
+  exit 1
+fi
 
 echo "=== Nanoclaw safe deploy ($(date)) ==="
 echo "Branch: ${BRANCH}"
+echo "Repo root: ${REPO_ROOT}"
 
 if [[ -n "$(git status --porcelain)" ]]; then
   echo "❌ Refusing deploy: working tree is not clean."

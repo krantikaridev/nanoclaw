@@ -25,11 +25,30 @@ else
 fi
 
 sync && sudo sysctl -w vm.drop_caches=3 2>/dev/null || true
+
+ENV_PATH="${NANOCLAW_ENV_PATH:-$HOME/.nanobot/workspace/nanoclaw/.env}"
+
+upsert_env() {
+  local key="$1"
+  local value="$2"
+  local file="$3"
+  if [ ! -f "$file" ]; then
+    echo "⚠️ Env file not found: $file"
+    return 1
+  fi
+  if grep -q "^${key}=" "$file"; then
+    sed -i "s/^${key}=.*/${key}=${value}/" "$file"
+  else
+    echo "${key}=${value}" >> "$file"
+  fi
+  return 0
+}
+
 if [ -n "${NANOCLAW_FIX_MAX_GWEI:-}" ]; then
-  sed -i "s/MAX_GWEI=.*/MAX_GWEI=${NANOCLAW_FIX_MAX_GWEI}/" ~/.nanobot/workspace/nanoclaw/.env.local 2>/dev/null || true
+  upsert_env "MAX_GWEI" "${NANOCLAW_FIX_MAX_GWEI}" "${ENV_PATH}" || true
 fi
 if [ -n "${NANOCLAW_FIX_URGENT_GWEI:-}" ]; then
-  sed -i "s/URGENT_GWEI=.*/URGENT_GWEI=${NANOCLAW_FIX_URGENT_GWEI}/" ~/.nanobot/workspace/nanoclaw/.env.local 2>/dev/null || true
+  upsert_env "URGENT_GWEI" "${NANOCLAW_FIX_URGENT_GWEI}" "${ENV_PATH}" || true
 fi
 pkill -f clean_swap.py || true
 sleep 3
