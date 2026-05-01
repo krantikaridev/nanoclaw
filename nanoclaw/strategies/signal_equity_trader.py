@@ -54,7 +54,7 @@ class SignalEquityTraderBuilder:
     def __init__(self) -> None:
         self._enabled = os.getenv("ENABLE_X_SIGNAL_EQUITY", "false").lower() == "true"
         self._followed_equities_path = os.getenv("FOLLOWED_EQUITIES_PATH", "followed_equities.json")
-        self._strong_signal_threshold = float(os.getenv("X_SIGNAL_STRONG_THRESHOLD", "0.85"))
+        self._strong_signal_threshold = float(os.getenv("X_SIGNAL_STRONG_THRESHOLD", "0.80"))
         self._max_earnings_days = float(os.getenv("X_SIGNAL_MAX_EARNINGS_DAYS", "5.0"))
         self._trade_pct_of_usdc = float(os.getenv("X_SIGNAL_EQUITY_TRADE_PCT", "0.18"))
         self._min_trade_usdc: Optional[float] = None
@@ -280,6 +280,7 @@ class SignalEquityTrader:
 
         strength = float(signal_strength)
         strong = abs(strength) >= float(self.config.strong_signal_threshold)
+        print(f"DEBUG build_plan | {sym} | signal={signal_strength} | strong={strong} | earnings_ok={self._in_earnings_window(earnings_proximity_days)} | cooldown_ok={self._cooldown_ok(sym, can_trade_asset=can_trade_asset, now=now)} | gas_ok={gas_status.get("gas_ok", False)} | trade_size={trade_size if "trade_size" in locals() else "N/A"}")
         if not strong:
             return None
 

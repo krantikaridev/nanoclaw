@@ -609,7 +609,7 @@ def _strong_x_signal_buy_present() -> bool:
     if not bool(cfg.get("enabled", True)):
         return False
     min_strength = _effective_equity_signal_min(cfg)
-    strong_thr = float(os.getenv("X_SIGNAL_STRONG_THRESHOLD", "0.85"))
+    strong_thr = float(os.getenv("X_SIGNAL_STRONG_THRESHOLD", "0.80"))
     assets_seq = X_SIGNAL_EQUITY_TRADER.load_followed_equities()
     _, eligible = _sorted_and_eligible_equities(assets_seq, min_strength)
     return any(
@@ -869,7 +869,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                         f"AUTO-USDC failed during high-conviction prep (have ${balances.usdc:.2f}, need $8.00)"
                     )
 
-        strong_thr = float(os.getenv("X_SIGNAL_STRONG_THRESHOLD", "0.85"))
+        strong_thr = float(os.getenv("X_SIGNAL_STRONG_THRESHOLD", "0.80"))
         has_strong_buy = any(
             float(a.signal_strength) > 0 and float(a.signal_strength) >= strong_thr for a in eligible
         )
