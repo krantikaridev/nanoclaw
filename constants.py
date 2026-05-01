@@ -42,7 +42,7 @@ def _abi_fragment_to_entry_list(fragment: object) -> list:
 LOG_PREFIX = os.getenv("LOG_PREFIX", "[nanoclaw]").strip()
 
 # Native POL floor for gas (used by multiple modules; can be overridden via env MIN_POL_FOR_GAS).
-MIN_POL_FOR_GAS = float(os.getenv("MIN_POL_FOR_GAS", "0.025"))
+MIN_POL_FOR_GAS = float(os.getenv("MIN_POL_FOR_GAS", "0.005"))
 
 # Deployment-specific addresses should be env-driven.
 WALLET = os.getenv("WALLET", "0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA")

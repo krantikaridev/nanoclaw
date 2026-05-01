@@ -42,7 +42,7 @@ STATE_FILE = "bot_state.json"
 TRADE_LOG_FILE = "trade_exits.json"
 
 COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", 7))
-MIN_POL_FOR_GAS = float(os.getenv("MIN_POL_FOR_GAS", "0.025"))
+MIN_POL_FOR_GAS = float(os.getenv("MIN_POL_FOR_GAS", "0.005"))
 AUTO_TOPUP_POL = os.getenv("AUTO_TOPUP_POL", "true").lower() == "true"
 POL_TOPUP_AMOUNT = float(os.getenv("POL_TOPUP_AMOUNT", "0.03"))
 COPY_TRADE_PCT = float(os.getenv("COPY_TRADE_PCT", "0.25"))
@@ -1173,22 +1173,6 @@ async def main(*, dry_run: bool = False) -> None:
 
     create_lock()
     try:
-        pol_now = float(get_pol_balance())
-        if pol_now < float(MIN_POL_FOR_GAS):
-            if AUTO_TOPUP_POL:
-                # Run sync top-up off the active event loop (ensure_pol_for_trade uses asyncio.run internally).
-                topup_ok = await asyncio.to_thread(
-                    ensure_pol_for_trade,
-                    float(MIN_POL_FOR_GAS),
-                )
-                if not topup_ok:
-                    print(f"{_nanolog()}AUTO-POL failed — skipping cycle (pol<{MIN_POL_FOR_GAS:.3f})")
-                    return
-            else:
-                print(
-                    f"{_nanolog()}POL low (pol≈{pol_now:.4f} < {MIN_POL_FOR_GAS:.4f}) and AUTO_TOPUP_POL=false — skipping cycle"
-                )
-                return
         if is_global_cooldown_active(state):
             lr = float(state.get("last_run") or 0.0)
             elapsed_s = max(0.0, time.time() - lr)
@@ -1198,19 +1182,6 @@ async def main(*, dry_run: bool = False) -> None:
                 f"(COOLDOWN_MINUTES={COOLDOWN_MINUTES}; last_run was {elapsed_s:.0f}s ago)"
             )
             return
-
-        gas_status = get_gas_status()
-        if not gas_status["ok"]:
-            gas_gwei = float(gas_status.get("gas_gwei") or 0.0)
-            if gas_gwei <= 400.0:
-                print("⚠️ High gas but forcing trade (urgent mode)")
-            else:
-                print(
-                    "⛔ Gas protection active "
-                    f"(gas {gas_status['gas_gwei']:.2f}/{gas_status['max_gwei']:.2f} gwei, "
-                    f"POL {gas_status['pol_balance']:.4f}/{gas_status['min_pol_balance']:.4f})"
-                )
-                return
 
         current_price = get_live_wmatic_price()
         decision = await asyncio.to_thread(
@@ -1228,6 +1199,36 @@ async def main(*, dry_run: bool = False) -> None:
         if dry_run:
             print(f"🧪 DRY RUN: would execute {decision.direction} for amount_in={decision.amount_in}")
             return
+
+        pol_now = float(get_pol_balance())
+        if pol_now < float(MIN_POL_FOR_GAS):
+            if AUTO_TOPUP_POL:
+                # Run sync top-up off the active event loop (ensure_pol_for_trade uses asyncio.run internally).
+                topup_ok = await asyncio.to_thread(
+                    ensure_pol_for_trade,
+                    float(MIN_POL_FOR_GAS),
+                )
+                if not topup_ok:
+                    print(f"{_nanolog()}AUTO-POL failed — trade blocked (pol<{MIN_POL_FOR_GAS:.3f})")
+                    return
+            else:
+                print(
+                    f"{_nanolog()}POL low (pol≈{pol_now:.4f} < {MIN_POL_FOR_GAS:.4f}) and AUTO_TOPUP_POL=false — trade blocked"
+                )
+                return
+
+        gas_status = get_gas_status()
+        if not gas_status["ok"]:
+            gas_gwei = float(gas_status.get("gas_gwei") or 0.0)
+            if gas_gwei <= 400.0:
+                print("⚠️ High gas but forcing trade (urgent mode)")
+            else:
+                print(
+                    "⛔ Gas protection active "
+                    f"(gas {gas_status['gas_gwei']:.2f}/{gas_status['max_gwei']:.2f} gwei, "
+                    f"POL {gas_status['pol_balance']:.4f}/{gas_status['min_pol_balance']:.4f})"
+                )
+                return
 
         if decision.direction == "USDT_TO_WMATIC":
             record_buy(current_price, decision.trade_size, "pending")
