@@ -16,6 +16,31 @@
 
 **Goal**: Growth with strict risk controls (`protection.py`, GasProtector, take-profit tiers).
 
+## P0 objective (ROI-first)
+
+- **Primary objective:** prove stage strategy can produce **reliable positive net PnL** with trustworthy accounting.
+- **Current phase:** stage-only validation on small capital; production scaling is blocked until stage criteria pass.
+- **Definition of done for this phase (all required):**
+  - Continuous run window: **>= 168 hours (7 days)**
+  - Sample size: **>= 40 executed swaps**
+  - Net result: **> +2%** over the validation window (net of gas/slippage)
+  - Risk cap: **max drawdown < 10%**
+  - Data quality: portfolio/trade logs are internally consistent and reproducible
+
+## P0 execution loop (daily)
+
+- Keep one write-enabled stage bot running continuously (do not interrupt data collection unless blocker).
+- Prioritize only changes that improve one of:
+  - net edge (PnL)
+  - risk control integrity
+  - data reliability/observability
+- Avoid broad refactors during data collection unless they remove a proven blocker.
+- At the end of each day, capture:
+  - executed swaps count
+  - net PnL %
+  - max drawdown %
+  - top 1-3 blockers for next iteration
+
 ## Core strategy (`clean_swap.py` precedence)
 
 Protection → Profit take (`evaluate_take_profit`) → **X-Signal equities** (`try_x_signal_equity_decision`) → USDC copy → polycopy/target wallets → main USDT↔WMATIC logic.
@@ -69,6 +94,8 @@ Load order: `.env` then optional `.env.local` (`override=True`) when present.
 ## Development workflow
 
 - Local Cursor → tests (`pytest`) → dry-run (`python clean_swap.py --dry-run`; on Windows set `PYTHONIOENCODING=utf-8` if the console rejects emoji prints from legacy modules).
+- Windows PowerShell execution-policy-safe pre-commit gate:
+  - `powershell -ExecutionPolicy Bypass -File .\scripts\pre_commit_gate.ps1`
 
 ## Urgent delta checklist (do not skip)
 
@@ -112,6 +139,7 @@ Load order: `.env` then optional `.env.local` (`override=True`) when present.
 - Verification gate (must pass):
   - `python -m compileall -q .`
   - `python -m pytest -q`
+  - Coverage baseline check (periodic): `python -m pytest --cov=. --cov-report=term-missing -q`
 - Deployment readiness:
   - Do not rely on `git stash -a && pull && stash pop` in VM for normal deploys.
   - Deploy from a clean checkout/branch and restart bot from known commit.
