@@ -25,9 +25,13 @@ class _DummyTunedTrader:
         self.gas_protector = _DummyGasProtector()
         self.build_plan_calls = 0
 
-    def build_plan(self, **kwargs):
+    def build_plan_with_block_reason(self, **kwargs):
         self.build_plan_calls += 1
-        return object()
+        return object(), None
+
+    def build_plan(self, **kwargs):
+        plan, _ = self.build_plan_with_block_reason(**kwargs)
+        return plan
 
 
 def test_evaluate_usdc_copy_trade_defaults_strategy_without_build_call(monkeypatch):
@@ -462,6 +466,9 @@ def test_try_x_signal_equity_decision_applies_dynamic_size_for_strong_buy(monkey
             _ = kwargs
             return _Plan()
 
+        def build_plan_with_block_reason(self, **kwargs):
+            return self.build_plan(**kwargs), None
+
     class _BaseTrader:
         def load_followed_equities(self):
             return [
@@ -513,6 +520,9 @@ def test_try_x_signal_equity_decision_caps_dynamic_size_to_available_usdc(monkey
         def build_plan(self, **kwargs):
             _ = kwargs
             return _Plan()
+
+        def build_plan_with_block_reason(self, **kwargs):
+            return self.build_plan(**kwargs), None
 
     class _BaseTrader:
         def load_followed_equities(self):
@@ -583,6 +593,131 @@ def test_sorted_and_eligible_equities_respects_explicit_zero_floor():
     assert [a.symbol for a in eligible] == ["ZERO_FLOOR"]
 
 
+def test_order_eligible_x_signal_candidates_prefers_tradable_over_higher_signal_on_cooldown(monkeypatch):
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_EQUITY_COOLDOWN_FIRST_SORT", True)
+
+    wmatic = clean_swap.FollowedEquity(
+        symbol="WMATIC_ALPHA",
+        token_address="0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
+        decimals=18,
+        signal_strength=0.92,
+    )
+    weth = clean_swap.FollowedEquity(
+        symbol="WETH_ALPHA",
+        token_address="0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+        decimals=18,
+        signal_strength=0.87,
+    )
+
+    def fake_can_trade(sym: str, now=None, cooldown_seconds=0):
+        return sym != "WMATIC_ALPHA"
+
+    monkeypatch.setattr(clean_swap, "can_trade_asset", fake_can_trade)
+    out = clean_swap._order_eligible_x_signal_candidates(
+        [wmatic, weth],
+        per_asset_cooldown_seconds=1800,
+    )
+    assert [a.symbol for a in out] == ["WETH_ALPHA", "WMATIC_ALPHA"]
+
+
+def test_order_eligible_x_signal_legacy_pure_signal_when_sort_disabled(monkeypatch):
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_EQUITY_COOLDOWN_FIRST_SORT", False)
+
+    wmatic = clean_swap.FollowedEquity(
+        symbol="WMATIC_ALPHA",
+        token_address="0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
+        decimals=18,
+        signal_strength=0.92,
+    )
+    weth = clean_swap.FollowedEquity(
+        symbol="WETH_ALPHA",
+        token_address="0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+        decimals=18,
+        signal_strength=0.87,
+    )
+
+    def fake_can_trade(sym: str, now=None, cooldown_seconds=0):
+        return sym != "WMATIC_ALPHA"
+
+    monkeypatch.setattr(clean_swap, "can_trade_asset", fake_can_trade)
+    out = clean_swap._order_eligible_x_signal_candidates(
+        [wmatic, weth],
+        per_asset_cooldown_seconds=1800,
+    )
+    assert [a.symbol for a in out] == ["WMATIC_ALPHA", "WETH_ALPHA"]
+
+
+def test_try_x_signal_equity_prioritizes_ready_asset_sorted_before_build_plan(monkeypatch):
+    class _Plan:
+        direction = "USDC_TO_EQUITY"
+        amount_in = 8_000_000
+        trade_size = 8.0
+        message = "buy"
+        token_in = "0x" + "2" * 40
+        token_out = "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619"
+
+    class _TunedConfig:
+        min_trade_usdc = 5.0
+        per_asset_cooldown_seconds = 1800
+        min_pol_for_gas = 0.005
+
+    build_order: list[str] = []
+
+    class _TunedTrader:
+        config = _TunedConfig()
+        gas_protector = _DummyGasProtector()
+
+        def build_plan_with_block_reason(self, **kwargs):
+            sym = str(kwargs.get("symbol", "")).strip()
+            build_order.append(sym)
+            if sym == "WMATIC_ALPHA":
+                return None, "per_asset_cooldown_stub"
+            return _Plan(), None
+
+        def build_plan(self, **kwargs):
+            p, _ = self.build_plan_with_block_reason(**kwargs)
+            return p
+
+    class _BaseTrader:
+        def load_followed_equities(self):
+            return [
+                clean_swap.FollowedEquity(
+                    symbol="WMATIC_ALPHA",
+                    token_address="0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
+                    decimals=18,
+                    signal_strength=0.92,
+                ),
+                clean_swap.FollowedEquity(
+                    symbol="WETH_ALPHA",
+                    token_address="0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+                    decimals=18,
+                    signal_strength=0.87,
+                ),
+            ]
+
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(clean_swap, "AUTO_TOPUP_POL", False)
+    monkeypatch.setattr(clean_swap, "_load_followed_equities_json_dict", lambda: {"enabled": True, "min_signal_strength": 0.60})
+    monkeypatch.setattr(clean_swap, "_effective_equity_signal_min", lambda cfg: 0.60)
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_EQUITY_TRADER", _BaseTrader())
+    monkeypatch.setattr(clean_swap, "_tuned_signal_equity_trader", lambda min_strength: _TunedTrader())
+
+    def fake_can_trade(sym: str, now=None, cooldown_seconds=0):
+        return sym != "WMATIC_ALPHA"
+
+    monkeypatch.setattr(clean_swap, "can_trade_asset", fake_can_trade)
+    monkeypatch.setattr(clean_swap, "get_token_balance", lambda *_a, **_k: 0.0)
+
+    decision = clean_swap.try_x_signal_equity_decision(
+        clean_swap.Balances(usdt=40.0, wmatic=10.0, pol=1.0, usdc=20.0),
+        dry_run=True,
+    )
+
+    assert decision is not None
+    assert decision.direction == "USDC_TO_EQUITY"
+    assert build_order[0] == "WETH_ALPHA"
+
+
 def test_try_x_signal_high_conviction_bypasses_high_gas_and_forces_usdc_topup(monkeypatch, capsys):
     class _Plan:
         direction = "USDC_TO_EQUITY"
@@ -616,6 +751,9 @@ def test_try_x_signal_high_conviction_bypasses_high_gas_and_forces_usdc_topup(mo
         def build_plan(self, **kwargs):
             captured_kwargs.update(kwargs)
             return _Plan()
+
+        def build_plan_with_block_reason(self, **kwargs):
+            return self.build_plan(**kwargs), None
 
     class _BaseTrader:
         def load_followed_equities(self):
@@ -693,6 +831,10 @@ def test_try_x_signal_high_conviction_no_plan_logs_override_not_gas_blocked(monk
             _ = kwargs
             return None
 
+        def build_plan_with_block_reason(self, **kwargs):
+            _ = kwargs
+            return None, "mock_no_plan"
+
     class _BaseTrader:
         def load_followed_equities(self):
             return [
@@ -720,7 +862,7 @@ def test_try_x_signal_high_conviction_no_plan_logs_override_not_gas_blocked(monk
 
     out = capsys.readouterr().out
     assert decision is None
-    assert "gas override active (0.88+ high conviction; bypassing max_gwei block)" in out
+    assert "gas override active (0.80+ high conviction; bypassing max_gwei block)" in out
     assert "gas blocked (gas≈" not in out
 
 
@@ -765,6 +907,9 @@ def test_try_x_signal_logs_high_conviction_auto_usdc_failure(monkeypatch, capsys
         def build_plan(self, **kwargs):
             _ = kwargs
             return None
+
+        def build_plan_with_block_reason(self, **kwargs):
+            return self.build_plan(**kwargs), None
 
     class _BaseTrader:
         def load_followed_equities(self):
@@ -815,6 +960,9 @@ def test_try_x_signal_logs_standard_auto_usdc_failure(monkeypatch, capsys):
         def build_plan(self, **kwargs):
             _ = kwargs
             return None
+
+        def build_plan_with_block_reason(self, **kwargs):
+            return self.build_plan(**kwargs), None
 
     class _BaseTrader:
         def load_followed_equities(self):

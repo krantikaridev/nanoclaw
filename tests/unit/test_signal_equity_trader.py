@@ -135,3 +135,56 @@ def test_load_followed_equities_keeps_per_asset_min_signal_strength(tmp_path):
     assert assets[0].min_signal_strength == 0.75
     assert assets[1].symbol == "WETH"
     assert assets[1].min_signal_strength == 0.70
+
+
+def test_buy_usdc_same_as_reserve_is_usdc_identity_noop():
+    usdc_polygon = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"
+    strategy = (
+        SignalEquityTrader.builder()
+        .with_enabled(True)
+        .with_gas_protector(DummyProtector(gas_ok=True, pol_balance=1.0))
+        .with_usdc_address(usdc_polygon)
+        .build()
+    )
+
+    plan, reason = strategy.build_plan_with_block_reason(
+        symbol="USDC",
+        token_address=usdc_polygon.upper(),
+        token_decimals=6,
+        signal_strength=0.92,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=50.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda symbol, now, cooldown: True,
+        now=1000.0,
+    )
+    assert plan is None
+    assert reason == "usdc_identity_noop"
+
+
+def test_below_strong_signal_threshold_returns_explained_reason():
+    strategy = (
+        SignalEquityTrader.builder()
+        .with_enabled(True)
+        .with_strong_signal_threshold(0.90)
+        .with_gas_protector(DummyProtector(gas_ok=True, pol_balance=1.0))
+        .with_usdc_address("0x" + "2" * 40)
+        .build()
+    )
+
+    _, reason = strategy.build_plan_with_block_reason(
+        symbol="WETH_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.85,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=50.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda symbol, now, cooldown: True,
+        now=1000.0,
+    )
+    assert reason is not None and "below_strong_threshold" in reason

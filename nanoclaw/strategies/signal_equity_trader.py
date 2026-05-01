@@ -5,7 +5,7 @@ import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional, Sequence
+from typing import Callable, Optional, Sequence, Tuple
 
 from nanoclaw.utils.gas_protector import GasProtector
 
@@ -234,6 +234,119 @@ class SignalEquityTrader:
         sized = min(float(self.config.max_trade_usdc), sized)
         return max(0.0, float(sized))
 
+    @staticmethod
+    def _addrs_equal_case_insensitive(a: str, b: str) -> bool:
+        return str(a).strip().lower() == str(b).strip().lower()
+
+    def build_plan_with_block_reason(
+        self,
+        *,
+        symbol: str,
+        token_address: str,
+        token_decimals: int,
+        signal_strength: float,
+        earnings_proximity_days: Optional[float],
+        current_price_usd: Optional[float],
+        usdc_balance: float,
+        equity_balance: float,
+        wallet_address_for_gas: str,
+        can_trade_asset: AssetCooldownGetFn,
+        now: Optional[float] = None,
+        urgent_gas: bool = False,
+        allow_high_gas_override: bool = False,
+    ) -> Tuple[Optional[EquityTradePlan], Optional[str]]:
+        if not self.config.enabled:
+            return None, "strategy_disabled"
+
+        sym = str(symbol).strip()
+        if not sym or not token_address:
+            return None, "invalid_symbol_or_token"
+
+        if not self._in_earnings_window(earnings_proximity_days):
+            return None, "outside_earnings_window"
+
+        gas_status = self.gas_protector.get_safe_status(
+            address=wallet_address_for_gas,
+            urgent=urgent_gas,
+            min_pol=self.config.min_pol_for_gas,
+        )
+        if not gas_status.get("gas_ok", False) and not bool(allow_high_gas_override):
+            return None, "gas_above_limit"
+
+        effective_pol = float(gas_status.get("pol_balance", 0.0) or 0.0)
+        if effective_pol < float(self.config.min_pol_for_gas):
+            return None, "pol_below_min"
+
+        if not self._cooldown_ok(sym, can_trade_asset=can_trade_asset, now=now):
+            return None, "per_asset_cooldown"
+
+        strength = float(signal_strength)
+        if abs(strength) < float(self.config.strong_signal_threshold):
+            return (
+                None,
+                f"below_strong_threshold (need abs>={float(self.config.strong_signal_threshold):.3f})",
+            )
+
+        if strength > 0:
+            if self._addrs_equal_case_insensitive(token_address, self.usdc_address):
+                return None, "usdc_identity_noop"
+            if usdc_balance <= 0:
+                return None, "zero_usdc"
+            trade_size = self._compute_trade_size(usdc_balance)
+            if trade_size <= 0 or trade_size > usdc_balance:
+                return None, "invalid_trade_size"
+            tp = float(self.config.strong_take_profit_pct)
+            price_note = f" @ ${current_price_usd:.2f}" if isinstance(current_price_usd, (int, float)) else ""
+            earn_note = (
+                f" | Earnings in ~{earnings_proximity_days:.1f}d"
+                if isinstance(earnings_proximity_days, (int, float))
+                else ""
+            )
+            plan = EquityTradePlan(
+                direction="USDC_TO_EQUITY",
+                symbol=sym,
+                token_in=self.usdc_address,
+                token_out=token_address,
+                amount_in=int(trade_size * 1_000_000),
+                trade_size=trade_size,
+                signal_strength=strength,
+                message=(
+                    f"🟪 X-SIGNAL EQUITY BUY: {sym}{price_note} | Strength {strength:.2f}{earn_note} | "
+                    f"TP {tp:.0f}% | Size: ${trade_size:.2f} (USDC→{sym})"
+                ),
+            )
+            return plan, None
+
+        if equity_balance <= 0:
+            return None, "zero_equity_balance"
+
+        sell_fraction = float(os.getenv("X_SIGNAL_EQUITY_SELL_FRACTION", "0.55"))
+        sell_fraction = min(1.0, max(0.05, sell_fraction))
+        amount_in_units = int(equity_balance * sell_fraction * (10**int(token_decimals)))
+        if amount_in_units <= 0:
+            return None, "sell_amount_below_min_units"
+
+        price_note = f" @ ${current_price_usd:.2f}" if isinstance(current_price_usd, (int, float)) else ""
+        earn_note = (
+            f" | Earnings in ~{earnings_proximity_days:.1f}d"
+            if isinstance(earnings_proximity_days, (int, float))
+            else ""
+        )
+        plan = EquityTradePlan(
+            direction="EQUITY_TO_USDC",
+            symbol=sym,
+            token_in=token_address,
+            token_out=self.usdc_address,
+            amount_in=amount_in_units,
+            trade_size=0.0,
+            signal_strength=strength,
+            message=(
+                f"🟪 X-SIGNAL EQUITY SELL: {sym}{price_note} | Strength {strength:.2f}{earn_note} | "
+                f"Selling {sell_fraction * 100:.0f}% ( {sym}→USDC )"
+            ),
+        )
+        return plan, None
+
     def build_plan(
         self,
         *,
@@ -251,92 +364,20 @@ class SignalEquityTrader:
         urgent_gas: bool = False,
         allow_high_gas_override: bool = False,
     ) -> Optional[EquityTradePlan]:
-        if not self.config.enabled:
-            return None
-
-        sym = str(symbol).strip()
-        if not sym or not token_address:
-            return None
-
-        if not self._in_earnings_window(earnings_proximity_days):
-            return None
-
-        gas_status = self.gas_protector.get_safe_status(
-            address=wallet_address_for_gas,
-            urgent=urgent_gas,
-            min_pol=self.config.min_pol_for_gas,
+        plan, _reason = self.build_plan_with_block_reason(
+            symbol=symbol,
+            token_address=token_address,
+            token_decimals=token_decimals,
+            signal_strength=signal_strength,
+            earnings_proximity_days=earnings_proximity_days,
+            current_price_usd=current_price_usd,
+            usdc_balance=usdc_balance,
+            equity_balance=equity_balance,
+            wallet_address_for_gas=wallet_address_for_gas,
+            can_trade_asset=can_trade_asset,
+            now=now,
+            urgent_gas=urgent_gas,
+            allow_high_gas_override=allow_high_gas_override,
         )
-        if not gas_status.get("gas_ok", False) and not bool(allow_high_gas_override):
-            return None
-
-        # Always use the fresh on-chain POL value from this just-performed safety query.
-        # Do not rely on upstream snapshots that may be stale by the time a plan is built.
-        effective_pol = float(gas_status.get("pol_balance", 0.0) or 0.0)
-        if effective_pol < float(self.config.min_pol_for_gas):
-            return None
-
-        if not self._cooldown_ok(sym, can_trade_asset=can_trade_asset, now=now):
-            return None
-
-        strength = float(signal_strength)
-        strong = abs(strength) >= float(self.config.strong_signal_threshold)
-        print(f"DEBUG build_plan | {sym} | signal={signal_strength} | strong={strong} | earnings_ok={self._in_earnings_window(earnings_proximity_days)} | cooldown_ok={self._cooldown_ok(sym, can_trade_asset=can_trade_asset, now=now)} | gas_ok={gas_status.get("gas_ok", False)} | trade_size={trade_size if "trade_size" in locals() else "N/A"}")
-        if not strong:
-            return None
-
-        if strength > 0:
-            if usdc_balance <= 0:
-                return None
-            trade_size = self._compute_trade_size(usdc_balance)
-            if trade_size <= 0 or trade_size > usdc_balance:
-                return None
-            tp = float(self.config.strong_take_profit_pct)
-            price_note = f" @ ${current_price_usd:.2f}" if isinstance(current_price_usd, (int, float)) else ""
-            earn_note = (
-                f" | Earnings in ~{earnings_proximity_days:.1f}d"
-                if isinstance(earnings_proximity_days, (int, float))
-                else ""
-            )
-            return EquityTradePlan(
-                direction="USDC_TO_EQUITY",
-                symbol=sym,
-                token_in=self.usdc_address,
-                token_out=token_address,
-                amount_in=int(trade_size * 1_000_000),
-                trade_size=trade_size,
-                signal_strength=strength,
-                message=(
-                    f"🟪 X-SIGNAL EQUITY BUY: {sym}{price_note} | Strength {strength:.2f}{earn_note} | "
-                    f"TP {tp:.0f}% | Size: ${trade_size:.2f} (USDC→{sym})"
-                ),
-            )
-
-        if equity_balance <= 0:
-            return None
-
-        sell_fraction = float(os.getenv("X_SIGNAL_EQUITY_SELL_FRACTION", "0.55"))
-        sell_fraction = min(1.0, max(0.05, sell_fraction))
-        amount_in_units = int(equity_balance * sell_fraction * (10**int(token_decimals)))
-        if amount_in_units <= 0:
-            return None
-
-        price_note = f" @ ${current_price_usd:.2f}" if isinstance(current_price_usd, (int, float)) else ""
-        earn_note = (
-            f" | Earnings in ~{earnings_proximity_days:.1f}d"
-            if isinstance(earnings_proximity_days, (int, float))
-            else ""
-        )
-        return EquityTradePlan(
-            direction="EQUITY_TO_USDC",
-            symbol=sym,
-            token_in=token_address,
-            token_out=self.usdc_address,
-            amount_in=amount_in_units,
-            trade_size=0.0,
-            signal_strength=strength,
-            message=(
-                f"🟪 X-SIGNAL EQUITY SELL: {sym}{price_note} | Strength {strength:.2f}{earn_note} | "
-                f"Selling {sell_fraction * 100:.0f}% ( {sym}→USDC )"
-            ),
-        )
+        return plan
 

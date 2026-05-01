@@ -80,6 +80,10 @@ AUTO_USDC_FOR_X_SIGNAL_MIN_USDC = float(os.getenv("AUTO_USDC_FOR_X_SIGNAL_MIN_US
 AUTO_USDC_FOR_X_SIGNAL_MIN_WMATIC_VALUE = float(
     os.getenv("AUTO_USDC_FOR_X_SIGNAL_MIN_WMATIC_VALUE", str(X_SIGNAL_WMATIC_MIN_VALUE))
 )
+# When true (default): try assets off per-asset cooldown before higher-signal assets still cooling down.
+X_SIGNAL_EQUITY_COOLDOWN_FIRST_SORT = (
+    os.getenv("X_SIGNAL_EQUITY_COOLDOWN_FIRST_SORT", "true").lower() == "true"
+)
 
 
 def _nanolog() -> str:
@@ -119,6 +123,11 @@ def _effective_equity_signal_min(cfg: dict) -> float:
     return max(json_floor, X_SIGNAL_EQUITY_MIN_STRENGTH)
 
 
+def _effective_floor_for_equity(asset: FollowedEquity, min_strength: float) -> float:
+    asset_floor_raw = getattr(asset, "min_signal_strength", None)
+    return float(min_strength) if asset_floor_raw is None else float(asset_floor_raw)
+
+
 def _sorted_and_eligible_equities(
     assets_seq: Sequence[FollowedEquity],
     min_strength: float,
@@ -131,11 +140,27 @@ def _sorted_and_eligible_equities(
     eligible: list[FollowedEquity] = []
     for a in assets_list:
         # Tier 1: explicit per-asset min_signal_strength (including 0.0) must be respected.
-        asset_floor_raw = getattr(a, "min_signal_strength", None)
-        effective_floor = float(min_strength) if asset_floor_raw is None else float(asset_floor_raw)
+        effective_floor = _effective_floor_for_equity(a, min_strength)
         if abs(float(a.signal_strength)) >= effective_floor:
             eligible.append(a)
     return assets_list, eligible
+
+
+def _order_eligible_x_signal_candidates(
+    eligible: Sequence[FollowedEquity],
+    *,
+    per_asset_cooldown_seconds: int,
+) -> list[FollowedEquity]:
+    seq = list(eligible)
+    if not X_SIGNAL_EQUITY_COOLDOWN_FIRST_SORT:
+        return sorted(seq, key=lambda a: -abs(float(a.signal_strength)))
+
+    def sort_key(a: FollowedEquity) -> tuple[int, float]:
+        sym = str(a.symbol).strip()
+        cooldown_ok = can_trade_asset(sym, None, int(per_asset_cooldown_seconds))
+        return (0 if cooldown_ok else 1, -abs(float(a.signal_strength)))
+
+    return sorted(seq, key=sort_key)
 
 
 WALLET_LAST_TRADE: Dict[str, float] = {}
@@ -768,12 +793,17 @@ def _project_balances_after_auto_usdc(
 
 
 def _tuned_signal_equity_trader(min_signal_strength: float) -> SignalEquityTrader:
+    """Build a trader with tuned enablement; `min_signal_strength` kept for API compatibility (eligibility-only)."""
+    _ = min_signal_strength
     base_cfg = X_SIGNAL_EQUITY_TRADER.config
+    strong_thr = float(
+        os.getenv("X_SIGNAL_STRONG_THRESHOLD", str(base_cfg.strong_signal_threshold)),
+    )
     tuned_cfg = SignalEquityTraderConfig(
         **{
             **base_cfg.__dict__,
             "enabled": True,
-            "strong_signal_threshold": float(min_signal_strength),
+            "strong_signal_threshold": strong_thr,
         }
     )
     return SignalEquityTrader(
@@ -962,6 +992,19 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                         f"POL low for BUY path (pol={float(balances.pol):.4f}, min={MIN_POL_FOR_GAS:.4f})"
                     )
 
+        secs_order = int(trader.config.per_asset_cooldown_seconds)
+        eligible_ordered = _order_eligible_x_signal_candidates(eligible, per_asset_cooldown_seconds=secs_order)
+        for _a in eligible_ordered:
+            _sym = str(_a.symbol).strip()
+            _sig = float(_a.signal_strength)
+            _floor = _effective_floor_for_equity(_a, min_strength)
+            _cd_ok = can_trade_asset(_sym, None, secs_order)
+            _buy_preview = _sig > 0 and buy_paths_allowed
+            print(
+                f"{_nanolog()}X-Signal candidate | {_sym} | signal={_sig:.3f} | floor={_floor:.3f} | "
+                f"cooldown_ok={_cd_ok} | buy_path_ok={_buy_preview}"
+            )
+
         reason_parts: list[str] = []
         chain_notes: list[str] = []
 
@@ -970,7 +1013,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
             if hint:
                 chain_notes.append(hint)
 
-        for a in eligible:
+        for a in eligible_ordered:
             sym = str(a.symbol).strip()
             sig = float(a.signal_strength)
             action_label = "BUY" if sig > 0 else "SELL"
@@ -993,7 +1036,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                 )
                 continue
             equity_bal = get_token_balance(a.token_address, int(a.decimals))
-            plan = trader.build_plan(
+            plan, plan_block = trader.build_plan_with_block_reason(
                 symbol=sym,
                 token_address=str(a.token_address).strip(),
                 token_decimals=int(a.decimals),
@@ -1037,7 +1080,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                     f"{_nanolog()}X-Signal swap intent | {plan.direction} | "
                     f"{sym} | token_in={tin_p} token_out={tout_p}"
                 )
-                secs = int(trader.config.per_asset_cooldown_seconds)
+                secs_plan = int(trader.config.per_asset_cooldown_seconds)
                 decision = TradeDecision(
                     direction=plan.direction,
                     amount_in=(
@@ -1049,11 +1092,13 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                     message=plan.message,
                     token_in=plan.token_in,
                     token_out=plan.token_out,
-                    cooldown_asset=(sym, secs),
+                    cooldown_asset=(sym, secs_plan),
                 )
                 result = decision.message or (decision.direction or "TRADE")
                 break
-            hints: list[str] = []
+            pb = plan_block or "unknown"
+            print(f"{_nanolog()}X-Signal plan blocked | {sym} | reason={pb}")
+            hints: list[str] = [f"strategy:{pb}"]
             if balances.usdc <= 0 and sig > 0:
                 hints.append("zero_usdc_for_buy_path")
             if equity_bal <= 0 and sig < 0:
@@ -1171,8 +1216,15 @@ def evaluate_x_signal_equity_trade(
     _, eligible = _sorted_and_eligible_equities(assets_seq, min_strength)
     if not eligible:
         return None
+    high_conviction = any(
+        float(a.signal_strength) >= 0.88 for a in eligible if float(a.signal_strength) > 0
+    )
     tuned = _tuned_signal_equity_trader(min_strength)
-    for a in eligible:
+    eligible_ordered = _order_eligible_x_signal_candidates(
+        eligible,
+        per_asset_cooldown_seconds=int(tuned.config.per_asset_cooldown_seconds),
+    )
+    for a in eligible_ordered:
         equity_balance = get_token_balance(a.token_address, int(a.decimals))
         sym = str(a.symbol).strip()
         plan = tuned.build_plan(
@@ -1186,6 +1238,7 @@ def evaluate_x_signal_equity_trade(
             equity_balance=equity_balance,
             wallet_address_for_gas=WALLET,
             can_trade_asset=can_trade_asset,
+            allow_high_gas_override=high_conviction,
         )
         if plan:
             return plan
