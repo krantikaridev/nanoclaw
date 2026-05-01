@@ -29,12 +29,36 @@ Run the pre-commit gate before commit/push:
 PowerShell (Windows):
 
 ```powershell
-./scripts/pre_commit_gate.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\pre_commit_gate.ps1
+```
+
+Windows shortcut (avoids policy friction each run):
+
+```powershell
+.\scripts\pre_commit_gate.cmd
 ```
 
 Checklist reference:
 
 - `docs/CLEAN_STATE_CHECKLIST.md`
+
+## Coverage tracking (in-repo)
+
+Generate and persist a coverage snapshot (for humans + AI agents):
+
+```bash
+python scripts/update_coverage_history.py
+```
+
+This command:
+
+- runs test suite with coverage
+- writes raw JSON to `artifacts/coverage/coverage.json`
+- appends critical-module summary to `docs/COVERAGE_HISTORY.md`
+
+For ROI-first iteration, review deltas in:
+
+- `docs/COVERAGE_HISTORY.md`
 
 ## Key scripts
 

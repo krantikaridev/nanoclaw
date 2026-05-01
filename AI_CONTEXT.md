@@ -96,6 +96,10 @@ Load order: `.env` then optional `.env.local` (`override=True`) when present.
 - Local Cursor → tests (`pytest`) → dry-run (`python clean_swap.py --dry-run`; on Windows set `PYTHONIOENCODING=utf-8` if the console rejects emoji prints from legacy modules).
 - Windows PowerShell execution-policy-safe pre-commit gate:
   - `powershell -ExecutionPolicy Bypass -File .\scripts\pre_commit_gate.ps1`
+  - shortcut: `.\scripts\pre_commit_gate.cmd`
+- Coverage tracking (in-repo, periodic):
+  - `python scripts/update_coverage_history.py`
+  - review `docs/COVERAGE_HISTORY.md` for critical-module trend (ROI-first focus)
 
 ## Urgent delta checklist (do not skip)
 
@@ -140,6 +144,7 @@ Load order: `.env` then optional `.env.local` (`override=True`) when present.
   - `python -m compileall -q .`
   - `python -m pytest -q`
   - Coverage baseline check (periodic): `python -m pytest --cov=. --cov-report=term-missing -q`
+  - Coverage history update (periodic): `python scripts/update_coverage_history.py`
 - Deployment readiness:
   - Do not rely on `git stash -a && pull && stash pop` in VM for normal deploys.
   - Deploy from a clean checkout/branch and restart bot from known commit.

@@ -215,3 +215,91 @@ def test_x_signal_buy_paths_block_when_topup_reports_success_but_pol_remains_low
 
     assert decision is None
     assert tuned_trader.build_plan_calls == 0
+
+
+def test_determine_trade_decision_prioritizes_protection_first(monkeypatch):
+    monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (True, "PER_TRADE_EXIT"))
+    monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
+
+    sentinel = clean_swap.TradeDecision(direction="WMATIC_TO_USDT", amount_in=123, message="protection")
+    monkeypatch.setattr(clean_swap, "build_protection_exit_decision", lambda **kwargs: sentinel)
+    monkeypatch.setattr(clean_swap, "evaluate_take_profit", lambda *_args, **_kwargs: (False, None))
+
+    out = clean_swap.determine_trade_decision(
+        state={},
+        balances=clean_swap.Balances(usdt=10.0, wmatic=5.0, pol=1.0, usdc=2.0),
+        current_price=1.0,
+    )
+
+    assert out is sentinel
+
+
+def test_determine_trade_decision_prioritizes_profit_take_over_xsignal(monkeypatch):
+    monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))
+    monkeypatch.setattr(
+        clean_swap,
+        "evaluate_take_profit",
+        lambda *_args, **_kwargs: (True, {"reason": "TP_HIT", "message": "tp", "sell_fraction": 0.45}),
+    )
+    monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+
+    sentinel = clean_swap.TradeDecision(direction="WMATIC_TO_USDT", amount_in=456, message="profit")
+    monkeypatch.setattr(clean_swap, "build_profit_exit_decision", lambda *_args, **_kwargs: sentinel)
+
+    # Should never be reached because profit-take returns first.
+    monkeypatch.setattr(
+        clean_swap,
+        "try_x_signal_equity_decision",
+        lambda *_args, **_kwargs: clean_swap.TradeDecision(direction="USDC_TO_WMATIC", amount_in=999, message="x"),
+    )
+
+    out = clean_swap.determine_trade_decision(
+        state={},
+        balances=clean_swap.Balances(usdt=10.0, wmatic=5.0, pol=1.0, usdc=2.0),
+        current_price=1.0,
+    )
+
+    assert out is sentinel
+
+
+def test_determine_trade_decision_uses_xsignal_before_copy_and_main(monkeypatch):
+    monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))
+    monkeypatch.setattr(clean_swap, "evaluate_take_profit", lambda *_args, **_kwargs: (False, None))
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: ["0xwallet"])
+
+    sentinel = clean_swap.TradeDecision(direction="USDC_TO_EQUITY", amount_in=789, message="x-signal")
+    monkeypatch.setattr(clean_swap, "try_x_signal_equity_decision", lambda *_args, **_kwargs: sentinel)
+
+    out = clean_swap.determine_trade_decision(
+        state={},
+        balances=clean_swap.Balances(usdt=10.0, wmatic=5.0, pol=1.0, usdc=10.0),
+        current_price=1.0,
+    )
+
+    assert out is sentinel
+
+
+def test_main_skips_cycle_on_global_cooldown_and_logs_reason(monkeypatch):
+    monkeypatch.setattr(clean_swap, "load_state", lambda: {"last_run": 1000.0})
+    monkeypatch.setattr(
+        clean_swap,
+        "get_balances",
+        lambda: clean_swap.Balances(usdt=10.0, wmatic=5.0, pol=1.0, usdc=2.0),
+    )
+    monkeypatch.setattr(clean_swap, "has_active_lock", lambda: False)
+    monkeypatch.setattr(clean_swap, "create_lock", lambda: None)
+    monkeypatch.setattr(clean_swap, "release_lock", lambda: None)
+    monkeypatch.setattr(clean_swap, "get_live_wmatic_price", lambda: 1.0)
+    monkeypatch.setattr(clean_swap, "write_portfolio_history_snapshot", lambda _price: None)
+    monkeypatch.setattr(clean_swap, "is_global_cooldown_active", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(clean_swap.time, "time", lambda: 1060.0)
+
+    logs = []
+    monkeypatch.setattr(clean_swap, "_log_trade_skipped", lambda reason: logs.append(reason))
+
+    asyncio.run(clean_swap.main(dry_run=True))
+
+    assert logs
+    assert "cooldown (global" in logs[0]
