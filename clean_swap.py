@@ -1,8 +1,10 @@
 import asyncio
+import csv
 import json
 import os
 import time
 import tempfile
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple, Sequence
 
@@ -40,8 +42,12 @@ load_dotenv(".env.local", override=True)
 LOCK_FILE = os.path.join(tempfile.gettempdir(), "nanoclaw.lock")
 STATE_FILE = "bot_state.json"
 TRADE_LOG_FILE = "trade_exits.json"
+PORTFOLIO_HISTORY_FILE = "portfolio_history.csv"
 
 COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", 7))
+PER_ASSET_COOLDOWN_MINUTES = int(os.getenv("PER_ASSET_COOLDOWN_MINUTES", "30"))
+PER_ASSET_COOLDOWN_SECONDS = PER_ASSET_COOLDOWN_MINUTES * 60
+POL_USD_PRICE = float(os.getenv("POL_USD_PRICE", "0.10"))
 MIN_POL_FOR_GAS = float(os.getenv("MIN_POL_FOR_GAS", "0.005"))
 AUTO_TOPUP_POL = os.getenv("AUTO_TOPUP_POL", "true").lower() == "true"
 POL_TOPUP_AMOUNT = float(os.getenv("POL_TOPUP_AMOUNT", "0.03"))
@@ -78,6 +84,22 @@ AUTO_USDC_FOR_X_SIGNAL_MIN_WMATIC_VALUE = float(
 def _nanolog() -> str:
     p = (LOG_PREFIX or "").strip()
     return f"{p} " if p else ""
+
+
+def _effective_take_profit_thresholds() -> tuple[float, float]:
+    """
+    Keep two-tier TP valid even when env values are misconfigured.
+    Strong TP must always be greater than base TP.
+    """
+    base_tp = float(TAKE_PROFIT_PCT)
+    strong_tp = float(STRONG_SIGNAL_TP)
+    if strong_tp <= base_tp:
+        strong_tp = base_tp + 4.0
+    return base_tp, strong_tp
+
+
+def _log_trade_skipped(reason: str) -> None:
+    print(f"{_nanolog()}TRADE SKIPPED: {reason}")
 
 
 def _load_followed_equities_json_dict() -> dict:
@@ -173,6 +195,7 @@ X_SIGNAL_EQUITY_TRADER = (
     SignalEquityTrader.builder()
     .with_enabled(ENABLE_X_SIGNAL_EQUITY)
     .with_followed_equities_path(FOLLOWED_EQUITIES_PATH)
+    .with_per_asset_cooldown_seconds(PER_ASSET_COOLDOWN_SECONDS)
     .with_usdc_address(USDC)
     .with_gas_protector(GAS_PROTECTOR)
     .build()
@@ -344,6 +367,49 @@ def get_balances() -> Balances:
     )
 
 
+def _portfolio_history_header() -> list[str]:
+    return ["timestamp", "usdt", "usdc", "wmatic", "pol", "pol_usd_price", "total_value"]
+
+
+def write_portfolio_history_snapshot(current_price: float) -> None:
+    """
+    Persist portfolio history from real on-chain balances.
+    This avoids stale cached totals and keeps wallet value accurate in CSV.
+    """
+    usdt = get_token_balance(USDT, 6)
+    usdc = get_token_balance(USDC, 6)
+    wmatic = get_token_balance(WMATIC, 18)
+    pol = get_pol_balance()
+    # POL (native gas token) and WMATIC can have different market prices.
+    # Keep POL valuation independently configurable to avoid inflated totals.
+    pol_price_usd = float(POL_USD_PRICE)
+    total_value = float(usdt) + float(usdc) + (float(wmatic) * float(current_price)) + (float(pol) * pol_price_usd)
+    row = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "usdt": f"{usdt:.6f}",
+        "usdc": f"{usdc:.6f}",
+        "wmatic": f"{wmatic:.6f}",
+        "pol": f"{pol:.6f}",
+        "pol_usd_price": f"{pol_price_usd:.6f}",
+        "total_value": f"{total_value:.6f}",
+    }
+    headers = _portfolio_history_header()
+    write_header = True
+    if os.path.exists(PORTFOLIO_HISTORY_FILE):
+        try:
+            with open(PORTFOLIO_HISTORY_FILE, "r", encoding="utf-8", newline="") as fh:
+                first_line = (fh.readline() or "").strip()
+                write_header = first_line != ",".join(headers)
+        except Exception:
+            write_header = True
+    mode = "w" if write_header else "a"
+    with open(PORTFOLIO_HISTORY_FILE, mode, encoding="utf-8", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=headers)
+        if write_header:
+            writer.writeheader()
+        writer.writerow(row)
+
+
 def load_state(path: str = STATE_FILE) -> dict:
     try:
         with open(path, "r", encoding="utf-8") as file_handle:
@@ -400,6 +466,7 @@ def get_latest_open_trade(trade_log_file: str = TRADE_LOG_FILE) -> Optional[dict
 def evaluate_take_profit(current_price: float, state: dict) -> Tuple[bool, Optional[dict]]:
     trade = get_latest_open_trade()
     tracking = state.setdefault("profit_tracking", {})
+    take_profit_pct, strong_signal_tp = _effective_take_profit_thresholds()
 
     if not trade:
         tracking.clear()
@@ -424,12 +491,12 @@ def evaluate_take_profit(current_price: float, state: dict) -> Tuple[bool, Optio
     peak_gain_pct = ((peak_price - buy_price) / buy_price) * 100
     pullback_pct = ((peak_price - current_price) / peak_price) * 100 if peak_price > 0 else 0.0
 
-    if gain_pct >= STRONG_SIGNAL_TP:
+    if gain_pct >= strong_signal_tp:
         return True, {
             "reason": "STRONG_TP_HIT",
             "message": (
                 f"Strong TP hit | buy ${buy_price:.4f} -> now ${current_price:.4f} "
-                f"({gain_pct:.2f}%) >= {STRONG_SIGNAL_TP:.2f}%"
+                f"({gain_pct:.2f}%) >= {strong_signal_tp:.2f}%"
             ),
             "sell_fraction": STRONG_TP_SELL_PCT,
             "gain_pct": gain_pct,
@@ -437,12 +504,12 @@ def evaluate_take_profit(current_price: float, state: dict) -> Tuple[bool, Optio
             "pullback_pct": pullback_pct,
         }
 
-    if gain_pct >= TAKE_PROFIT_PCT:
+    if gain_pct >= take_profit_pct:
         return True, {
             "reason": "TP_HIT",
             "message": (
                 f"Take-profit hit | buy ${buy_price:.4f} -> now ${current_price:.4f} "
-                f"({gain_pct:.2f}%) >= {TAKE_PROFIT_PCT:.2f}%"
+                f"({gain_pct:.2f}%) >= {take_profit_pct:.2f}%"
             ),
             "sell_fraction": TAKE_PROFIT_SELL_PCT,
             "gain_pct": gain_pct,
@@ -450,7 +517,7 @@ def evaluate_take_profit(current_price: float, state: dict) -> Tuple[bool, Optio
             "pullback_pct": pullback_pct,
         }
 
-    if peak_gain_pct >= TAKE_PROFIT_PCT and pullback_pct >= TRAILING_STOP_PCT:
+    if peak_gain_pct >= take_profit_pct and pullback_pct >= TRAILING_STOP_PCT:
         return True, {
             "reason": "TRAILING_STOP_HIT",
             "message": (
@@ -483,13 +550,14 @@ def build_protection_exit_decision(
     open_trade: Optional[dict],
 ) -> TradeDecision:
     sell_fraction = 0.45
+    _, strong_signal_tp = _effective_take_profit_thresholds()
 
     if reason == "PER_TRADE_EXIT" and open_trade:
         buy_price = float(open_trade["buy_price"])
         gain_pct = ((current_price - buy_price) / buy_price) * 100 if buy_price > 0 else 0.0
-        sell_fraction = STRONG_TP_SELL_PCT if gain_pct >= STRONG_SIGNAL_TP else TAKE_PROFIT_SELL_PCT
+        sell_fraction = STRONG_TP_SELL_PCT if gain_pct >= strong_signal_tp else TAKE_PROFIT_SELL_PCT
         message = (
-            f"🛡️ PROTECTION EXIT: {'strong TP hit' if gain_pct >= STRONG_SIGNAL_TP else 'TP hit'} | "
+            f"🛡️ PROTECTION EXIT: {'strong TP hit' if gain_pct >= strong_signal_tp else 'TP hit'} | "
             f"buy ${buy_price:.4f} -> now ${current_price:.4f} "
             f"({gain_pct:.2f}%) | selling {sell_fraction * 100:.0f}% WMATIC"
         )
@@ -518,7 +586,8 @@ def build_profit_exit_decision(profit_signal: dict, wmatic_balance: float) -> Tr
 def select_copy_trade(balances: Balances, wallets: list[str]) -> TradeDecision:
     active_wallets = [wallet for wallet in wallets if can_trade_wallet(wallet)]
     if not active_wallets:
-        return TradeDecision(message=f"⏳ All wallets in {PER_WALLET_COOLDOWN}s cooldown — skipping")
+        _log_trade_skipped(f"cooldown (all wallets in {PER_WALLET_COOLDOWN}s window)")
+        return TradeDecision(message=f"TRADE SKIPPED: cooldown (all wallets in {PER_WALLET_COOLDOWN}s window)")
 
     trade_size = max(8.0, min(18.0, balances.usdt * COPY_TRADE_PCT))
     return TradeDecision(
@@ -801,6 +870,9 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                     f"🟦 X-SIGNAL EQUITY | Auto-USDC insufficient for BUY equity "
                     f"(USDC ${balances.usdc:.2f} < ${max(force_floor, min_trade_usdc):.2f}) — BUY paths skipped"
                 )
+                _log_trade_skipped(
+                    f"USDC low (have ${balances.usdc:.2f}, need ${max(force_floor, min_trade_usdc):.2f})"
+                )
 
         if not dry_run and has_strong_buy:
             balances = get_balances()
@@ -813,6 +885,18 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                             buy_paths_allowed = True
                             buy_paths_block_reason = (
                                 f"pol recovered to >= {MIN_POL_FOR_GAS:.4f} after AUTO_TOPUP_POL=true retry"
+                            )
+                        else:
+                            print(
+                                f"{_nanolog()}AUTO-POL reported success but POL still low "
+                                f"(pol≈{float(balances.pol):.4f} < {MIN_POL_FOR_GAS:.4f}) — BUY paths skipped"
+                            )
+                            buy_paths_allowed = False
+                            buy_paths_block_reason = (
+                                f"pol<{MIN_POL_FOR_GAS:.4f} after AUTO_TOPUP_POL=true success response"
+                            )
+                            _log_trade_skipped(
+                                f"POL low for BUY path after top-up (pol={float(balances.pol):.4f}, min={MIN_POL_FOR_GAS:.4f})"
                             )
                     else:
                         print(
@@ -830,6 +914,9 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                     )
                     buy_paths_allowed = False
                     buy_paths_block_reason = f"pol<{MIN_POL_FOR_GAS:.4f} and AUTO_TOPUP_POL=false"
+                    _log_trade_skipped(
+                        f"POL low for BUY path (pol={float(balances.pol):.4f}, min={MIN_POL_FOR_GAS:.4f})"
+                    )
 
         reason_parts: list[str] = []
         chain_notes: list[str] = []
@@ -848,11 +935,15 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
             )
             if sig > 0 and not buy_paths_allowed:
                 reason_parts.append(f"{sym}: buy_skipped ({buy_paths_block_reason})")
+                _log_trade_skipped(f"POL low ({sym} buy blocked)")
                 continue
             if sig > 0 and balances.usdc < required_usdc_floor:
                 reason_parts.append(
                     f"{sym}: buy_skipped (USDC ${balances.usdc:.2f} < required_floor ${required_usdc_floor:.2f}; "
                     f"min_trade_usdc ${min_trade_usdc:.2f})"
+                )
+                _log_trade_skipped(
+                    f"USDC low ({sym} buy blocked: ${balances.usdc:.2f} < ${required_usdc_floor:.2f})"
                 )
                 continue
             equity_bal = get_token_balance(a.token_address, int(a.decimals))
@@ -896,11 +987,18 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
             gst_early = trader.gas_protector.get_safe_status(
                 address=WALLET, urgent=False, min_pol=float(trader.config.min_pol_for_gas)
             )
-            gas_ok_early = gst_early.get("ok", False)
+            gas_ok_early = bool(gst_early.get("gas_ok", False))
+            fresh_pol_early = float(gst_early.get("pol_balance", 0.0) or 0.0)
+            pol_ok_early = fresh_pol_early >= float(trader.config.min_pol_for_gas)
             if not gas_ok_early:
                 hints.append(
-                    "gas_or_pol_guard_blocked "
-                    f"(need POL≥{float(trader.config.min_pol_for_gas):.4f} for swaps)"
+                    f"gas_guard_blocked (gas {float(gst_early.get('gas_gwei', 0.0)):.2f} > "
+                    f"{float(gst_early.get('max_gwei', 0.0)):.2f} gwei)"
+                )
+            if not pol_ok_early:
+                hints.append(
+                    f"pol_guard_blocked (pol {fresh_pol_early:.4f} < "
+                    f"{float(trader.config.min_pol_for_gas):.4f})"
                 )
             if not can_trade_asset(
                 sym,
@@ -908,8 +1006,9 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                 cooldown_seconds=int(trader.config.per_asset_cooldown_seconds),
             ):
                 hints.append(f"per_asset_cooldown={trader.config.per_asset_cooldown_seconds}s")
+                _log_trade_skipped(f"cooldown ({sym}: {trader.config.per_asset_cooldown_seconds}s)")
             min_usdc_trade = float(trader.config.min_trade_usdc)
-            if not hints and gas_ok_early:
+            if not hints and gas_ok_early and pol_ok_early:
                 if sig > 0 and balances.usdc >= min_usdc_trade:
                     hints.append(
                         "build_plan_returned_none (BUY: earnings_window/strong_threshold_internal/risk_filters)"
@@ -939,13 +1038,19 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
             gst = trader.gas_protector.get_safe_status(
                 address=WALLET, urgent=False, min_pol=float(trader.config.min_pol_for_gas)
             )
-            if not gst.get("ok", False):
+            if not bool(gst.get("gas_ok", False)):
                 summary_bits.append(
-                    f"gas/POL blocked (pol≈{float(gst.get('pol_balance', 0)):.4f}, "
-                    f"need≥{float(trader.config.min_pol_for_gas):.4f})"
+                    f"gas blocked (gas≈{float(gst.get('gas_gwei', 0)):.2f}, "
+                    f"limit≤{float(gst.get('max_gwei', 0)):.2f})"
                 )
             else:
                 summary_bits.append("gas_ok")
+            fresh_pol = float(gst.get("pol_balance", 0.0) or 0.0)
+            if fresh_pol < float(trader.config.min_pol_for_gas):
+                summary_bits.append(
+                    f"POL blocked (pol≈{fresh_pol:.4f}, "
+                    f"need≥{float(trader.config.min_pol_for_gas):.4f})"
+                )
             merged = (
                 " | ".join(reason_parts[:4])
                 + (f" …(+{len(reason_parts)-4} more symbols)" if len(reason_parts) > 4 else "")
@@ -1098,6 +1203,11 @@ def determine_trade_decision(
         "🔍 DECISION PATH | precedence: "
         "PROTECTION → PROFIT_TAKE → X_SIGNAL_EQUITY → USDC_COPY | POLYCOPY → MAIN_STRATEGY"
     )
+    print(
+        f"{_nanolog()}Runtime config | TAKE_PROFIT_PCT={TAKE_PROFIT_PCT:.2f} "
+        f"STRONG_SIGNAL_TP={STRONG_SIGNAL_TP:.2f} "
+        f"PER_ASSET_COOLDOWN_MINUTES={PER_ASSET_COOLDOWN_MINUTES}"
+    )
 
     if COPY_TRADE_PCT >= 0.20:
         print(f"🔥 AGGRESSIVE MODE ACTIVE | COPY_TRADE_PCT={COPY_TRADE_PCT:.2f}")
@@ -1173,6 +1283,9 @@ async def main(*, dry_run: bool = False) -> None:
 
     create_lock()
     try:
+        current_price = get_live_wmatic_price()
+        write_portfolio_history_snapshot(current_price)
+
         if is_global_cooldown_active(state):
             lr = float(state.get("last_run") or 0.0)
             elapsed_s = max(0.0, time.time() - lr)
@@ -1181,9 +1294,9 @@ async def main(*, dry_run: bool = False) -> None:
                 f"{_nanolog()}skip cycle — global cooldown ~{remain_s:.0f}s left "
                 f"(COOLDOWN_MINUTES={COOLDOWN_MINUTES}; last_run was {elapsed_s:.0f}s ago)"
             )
+            _log_trade_skipped(f"cooldown (global, ~{remain_s:.0f}s left)")
             return
 
-        current_price = get_live_wmatic_price()
         decision = await asyncio.to_thread(
             lambda: determine_trade_decision(state, balances, current_price, dry_run=dry_run)
         )
@@ -1193,6 +1306,7 @@ async def main(*, dry_run: bool = False) -> None:
             print(decision.message)
 
         if not decision.should_execute:
+            _log_trade_skipped("protection/strategy returned no actionable trade")
             print("ℹ️ No actionable trade this cycle")
             return
 
@@ -1209,9 +1323,11 @@ async def main(*, dry_run: bool = False) -> None:
                     float(MIN_POL_FOR_GAS),
                 )
                 if not topup_ok:
+                    _log_trade_skipped(f"POL low (auto top-up failed; need {MIN_POL_FOR_GAS:.4f})")
                     print(f"{_nanolog()}AUTO-POL failed — trade blocked (pol<{MIN_POL_FOR_GAS:.3f})")
                     return
             else:
+                _log_trade_skipped(f"POL low (have {pol_now:.4f}, need {MIN_POL_FOR_GAS:.4f})")
                 print(
                     f"{_nanolog()}POL low (pol≈{pol_now:.4f} < {MIN_POL_FOR_GAS:.4f}) and AUTO_TOPUP_POL=false — trade blocked"
                 )
@@ -1223,6 +1339,9 @@ async def main(*, dry_run: bool = False) -> None:
             if gas_gwei <= 400.0:
                 print("⚠️ High gas but forcing trade (urgent mode)")
             else:
+                _log_trade_skipped(
+                    f"protection (gas high: {gas_status['gas_gwei']:.2f} gwei > {gas_status['max_gwei']:.2f})"
+                )
                 print(
                     "⛔ Gas protection active "
                     f"(gas {gas_status['gas_gwei']:.2f}/{gas_status['max_gwei']:.2f} gwei, "

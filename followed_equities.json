@@ -1,32 +1,8 @@
 {
-  "_note": "GOOGLON, NVDAON, MSFTON are currently on Ethereum/BNB (Ondo). Polygon support pending. Using test mode with WMATIC for now.",
+  "_note": "Only Polygon-valid addresses are kept active. Tokenized equities without official Polygon contracts are skipped until verified listings exist.",
   "enabled": true,
   "min_signal_strength": 0.6,
   "assets": [
-    {
-      "symbol": "GOOGLON",
-      "address": "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
-      "decimals": 18,
-      "signal_strength": 0.88,
-      "upside_pct": 18,
-      "timeline_hours": 24
-    },
-    {
-      "symbol": "NVDAON",
-      "address": "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
-      "decimals": 18,
-      "signal_strength": 0.82,
-      "upside_pct": 15,
-      "timeline_hours": 48
-    },
-    {
-      "symbol": "MSFTON",
-      "address": "0x1BFD67037B42Cf73acf204706795bF64736C834e",
-      "decimals": 8,
-      "signal_strength": 0.79,
-      "upside_pct": 12,
-      "timeline_hours": 36
-    },
     {
       "symbol": "WMATIC_ALPHA",
       "address": "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
@@ -34,6 +10,30 @@
       "signal_strength": 0.92,
       "upside_pct": 22,
       "timeline_hours": 8
+    },
+    {
+      "symbol": "WETH_ALPHA",
+      "address": "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+      "decimals": 18,
+      "signal_strength": 0.87,
+      "upside_pct": 16,
+      "timeline_hours": 24
+    },
+    {
+      "symbol": "WBTC_ALPHA",
+      "address": "0x1BFD67037B42Cf73acf204706795bF64736C834e",
+      "decimals": 8,
+      "signal_strength": 0.83,
+      "upside_pct": 14,
+      "timeline_hours": 30
+    },
+    {
+      "symbol": "LINK_ALPHA",
+      "address": "0x53E0bca35eC356BD5ddDFebBD1Fc0fF03FaBad39",
+      "decimals": 18,
+      "signal_strength": 0.81,
+      "upside_pct": 13,
+      "timeline_hours": 36
     }
   ]
 }

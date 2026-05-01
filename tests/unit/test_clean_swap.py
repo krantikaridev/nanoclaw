@@ -3,6 +3,33 @@ import asyncio
 import clean_swap
 
 
+class _DummyGasProtector:
+    def get_safe_status(self, address, urgent=False, min_pol=None):
+        return {
+            "gas_ok": True,
+            "pol_balance": 1.0,
+            "gas_gwei": 20.0,
+            "max_gwei": 80.0,
+        }
+
+
+class _DummyTraderConfig:
+    min_trade_usdc = 6.0
+    per_asset_cooldown_seconds = 1800
+    min_pol_for_gas = 0.005
+
+
+class _DummyTunedTrader:
+    def __init__(self):
+        self.config = _DummyTraderConfig()
+        self.gas_protector = _DummyGasProtector()
+        self.build_plan_calls = 0
+
+    def build_plan(self, **kwargs):
+        self.build_plan_calls += 1
+        return object()
+
+
 def test_evaluate_usdc_copy_trade_defaults_strategy_without_build_call(monkeypatch):
     monkeypatch.setattr(clean_swap, "ENABLE_USDC_COPY", True)
 
@@ -27,6 +54,32 @@ def test_evaluate_take_profit_hits_strong_take_profit(monkeypatch):
     assert signal["reason"] == "STRONG_TP_HIT"
     assert signal["sell_fraction"] == clean_swap.STRONG_TP_SELL_PCT
     assert state["profit_tracking"]["peak_price"] == 1.13
+
+
+def test_evaluate_take_profit_hits_standard_take_profit(monkeypatch):
+    monkeypatch.setattr(clean_swap, "TAKE_PROFIT_PCT", 8.0)
+    monkeypatch.setattr(clean_swap, "STRONG_SIGNAL_TP", 12.0)
+    monkeypatch.setattr(clean_swap, "get_latest_open_trade", lambda trade_log_file=clean_swap.TRADE_LOG_FILE: {"buy_price": 1.0})
+    state = {}
+
+    should_exit, signal = clean_swap.evaluate_take_profit(1.09, state)
+
+    assert should_exit is True
+    assert signal["reason"] == "TP_HIT"
+    assert signal["sell_fraction"] == clean_swap.TAKE_PROFIT_SELL_PCT
+
+
+def test_evaluate_take_profit_preserves_two_tiers_when_thresholds_overlap(monkeypatch):
+    monkeypatch.setattr(clean_swap, "TAKE_PROFIT_PCT", 12.0)
+    monkeypatch.setattr(clean_swap, "STRONG_SIGNAL_TP", 12.0)
+    monkeypatch.setattr(clean_swap, "get_latest_open_trade", lambda trade_log_file=clean_swap.TRADE_LOG_FILE: {"buy_price": 1.0})
+    state = {}
+
+    should_exit, signal = clean_swap.evaluate_take_profit(1.12, state)
+
+    assert should_exit is True
+    assert signal["reason"] == "TP_HIT"
+    assert signal["sell_fraction"] == clean_swap.TAKE_PROFIT_SELL_PCT
 
 
 def test_evaluate_take_profit_hits_trailing_stop_after_pullback(monkeypatch):
@@ -85,3 +138,80 @@ def test_wallet_cooldown_blocks_until_threshold_passes():
 
     assert clean_swap.can_trade_wallet(wallet, now=1200, cooldown_seconds=300) is False
     assert clean_swap.can_trade_wallet(wallet, now=1301, cooldown_seconds=300) is True
+
+
+def test_portfolio_history_uses_independent_pol_price(monkeypatch, tmp_path):
+    csv_path = tmp_path / "portfolio_history.csv"
+    monkeypatch.setattr(clean_swap, "PORTFOLIO_HISTORY_FILE", str(csv_path))
+    monkeypatch.setattr(clean_swap, "POL_USD_PRICE", 0.10)
+    monkeypatch.setattr(clean_swap, "USDT", "0xusdt")
+    monkeypatch.setattr(clean_swap, "USDC", "0xusdc")
+    monkeypatch.setattr(clean_swap, "WMATIC", "0xwmatic")
+
+    def _token_balance(token_address, decimals=6, web3_client=None, wallet_address=None):
+        if token_address == "0xusdt":
+            return 50.0
+        if token_address == "0xusdc":
+            return 10.0
+        if token_address == "0xwmatic":
+            return 5.0
+        return 0.0
+
+    monkeypatch.setattr(clean_swap, "get_token_balance", _token_balance)
+    monkeypatch.setattr(clean_swap, "get_pol_balance", lambda wallet_address=clean_swap.WALLET: 20.0)
+
+    clean_swap.write_portfolio_history_snapshot(current_price=1.0)
+
+    lines = csv_path.read_text(encoding="utf-8").strip().splitlines()
+    assert lines[0] == "timestamp,usdt,usdc,wmatic,pol,pol_usd_price,total_value"
+    # total_value = 50 + 10 + (5 * 1.0) + (20 * 0.10) = 67.0
+    assert lines[1].endswith(",20.000000,0.100000,67.000000")
+
+
+def test_x_signal_buy_paths_block_when_topup_reports_success_but_pol_remains_low(monkeypatch):
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(clean_swap, "AUTO_TOPUP_POL", True)
+    monkeypatch.setattr(clean_swap, "MIN_POL_FOR_GAS", 0.005)
+    monkeypatch.setattr(clean_swap, "_load_followed_equities_json_dict", lambda: {"enabled": True, "min_signal_strength": 0.60})
+    monkeypatch.setattr(clean_swap, "_effective_equity_signal_min", lambda cfg: 0.60)
+
+    base_trader = type(
+        "BaseTrader",
+        (),
+        {
+            "load_followed_equities": lambda self: [
+                clean_swap.FollowedEquity(
+                    symbol="WMATIC_ALPHA",
+                    token_address="0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
+                    decimals=18,
+                    signal_strength=0.92,
+                )
+            ]
+        },
+    )()
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_EQUITY_TRADER", base_trader)
+
+    tuned_trader = _DummyTunedTrader()
+    monkeypatch.setattr(clean_swap, "_tuned_signal_equity_trader", lambda min_strength: tuned_trader)
+    monkeypatch.setattr(clean_swap, "ensure_pol_for_trade", lambda min_pol=0.005: True)
+
+    balances_sequence = [
+        clean_swap.Balances(usdt=40.0, wmatic=10.0, pol=0.001, usdc=20.0),
+        clean_swap.Balances(usdt=40.0, wmatic=10.0, pol=0.001, usdc=20.0),
+    ]
+
+    def _get_balances():
+        return balances_sequence.pop(0) if balances_sequence else clean_swap.Balances(
+            usdt=40.0, wmatic=10.0, pol=0.001, usdc=20.0
+        )
+
+    monkeypatch.setattr(clean_swap, "get_balances", _get_balances)
+    monkeypatch.setattr(clean_swap, "can_trade_asset", lambda symbol, now=None, cooldown_seconds=0: True)
+
+    decision = clean_swap.try_x_signal_equity_decision(
+        clean_swap.Balances(usdt=40.0, wmatic=10.0, pol=0.001, usdc=20.0),
+        dry_run=False,
+    )
+
+    assert decision is None
+    assert tuned_trader.build_plan_calls == 0

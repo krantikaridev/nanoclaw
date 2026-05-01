@@ -29,9 +29,9 @@ class SignalEquityTraderConfig:
     trade_pct_of_usdc: float = 0.18
     min_trade_usdc: float = 5.0
     max_trade_usdc: float = 28.0
-    per_asset_cooldown_seconds: int = 6 * 60 * 60
-    min_pol_for_gas: float = 0.025
-    strong_take_profit_pct: float = 15.0
+    per_asset_cooldown_seconds: int = 30 * 60
+    min_pol_for_gas: float = 0.005
+    strong_take_profit_pct: float = 12.0
 
 
 @dataclass(frozen=True)
@@ -58,11 +58,21 @@ class SignalEquityTraderBuilder:
         self._trade_pct_of_usdc = float(os.getenv("X_SIGNAL_EQUITY_TRADE_PCT", "0.18"))
         self._min_trade_usdc: Optional[float] = None
         self._max_trade_usdc = float(os.getenv("X_SIGNAL_EQUITY_MAX_TRADE", "28.0"))
-        self._per_asset_cooldown_seconds = int(os.getenv("X_SIGNAL_EQUITY_COOLDOWN_SECONDS", str(6 * 60 * 60)))
-        self._min_pol_for_gas = float(os.getenv("MIN_POL_FOR_GAS", "0.025"))
-        self._strong_take_profit_pct = float(os.getenv("X_SIGNAL_EQUITY_STRONG_TP_PCT", "15.0"))
+        self._per_asset_cooldown_seconds = int(
+            os.getenv(
+                "X_SIGNAL_EQUITY_COOLDOWN_SECONDS",
+                str(int(os.getenv("PER_ASSET_COOLDOWN_MINUTES", "30")) * 60),
+            )
+        )
+        self._min_pol_for_gas = float(os.getenv("MIN_POL_FOR_GAS", "0.005"))
+        self._strong_take_profit_pct = float(os.getenv("X_SIGNAL_EQUITY_STRONG_TP_PCT", "12.0"))
         self._gas_protector: Optional[GasProtector] = None
         self._usdc_address: Optional[str] = os.getenv("USDC")
+
+    @staticmethod
+    def _is_valid_polygon_address(token_address: str) -> bool:
+        addr = str(token_address or "").strip()
+        return addr.startswith("0x") and len(addr) == 42
 
     def with_enabled(self, enabled: bool) -> "SignalEquityTraderBuilder":
         self._enabled = bool(enabled)
@@ -174,6 +184,11 @@ class SignalEquityTrader:
             explicit = str(explicit_address).strip() if explicit_address is not None else ""
             token_address = explicit or str(os.getenv(env_key, "")).strip()
             if not symbol or not token_address:
+                if symbol:
+                    print(f"[nanoclaw] TRADE SKIPPED: invalid asset config ({symbol}: missing token address)")
+                continue
+            if not SignalEquityTraderBuilder._is_valid_polygon_address(token_address):
+                print(f"[nanoclaw] TRADE SKIPPED: invalid asset config ({symbol}: bad Polygon address '{token_address}')")
                 continue
             decimals = int(item.get("decimals", 18) or 18)
             signal_strength = float(item.get("signal_strength", 0.0) or 0.0)
@@ -239,7 +254,13 @@ class SignalEquityTrader:
             urgent=urgent_gas,
             min_pol=self.config.min_pol_for_gas,
         )
-        if not gas_status.get("ok", False):
+        if not gas_status.get("gas_ok", False):
+            return None
+
+        # Always use the fresh on-chain POL value from this just-performed safety query.
+        # Do not rely on upstream snapshots that may be stale by the time a plan is built.
+        effective_pol = float(gas_status.get("pol_balance", 0.0) or 0.0)
+        if effective_pol < float(self.config.min_pol_for_gas):
             return None
 
         if not self._cooldown_ok(sym, can_trade_asset=can_trade_asset, now=now):

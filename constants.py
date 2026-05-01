@@ -43,6 +43,9 @@ LOG_PREFIX = os.getenv("LOG_PREFIX", "[nanoclaw]").strip()
 
 # Native POL floor for gas (used by multiple modules; can be overridden via env MIN_POL_FOR_GAS).
 MIN_POL_FOR_GAS = float(os.getenv("MIN_POL_FOR_GAS", "0.005"))
+# X-signal per-asset cooldown should remain env-driven, never hardcoded.
+PER_ASSET_COOLDOWN_MINUTES = int(os.getenv("PER_ASSET_COOLDOWN_MINUTES", "30"))
+PER_ASSET_COOLDOWN_SECONDS = PER_ASSET_COOLDOWN_MINUTES * 60
 
 # Deployment-specific addresses should be env-driven.
 WALLET = os.getenv("WALLET", "0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA")

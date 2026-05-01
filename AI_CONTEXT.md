@@ -7,6 +7,7 @@
 
 **Current Status**:
 - V2.5.3 - Max Aggression + Bug Fixes in progress.
+- V2.5.3 critical findings (1 May 2026): portfolio drawdown to ~$102.19, X-SIGNAL blocked by false guard + low USDC floor mismatch, stale `portfolio_history.csv` totals, hardcoded per-asset cooldown, and TP default drift in logs.
 
 **Current Portfolio Snapshot** (historical baseline; reconcile with balances on-chain):
 - Total ≈ $113
@@ -60,6 +61,10 @@ Load order: `.env` then `.env.local` (`override=True`).
 - `portfolio_history.csv` calculation bug.
 - 6-hour cooldown is the biggest bottleneck.
 - Only one asset is working due to wrong addresses.
+- 6-hour cooldown was never made env-driven (critical mistake).
+- `portfolio_history.csv` total calculation bug caused confusion (`~$122` logged vs real wallet `~$102`).
+- POL guard produced false-positive skips even when wallet POL was 23+.
+- Keep hard risk limits only. Remove artificial profit caps (cooldown, small trade size, low frequency).
 
 ## Development workflow
 
@@ -85,7 +90,7 @@ Load order: `.env` then `.env.local` (`override=True`).
 
 Replace proxy addresses when Ondo/other issuers publish **Polygon POS** deployments; validate pool depth (`getAmountsOut`) before size-up. Optional later: earnings-calendar-driven filters—not required for baseline execution.
 
-### Parked milestone
+### Parked milestones
 
 - Earnings Volatility Capture Engine v1 (dynamic tokenized equity trading based on earnings calendar + X signals).
 
@@ -97,4 +102,4 @@ Replace proxy addresses when Ondo/other issuers publish **Polygon POS** deployme
 Paste raw: https://raw.githubusercontent.com/krantikaridev/nanoclaw/V2/AI_CONTEXT.md
 
 **Next milestone**  
-Remove artificial profit caps (cooldown, small trade size) while keeping hard risk limits.
+Earnings Volatility Capture Engine v1, while preserving strict hard risk limits and removing artificial profit caps (cooldown, small trade size, low frequency).
