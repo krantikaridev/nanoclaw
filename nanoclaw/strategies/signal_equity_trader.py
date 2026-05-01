@@ -21,7 +21,7 @@ class FollowedEquity:
     current_price_usd: Optional[float] = None
 
 
-@dataclass(frozen=True)
+@dataclass
 class SignalEquityTraderConfig:
     enabled: bool = False
     followed_equities_path: str = "followed_equities.json"

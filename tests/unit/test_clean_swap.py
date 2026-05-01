@@ -572,9 +572,36 @@ def test_sorted_and_eligible_equities_respects_per_asset_min_signal_strength():
         ),
     ]
 
-    _all_assets, eligible = clean_swap._sorted_and_eligible_equities(assets, min_strength=0.60)
+    _all_assets, eligible = clean_swap._sorted_and_eligible_equities(
+        assets, min_strength=0.60, strong_threshold=0.80
+    )
 
     assert [a.symbol for a in eligible] == ["USDC"]
+
+
+def test_sorted_and_eligible_equities_allows_strong_asset_above_global_threshold_even_when_per_asset_floor_is_higher():
+    assets = [
+        clean_swap.FollowedEquity(
+            symbol="WETH",
+            token_address="0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+            decimals=18,
+            signal_strength=0.81,
+            min_signal_strength=0.87,
+        ),
+        clean_swap.FollowedEquity(
+            symbol="LINK",
+            token_address="0x53e0bca35ec356bd5dddfebbd1fc0fd03fabad39",
+            decimals=18,
+            signal_strength=0.79,
+            min_signal_strength=0.70,
+        ),
+    ]
+
+    _all_assets, eligible = clean_swap._sorted_and_eligible_equities(
+        assets, min_strength=0.60, strong_threshold=0.80
+    )
+
+    assert [a.symbol for a in eligible] == ["WETH", "LINK"]
 
 
 def test_sorted_and_eligible_equities_respects_explicit_zero_floor():
@@ -588,7 +615,9 @@ def test_sorted_and_eligible_equities_respects_explicit_zero_floor():
         ),
     ]
 
-    _all_assets, eligible = clean_swap._sorted_and_eligible_equities(assets, min_strength=0.60)
+    _all_assets, eligible = clean_swap._sorted_and_eligible_equities(
+        assets, min_strength=0.60, strong_threshold=0.80
+    )
 
     assert [a.symbol for a in eligible] == ["ZERO_FLOOR"]
 
