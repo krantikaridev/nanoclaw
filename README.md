@@ -2,6 +2,22 @@
 
 Nanoclaw is a risk-first trading bot for Polygon that executes real swaps and is designed to be **100% `.env` driven**, unit-testable, and resilient to RPC/gas volatility.
 
+## 🚀 Quick Commands (Sprint Mode)
+
+| Command       | What it does                              |
+|---------------|-------------------------------------------|
+| `nanoup`      | Safe update + restart (recommended)       |
+| `nanomon`     | Quick status + balances + portfolio       |
+| `nanokill`    | Stop the bot                              |
+| `nanoattach`  | Attach to live bot logs                   |
+| `sprintmon`   | One-line monitoring (balances + logs)     |
+
+### Safe Update Flow (use this every time)
+nanoup
+nanomon
+Important: Never git stash while the bot is running. Always kill first (nanokill), then pull, then restart.
+'''bash
+
 ## Quick start
 
 - **Install deps**: create/activate your Python environment and install requirements for this repo (project-specific).
