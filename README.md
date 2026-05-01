@@ -18,6 +18,18 @@ python clean_swap.py
 python -m pytest
 ```
 
+## Release safety
+
+Run the pre-commit gate before commit/push:
+
+```bash
+./scripts/pre_commit_gate.sh
+```
+
+Checklist reference:
+
+- `docs/CLEAN_STATE_CHECKLIST.md`
+
 ## Key scripts
 
 - `clean_swap.py`: main orchestrator (decision + gas protection + execution)
@@ -47,4 +59,41 @@ ABIs are stored in-repo under `nanoclaw/abi/` and loaded by `constants.py`. You 
 ## Notes
 
 - Only **one on-chain swap** is executed per cycle (nonce safety), even if multiple strategies evaluate in parallel.
+
+## VM deploy (safer flow)
+
+Avoid `git stash -a && git pull && git stash pop` for normal deploys.
+Use clean-tree deploy instead:
+
+```bash
+./scripts/deploy_vm_safe.sh V2
+```
+
+This script enforces:
+
+- clean working tree
+- fast-forward pull
+- local verification (`compileall` + `pytest`)
+- controlled bot restart
+
+## Docker Compose (stage/prod split)
+
+Create env files locally (ignored by git):
+
+```bash
+cp .env.example .env.stage
+cp .env.example .env.prod
+```
+
+Run stage:
+
+```bash
+NANOCLAW_ENV_FILE=.env.stage docker compose up -d --build
+```
+
+Run production:
+
+```bash
+NANOCLAW_ENV_FILE=.env.prod docker compose up -d --build
+```
 

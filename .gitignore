@@ -13,6 +13,8 @@ xwatcher/xwatcher_env/
 .venv/
 .env
 *.env
+.env.stage
+.env.prod
 .env.local
 real_cron.log
 bot_state.json

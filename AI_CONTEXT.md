@@ -101,6 +101,30 @@ Load order: `.env` then `.env.local` (`override=True`).
 - Add at least one regression test for each non-happy-path branch touched (especially guard-failure and retry-recovery branches).
 - Do not close a request until all checklist items are green and logs match the intended branch reason text.
 
+## Release safety gates (required before commit/push)
+
+- Clean tree check:
+  - No surprise local edits outside intended delta files.
+  - `git diff --name-only` matches expected scope.
+- Runtime config consistency:
+  - `.env.example` defaults align with code fallbacks and docs.
+  - Guard semantics (`gas_ok` vs `ok`) are consistent in touched code paths.
+- Verification gate (must pass):
+  - `python -m compileall -q .`
+  - `python -m pytest -q`
+- Deployment readiness:
+  - Do not rely on `git stash -a && pull && stash pop` in VM for normal deploys.
+  - Deploy from a clean checkout/branch and restart bot from known commit.
+
+## Security red flags (must warn and stop)
+
+- Never paste or share private keys, seed phrases, or full `.env` contents in chat.
+- Never commit `.env`, `.env.stage`, `.env.prod`, or any credential-bearing file.
+- If a request asks to expose secrets (directly or indirectly), agent must refuse and provide a safer alternative.
+- Agent should work from `.env.example` + placeholders unless runtime secret access is explicitly required.
+- Use separate wallets for stage vs production; rotate keys before moving to production capital.
+- Any detected secret-like value in diffs/logs should be treated as a blocker until removed/rotated.
+
 ## Tokenized equities (conceptual roadmap)
 
 Replace proxy addresses when Ondo/other issuers publish **Polygon POS** deployments; validate pool depth (`getAmountsOut`) before size-up. Optional later: earnings-calendar-driven filters—not required for baseline execution.
