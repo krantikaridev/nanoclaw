@@ -378,13 +378,12 @@ def write_portfolio_history_snapshot(current_price: float) -> None:
     This avoids stale cached totals and keeps wallet value accurate in CSV.
     """
     usdt = get_token_balance(USDT, 6)
-    usdc = get_token_balance(USDC, 6)
     wmatic = get_token_balance(WMATIC, 18)
     pol = get_pol_balance()
-    # POL (native gas token) and WMATIC can have different market prices.
-    # Keep POL valuation independently configurable to avoid inflated totals.
+    usdc = get_token_balance(USDC, 6)
+    # Always use real on-chain balances (fixed 2026-05-01)
+    total_value = float(usdt) + float(wmatic) + float(pol)
     pol_price_usd = float(POL_USD_PRICE)
-    total_value = float(usdt) + float(usdc) + (float(wmatic) * float(current_price)) + (float(pol) * pol_price_usd)
     row = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "usdt": f"{usdt:.6f}",
