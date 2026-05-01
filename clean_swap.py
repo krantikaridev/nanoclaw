@@ -84,6 +84,9 @@ AUTO_USDC_FOR_X_SIGNAL_MIN_WMATIC_VALUE = float(
 X_SIGNAL_EQUITY_COOLDOWN_FIRST_SORT = (
     os.getenv("X_SIGNAL_EQUITY_COOLDOWN_FIRST_SORT", "true").lower() == "true"
 )
+# Proactive USDC maintenance for X-Signal equity trading.
+X_SIGNAL_USDC_SAFE_FLOOR = float(os.getenv("X_SIGNAL_USDC_SAFE_FLOOR", "20.0"))
+X_SIGNAL_AUTO_USDC_TARGET = float(os.getenv("X_SIGNAL_AUTO_USDC_TARGET", "25.0"))
 
 
 def _nanolog() -> str:
@@ -655,12 +658,12 @@ def _strong_x_signal_buy_present() -> bool:
     )
 
 
-def ensure_usdc_for_x_signal(min_usdc: float = 8.0, min_wmatic_value: float = 15.0) -> bool:
-    """If USDC is below ``min_usdc`` and a strong X-Signal BUY is active, swap WMATIC→USDC (preferred) or USDT→USDC."""
+def ensure_usdc_for_x_signal(min_usdc: float = 8.0, min_wmatic_value: float = 15.0, force: bool = False) -> bool:
+    """If USDC is below ``min_usdc`` and (a strong X-Signal BUY is active or force=True), swap WMATIC→USDC (preferred) or USDT→USDC."""
     balances = get_balances()
     if balances.usdc >= min_usdc:
         return True
-    if not _strong_x_signal_buy_present():
+    if not force and not _strong_x_signal_buy_present():
         return False
 
     gst = GAS_PROTECTOR.get_safe_status(address=WALLET, urgent=False, min_pol=MIN_POL_FOR_GAS)
@@ -853,6 +856,15 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
         )
         return None
 
+    # Proactive USDC maintenance: ensure USDC never drops too low for X-Signal buys.
+    if not dry_run:
+        current_balances = get_balances()
+        if current_balances.usdc < X_SIGNAL_USDC_SAFE_FLOOR:
+            print(f"🚀 PROACTIVE USDC TOP-UP triggered (have ${current_balances.usdc:.2f} < ${X_SIGNAL_USDC_SAFE_FLOOR:.2f}, target ${X_SIGNAL_AUTO_USDC_TARGET:.2f})")
+            ensure_usdc_for_x_signal(min_usdc=X_SIGNAL_AUTO_USDC_TARGET, min_wmatic_value=X_SIGNAL_WMATIC_MIN_VALUE, force=True)
+            # Refresh balances after potential top-up.
+            balances = get_balances()
+
     cfg = _load_followed_equities_json_dict()
     cfg_enabled = bool(cfg.get("enabled", True)) if isinstance(cfg, dict) else True
     min_strength = _effective_equity_signal_min(cfg)
@@ -866,7 +878,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
     assets, eligible = _sorted_and_eligible_equities(assets_seq, min_strength, strong_thr)
     eligible_count = len(eligible)
     high_conviction = bool(cfg_enabled) and any(
-        float(a.signal_strength) >= max(0.88, strong_thr) for a in eligible if float(a.signal_strength) > 0
+        float(a.signal_strength) >= strong_thr for a in eligible if float(a.signal_strength) > 0
     )
     if high_conviction:
         print(
@@ -1036,13 +1048,15 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
             print(
                 f"🟦 X-SIGNAL EQUITY ACTIVE | {sym} | Strength {sig:.3f} | Action: {action_label}"
             )
-            if sig > 0 and not buy_paths_allowed:
+            if sig > 0 and not buy_paths_allowed and not (sig >= strong_thr):
+                print(f"DEBUG: {sym} skipped due to POL low (buy_paths_allowed=False) and signal {sig:.3f} < {strong_thr:.3f}")
                 reason_parts.append(f"{sym}: buy_skipped ({buy_paths_block_reason})")
                 _log_trade_skipped(f"POL low ({sym} buy blocked)")
                 continue
-            if sig >= 0.80:
+            if sig >= strong_thr:
                 print(f"🚀 HIGH-CONVICTION BYPASS | Strength {sig:.2f} — forcing trade even on high gas/low USDC (PnL+ Sprint Mode)")
-            if sig > 0 and balances.usdc < required_usdc_floor:
+            if sig > 0 and balances.usdc < required_usdc_floor and not (sig >= strong_thr):
+                print(f"DEBUG: {sym} skipped due to USDC low (${balances.usdc:.2f} < ${required_usdc_floor:.2f}) and signal {sig:.3f} < {strong_thr:.3f}")
                 reason_parts.append(
                     f"{sym}: buy_skipped (USDC ${balances.usdc:.2f} < required_floor ${required_usdc_floor:.2f}; "
                     f"min_trade_usdc ${min_trade_usdc:.2f})"
