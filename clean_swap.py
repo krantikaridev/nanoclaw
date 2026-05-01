@@ -981,6 +981,8 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                 reason_parts.append(f"{sym}: buy_skipped ({buy_paths_block_reason})")
                 _log_trade_skipped(f"POL low ({sym} buy blocked)")
                 continue
+            if sig >= 0.88:
+                print(f"🚀 HIGH-CONVICTION BYPASS | Strength {sig:.2f} — forcing trade even on high gas/low USDC (PnL+ Sprint Mode)")
             if sig > 0 and balances.usdc < required_usdc_floor:
                 reason_parts.append(
                     f"{sym}: buy_skipped (USDC ${balances.usdc:.2f} < required_floor ${required_usdc_floor:.2f}; "
