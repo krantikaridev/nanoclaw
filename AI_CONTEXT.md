@@ -86,6 +86,21 @@ Load order: `.env` then `.env.local` (`override=True`).
   - `python -m pytest -q`
 - Python note for reviewers: `if/else` blocks do not create local scope. `nonlocal` is required only for assignments inside nested functions/closures.
 
+## One-go execution protocol (required before coding)
+
+- Start every major change request by writing a short acceptance checklist in chat first (expected behavior + logs + test gates).
+- Define invariants explicitly before edits:
+  - one source of truth per guard
+  - fresh-vs-cached state policy per check
+  - env/default consistency policy (`.env.example`, code fallback, docs)
+- Build/update the branch matrix first, then implement all coupled layers in one pass:
+  - decision logic
+  - diagnostics/log strings
+  - env defaults/template
+  - tests
+- Add at least one regression test for each non-happy-path branch touched (especially guard-failure and retry-recovery branches).
+- Do not close a request until all checklist items are green and logs match the intended branch reason text.
+
 ## Tokenized equities (conceptual roadmap)
 
 Replace proxy addresses when Ondo/other issuers publish **Polygon POS** deployments; validate pool depth (`getAmountsOut`) before size-up. Optional later: earnings-calendar-driven filters—not required for baseline execution.
