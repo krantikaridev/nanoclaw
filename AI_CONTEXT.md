@@ -1,4 +1,23 @@
 # Nanoclaw v2 - AI Context (Single Source of Truth)
+## V2.5.3 Status (as of 1 May 2026, 13:30 IST)
+
+**Current Situation**:
+- Portfolio: ~$101.25 (stable, no major loss)
+- All Tier 1 improvements deployed: Dynamic position sizing, 1inch aggregator, 4 assets (WMATIC_ALPHA, WETH_ALPHA, WBTC_ALPHA, LINK_ALPHA)
+- X-SIGNAL currently blocked by high gas (610 gwei > 450 limit) — protection module working correctly
+- Global cooldown reduced to 4 minutes, per-asset cooldown = 30 minutes
+- `portfolio_history.csv` now shows correct real values (~$95)
+
+**Key Learnings Today**:
+- High gas days completely block X-SIGNAL (protection is working as designed)
+- Dynamic sizing + 1inch should improve execution once gas normalizes
+- 4-minute global cooldown significantly increases cycle frequency
+
+**Next Priority**: Wait for gas to drop below 450 gwei, then observe PnL for 24 hours before any further changes.
+
+**Production Strategy**:
+- `main` branch = Production (serious capital)
+- `dev` branch = Experimentation ($100 seed)
 
 **Repo**: https://github.com/krantikaridev/nanoclaw  
 **Active Branch**: V2  
