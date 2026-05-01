@@ -44,6 +44,29 @@ def test_evaluate_usdc_copy_trade_defaults_strategy_without_build_call(monkeypat
     assert "ℹ️" in (out.message or "")
 
 
+def test_evaluate_usdc_copy_trade_returns_disabled_message_when_flag_off(monkeypatch):
+    monkeypatch.setattr(clean_swap, "ENABLE_USDC_COPY", False)
+
+    out = asyncio.run(
+        clean_swap.evaluate_usdc_copy_trade(
+            clean_swap.Balances(usdt=0.0, wmatic=0.0, pol=1.0, usdc=0.0),
+            wallets=[],
+        )
+    )
+
+    assert out.message == "ℹ️ USDC copy disabled"
+
+
+def test_effective_take_profit_thresholds_bumps_strong_threshold_when_misconfigured(monkeypatch):
+    monkeypatch.setattr(clean_swap, "TAKE_PROFIT_PCT", 10.0)
+    monkeypatch.setattr(clean_swap, "STRONG_SIGNAL_TP", 9.0)
+
+    base_tp, strong_tp = clean_swap._effective_take_profit_thresholds()
+
+    assert base_tp == 10.0
+    assert strong_tp == 14.0
+
+
 def test_evaluate_take_profit_hits_strong_take_profit(monkeypatch):
     monkeypatch.setattr(clean_swap, "get_latest_open_trade", lambda trade_log_file=clean_swap.TRADE_LOG_FILE: {"buy_price": 1.0})
     state = {}
@@ -104,6 +127,69 @@ def test_evaluate_take_profit_resets_tracking_without_open_trade(monkeypatch):
     assert state["profit_tracking"] == {}
 
 
+def test_evaluate_take_profit_returns_none_and_clears_tracking_for_invalid_buy_price(monkeypatch):
+    monkeypatch.setattr(clean_swap, "get_latest_open_trade", lambda trade_log_file=clean_swap.TRADE_LOG_FILE: {"buy_price": 0.0})
+    state = {"profit_tracking": {"buy_price": 1.0, "peak_price": 1.2}}
+
+    should_exit, signal = clean_swap.evaluate_take_profit(1.05, state)
+
+    assert should_exit is False
+    assert signal is None
+    assert state["profit_tracking"] == {}
+
+
+def test_evaluate_take_profit_returns_hold_signal_when_no_exit_conditions_hit(monkeypatch):
+    monkeypatch.setattr(clean_swap, "get_latest_open_trade", lambda trade_log_file=clean_swap.TRADE_LOG_FILE: {"buy_price": 1.0})
+    state = {}
+
+    should_exit, signal = clean_swap.evaluate_take_profit(1.02, state)
+
+    assert should_exit is False
+    assert signal["reason"] == "HOLD"
+    assert signal["sell_fraction"] == 0.0
+
+
+def test_build_protection_exit_decision_uses_strong_tp_sell_fraction(monkeypatch):
+    monkeypatch.setattr(clean_swap, "_effective_take_profit_thresholds", lambda: (8.0, 12.0))
+    decision = clean_swap.build_protection_exit_decision(
+        reason="PER_TRADE_EXIT",
+        current_price=1.20,
+        wmatic_balance=10.0,
+        open_trade={"buy_price": 1.0},
+    )
+
+    assert decision.direction == "WMATIC_TO_USDT"
+    assert decision.amount_in == int(10.0 * clean_swap.STRONG_TP_SELL_PCT * 1e18)
+    assert "strong TP hit" in decision.message
+
+
+def test_build_protection_exit_decision_uses_default_message_for_non_trade_reason():
+    decision = clean_swap.build_protection_exit_decision(
+        reason="GUARD_TRIGGERED",
+        current_price=1.0,
+        wmatic_balance=10.0,
+        open_trade=None,
+    )
+
+    assert decision.direction == "WMATIC_TO_USDT"
+    assert decision.amount_in == int(10.0 * 0.45 * 1e18)
+    assert "PROTECTION TRIGGERED" in decision.message
+
+
+def test_build_profit_exit_decision_clamps_sell_fraction_bounds():
+    low = clean_swap.build_profit_exit_decision(
+        {"reason": "TP_HIT", "message": "low", "sell_fraction": 0.01},
+        wmatic_balance=10.0,
+    )
+    high = clean_swap.build_profit_exit_decision(
+        {"reason": "TP_HIT", "message": "high", "sell_fraction": 5.0},
+        wmatic_balance=10.0,
+    )
+
+    assert low.amount_in == int(10.0 * 0.1 * 1e18)
+    assert high.amount_in == int(10.0 * 1.0 * 1e18)
+
+
 def test_select_main_strategy_prefers_usdt_reserve_protection():
     decision = clean_swap.select_main_strategy_trade(
         clean_swap.Balances(usdt=20.0, wmatic=80.0, pol=1.0),
@@ -123,6 +209,55 @@ def test_select_main_strategy_buys_when_balances_are_healthy():
     assert decision.direction == "USDT_TO_WMATIC"
     assert decision.trade_size > 0
     assert decision.amount_in == int(decision.trade_size * 1_000_000)
+
+
+def test_select_main_strategy_takes_profit_when_wmatic_value_is_high():
+    decision = clean_swap.select_main_strategy_trade(
+        clean_swap.Balances(usdt=30.0, wmatic=60.0, pol=1.0),
+        current_price=1.0,
+    )
+
+    assert decision.direction == "WMATIC_TO_USDT"
+    assert "Taking profit" in decision.message
+
+
+def test_select_main_strategy_cuts_loss_when_wmatic_value_is_low_and_size_is_large():
+    decision = clean_swap.select_main_strategy_trade(
+        clean_swap.Balances(usdt=30.0, wmatic=60.0, pol=1.0),
+        current_price=0.6,
+    )
+
+    assert decision.direction == "WMATIC_TO_USDT"
+    assert decision.amount_in == int(60.0 * 0.28 * 1e18)
+    assert "Cutting loss" in decision.message
+
+
+def test_select_copy_trade_skips_when_all_wallets_are_on_cooldown(monkeypatch):
+    logs = []
+    monkeypatch.setattr(clean_swap, "can_trade_wallet", lambda wallet: False)
+    monkeypatch.setattr(clean_swap, "_log_trade_skipped", lambda reason: logs.append(reason))
+
+    decision = clean_swap.select_copy_trade(
+        clean_swap.Balances(usdt=100.0, wmatic=10.0, pol=1.0, usdc=0.0),
+        wallets=["0x1", "0x2"],
+    )
+
+    assert decision.direction is None
+    assert "TRADE SKIPPED: cooldown" in decision.message
+    assert logs
+
+
+def test_select_copy_trade_executes_when_at_least_one_wallet_is_eligible(monkeypatch):
+    monkeypatch.setattr(clean_swap, "can_trade_wallet", lambda wallet: wallet == "0x2")
+
+    decision = clean_swap.select_copy_trade(
+        clean_swap.Balances(usdt=100.0, wmatic=10.0, pol=1.0, usdc=0.0),
+        wallets=["0x1", "0x2"],
+    )
+
+    assert decision.direction == "USDT_TO_WMATIC"
+    assert decision.trade_size == 18.0
+    assert decision.amount_in == int(18.0 * 1_000_000)
 
 
 def test_global_cooldown_uses_last_run_timestamp():
