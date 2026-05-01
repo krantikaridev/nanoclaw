@@ -128,7 +128,13 @@ def _sorted_and_eligible_equities(
         key=lambda a: abs(float(a.signal_strength)),
         reverse=True,
     )
-    eligible = [a for a in assets_list if abs(float(a.signal_strength)) >= float(min_strength)]
+    eligible: list[FollowedEquity] = []
+    for a in assets_list:
+        # Tier 1: explicit per-asset min_signal_strength (including 0.0) must be respected.
+        asset_floor_raw = getattr(a, "min_signal_strength", None)
+        effective_floor = float(min_strength) if asset_floor_raw is None else float(asset_floor_raw)
+        if abs(float(a.signal_strength)) >= effective_floor:
+            eligible.append(a)
     return assets_list, eligible
 
 
@@ -960,6 +966,29 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                 can_trade_asset=can_trade_asset,
             )
             if plan:
+                dynamic_trade_size_usdc = float(plan.trade_size)
+                if str(plan.direction) == "USDC_TO_EQUITY":
+                    strength = abs(sig)
+                    # Dynamic sizing based on signal strength (Tier 1 - 2026-05-01)
+                    if strength >= 0.90:
+                        trade_size_usdc = 12.0
+                    elif strength >= 0.80:
+                        trade_size_usdc = 10.0
+                    else:
+                        trade_size_usdc = 8.0
+                    desired_trade_size_usdc = float(trade_size_usdc)
+                    available_usdc = float(balances.usdc)
+                    # Safety: never request more USDC than wallet balance.
+                    dynamic_trade_size_usdc = min(desired_trade_size_usdc, available_usdc)
+                    if dynamic_trade_size_usdc < min_trade_usdc:
+                        reason_parts.append(
+                            f"{sym}: buy_skipped (dynamic_size ${desired_trade_size_usdc:.2f}, "
+                            f"available_usdc ${available_usdc:.2f}, min_trade_usdc ${min_trade_usdc:.2f})"
+                        )
+                        _log_trade_skipped(
+                            f"USDC low ({sym} dynamic size capped below min trade: ${dynamic_trade_size_usdc:.2f})"
+                        )
+                        continue
                 _checksum = getattr(Web3, "to_checksum_address", lambda x: x)
                 tin_p = _checksum(str(plan.token_in).strip())
                 tout_p = _checksum(str(plan.token_out).strip())
@@ -970,8 +999,12 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                 secs = int(trader.config.per_asset_cooldown_seconds)
                 decision = TradeDecision(
                     direction=plan.direction,
-                    amount_in=plan.amount_in,
-                    trade_size=plan.trade_size,
+                    amount_in=(
+                        int(dynamic_trade_size_usdc * 1_000_000)
+                        if str(plan.direction) == "USDC_TO_EQUITY"
+                        else plan.amount_in
+                    ),
+                    trade_size=dynamic_trade_size_usdc,
                     message=plan.message,
                     token_in=plan.token_in,
                     token_out=plan.token_out,

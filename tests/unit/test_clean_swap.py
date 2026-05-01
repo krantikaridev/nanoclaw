@@ -438,3 +438,146 @@ def test_main_skips_cycle_on_global_cooldown_and_logs_reason(monkeypatch):
 
     assert logs
     assert "cooldown (global" in logs[0]
+
+
+def test_try_x_signal_equity_decision_applies_dynamic_size_for_strong_buy(monkeypatch):
+    class _Plan:
+        direction = "USDC_TO_EQUITY"
+        amount_in = 1
+        trade_size = 5.0
+        message = "buy"
+        token_in = "0x" + "2" * 40
+        token_out = "0x" + "1" * 40
+
+    class _TunedConfig:
+        min_trade_usdc = 5.0
+        per_asset_cooldown_seconds = 1800
+        min_pol_for_gas = 0.005
+
+    class _TunedTrader:
+        config = _TunedConfig()
+        gas_protector = _DummyGasProtector()
+
+        def build_plan(self, **kwargs):
+            _ = kwargs
+            return _Plan()
+
+    class _BaseTrader:
+        def load_followed_equities(self):
+            return [
+                clean_swap.FollowedEquity(
+                    symbol="WMATIC_ALPHA",
+                    token_address="0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
+                    decimals=18,
+                    signal_strength=0.92,
+                )
+            ]
+
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(clean_swap, "_load_followed_equities_json_dict", lambda: {"enabled": True, "min_signal_strength": 0.60})
+    monkeypatch.setattr(clean_swap, "_effective_equity_signal_min", lambda cfg: 0.60)
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_EQUITY_TRADER", _BaseTrader())
+    monkeypatch.setattr(clean_swap, "_tuned_signal_equity_trader", lambda min_strength: _TunedTrader())
+    monkeypatch.setattr(clean_swap, "can_trade_asset", lambda symbol, now=None, cooldown_seconds=0: True)
+    monkeypatch.setattr(clean_swap, "get_token_balance", lambda *_args, **_kwargs: 0.0)
+
+    decision = clean_swap.try_x_signal_equity_decision(
+        clean_swap.Balances(usdt=40.0, wmatic=10.0, pol=1.0, usdc=20.0),
+        dry_run=True,
+    )
+
+    assert decision is not None
+    assert decision.direction == "USDC_TO_EQUITY"
+    assert decision.trade_size == 12.0
+    assert decision.amount_in == int(12.0 * 1_000_000)
+
+
+def test_try_x_signal_equity_decision_caps_dynamic_size_to_available_usdc(monkeypatch):
+    class _Plan:
+        direction = "USDC_TO_EQUITY"
+        amount_in = 1
+        trade_size = 5.0
+        message = "buy"
+        token_in = "0x" + "2" * 40
+        token_out = "0x" + "1" * 40
+
+    class _TunedConfig:
+        min_trade_usdc = 5.0
+        per_asset_cooldown_seconds = 1800
+        min_pol_for_gas = 0.005
+
+    class _TunedTrader:
+        config = _TunedConfig()
+        gas_protector = _DummyGasProtector()
+
+        def build_plan(self, **kwargs):
+            _ = kwargs
+            return _Plan()
+
+    class _BaseTrader:
+        def load_followed_equities(self):
+            return [
+                clean_swap.FollowedEquity(
+                    symbol="WMATIC_ALPHA",
+                    token_address="0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
+                    decimals=18,
+                    signal_strength=0.92,
+                )
+            ]
+
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(clean_swap, "_load_followed_equities_json_dict", lambda: {"enabled": True, "min_signal_strength": 0.60})
+    monkeypatch.setattr(clean_swap, "_effective_equity_signal_min", lambda cfg: 0.60)
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_EQUITY_TRADER", _BaseTrader())
+    monkeypatch.setattr(clean_swap, "_tuned_signal_equity_trader", lambda min_strength: _TunedTrader())
+    monkeypatch.setattr(clean_swap, "can_trade_asset", lambda symbol, now=None, cooldown_seconds=0: True)
+    monkeypatch.setattr(clean_swap, "get_token_balance", lambda *_args, **_kwargs: 0.0)
+
+    decision = clean_swap.try_x_signal_equity_decision(
+        clean_swap.Balances(usdt=40.0, wmatic=10.0, pol=1.0, usdc=8.0),
+        dry_run=True,
+    )
+
+    assert decision is not None
+    assert decision.direction == "USDC_TO_EQUITY"
+    assert decision.trade_size == 8.0
+    assert decision.amount_in == int(8.0 * 1_000_000)
+
+
+def test_sorted_and_eligible_equities_respects_per_asset_min_signal_strength():
+    assets = [
+        clean_swap.FollowedEquity(
+            symbol="USDC",
+            token_address="0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+            decimals=6,
+            signal_strength=0.76,
+            min_signal_strength=0.75,
+        ),
+        clean_swap.FollowedEquity(
+            symbol="WETH",
+            token_address="0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+            decimals=18,
+            signal_strength=0.72,
+            min_signal_strength=0.75,
+        ),
+    ]
+
+    _all_assets, eligible = clean_swap._sorted_and_eligible_equities(assets, min_strength=0.60)
+
+    assert [a.symbol for a in eligible] == ["USDC"]
+
+
+def test_sorted_and_eligible_equities_respects_explicit_zero_floor():
+    assets = [
+        clean_swap.FollowedEquity(
+            symbol="ZERO_FLOOR",
+            token_address="0x1111111111111111111111111111111111111111",
+            decimals=18,
+            signal_strength=0.10,
+            min_signal_strength=0.0,
+        ),
+    ]
+
+    _all_assets, eligible = clean_swap._sorted_and_eligible_equities(assets, min_strength=0.60)
+
+    assert [a.symbol for a in eligible] == ["ZERO_FLOOR"]

@@ -1,3 +1,5 @@
+import json
+
 from nanoclaw.strategies.signal_equity_trader import SignalEquityTrader
 from nanoclaw.utils.gas_protector import GasProtector
 
@@ -67,3 +69,47 @@ def test_build_plan_uses_fresh_guard_pol_and_builds_buy_when_sufficient():
 
     assert plan is not None
     assert plan.direction == "USDC_TO_EQUITY"
+
+
+def test_load_followed_equities_keeps_per_asset_min_signal_strength(tmp_path):
+    followed_path = tmp_path / "followed_equities.json"
+    followed_path.write_text(
+        json.dumps(
+            {
+                "enabled": True,
+                "assets": [
+                    {
+                        "symbol": "USDC",
+                        "address": "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+                        "decimals": 6,
+                        "signal_strength": 0.80,
+                        "min_signal_strength": 0.75,
+                    },
+                    {
+                        "symbol": "WETH",
+                        "address": "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+                        "decimals": 18,
+                        "signal_strength": 0.72,
+                        "min_signal_strength": 0.70,
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    strategy = (
+        SignalEquityTrader.builder()
+        .with_enabled(True)
+        .with_followed_equities_path(str(followed_path))
+        .with_gas_protector(DummyProtector(gas_ok=True, pol_balance=1.0))
+        .with_usdc_address("0x" + "2" * 40)
+        .build()
+    )
+
+    assets = strategy.load_followed_equities()
+
+    assert len(assets) == 2
+    assert assets[0].symbol == "USDC"
+    assert assets[0].min_signal_strength == 0.75
+    assert assets[1].symbol == "WETH"
+    assert assets[1].min_signal_strength == 0.70

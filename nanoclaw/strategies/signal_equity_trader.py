@@ -16,6 +16,7 @@ class FollowedEquity:
     token_address: str
     decimals: int = 18
     signal_strength: float = 0.0
+    min_signal_strength: Optional[float] = None
     earnings_days: Optional[float] = None
     current_price_usd: Optional[float] = None
 
@@ -192,6 +193,15 @@ class SignalEquityTrader:
                 continue
             decimals = int(item.get("decimals", 18) or 18)
             signal_strength = float(item.get("signal_strength", 0.0) or 0.0)
+            min_signal_strength = item.get("min_signal_strength", None)
+            if min_signal_strength is not None:
+                try:
+                    min_signal_strength = float(min_signal_strength)
+                except Exception:
+                    min_signal_strength = None
+            # Tier 1 liquidity configs may define per-asset signal floor; keep only sane values.
+            if isinstance(min_signal_strength, (int, float)) and not (0.0 <= float(min_signal_strength) <= 1.0):
+                min_signal_strength = None
             earnings_days = item.get("earnings_days", None)
             earnings_days_f = float(earnings_days) if earnings_days is not None else None
             current_price = item.get("current_price_usd", None)
@@ -202,6 +212,7 @@ class SignalEquityTrader:
                     token_address=token_address,
                     decimals=decimals,
                     signal_strength=signal_strength,
+                    min_signal_strength=min_signal_strength,
                     earnings_days=earnings_days_f,
                     current_price_usd=current_price_f,
                 )

@@ -1,5 +1,5 @@
 {
-  "_note": "Only Polygon-valid addresses are kept active. Tokenized equities without official Polygon contracts are skipped until verified listings exist.",
+  "_note": "Only Polygon-valid addresses are kept active. Tier 1 adds liquid Polygon assets with per-asset min_signal_strength floors.",
   "enabled": true,
   "min_signal_strength": 0.6,
   "assets": [
@@ -12,12 +12,22 @@
       "timeline_hours": 8
     },
     {
-      "symbol": "WETH_ALPHA",
+      "symbol": "WETH",
       "address": "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
       "decimals": 18,
+      "min_signal_strength": 0.7,
       "signal_strength": 0.87,
       "upside_pct": 16,
       "timeline_hours": 24
+    },
+    {
+      "symbol": "USDC",
+      "address": "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+      "decimals": 6,
+      "min_signal_strength": 0.75,
+      "signal_strength": 0.8,
+      "upside_pct": 8,
+      "timeline_hours": 12
     },
     {
       "symbol": "WBTC_ALPHA",

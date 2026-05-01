@@ -202,3 +202,33 @@ def test_approve_and_swap_returns_none_when_token_in_equals_token_out():
     )
 
     assert out is None
+
+
+def test_approve_and_swap_uses_router_fallback_when_oneinch_key_missing(monkeypatch):
+    monkeypatch.delenv("ONEINCH_API_KEY", raising=False)
+    monkeypatch.delenv("INCH_API_KEY", raising=False)
+
+    called = {"router_quote": False}
+
+    def _fake_best_quote_path(*_args, **_kwargs):
+        called["router_quote"] = True
+        raise RuntimeError("router quote called")
+
+    monkeypatch.setattr(swap_executor, "_best_quote_path", _fake_best_quote_path)
+    monkeypatch.setattr(
+        swap_executor,
+        "_oneinch_swap_payload",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("1inch should not be called without key")),
+    )
+
+    out = asyncio.run(
+        swap_executor.approve_and_swap(
+            w3=object(),
+            private_key="dummy-key",
+            amount_in=1,
+            direction="USDT_TO_WMATIC",
+        )
+    )
+
+    assert out is None
+    assert called["router_quote"] is True

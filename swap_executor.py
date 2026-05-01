@@ -1,4 +1,7 @@
 import os
+import json
+import urllib.parse
+import urllib.request
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -19,6 +22,11 @@ from constants import (
 )
 
 SWAP_SLIPPAGE_BPS = int(os.getenv("SWAP_SLIPPAGE_BPS", "100"))
+ONEINCH_SWAP_ENDPOINT = os.getenv("ONEINCH_SWAP_ENDPOINT", "https://api.1inch.dev/swap/v5.2/137/swap")
+ONEINCH_SPENDER_ENDPOINT = os.getenv(
+    "ONEINCH_SPENDER_ENDPOINT",
+    "https://api.1inch.dev/swap/v5.2/137/approve/spender",
+)
 
 _prefix = LOG_PREFIX + " " if LOG_PREFIX else ""
 
@@ -87,6 +95,61 @@ def _best_quote_path(
     return best_path, best_amt, min_out
 
 
+def _oneinch_api_key() -> str:
+    return (os.getenv("ONEINCH_API_KEY") or os.getenv("INCH_API_KEY") or "").strip()
+
+
+def _oneinch_headers() -> dict[str, str]:
+    api_key = _oneinch_api_key()
+    if not api_key:
+        raise ValueError("Missing ONEINCH_API_KEY (required for 1inch swap API)")
+    return {
+        "Authorization": f"Bearer {api_key}",
+        "Accept": "application/json",
+    }
+
+
+def _oneinch_get_json(url: str) -> dict:
+    req = urllib.request.Request(url=url, headers=_oneinch_headers(), method="GET")
+    with urllib.request.urlopen(req, timeout=20) as response:  # noqa: S310
+        payload = response.read().decode("utf-8")
+    data = json.loads(payload or "{}")
+    if not isinstance(data, dict):
+        raise ValueError("Invalid 1inch response format")
+    return data
+
+
+def _oneinch_approve_spender() -> str:
+    data = _oneinch_get_json(ONEINCH_SPENDER_ENDPOINT)
+    spender = str(data.get("address", "")).strip()
+    if not spender:
+        raise ValueError("1inch approve/spender response missing address")
+    return spender
+
+
+def _oneinch_swap_payload(*, token_in: str, token_out: str, amount_in: int) -> dict:
+    slippage_percent = max(0.1, float(SWAP_SLIPPAGE_BPS) / 100.0)
+    params = {
+        "src": token_in,
+        "dst": token_out,
+        "amount": str(int(amount_in)),
+        "from": WALLET,
+        "origin": WALLET,
+        "receiver": WALLET,
+        "slippage": f"{slippage_percent:.2f}",
+        "disableEstimate": "false",
+        "allowPartialFill": "false",
+    }
+    # Using 1inch for better execution (Tier 1 - 2026-05-01)
+    query = urllib.parse.urlencode(params)
+    url = f"{ONEINCH_SWAP_ENDPOINT}?{query}"
+    data = _oneinch_get_json(url)
+    tx_data = data.get("tx")
+    if not isinstance(tx_data, dict) or not tx_data.get("to") or not tx_data.get("data"):
+        raise ValueError("1inch swap response missing tx payload")
+    return data
+
+
 async def approve_and_swap(
     w3,
     private_key,
@@ -130,27 +193,48 @@ async def approve_and_swap(
                 f"{_prefix}refusing swap: token_in == token_out ({_addr_probe(str(token_in))}); check USDC/WMATIC env"
             )
 
-        router = Web3.to_checksum_address(ROUTER)
-
         print(
             f"{_prefix}swap intent | {_addr_probe(token_in_cs)}→{_addr_probe(token_out_cs)} | "
-            f"slippage_bps={SWAP_SLIPPAGE_BPS}"
+            f"slippage_bps={SWAP_SLIPPAGE_BPS} | executor=1inch"
         )
 
-        path_candidates = build_polygon_swap_path_candidates(token_in_cs, token_out_cs)
-        chosen_path, expected_out, amount_out_min = _best_quote_path(
-            w3,
-            router=router,
-            amount_in=amount_in,
-            paths=path_candidates,
-        )
-        print(
-            f"{_prefix}route | hops={len(chosen_path) - 1} | expected_out≈{expected_out} | min_out={amount_out_min}"
-        )
+        use_oneinch = bool(_oneinch_api_key())
+        tx_payload: dict | None = None
+        amount_out_min = 0
+        chosen_path: list[str] = []
+        router = Web3.to_checksum_address(ROUTER)
+        approve_spender = router
+        if use_oneinch:
+            try:
+                swap_payload = _oneinch_swap_payload(
+                    token_in=token_in_cs,
+                    token_out=token_out_cs,
+                    amount_in=amount_in,
+                )
+                tx_payload = swap_payload["tx"]
+                expected_out = int(str(swap_payload.get("dstAmount") or "0"))
+                print(f"{_prefix}route | expected_out≈{expected_out} | provider=1inch")
+                approve_spender = Web3.to_checksum_address(_oneinch_approve_spender())
+            except Exception as ex:
+                print(f"{_prefix}1inch unavailable ({ex}) — falling back to router path quoting")
+                use_oneinch = False
+        if not use_oneinch:
+            if not _oneinch_api_key():
+                print(f"{_prefix}ONEINCH_API_KEY missing — using router fallback execution")
+            path_candidates = build_polygon_swap_path_candidates(token_in_cs, token_out_cs)
+            chosen_path, expected_out, amount_out_min = _best_quote_path(
+                w3,
+                router=router,
+                amount_in=amount_in,
+                paths=path_candidates,
+            )
+            print(
+                f"{_prefix}route | hops={len(chosen_path) - 1} | expected_out≈{expected_out} | min_out={amount_out_min}"
+            )
 
         nonce = w3.eth.get_transaction_count(WALLET)
         approve_contract = w3.eth.contract(address=token_in_cs, abi=ERC20_ABI)
-        approve_tx = approve_contract.functions.approve(router, amount_in).build_transaction({
+        approve_tx = approve_contract.functions.approve(approve_spender, amount_in).build_transaction({
             "from": WALLET,
             "nonce": nonce,
             "gas": 140000,
@@ -167,23 +251,36 @@ async def approve_and_swap(
         print("✅ Approve confirmed!")
         await asyncio.sleep(5)
 
-        swap_contract = w3.eth.contract(address=router, abi=ROUTER_SWAP_AND_QUOTE_ABI)
-        gas_limit = 320000 if len(chosen_path) <= 2 else 520000
-
         nonce_swap = w3.eth.get_transaction_count(WALLET)
-        swap_tx = swap_contract.functions.swapExactTokensForTokens(
-            amount_in,
-            amount_out_min,
-            chosen_path,
-            WALLET,
-            int(time.time()) + 300,
-        ).build_transaction({
-            "from": WALLET,
-            "nonce": nonce_swap,
-            "gas": gas_limit,
-            "gasPrice": w3.eth.gas_price * 15 // 10,
-            "chainId": 137,
-        })
+        if use_oneinch and tx_payload is not None:
+            gas_price = int(tx_payload.get("gasPrice") or w3.eth.gas_price * 15 // 10)
+            gas_limit = int(tx_payload.get("gas") or 450000)
+            swap_tx = {
+                "from": WALLET,
+                "nonce": nonce_swap,
+                "to": Web3.to_checksum_address(str(tx_payload["to"])),
+                "data": str(tx_payload["data"]),
+                "value": int(tx_payload.get("value") or 0),
+                "gas": gas_limit,
+                "gasPrice": gas_price,
+                "chainId": 137,
+            }
+        else:
+            swap_contract = w3.eth.contract(address=router, abi=ROUTER_SWAP_AND_QUOTE_ABI)
+            gas_limit = 320000 if len(chosen_path) <= 2 else 520000
+            swap_tx = swap_contract.functions.swapExactTokensForTokens(
+                amount_in,
+                amount_out_min,
+                chosen_path,
+                WALLET,
+                int(time.time()) + 300,
+            ).build_transaction({
+                "from": WALLET,
+                "nonce": nonce_swap,
+                "gas": gas_limit,
+                "gasPrice": w3.eth.gas_price * 15 // 10,
+                "chainId": 137,
+            })
 
         signed_swap = w3.eth.account.sign_transaction(swap_tx, resolved_key)
         swap_hash = w3.eth.send_raw_transaction(signed_swap.raw_transaction)
