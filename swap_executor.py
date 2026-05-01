@@ -1,14 +1,12 @@
-import os
 import json
-import urllib.parse
-import urllib.request
-from dotenv import load_dotenv
-
-load_dotenv()
+import os
 import asyncio
 import time
+import urllib.parse
+import urllib.request
 
 from web3 import Web3
+from dotenv import load_dotenv
 
 from constants import (
     ERC20_ABI,
@@ -20,6 +18,8 @@ from constants import (
     USDT,
     WMATIC,
 )
+
+load_dotenv()
 
 SWAP_SLIPPAGE_BPS = int(os.getenv("SWAP_SLIPPAGE_BPS", "100"))
 ONEINCH_SWAP_ENDPOINT = os.getenv("ONEINCH_SWAP_ENDPOINT", "https://api.1inch.dev/swap/v5.2/137/swap")

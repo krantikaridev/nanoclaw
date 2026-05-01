@@ -1,3 +1,5 @@
+import pytest
+
 from nanoclaw.strategies.usdc_copy import USDCopyStrategy
 from nanoclaw.utils.gas_protector import GasProtector
 
@@ -13,11 +15,8 @@ class DummyProtector(GasProtector):
 
 def test_builder_requires_gas_protector():
     builder = USDCopyStrategy.builder().with_enabled(True)
-    try:
+    with pytest.raises(ValueError, match="GasProtector"):
         builder.build()
-        assert False, "expected ValueError"
-    except ValueError as exc:
-        assert "GasProtector" in str(exc)
 
 
 def test_disabled_strategy_returns_no_plan():

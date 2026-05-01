@@ -53,11 +53,13 @@ def record_buy(buy_price, amount_usd, tx_hash):
         "status": "OPEN"
     }
     if os.path.exists(TRADE_LOG_FILE):
-        with open(TRADE_LOG_FILE) as f: trades = json.load(f)
+        with open(TRADE_LOG_FILE) as f:
+            trades = json.load(f)
     else:
         trades = []
     trades.append(entry)
-    with open(TRADE_LOG_FILE, "w") as f: json.dump(trades, f, indent=2)
+    with open(TRADE_LOG_FILE, "w") as f:
+        json.dump(trades, f, indent=2)
     print(f"🔒 Trade locked | Buy: ${buy_price:.4f} | Target: ${entry['target_price']:.4f} (+{PROFIT_LOCK_PERCENT}%)")
 
 def check_exit_conditions():

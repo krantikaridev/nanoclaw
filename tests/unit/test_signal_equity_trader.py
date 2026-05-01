@@ -71,6 +71,28 @@ def test_build_plan_uses_fresh_guard_pol_and_builds_buy_when_sufficient():
     assert plan.direction == "USDC_TO_EQUITY"
 
 
+def test_build_plan_allows_high_gas_when_override_enabled():
+    strategy = _build_strategy(gas_ok=False, pol_balance=1.0)
+
+    plan = strategy.build_plan(
+        symbol="WMATIC_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.92,
+        earnings_proximity_days=None,
+        current_price_usd=1.23,
+        usdc_balance=100.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda symbol, now, cooldown: True,
+        now=1000.0,
+        allow_high_gas_override=True,
+    )
+
+    assert plan is not None
+    assert plan.direction == "USDC_TO_EQUITY"
+
+
 def test_load_followed_equities_keeps_per_asset_min_signal_strength(tmp_path):
     followed_path = tmp_path / "followed_equities.json"
     followed_path.write_text(

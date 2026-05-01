@@ -249,6 +249,7 @@ class SignalEquityTrader:
         can_trade_asset: AssetCooldownGetFn,
         now: Optional[float] = None,
         urgent_gas: bool = False,
+        allow_high_gas_override: bool = False,
     ) -> Optional[EquityTradePlan]:
         if not self.config.enabled:
             return None
@@ -265,7 +266,7 @@ class SignalEquityTrader:
             urgent=urgent_gas,
             min_pol=self.config.min_pol_for_gas,
         )
-        if not gas_status.get("gas_ok", False):
+        if not gas_status.get("gas_ok", False) and not bool(allow_high_gas_override):
             return None
 
         # Always use the fresh on-chain POL value from this just-performed safety query.

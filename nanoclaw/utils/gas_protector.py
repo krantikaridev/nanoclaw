@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Callable, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Iterable, List, Optional, Tuple, cast
 
 try:
-    from web3 import Web3
+    from web3 import Web3 as _Web3
+    Web3 = _Web3
 except ImportError:  # pragma: no cover - exercised in lightweight test environments
-    class Web3:  # type: ignore[override]
+    class Web3:  # type: ignore[no-redef]
         class _MissingEth:  # type: ignore[override]
             @property
             def gas_price(self) -> int:
@@ -23,7 +24,7 @@ except ImportError:  # pragma: no cover - exercised in lightweight test environm
                 self.endpoint_uri = endpoint_uri
                 self.request_kwargs = request_kwargs or {}
 
-        def __init__(self, provider: "Web3.HTTPProvider") -> None:
+        def __init__(self, provider: Any) -> None:
             self.provider = provider
             self.eth = self._MissingEth()
 
@@ -135,6 +136,15 @@ class GasProtector:
         )
         return Web3(provider)
 
+    def _checksum_or_raw(self, address: str) -> str:
+        converter = getattr(Web3, "to_checksum_address", None)
+        if not callable(converter):
+            return address
+        try:
+            return cast(str, converter(address))
+        except Exception:
+            return address
+
     def _query_with_fallback(self, query_fn: SafeQuery) -> Tuple[Optional[float], Optional[str]]:
         for _ in range(self.config.retry_attempts):
             for rpc_url in self._rpc_urls():
@@ -161,8 +171,11 @@ class GasProtector:
             return False
 
     def get_pol_balance(self, address: str) -> float:
+        addr = self._checksum_or_raw(address)
         pol_balance, _ = self._query_with_fallback(
-            lambda web3_client: float(web3_client.from_wei(web3_client.eth.get_balance(address), "ether"))
+            lambda web3_client: float(
+                web3_client.from_wei(web3_client.eth.get_balance(cast(Any, addr)), "ether")
+            )
         )
         if pol_balance is None:
             return self._safe_low_pol_balance()
@@ -178,11 +191,14 @@ class GasProtector:
     def get_safe_status(self, address: str, urgent: bool = False, min_pol: Optional[float] = None) -> dict:
         threshold = self.config.urgent_gwei if urgent else self.config.max_gwei
         required_pol = self.config.min_pol_balance if min_pol is None else float(min_pol)
+        addr = self._checksum_or_raw(address)
         gas_gwei, gas_rpc = self._query_with_fallback(
             lambda web3_client: float(web3_client.from_wei(web3_client.eth.gas_price, "gwei"))
         )
         pol_balance, pol_rpc = self._query_with_fallback(
-            lambda web3_client: float(web3_client.from_wei(web3_client.eth.get_balance(address), "ether"))
+            lambda web3_client: float(
+                web3_client.from_wei(web3_client.eth.get_balance(cast(Any, addr)), "ether")
+            )
         )
 
         safe_gas_gwei = self._safe_high_gas_gwei(urgent=urgent) if gas_gwei is None else gas_gwei

@@ -821,6 +821,11 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
     assets_seq = X_SIGNAL_EQUITY_TRADER.load_followed_equities()
     assets, eligible = _sorted_and_eligible_equities(assets_seq, min_strength)
     eligible_count = len(eligible)
+    high_conviction = bool(cfg_enabled) and any(
+        float(a.signal_strength) >= 0.88 for a in eligible if float(a.signal_strength) > 0
+    )
+    if high_conviction:
+        print("🚀 HIGH-CONVICTION MODE ACTIVE — 0.88+ signal present, gas protection relaxed for this cycle")
 
     print(f"🟦 X-SIGNAL EQUITY CHECK | Checking {len(assets)} assets")
     if not cfg_enabled:
@@ -839,6 +844,31 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
             f"(reason: no_asset_above_threshold (>={min_strength:.2f}))"
         )
     else:
+        # === PnL+ SPRINT OVERRIDE (high-conviction bypass) ===
+        if high_conviction:
+            print(
+                "🚀 HIGH-CONVICTION GAS OVERRIDE | 0.88+ strength detected — bypassing 450 gwei limit "
+                "(PnL+ Sprint Mode, high return high conviction, net expected positive)"
+            )
+            # Force USDC top-up for high-conviction.
+            if dry_run:
+                balances = _project_balances_after_auto_usdc(
+                    balances,
+                    min_usdc=8.0,
+                    min_wmatic_value=12.0,
+                )
+            else:
+                topup_ok = ensure_usdc_for_x_signal(min_usdc=8.0, min_wmatic_value=12.0)
+                balances = get_balances()
+                if not topup_ok and balances.usdc < 8.0:
+                    print(
+                        "🟦 X-SIGNAL EQUITY | Auto-USDC failed during HIGH-CONVICTION prep "
+                        "(PnL+ Sprint Mode, high return high conviction)"
+                    )
+                    _log_trade_skipped(
+                        f"AUTO-USDC failed during high-conviction prep (have ${balances.usdc:.2f}, need $8.00)"
+                    )
+
         strong_thr = float(os.getenv("X_SIGNAL_STRONG_THRESHOLD", "0.85"))
         has_strong_buy = any(
             float(a.signal_strength) > 0 and float(a.signal_strength) >= strong_thr for a in eligible
@@ -859,11 +889,19 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                     min_wmatic_value=float(X_SIGNAL_WMATIC_MIN_VALUE),
                 )
             else:
-                ensure_usdc_for_x_signal(
+                topup_ok = ensure_usdc_for_x_signal(
                     min_usdc=max(force_floor, auto_usdc_target),
                     min_wmatic_value=float(X_SIGNAL_WMATIC_MIN_VALUE),
                 )
                 balances = get_balances()
+                if not topup_ok and balances.usdc < max(force_floor, min_trade_usdc):
+                    print(
+                        "🟦 X-SIGNAL EQUITY | Auto-USDC attempt failed "
+                        "(guard/tx) — BUY paths may be skipped"
+                    )
+                    _log_trade_skipped(
+                        f"AUTO-USDC failed (have ${balances.usdc:.2f}, need ${max(force_floor, min_trade_usdc):.2f})"
+                    )
             if balances.usdc >= max(force_floor, min_trade_usdc):
                 if dry_run:
                     print(
@@ -964,6 +1002,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                 equity_balance=equity_bal,
                 wallet_address_for_gas=WALLET,
                 can_trade_asset=can_trade_asset,
+                allow_high_gas_override=high_conviction,
             )
             if plan:
                 dynamic_trade_size_usdc = float(plan.trade_size)
@@ -1071,7 +1110,11 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
             gst = trader.gas_protector.get_safe_status(
                 address=WALLET, urgent=False, min_pol=float(trader.config.min_pol_for_gas)
             )
-            if not bool(gst.get("gas_ok", False)):
+            if high_conviction:
+                summary_bits.append(
+                    "gas override active (0.88+ high conviction; bypassing max_gwei block)"
+                )
+            elif not bool(gst.get("gas_ok", False)):
                 summary_bits.append(
                     f"gas blocked (gas≈{float(gst.get('gas_gwei', 0)):.2f}, "
                     f"limit≤{float(gst.get('max_gwei', 0)):.2f})"
