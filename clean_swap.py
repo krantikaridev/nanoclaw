@@ -381,9 +381,9 @@ def write_portfolio_history_snapshot(current_price: float) -> None:
     wmatic = get_token_balance(WMATIC, 18)
     pol = get_pol_balance()
     usdc = get_token_balance(USDC, 6)
-    # Always use real on-chain balances (fixed 2026-05-01)
-    total_value = float(usdt) + float(wmatic) + float(pol)
     pol_price_usd = float(POL_USD_PRICE)
+    # Always calculate real total_value from on-chain balances (fixed 2026-05-01)
+    total_value = usdt + usdc + (wmatic * current_price) + (pol * pol_price_usd)
     row = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "usdt": f"{usdt:.6f}",

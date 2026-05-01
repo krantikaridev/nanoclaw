@@ -278,7 +278,7 @@ def test_wallet_cooldown_blocks_until_threshold_passes():
 def test_portfolio_history_uses_independent_pol_price(monkeypatch, tmp_path):
     csv_path = tmp_path / "portfolio_history.csv"
     monkeypatch.setattr(clean_swap, "PORTFOLIO_HISTORY_FILE", str(csv_path))
-    monkeypatch.setattr(clean_swap, "POL_USD_PRICE", 0.10)
+    monkeypatch.setattr(clean_swap, "POL_USD_PRICE", 0.25)
     monkeypatch.setattr(clean_swap, "USDT", "0xusdt")
     monkeypatch.setattr(clean_swap, "USDC", "0xusdc")
     monkeypatch.setattr(clean_swap, "WMATIC", "0xwmatic")
@@ -295,12 +295,12 @@ def test_portfolio_history_uses_independent_pol_price(monkeypatch, tmp_path):
     monkeypatch.setattr(clean_swap, "get_token_balance", _token_balance)
     monkeypatch.setattr(clean_swap, "get_pol_balance", lambda wallet_address=clean_swap.WALLET: 20.0)
 
-    clean_swap.write_portfolio_history_snapshot(current_price=1.0)
+    clean_swap.write_portfolio_history_snapshot(current_price=2.0)
 
     lines = csv_path.read_text(encoding="utf-8").strip().splitlines()
     assert lines[0] == "timestamp,usdt,usdc,wmatic,pol,pol_usd_price,total_value"
-    # total_value = 50 + 10 + (5 * 1.0) + (20 * 0.10) = 67.0
-    assert lines[1].endswith(",20.000000,0.100000,67.000000")
+    # total_value = 50 + 10 + (5 * 2.0) + (20 * 0.25) = 75.0
+    assert lines[1].endswith(",20.000000,0.250000,75.000000")
 
 
 def test_x_signal_buy_paths_block_when_topup_reports_success_but_pol_remains_low(monkeypatch):
