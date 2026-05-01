@@ -36,12 +36,30 @@ upsert_env() {
     echo "⚠️ Env file not found: $file"
     return 1
   fi
-  if grep -q "^${key}=" "$file"; then
-    sed -i "s/^${key}=.*/${key}=${value}/" "$file"
-  else
-    echo "${key}=${value}" >> "$file"
-  fi
-  return 0
+  python - "$file" "$key" "$value" <<'PY'
+import pathlib
+import sys
+
+env_path = pathlib.Path(sys.argv[1])
+key = sys.argv[2]
+value = sys.argv[3]
+
+lines = env_path.read_text(encoding="utf-8").splitlines()
+prefix = f"{key}="
+updated = False
+
+for i, line in enumerate(lines):
+    if line.startswith(prefix):
+        lines[i] = f"{key}={value}"
+        updated = True
+        break
+
+if not updated:
+    lines.append(f"{key}={value}")
+
+env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+PY
+  return $?
 }
 
 if [ -n "${NANOCLAW_FIX_MAX_GWEI:-}" ]; then

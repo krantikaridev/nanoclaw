@@ -48,7 +48,7 @@ Operational focus: correctness of this precedence, USDC liquidity for equity **b
 Examples: `RPC`, `COOLDOWN_MINUTES`, `ENABLE_X_SIGNAL_EQUITY`, `X_SIGNAL_EQUITY_MIN_STRENGTH` **(default template 0.60; tighten in prod if desired)**,
 `SWAP_SLIPPAGE_BPS`, `LOG_PREFIX`, Polygon token addresses (`USDC`, `WMATIC`, `ROUTER`).
 
-Load order: `.env` only.
+Load order: `.env` then optional `.env.local` (`override=True`) when present.
 
 ## Recent implementation notes (April 2026)
 

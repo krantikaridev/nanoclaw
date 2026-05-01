@@ -47,6 +47,7 @@ Checklist reference:
 
 - **Template**: `.env.example`
 - **Do not commit**: `.env` (contains secrets)
+- Optional local override file: `.env.local` (loaded after `.env` when present)
 
 ### Required addresses (Polygon)
 
@@ -97,7 +98,8 @@ Policy:
 
 ## VM fix script env target
 
-`scripts/fix_vm.sh` now writes gas overrides into `.env` (not `.env.local`).
+`scripts/fix_vm.sh` now writes gas overrides into `.env` by default.
+If your runtime uses `.env.local` overrides, point it explicitly via `NANOCLAW_ENV_PATH`.
 Override env file path if needed:
 
 ```bash
