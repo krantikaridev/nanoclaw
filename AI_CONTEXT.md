@@ -6,7 +6,7 @@
 **Wallet**: 0x6e291a7180bd198d67eeb792bb3262324d3e64aa
 
 **Current Status**:
-- Smart USDC population added (WMATIC → USDC priority for gas optimization). X-Signal now self-sufficient.
+- V2.5.3 - Max Aggression + Bug Fixes in progress.
 
 **Current Portfolio Snapshot** (historical baseline; reconcile with balances on-chain):
 - Total ≈ $113
@@ -54,6 +54,13 @@ Load order: `.env` then `.env.local` (`override=True`).
 - Unit tests for take-profit paths, swap path candidates, and X-Signal threshold helper (`tests/unit/`).
 - No non-core alerting layers in-scope; prioritize strategy code and deterministic logs.
 
+## Today's learnings (1 May 2026)
+
+- POL guard false positive bug.
+- `portfolio_history.csv` calculation bug.
+- 6-hour cooldown is the biggest bottleneck.
+- Only one asset is working due to wrong addresses.
+
 ## Development workflow
 
 - Local Cursor → tests (`pytest`) → dry-run (`python clean_swap.py --dry-run`; on Windows set `PYTHONIOENCODING=utf-8` if the console rejects emoji prints from legacy modules).
@@ -78,6 +85,10 @@ Load order: `.env` then `.env.local` (`override=True`).
 
 Replace proxy addresses when Ondo/other issuers publish **Polygon POS** deployments; validate pool depth (`getAmountsOut`) before size-up. Optional later: earnings-calendar-driven filters—not required for baseline execution.
 
+### Parked milestone
+
+- Earnings Volatility Capture Engine v1 (dynamic tokenized equity trading based on earnings calendar + X signals).
+
 ## Design rules
 
 - Builder pattern where used; `.env`-driven; risk-first.
@@ -86,4 +97,4 @@ Replace proxy addresses when Ondo/other issuers publish **Polygon POS** deployme
 Paste raw: https://raw.githubusercontent.com/krantikaridev/nanoclaw/V2/AI_CONTEXT.md
 
 **Next milestone**  
-Swap-size validation against quoted `amount_out_min` under stress, hardened Polygon ticker addresses when published, shallow integration test with mocked `Web3` for `approve_and_swap` success path only.
+Remove artificial profit caps (cooldown, small trade size) while keeping hard risk limits.
