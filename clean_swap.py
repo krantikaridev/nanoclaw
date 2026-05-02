@@ -1433,12 +1433,7 @@ def evaluate_x_signal_equity_trade(
             can_trade_asset=can_trade_asset,
             allow_high_gas_override=high_conviction,
         )
-        if plan:
-            # Continue to next asset (try all eligible)
-            pass
-        if plan:
-            # Continue to next asset (try all eligible)
-            pass
+       
         if plan:
             # Continue to next asset (try all eligible)
             pass
