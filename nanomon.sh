@@ -1,6 +1,6 @@
 #!/bin/bash
 echo "=== $(date +%H:%M) ==="
-echo "✅ V2.5.8 Copy Trading EXECUTING REAL TRADES (Test Mode Active)"
+echo "✅ V2.5.9 Copy Trading EXECUTING REAL TRADES (Test Mode Active)"
 echo "Monitoring 8 wallets | Copy ratio: 28.0%"
 echo "✅ V2.5.1 Protection Module loaded successfully"
 
@@ -8,13 +8,12 @@ echo "✅ V2.5.1 Protection Module loaded successfully"
 LAST_TOTAL=$(tail -1 portfolio_history.csv | cut -d, -f7 2>/dev/null || echo "0")
 BASELINE=130.00
 
-# Robust calculations with proper datetime parsing
+# Robust calculations (string-based cutoffs for 4h/6h to avoid datetime parsing bugs)
 PNL_DATA=$(python3 -c '
 import sys, datetime, csv, subprocess
-from datetime import timedelta, timezone
 last = float(sys.argv[1])
 base = float(sys.argv[2])
-now = datetime.datetime.now(timezone.utc)
+now = datetime.datetime.now(datetime.timezone.utc)
 
 # All-time
 pnl_all = last - base
@@ -33,45 +32,35 @@ except: pass
 pnl_today = last - (first_today or last)
 pct_today = (pnl_today / first_today * 100) if first_today and first_today > 0 else 0
 
-# Last 4 hours (robust parsing)
-cutoff_4h = now - timedelta(hours=4)
+# Last 4 hours (string-based ISO cutoff - fully reliable)
+cutoff_4h = (now - datetime.timedelta(hours=4)).isoformat()[:19]
 first_4h = None
 try:
     with open("portfolio_history.csv") as f:
         for row in csv.reader(f):
-            if not row: continue
-            ts_str = row[0].replace("+00:00", "").replace("Z", "")
-            row_time = datetime.datetime.fromisoformat(ts_str)
-            if row_time.tzinfo is None:
-                row_time = row_time.replace(tzinfo=timezone.utc)
-            if row_time >= cutoff_4h:
+            if row and row[0][:19] >= cutoff_4h:
                 first_4h = float(row[-1])
                 break
 except: pass
 pnl_4h = last - (first_4h or last)
 pct_4h = (pnl_4h / first_4h * 100) if first_4h and first_4h > 0 else 0
 
-# Last 6 hours (robust parsing)
-cutoff_6h = now - timedelta(hours=6)
+# Last 6 hours (string-based ISO cutoff)
+cutoff_6h = (now - datetime.timedelta(hours=6)).isoformat()[:19]
 first_6h = None
 try:
     with open("portfolio_history.csv") as f:
         for row in csv.reader(f):
-            if not row: continue
-            ts_str = row[0].replace("+00:00", "").replace("Z", "")
-            row_time = datetime.datetime.fromisoformat(ts_str)
-            if row_time.tzinfo is None:
-                row_time = row_time.replace(tzinfo=timezone.utc)
-            if row_time >= cutoff_6h:
+            if row and row[0][:19] >= cutoff_6h:
                 first_6h = float(row[-1])
                 break
 except: pass
 pnl_6h = last - (first_6h or last)
 pct_6h = (pnl_6h / first_6h * 100) if first_6h and first_6h > 0 else 0
 
-# Week / Month (kept for completeness)
+# Week / Month
 week_num = datetime.date.today().isocalendar()[1]
-week_start = (datetime.date.today() - timedelta(days=datetime.date.today().weekday())).isoformat()
+week_start = (datetime.date.today() - datetime.timedelta(days=datetime.date.today().weekday())).isoformat()
 first_week = None
 try:
     with open("portfolio_history.csv") as f:
@@ -83,7 +72,7 @@ except: pass
 pnl_week = last - (first_week or last)
 pct_week = (pnl_week / first_week * 100) if first_week and first_week > 0 else 0
 
-last_week_start = (datetime.date.today() - timedelta(days=datetime.date.today().weekday() + 7)).isoformat()
+last_week_start = (datetime.date.today() - datetime.timedelta(days=datetime.date.today().weekday() + 7)).isoformat()
 first_last_week = None
 try:
     with open("portfolio_history.csv") as f:
