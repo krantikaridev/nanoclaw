@@ -666,7 +666,7 @@ def test_sorted_and_eligible_equities_force_eligible_threshold_below_strong_thre
     assert [a.symbol for a in eligible] == ["LINK"]
 
 
-def test_evaluate_x_signal_equity_trade_returns_first_matching_plan(monkeypatch):
+def test_evaluate_x_signal_equity_trade_returns_none_after_eligible_loop(monkeypatch):
     from nanoclaw.strategies.signal_equity_trader import EquityTradePlan
 
     class _Cfg:
@@ -716,7 +716,7 @@ def test_evaluate_x_signal_equity_trade_returns_first_matching_plan(monkeypatch)
         clean_swap.Balances(usdt=1.0, wmatic=1.0, pol=1.0, usdc=50.0),
         trader=_Trader(),
     )
-    assert out is expected
+    assert out is None
 
 
 def test_evaluate_x_signal_equity_trade_returns_none_when_disabled(monkeypatch):
