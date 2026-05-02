@@ -212,3 +212,18 @@ Paste raw: https://raw.githubusercontent.com/krantikaridev/nanoclaw/V2/AI_CONTEX
 
 **Next milestone**  
 Earnings Volatility Capture Engine v1, while preserving strict hard risk limits and removing artificial profit caps (cooldown, small trade size, low frequency).
+
+## 🚀 Quick Commands (Sprint Mode)
+
+| Command               | What it does                                      | Usage |
+|-----------------------|---------------------------------------------------|-------|
+| `nanoup`              | Safe update + restart (recommended)               | `nanoup` |
+| `nanomon`             | Quick status + balances + portfolio               | `nanomon` |
+| `nanokill`            | Stop the bot                                      | `nanokill` |
+| `nanoattach`          | Attach to live bot logs                           | `nanoattach` |
+| `sprintmon`           | One-line monitoring (balances + logs + recent trades) | `sprintmon` |
+| `auto_usdc_maintain`  | Auto top-up USDC when low (background script)     | Already running (`tail -8 ~/auto_usdc.log` to check) |
+
+### How to stop the auto USDC script
+```bash
+kill $(cat ~/auto_usdc.pid)
