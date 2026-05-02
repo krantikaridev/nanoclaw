@@ -1,5 +1,10 @@
 #!/bin/bash
 echo "=== $(date +%H:%M) ==="
+_TP_LINE=$(grep -E '^[[:space:]]*TAKE_PROFIT_PCT=' .env 2>/dev/null | tail -1 || true)
+_TP_VAL="$(echo "${_TP_LINE#*=}" | tr -d ' \r')"
+[ -z "${_TP_VAL}" ] && _TP_VAL="5.0"
+if [[ "${_TP_VAL}" =~ ^[0-9]+\.0$ ]]; then _TP_DISP="${_TP_VAL%.0}"; else _TP_DISP="${_TP_VAL}"; fi
+echo "Profit-take: ${_TP_DISP}% (TAKE_PROFIT_PCT)"
 echo "✅ V2.5.10 Copy Trading EXECUTING REAL TRADES (Test Mode Active)"
 echo "Monitoring 8 wallets | Copy ratio: 28.0%"
 echo "✅ V2.5.1 Protection Module loaded successfully"

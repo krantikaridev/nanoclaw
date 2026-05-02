@@ -2,22 +2,36 @@
 
 Nanoclaw is a risk-first trading bot for Polygon that executes real swaps and is designed to be **100% `.env` driven**, unit-testable, and resilient to RPC/gas volatility.
 
-## 🚀 Quick Commands (Sprint Mode)
+For operators and agents, **`AI_CONTEXT.md`** on branch **`V2`** is the authoritative process and backlog; this README is the onboarding surface.
 
-| Command       | What it does                              |
-|---------------|-------------------------------------------|
-| `nanoup`      | Safe update + restart (recommended)       |
-| `nanomon`     | Quick status + balances + portfolio       |
-| `nanokill`    | Stop the bot                              |
-| `nanoattach`  | Attach to live bot logs                   |
-| `sprintmon`   | One-line monitoring (balances + logs)     |
-| `auto_usdc_maintain` | Auto top-up USDC when low for X-Signal equity buys | Uses env `X_SIGNAL_USDC_SAFE_FLOOR` / `X_SIGNAL_AUTO_USDC_TARGET` |
+## Quick commands (`nano*` convention)
+
+| Command | What it does |
+|---------|----------------|
+| `nanoup` | Safe update + restart (recommended) |
+| `nanomon` | Status, balances, CSV portfolio summary, recent activity from `real_cron.log` |
+| `nanokill` | Stop the bot |
+| `nanoattach` | Attach to live bot logs |
+
+**`sprintmon`** is not in this repo; use **`nanomon`** for a quick snapshot and **`nanoattach`** when you need the live stream.
+
+**USDC top-up for X-Signal equity** is handled inside the bot (`try_x_signal_equity_decision`), not as a separate shell alias. Configure `X_SIGNAL_USDC_SAFE_FLOOR` and `X_SIGNAL_AUTO_USDC_TARGET` in `.env` (see `.env.example`).
 
 ### Safe Update Flow (use this every time)
+
+```bash
 nanoup
 nanomon
-Important: Never git stash while the bot is running. Always kill first (nanokill), then pull, then restart.
-'''bash
+```
+
+Important: Never `git stash` while the bot is running. Always kill first (`nanokill`), then pull, then restart.
+
+### Stop / restart
+
+```bash
+nanokill
+nanoup
+```
 
 ## Quick start
 
@@ -172,23 +186,7 @@ Then upload the generated `artifacts/share/*.tar.gz` to Drive and share the link
 Do not run two trading bots with the same wallet/private key at the same time.
 Use one writer bot per wallet (second instance only in dry-run/read-only mode).
 
-## 🚀 Quick Commands (Nano* Convention Only)
+## Maintainer & agent context
 
-| Command       | What it does                                      | Usage |
-|---------------|---------------------------------------------------|-------|
-| `nanoup`      | Safe update + restart (recommended)               | `nanoup` |
-| `nanomon`     | Quick status + balances + portfolio + recent logs | `nanomon` |
-| `nanokill`    | Stop the bot                                      | `nanokill` |
-| `nanoattach`  | Attach to live bot logs                           | `nanoattach` |
+Operators and assistants should anchor session state on branch **`V2`** using **`AI_CONTEXT.md`** — process, backlog, and handoff rules (`docs/NEW_THREAD_PROTOCOL.md`). Keep dummy or test-era rows out of `portfolio_history.csv` when reconciling telemetry; **`scripts/clean_dummy_data.sh`** trims rows to cycles with logged successful swaps (`real_cron.log`).
 
-All commands now follow the `nano*` convention. `sprintmon` has been completely removed.
-
-### Auto USDC Maintenance
-- Now integrated into the main bot code (no separate script).
-- The bot will automatically top-up USDC when low (proactive check in `try_x_signal_equity_decision`).
-- No more manual `auto_usdc_maintain.sh` needed.
-
-### How to stop/restart the bot
-```bash
-nanokill
-nanoup

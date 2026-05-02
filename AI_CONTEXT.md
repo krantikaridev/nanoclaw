@@ -1,4 +1,54 @@
 # Nanoclaw v2 - AI Context (Single Source of Truth)
+
+**Canonical governance**: All process steps, backlog items, handoff rules, and session hygiene for this repo are defined **here first**. Cross-link from README or chat, but avoid duplicating TODO lists elsewhere—update this file.
+
+## **Systematic Learning & History**
+
+- **\$424.63 portfolio peak on 2026-05-01** reflected **test-mode / dummy instrumentation**, not verified on-chain wealth. Confirm any “peak” narrative against Polygonscan wallet history and live balances—**there was no real on-chain balance matching that headline figure**.
+- **Bleed-rate target**: **\$0/day** sustained drawdown from noise, gas bleed, or misconfigured paths—optimize for stability before increasing size.
+- **Profit-taking policy**: **`TAKE_PROFIT_PCT` lowered to 5%** effective **2026-05-02** (baseline take-profit tier; tune only with logged evidence).
+- **`portfolio_history.csv` hygiene**: Rows must not imply execution that never happened—**purge test-mode eras** using `scripts/clean_dummy_data.sh` (swap-correlated filtering via `real_cron.log`; see script docstring). **portfolio_history CSV last cleaned (automated)**: CSV_CLEAN_DUMMY_DATA_TS
+- Operational rule: Prefer **fewer misleading charts** over **dense but false** telemetry.
+
+## **New Thread Protocol** (Grok / agent handoff)
+
+When a Grok (or Cursor) thread hits the message limit—or you deliberately start fresh—avoid losing operational truth.
+
+1. **Open the canonical snapshot**: Fetch raw `AI_CONTEXT.md` from branch `V2`: `https://raw.githubusercontent.com/krantikaridev/nanoclaw/V2/AI_CONTEXT.md`
+2. **Paste the operative sections** into the new thread **or** the first message: minimum = **Systematic Learning & History**, **Current Situation**, **TODO & Backlog**, **House-Cleaning Checklist**, and **V2.5.11+ Roadmap**, plus wallet (public) context if rotating.
+3. **Follow the detailed checklist**: Step-by-step copy/paste order and pitfalls live in **`docs/NEW_THREAD_PROTOCOL.md`**.
+4. **Declare branch + scope** in thread #1 (`V2`, stage vs prod, VM vs local).
+5. **Secrets**: Never paste `.env`; refer only to **`.env.example` keys by name.**
+6. **First action in-thread**: Align on acceptance criteria once, then execute—mirror **One-go execution protocol** below.
+
+## **House-Cleaning Checklist** (end of every substantive session)
+
+- [ ] **`git status` / `git diff --name-only`** — scope matches intention; no surprise files.
+- [ ] **`python -m compileall -q .`** and **`python -m pytest -q`** after code changes.
+- [ ] **Commit** with a factual message (what / why).
+- [ ] **Update `AI_CONTEXT.md`** — backlog, dates, incidents, roadmap (this file stays current).
+- [ ] **CSV sanity** — if anything looked like test-mode spikes, run **`scripts/clean_dummy_data.sh`** after backup approval; reconcile with Polygonscan.
+- [ ] **`nanomon`** — spot-check totals vs on-chain intuition after deploy.
+- [ ] **Optional artifact bundle** — `./scripts/package_runtime_artifacts.sh` before sharing externally.
+- [ ] **Reminder**: no two write-enabled bots on one wallet key.
+
+## **V2.5.11+ Roadmap**
+
+| Tier | Track | Items |
+|------|-------|-------|
+| **High ROI** | Risk & monetization | 5% take-profit tier (**active policy 2026-05-02**); **dynamic valuation baseline** (seed vs accrued growth); **per-trade / per-cycle PnL attribution** wired to exits and gas; **`portfolio_history`/telemetry never diverges from chain reality** |
+| **High ROI** | Execution | **Option C** routing / aggregator path tuning once gas normalizes; **cooldown lattice** tuning (global vs per-asset) with empirical cycle data |
+| **Medium ROI** | Quality | **Automated CSV clean** maturity (broader matchers if log format evolves); tighten **Pylance** / typing on `clean_swap.py`; incremental **coverage** on modified modules |
+| **Medium ROI** | Platform | Smoke **Docker**/`deploy_vm_safe.sh` parity after risky merges |
+
+Parking lot: earnings-volatility engine (see roadmap below), **see also DB Migration Discussion.**
+
+## **DB Migration Discussion** (future)
+
+A prior thread noted **`portfolio_history.csv` as a transitional store** — acceptable for stage telemetry, brittle for auditing at scale (**concurrency**, **schema versioning**, joins with swap receipts). No migration is committed on `V2` yet. When ROI validation passes, evaluate a **minimal append-only persistence layer** (e.g., SQLite single-file initially) keyed by `(tx_hash, timestamp)` before introducing operational complexity.
+
+---
+
 ## V2.5.3 Status (as of 1 May 2026, 13:30 IST)
 
 **Current Situation**:
@@ -232,27 +282,29 @@ Replace proxy addresses when Ondo/other issuers publish **Polygon POS** deployme
 - Builder pattern where used; `.env`-driven; risk-first.
 
 **How to continue in any new thread**  
-Paste raw: https://raw.githubusercontent.com/krantikaridev/nanoclaw/V2/AI_CONTEXT.md
+Use **New Thread Protocol** above plus full steps in **`docs/NEW_THREAD_PROTOCOL.md`**. Snapshot URL: https://raw.githubusercontent.com/krantikaridev/nanoclaw/V2/AI_CONTEXT.md
 
-**Next milestone**  
+**Next milestone**
+
 Earnings Volatility Capture Engine v1, while preserving strict hard risk limits and removing artificial profit caps (cooldown, small trade size, low frequency).
 
-## 🚀 Quick Commands (Nano* Convention Only)
+## Quick commands (`nano*` convention)
 
-| Command       | What it does                                      | Usage |
-|---------------|---------------------------------------------------|-------|
-| `nanoup`              | Safe update + restart (recommended)               | `nanoup` |
-| `nanomon`             | Quick status + balances + portfolio               | `nanomon` |
-| `nanokill`            | Stop the bot                                      | `nanokill` |
-| `nanoattach`          | Attach to live bot logs                           | `nanoattach` |
-| `sprintmon`           | One-line monitoring (balances + logs + recent trades) | `sprintmon` |
-| `auto_usdc_maintain`  | Auto top-up USDC when low for X-Signal equity buys | Uses env `X_SIGNAL_USDC_SAFE_FLOOR` / `X_SIGNAL_AUTO_USDC_TARGET` |
+| Command | What it does |
+|---------|----------------|
+| `nanoup` | Safe update + restart (recommended) |
+| `nanomon` | Status, balances, CSV portfolio summary, recent activity from `real_cron.log` |
+| `nanokill` | Stop the bot |
+| `nanoattach` | Attach to live bot logs |
 
-> X-Signal now integrates proactive USDC maintenance in `try_x_signal_equity_decision` when USDC drops below `X_SIGNAL_USDC_SAFE_FLOOR`, targeting `X_SIGNAL_AUTO_USDC_TARGET` before BUY decisions.
+**`sprintmon`** was retired from this tree—use **`nanomon`** + **`nanoattach`** instead.
 
-### How to stop/restart the bot
+> X-Signal integrates proactive USDC maintenance in `try_x_signal_equity_decision` when USDC drops below `X_SIGNAL_USDC_SAFE_FLOOR`, targeting `X_SIGNAL_AUTO_USDC_TARGET` before BUY decisions (not a separate shell command).
 
-### How to stop/restart the bot
+### Stop / restart
+
 ```bash
 nanokill
 nanoup
+```
+
