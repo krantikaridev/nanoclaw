@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from dataclasses import dataclass
@@ -8,6 +9,8 @@ from pathlib import Path
 from typing import Callable, Optional, Sequence, Tuple
 
 from nanoclaw.utils.gas_protector import GasProtector
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -23,14 +26,15 @@ class FollowedEquity:
 
 @dataclass
 class SignalEquityTraderConfig:
-    """Configuration for X-Signal Equity Trading (MUTABLE - use builder pattern to override)."""
+    """Configuration for X-Signal Equity Trading (mutable dataclass; not frozen)."""
     enabled: bool = False
     followed_equities_path: str = "followed_equities.json"
     strong_signal_threshold: float = 0.80
     max_earnings_days: float = 5.0
     min_signal_strength: float = 0.60
-    force_high_conviction: bool = True  # If True, bypasses most eligibility filters for strong signals
+    force_high_conviction: bool = True  # Legacy flag; bypass uses force_eligible_threshold.
     high_conviction_threshold: float = 0.80
+    force_eligible_threshold: float = 0.80  # abs(signal) >= this bypasses earnings/cooldown/gas/strength bar
     trade_pct_of_usdc: float = 0.18
     min_trade_usdc: float = 5.0
     max_trade_usdc: float = 28.0
@@ -63,6 +67,12 @@ class SignalEquityTraderBuilder:
         self._min_signal_strength = float(os.getenv("X_SIGNAL_EQUITY_MIN_STRENGTH", "0.60"))
         self._force_high_conviction = os.getenv("X_SIGNAL_FORCE_HIGH_CONVICTION", "true").lower() == "true"
         self._high_conviction_threshold = float(os.getenv("X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD", "0.80"))
+        self._force_eligible_threshold = float(
+            os.getenv(
+                "X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD",
+                os.getenv("X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD", "0.80"),
+            )
+        )
         self._trade_pct_of_usdc = float(os.getenv("X_SIGNAL_EQUITY_TRADE_PCT", "0.18"))
         self._min_trade_usdc: Optional[float] = None
         self._max_trade_usdc = float(os.getenv("X_SIGNAL_EQUITY_MAX_TRADE", "28.0"))
@@ -126,6 +136,10 @@ class SignalEquityTraderBuilder:
         self._high_conviction_threshold = float(high_conviction_threshold)
         return self
 
+    def with_force_eligible_threshold(self, force_eligible_threshold: float) -> "SignalEquityTraderBuilder":
+        self._force_eligible_threshold = float(force_eligible_threshold)
+        return self
+
     def with_min_pol_for_gas(self, min_pol_for_gas: float) -> "SignalEquityTraderBuilder":
         self._min_pol_for_gas = float(min_pol_for_gas)
         return self
@@ -171,6 +185,7 @@ class SignalEquityTraderBuilder:
                 min_pol_for_gas=self._min_pol_for_gas,
                 strong_take_profit_pct=self._strong_take_profit_pct,
                 high_conviction_threshold=self._high_conviction_threshold,
+                force_eligible_threshold=self._force_eligible_threshold,
             ),
             gas_protector=self._gas_protector,
             usdc_address=self._usdc_address,
@@ -279,33 +294,45 @@ class SignalEquityTrader:
     ) -> Tuple[Optional[EquityTradePlan], Optional[str]]:
         """Build a trade plan with detailed block reasons for DEBUG."""
         if not self.config.enabled:
+            print(f"[nanoclaw] BLOCK: strategy_disabled")
+            logger.debug("build_plan block reason=strategy_disabled")
             return None, "strategy_disabled"
 
         sym = str(symbol).strip()
         if not sym or not token_address:
+            print(f"[nanoclaw] BLOCK: invalid_symbol_or_token (symbol={symbol!r}, token_address={token_address!r})")
+            logger.debug("build_plan block reason=invalid_symbol_or_token sym=%r token=%r", symbol, token_address)
             return None, "invalid_symbol_or_token"
 
         strength = float(signal_strength)
-        is_high_conviction = (
-            bool(self.config.force_high_conviction)
-            and strength >= float(self.config.high_conviction_threshold)
-        )
+        fe_thr = float(self.config.force_eligible_threshold)
+        is_force_eligible = abs(strength) >= fe_thr
 
         # === ELIGIBILITY DEBUG LOG ===
         print(
             f"[nanoclaw] BUILD_PLAN_ENTRY | {sym} | signal={strength:.3f} | "
+            f"force_eligible_threshold={fe_thr:.3f} | is_force_eligible={is_force_eligible} | "
             f"force_high_conviction={self.config.force_high_conviction} | "
             f"high_conviction_threshold={self.config.high_conviction_threshold:.3f} | "
-            f"is_high_conviction={is_high_conviction} | "
-            f"strong_threshold={self.config.strong_signal_threshold:.3f}"
+            f"strong_threshold={self.config.strong_signal_threshold:.3f} | "
+            f"earnings_days={earnings_proximity_days!r} | "
+            f"usdc_balance=${usdc_balance:.2f} | equity_balance={equity_balance:.2f}"
+        )
+        logger.debug(
+            "build_plan_with_block_reason entry sym=%s signal=%s fe_thr=%s is_force_eligible=%s",
+            sym,
+            strength,
+            fe_thr,
+            is_force_eligible,
         )
 
-        # === Earnings window check (applies to all) ===
-        if not self._in_earnings_window(earnings_proximity_days):
+        # === Earnings window check (bypass if force-eligible) ===
+        if not is_force_eligible and not self._in_earnings_window(earnings_proximity_days):
             print(f"[nanoclaw] BLOCK: {sym} | outside_earnings_window (earnings_days={earnings_proximity_days})")
+            logger.debug("build_plan block sym=%s reason=outside_earnings_window", sym)
             return None, "outside_earnings_window"
 
-        # === Gas check (bypassed if high_conviction + allow_override) ===
+        # === Gas check (bypass if force-eligible) ===
         gas_status = self.gas_protector.get_safe_status(
             address=wallet_address_for_gas,
             urgent=urgent_gas,
@@ -314,34 +341,38 @@ class SignalEquityTrader:
         gas_ok = bool(gas_status.get("gas_ok", False))
         gas_gwei = float(gas_status.get("gas_gwei", 0))
         max_gwei = float(gas_status.get("max_gwei", 0))
-        
-        if not gas_ok and not bool(allow_high_gas_override):
-            print(f"[nanoclaw] BLOCK: {sym} | gas_above_limit ({gas_gwei:.1f} gwei > {max_gwei:.1f} gwei, no override)")
-            return None, "gas_above_limit"
-        
-        if not gas_ok and is_high_conviction and bool(allow_high_gas_override):
-            print(f"[nanoclaw] GAS OVERRIDE | {sym} | high_conviction bypass (gas {gas_gwei:.1f} > {max_gwei:.1f}, but allow_override=True)")
 
-        # === POL check (critical safety) ===
+        if not gas_ok and not is_force_eligible and not bool(allow_high_gas_override):
+            print(f"[nanoclaw] BLOCK: {sym} | gas_above_limit ({gas_gwei:.1f} gwei > {max_gwei:.1f} gwei, no override)")
+            logger.debug("build_plan block sym=%s reason=gas_above_limit", sym)
+            return None, "gas_above_limit"
+
+        if not gas_ok and is_force_eligible and bool(allow_high_gas_override):
+            print(f"[nanoclaw] GAS OVERRIDE | {sym} | high_conviction bypass (gas {gas_gwei:.1f} > {max_gwei:.1f}, allow_high_gas_override=True)")
+
+        # === POL check (always on — not bypassed) ===
         effective_pol = float(gas_status.get("pol_balance", 0.0) or 0.0)
         if effective_pol < float(self.config.min_pol_for_gas):
             print(f"[nanoclaw] BLOCK: {sym} | pol_below_min ({effective_pol:.4f} < {self.config.min_pol_for_gas:.4f})")
+            logger.debug("build_plan block sym=%s reason=pol_below_min", sym)
             return None, "pol_below_min"
 
-        # === Per-asset cooldown check ===
-        if not self._cooldown_ok(sym, can_trade_asset=can_trade_asset, now=now):
+        # === Per-asset cooldown (bypass if force-eligible) ===
+        if not is_force_eligible and not self._cooldown_ok(sym, can_trade_asset=can_trade_asset, now=now):
             print(f"[nanoclaw] BLOCK: {sym} | per_asset_cooldown ({self.config.per_asset_cooldown_seconds}s)")
+            logger.debug("build_plan block sym=%s reason=per_asset_cooldown", sym)
             return None, "per_asset_cooldown"
+        if is_force_eligible and not self._cooldown_ok(sym, can_trade_asset=can_trade_asset, now=now):
+            print(f"[nanoclaw] COOLDOWN OVERRIDE | {sym} | force_eligible bypass ({self.config.per_asset_cooldown_seconds}s)")
 
-        # === STRENGTH FILTER (bypassed if high_conviction) ===
-        # KEY: If force_high_conviction=True AND signal >= 0.80, skip this filter entirely.
-        if not is_high_conviction:
+        # === STRENGTH FILTER (bypass if force-eligible) ===
+        if not is_force_eligible:
             if abs(strength) < float(self.config.strong_signal_threshold):
                 print(
                     f"[nanoclaw] BLOCK: {sym} | below_strong_threshold "
-                    f"({strength:.3f} < {self.config.strong_signal_threshold:.3f}; "
-                    f"force_high_conviction={self.config.force_high_conviction})"
+                    f"({strength:.3f} < {self.config.strong_signal_threshold:.3f})"
                 )
+                logger.debug("build_plan block sym=%s reason=below_strong_threshold", sym)
                 return (
                     None,
                     f"below_strong_threshold (need >={float(self.config.strong_signal_threshold):.3f})",
@@ -349,20 +380,23 @@ class SignalEquityTrader:
         else:
             print(
                 f"[nanoclaw] STRENGTH FILTER BYPASSED | {sym} | "
-                f"force_high_conviction=True + signal={strength:.3f} >= {self.config.high_conviction_threshold:.3f}"
+                f"abs(signal)>={fe_thr:.3f} (force-eligible)"
             )
 
         # === BUY PATH ===
         if strength > 0:
             if self._addrs_equal_case_insensitive(token_address, self.usdc_address):
                 print(f"[nanoclaw] BLOCK: {sym} | usdc_identity_noop")
+                logger.debug("build_plan block sym=%s reason=usdc_identity_noop", sym)
                 return None, "usdc_identity_noop"
             if usdc_balance <= 0:
                 print(f"[nanoclaw] BLOCK: {sym} | zero_usdc (balance=${usdc_balance:.2f})")
+                logger.debug("build_plan block sym=%s reason=zero_usdc", sym)
                 return None, "zero_usdc"
             trade_size = self._compute_trade_size(usdc_balance)
             if trade_size <= 0 or trade_size > usdc_balance:
                 print(f"[nanoclaw] BLOCK: {sym} | invalid_trade_size (computed=${trade_size:.2f}, available=${usdc_balance:.2f})")
+                logger.debug("build_plan block sym=%s reason=invalid_trade_size", sym)
                 return None, "invalid_trade_size"
             tp = float(self.config.strong_take_profit_pct)
             price_note = f" @ ${current_price_usd:.2f}" if isinstance(current_price_usd, (int, float)) else ""
@@ -385,11 +419,13 @@ class SignalEquityTrader:
                 ),
             )
             print(f"[nanoclaw] PLAN_BUILD_SUCCESS | {sym} | BUY | ${trade_size:.2f}")
+            logger.debug("build_plan success sym=%s direction=BUY trade_size=%s", sym, trade_size)
             return plan, None
 
         # === SELL PATH ===
         if equity_balance <= 0:
             print(f"[nanoclaw] BLOCK: {sym} | zero_equity_balance (balance={equity_balance:.2f})")
+            logger.debug("build_plan block sym=%s reason=zero_equity_balance", sym)
             return None, "zero_equity_balance"
 
         sell_fraction = float(os.getenv("X_SIGNAL_EQUITY_SELL_FRACTION", "0.55"))
@@ -397,6 +433,7 @@ class SignalEquityTrader:
         amount_in_units = int(equity_balance * sell_fraction * (10**int(token_decimals)))
         if amount_in_units <= 0:
             print(f"[nanoclaw] BLOCK: {sym} | sell_amount_below_min_units (fraction={sell_fraction:.2f}, equity={equity_balance:.2f})")
+            logger.debug("build_plan block sym=%s reason=sell_amount_below_min_units", sym)
             return None, "sell_amount_below_min_units"
 
         price_note = f" @ ${current_price_usd:.2f}" if isinstance(current_price_usd, (int, float)) else ""
@@ -419,6 +456,7 @@ class SignalEquityTrader:
             ),
         )
         print(f"[nanoclaw] PLAN_BUILD_SUCCESS | {sym} | SELL | {sell_fraction*100:.0f}%")
+        logger.debug("build_plan success sym=%s direction=SELL fraction=%s", sym, sell_fraction)
         return plan, None
 
     def build_plan(
@@ -438,7 +476,14 @@ class SignalEquityTrader:
         urgent_gas: bool = False,
         allow_high_gas_override: bool = False,
     ) -> Optional[EquityTradePlan]:
-        plan, _reason = self.build_plan_with_block_reason(
+        logger.debug(
+            "build_plan entry sym=%s signal=%s usdc=%s equity=%s",
+            symbol,
+            signal_strength,
+            usdc_balance,
+            equity_balance,
+        )
+        plan, reason = self.build_plan_with_block_reason(
             symbol=symbol,
             token_address=token_address,
             token_decimals=token_decimals,
@@ -453,5 +498,9 @@ class SignalEquityTrader:
             urgent_gas=urgent_gas,
             allow_high_gas_override=allow_high_gas_override,
         )
+        if plan is None:
+            logger.debug("build_plan exit None sym=%s reason=%s", symbol, reason)
+        else:
+            logger.debug("build_plan exit OK sym=%s direction=%s", symbol, plan.direction)
         return plan
 

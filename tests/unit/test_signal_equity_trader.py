@@ -179,7 +179,7 @@ def test_below_strong_signal_threshold_returns_explained_reason():
         symbol="WETH_ALPHA",
         token_address="0x" + "1" * 40,
         token_decimals=18,
-        signal_strength=0.85,
+        signal_strength=0.72,
         earnings_proximity_days=None,
         current_price_usd=1.0,
         usdc_balance=50.0,

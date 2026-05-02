@@ -65,6 +65,19 @@ X_SIGNAL_EQUITY_MIN_STRENGTH = float(os.getenv("X_SIGNAL_EQUITY_MIN_STRENGTH", "
 X_SIGNAL_MAX_EARNINGS_DAYS = float(os.getenv("X_SIGNAL_MAX_EARNINGS_DAYS", "5.0"))
 X_SIGNAL_FORCE_HIGH_CONVICTION = os.getenv("X_SIGNAL_FORCE_HIGH_CONVICTION", "true").lower() == "true"
 X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD = float(os.getenv("X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD", "0.80"))
+X_SIGNAL_STRONG_THRESHOLD = float(os.getenv("X_SIGNAL_STRONG_THRESHOLD", "0.80"))
+X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD = float(
+    os.getenv(
+        "X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD",
+        os.getenv("X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD", "0.80"),
+    )
+)
+X_SIGNAL_HIGH_CONVICTION_PREP_MIN_USDC = float(os.getenv("X_SIGNAL_HIGH_CONVICTION_PREP_MIN_USDC", "8.0"))
+X_SIGNAL_HIGH_CONVICTION_PREP_MIN_WMATIC = float(os.getenv("X_SIGNAL_HIGH_CONVICTION_PREP_MIN_WMATIC", "12.0"))
+X_SIGNAL_DYNAMIC_TIER_HIGH_MIN = float(os.getenv("X_SIGNAL_DYNAMIC_TIER_HIGH_MIN", "0.90"))
+X_SIGNAL_DYNAMIC_USDC_GTE_TIER_HIGH = float(os.getenv("X_SIGNAL_DYNAMIC_USDC_GTE_TIER_HIGH", "12.0"))
+X_SIGNAL_DYNAMIC_USDC_GTE_FORCE_ELIGIBLE = float(os.getenv("X_SIGNAL_DYNAMIC_USDC_GTE_FORCE_ELIGIBLE", "10.0"))
+X_SIGNAL_DYNAMIC_USDC_BELOW_FORCE_ELIGIBLE = float(os.getenv("X_SIGNAL_DYNAMIC_USDC_BELOW_FORCE_ELIGIBLE", "8.0"))
 FOLLOWED_EQUITIES_PATH = os.getenv("FOLLOWED_EQUITIES_PATH", "followed_equities.json")
 # Iron-fenced USDC population to prevent zero-USDC blocker.
 # Keep env precedence aligned with SignalEquityTraderBuilder to avoid sizing mismatches.
@@ -140,14 +153,17 @@ def _sorted_and_eligible_equities(
     strong_threshold: float,
     force_high_conviction: bool = True,
     high_conviction_threshold: float = 0.80,
+    force_eligible_threshold: float = 0.80,
 ) -> tuple[list[FollowedEquity], list[FollowedEquity]]:
     """
     Filter followed equities by eligibility criteria.
 
     An asset is eligible if ANY of:
-    1. force_high_conviction=True AND signal >= high_conviction_threshold (high-conviction bypass)
+    1. abs(signal) >= force_eligible_threshold (bypasses JSON/asset floors for rotation into major names)
     2. signal >= strong_threshold (normal strong signal)
     3. signal >= asset_floor (asset has own floor override)
+
+    ``force_high_conviction`` / ``high_conviction_threshold`` are kept for logging and gas override only.
 
     Returns (all_sorted_by_strength, eligible_only)
     """
@@ -161,6 +177,7 @@ def _sorted_and_eligible_equities(
     print(f"{_nanolog()}=== ELIGIBILITY CHECK START ===")
     print(
         f"{_nanolog()}  min_strength={min_strength:.3f} | strong_threshold={strong_threshold:.3f} | "
+        f"force_eligible_threshold={force_eligible_threshold:.3f} | "
         f"high_conviction_threshold={high_conviction_threshold:.3f} | force_high_conviction={force_high_conviction}"
     )
     
@@ -168,20 +185,17 @@ def _sorted_and_eligible_equities(
         effective_floor = _effective_floor_for_equity(a, min_strength)
         strength = abs(float(a.signal_strength))
         
-        # Eligibility criteria (any one makes asset eligible)
-        high_conv_bypass = bool(force_high_conviction and strength >= float(high_conviction_threshold))
+        force_eligible_bypass = strength >= float(force_eligible_threshold)
         eligible_by_strong = strength >= float(strong_threshold)
         eligible_by_floor = strength >= float(effective_floor)
         
-        is_eligible = high_conv_bypass or eligible_by_strong or eligible_by_floor
+        is_eligible = force_eligible_bypass or eligible_by_strong or eligible_by_floor
         
         if is_eligible:
             eligible.append(a)
             reason_parts = []
-            if high_conv_bypass:
-                reason_parts.append(
-                    f"force_high_conviction (>= {high_conviction_threshold:.3f})"
-                )
+            if force_eligible_bypass:
+                reason_parts.append(f"force_eligible (>={force_eligible_threshold:.3f})")
             if eligible_by_strong:
                 reason_parts.append(f"strong_threshold ({strong_threshold:.3f}+)")
             if eligible_by_floor:
@@ -196,7 +210,7 @@ def _sorted_and_eligible_equities(
                 f"{_nanolog()}  ❌ FILTERED | {a.symbol:12s} | signal={strength:6.3f} | "
                 f"raw_floor={a.min_signal_strength!r} | effective_floor={effective_floor:.3f} | "
                 f"strong_threshold={strong_threshold:.3f} | "
-                f"high_conviction_threshold={high_conviction_threshold:.3f}"
+                f"force_eligible_threshold={force_eligible_threshold:.3f}"
             )
     
     print(f"{_nanolog()}=== ELIGIBILITY CHECK END: {len(eligible)}/{len(assets_list)} eligible ===\n")
@@ -284,11 +298,12 @@ X_SIGNAL_EQUITY_TRADER = (
     SignalEquityTrader.builder()
     .with_enabled(ENABLE_X_SIGNAL_EQUITY)
     .with_followed_equities_path(FOLLOWED_EQUITIES_PATH)
-    .with_strong_signal_threshold(float(os.getenv("X_SIGNAL_STRONG_THRESHOLD", "0.80")))
+    .with_strong_signal_threshold(X_SIGNAL_STRONG_THRESHOLD)
     .with_max_earnings_days(float(os.getenv("X_SIGNAL_MAX_EARNINGS_DAYS", "5.0")))
     .with_min_signal_strength(float(os.getenv("X_SIGNAL_EQUITY_MIN_STRENGTH", "0.60")))
     .with_force_high_conviction(X_SIGNAL_FORCE_HIGH_CONVICTION)
     .with_high_conviction_threshold(X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD)
+    .with_force_eligible_threshold(X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD)
     .with_per_asset_cooldown_seconds(PER_ASSET_COOLDOWN_SECONDS)
     .with_usdc_address(USDC)
     .with_gas_protector(GAS_PROTECTOR)
@@ -696,9 +711,17 @@ def _strong_x_signal_buy_present() -> bool:
     if not bool(cfg.get("enabled", True)):
         return False
     min_strength = _effective_equity_signal_min(cfg)
-    strong_thr = float(os.getenv("X_SIGNAL_STRONG_THRESHOLD", "0.80"))
+    strong_thr = X_SIGNAL_STRONG_THRESHOLD
+    fe_thr = X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD
     assets_seq = X_SIGNAL_EQUITY_TRADER.load_followed_equities()
-    _, eligible = _sorted_and_eligible_equities(assets_seq, min_strength, strong_thr)
+    _, eligible = _sorted_and_eligible_equities(
+        assets_seq,
+        min_strength,
+        strong_thr,
+        force_high_conviction=X_SIGNAL_FORCE_HIGH_CONVICTION,
+        high_conviction_threshold=X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD,
+        force_eligible_threshold=fe_thr,
+    )
     return any(
         float(a.signal_strength) > 0 and float(a.signal_strength) >= strong_thr for a in eligible
     )
@@ -857,22 +880,41 @@ def _project_balances_after_auto_usdc(
 def _tuned_signal_equity_trader(min_signal_strength: float) -> SignalEquityTrader:
     """Build a trader with tuned enablement; `min_signal_strength` kept for API compatibility (eligibility-only)."""
     _ = min_signal_strength
-    base_cfg = X_SIGNAL_EQUITY_TRADER.config
+    root = X_SIGNAL_EQUITY_TRADER
+    base_cfg = getattr(root, "config", None)
+    gp = getattr(root, "gas_protector", GAS_PROTECTOR)
+    usdc_a = getattr(root, "usdc_address", USDC)
     strong_thr = float(
-        os.getenv("X_SIGNAL_STRONG_THRESHOLD", str(base_cfg.strong_signal_threshold)),
+        os.getenv(
+            "X_SIGNAL_STRONG_THRESHOLD",
+            str(getattr(base_cfg, "strong_signal_threshold", X_SIGNAL_STRONG_THRESHOLD)),
+        )
     )
-    tuned_cfg = SignalEquityTraderConfig(
-        **{
-            **base_cfg.__dict__,
-            "enabled": True,
-            "strong_signal_threshold": strong_thr,
-        }
+    fe_thr = float(
+        os.getenv(
+            "X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD",
+            os.getenv(
+                "X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD",
+                str(getattr(base_cfg, "force_eligible_threshold", X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD)),
+            ),
+        )
     )
-    return SignalEquityTrader(
-        config=tuned_cfg,
-        gas_protector=X_SIGNAL_EQUITY_TRADER.gas_protector,
-        usdc_address=X_SIGNAL_EQUITY_TRADER.usdc_address,
-    )
+    if base_cfg is None:
+        tuned_cfg = SignalEquityTraderConfig(
+            enabled=True,
+            strong_signal_threshold=strong_thr,
+            force_eligible_threshold=fe_thr,
+        )
+    else:
+        tuned_cfg = SignalEquityTraderConfig(
+            **{
+                **base_cfg.__dict__,
+                "enabled": True,
+                "strong_signal_threshold": strong_thr,
+                "force_eligible_threshold": fe_thr,
+            }
+        )
+    return SignalEquityTrader(config=tuned_cfg, gas_protector=gp, usdc_address=usdc_a)
 
 
 def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -> Optional[TradeDecision]:
@@ -902,25 +944,33 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
         )
         return None
 
-    # Proactive USDC maintenance: ensure USDC never drops too low for X-Signal buys.
+    # Proactive USDC maintenance runs before any eligibility/plan logic that uses balances.
     if not dry_run:
-        current_balances = get_balances()
-        if current_balances.usdc < X_SIGNAL_USDC_SAFE_FLOOR:
-            print(f"🚀 PROACTIVE USDC TOP-UP triggered (have ${current_balances.usdc:.2f} < ${X_SIGNAL_USDC_SAFE_FLOOR:.2f}, target ${X_SIGNAL_AUTO_USDC_TARGET:.2f})")
-            ensure_usdc_for_x_signal(min_usdc=X_SIGNAL_AUTO_USDC_TARGET, min_wmatic_value=X_SIGNAL_WMATIC_MIN_VALUE, force=True)
-            # Refresh balances after potential top-up.
-            balances = get_balances()
+        probe = get_balances()
+        if probe.usdc < X_SIGNAL_USDC_SAFE_FLOOR:
+            print(
+                f"🚀 PROACTIVE USDC TOP-UP triggered (have ${probe.usdc:.2f} < ${X_SIGNAL_USDC_SAFE_FLOOR:.2f}, "
+                f"target ${X_SIGNAL_AUTO_USDC_TARGET:.2f})"
+            )
+            ensure_usdc_for_x_signal(
+                min_usdc=X_SIGNAL_AUTO_USDC_TARGET,
+                min_wmatic_value=X_SIGNAL_WMATIC_MIN_VALUE,
+                force=True,
+            )
+        balances = get_balances()
 
     cfg = _load_followed_equities_json_dict()
     cfg_enabled = bool(cfg.get("enabled", True)) if isinstance(cfg, dict) else True
     min_strength = _effective_equity_signal_min(cfg)
-    config = X_SIGNAL_EQUITY_TRADER.config
-    strong_thr = float(config.strong_signal_threshold)
-    force_high_conviction = bool(config.force_high_conviction)
-    high_conviction_threshold = float(config.high_conviction_threshold)
+    tuned_trader = _tuned_signal_equity_trader(min_strength)
+    strong_thr = X_SIGNAL_STRONG_THRESHOLD
+    force_eligible_thr = X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD
+    force_high_conviction = X_SIGNAL_FORCE_HIGH_CONVICTION
+    high_conviction_threshold = X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD
     print(
         f"{_nanolog()}X-Signal eligibility floor = {min_strength:.4f}; "
         f"strong_threshold = {strong_thr:.4f}; "
+        f"force_eligible_threshold = {force_eligible_thr:.4f}; "
         f"high_conviction_threshold = {high_conviction_threshold:.4f}; "
         f"force_high_conviction = {force_high_conviction}"
     )
@@ -932,6 +982,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
         strong_thr,
         force_high_conviction=force_high_conviction,
         high_conviction_threshold=high_conviction_threshold,
+        force_eligible_threshold=force_eligible_thr,
     )
     eligible_count = len(eligible)
     high_conviction = bool(cfg_enabled) and any(
@@ -974,25 +1025,29 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
             if dry_run:
                 balances = _project_balances_after_auto_usdc(
                     balances,
-                    min_usdc=8.0,
-                    min_wmatic_value=12.0,
+                    min_usdc=X_SIGNAL_HIGH_CONVICTION_PREP_MIN_USDC,
+                    min_wmatic_value=X_SIGNAL_HIGH_CONVICTION_PREP_MIN_WMATIC,
                 )
             else:
-                topup_ok = ensure_usdc_for_x_signal(min_usdc=8.0, min_wmatic_value=12.0)
+                topup_ok = ensure_usdc_for_x_signal(
+                    min_usdc=X_SIGNAL_HIGH_CONVICTION_PREP_MIN_USDC,
+                    min_wmatic_value=X_SIGNAL_HIGH_CONVICTION_PREP_MIN_WMATIC,
+                )
                 balances = get_balances()
-                if not topup_ok and balances.usdc < 8.0:
+                if not topup_ok and balances.usdc < X_SIGNAL_HIGH_CONVICTION_PREP_MIN_USDC:
                     print(
                         "🟦 X-SIGNAL EQUITY | Auto-USDC failed during HIGH-CONVICTION prep "
                         "(PnL+ Sprint Mode, high return high conviction)"
                     )
                     _log_trade_skipped(
-                        f"AUTO-USDC failed during high-conviction prep (have ${balances.usdc:.2f}, need $8.00)"
+                        f"AUTO-USDC failed during high-conviction prep "
+                        f"(have ${balances.usdc:.2f}, need ${X_SIGNAL_HIGH_CONVICTION_PREP_MIN_USDC:.2f})"
                     )
 
         has_strong_buy = any(
             float(a.signal_strength) > 0 and float(a.signal_strength) >= strong_thr for a in eligible
         )
-        trader = _tuned_signal_equity_trader(min_strength)
+        trader = tuned_trader
         min_trade_usdc = float(trader.config.min_trade_usdc)
         min_usdc = float(X_SIGNAL_USDC_MIN)
         required_usdc_floor = max(float(min_usdc), min_trade_usdc)
@@ -1090,9 +1145,12 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
             _sig = float(_a.signal_strength)
             _floor = _effective_floor_for_equity(_a, min_strength)
             _cd_ok = can_trade_asset(_sym, None, secs_order)
-            _is_hc = _sig >= 0.80
+            _fe_thr_ord = float(
+                getattr(tuned_trader.config, "force_eligible_threshold", X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD)
+            )
+            _is_fe = abs(_sig) >= _fe_thr_ord
             print(
-                f"{_nanolog()}  {_sym:12s} | sig={_sig:6.3f} | high_conviction={_is_hc:5} | cooldown_ok={_cd_ok:5}"
+                f"{_nanolog()}  {_sym:12s} | sig={_sig:6.3f} | force_eligible={_is_fe:5} | cooldown_ok={_cd_ok:5}"
             )
         print(f"{_nanolog()}=== END ORDERING ===\n")
 
@@ -1109,39 +1167,43 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
             sym = str(a.symbol).strip()
             sig = float(a.signal_strength)
             action_label = "BUY" if sig > 0 else "SELL"
-            is_high_conviction = sig >= 0.80
+            fe_thr_run = float(
+                getattr(tuned_trader.config, "force_eligible_threshold", X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD)
+            )
+            is_force_eligible = abs(sig) >= fe_thr_run
             
             print(
-                f"🟦 X-SIGNAL EQUITY ACTIVE | {sym:12s} | sig={sig:6.3f} | action={action_label} | hc={is_high_conviction}"
+                f"🟦 X-SIGNAL EQUITY ACTIVE | {sym:12s} | sig={sig:6.3f} | action={action_label} | "
+                f"force_eligible={is_force_eligible}"
             )
             
-            # === HIGH-CONVICTION BYPASS: skip non-safety filters for 0.80+ ===
-            if is_high_conviction and sig > 0:
+            # === Force-eligible: skip POL/USDC pre-checks that gate BUY (matches build_plan bypass) ===
+            if is_force_eligible and sig > 0:
                 print(
-                    f"{_nanolog()}  ➜ HIGH-CONVICTION BYPASS ACTIVE for {sym} "
-                    f"(force_high_conviction={force_high_conviction})"
+                    f"{_nanolog()}  ➜ FORCE-ELIGIBLE BYPASS for {sym} "
+                    f"(abs(signal)>={fe_thr_run:.3f})"
                 )
             
             # === POL check for BUY paths (safety-critical, not bypassed) ===
-            if sig > 0 and not buy_paths_allowed and not is_high_conviction:
+            if sig > 0 and not buy_paths_allowed and not is_force_eligible:
                 print(
                     f"{_nanolog()}  ❌ BUY blocked for {sym}: {buy_paths_block_reason} "
-                    f"(signal {sig:.3f} < 0.80 high-conviction)"
+                    f"(signal abs={abs(sig):.3f} < {fe_thr_run:.3f} force-eligible)"
                 )
                 reason_parts.append(f"{sym}: buy_skipped_pol ({buy_paths_block_reason})")
-                _log_trade_skipped(f"POL low ({sym} buy blocked, not high-conviction)")
+                _log_trade_skipped(f"POL low ({sym} buy blocked, not force-eligible)")
                 continue
             
-            # === USDC check for BUY paths (unless high-conviction with auto-fill) ===
-            if sig > 0 and balances.usdc < required_usdc_floor and not is_high_conviction:
+            # === USDC check for BUY paths (unless force-eligible with auto-fill) ===
+            if sig > 0 and balances.usdc < required_usdc_floor and not is_force_eligible:
                 print(
                     f"{_nanolog()}  ❌ BUY blocked for {sym}: USDC low "
-                    f"(${balances.usdc:.2f} < ${required_usdc_floor:.2f}, not high-conviction)"
+                    f"(${balances.usdc:.2f} < ${required_usdc_floor:.2f}, not force-eligible)"
                 )
                 reason_parts.append(
                     f"{sym}: buy_skipped_usdc (have ${balances.usdc:.2f}, need ${required_usdc_floor:.2f})"
                 )
-                _log_trade_skipped(f"USDC low ({sym} buy blocked, not high-conviction)")
+                _log_trade_skipped(f"USDC low ({sym} buy blocked, not force-eligible)")
                 continue
             
             # === Retrieve equity balance ===
@@ -1166,13 +1228,15 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                 dynamic_trade_size_usdc = float(plan.trade_size)
                 if str(plan.direction) == "USDC_TO_EQUITY":
                     strength = abs(sig)
-                    # Dynamic sizing based on signal strength (Tier 1 - 2026-05-01)
-                    if strength >= 0.90:
-                        trade_size_usdc = 12.0
-                    elif strength >= 0.80:
-                        trade_size_usdc = 10.0
+                    fe_floor = float(
+                        getattr(tuned_trader.config, "force_eligible_threshold", X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD)
+                    )
+                    if strength >= X_SIGNAL_DYNAMIC_TIER_HIGH_MIN:
+                        trade_size_usdc = X_SIGNAL_DYNAMIC_USDC_GTE_TIER_HIGH
+                    elif strength >= fe_floor:
+                        trade_size_usdc = X_SIGNAL_DYNAMIC_USDC_GTE_FORCE_ELIGIBLE
                     else:
-                        trade_size_usdc = 8.0
+                        trade_size_usdc = X_SIGNAL_DYNAMIC_USDC_BELOW_FORCE_ELIGIBLE
                     desired_trade_size_usdc = float(trade_size_usdc)
                     available_usdc = float(balances.usdc)
                     # Safety: never request more USDC than wallet balance.
@@ -1277,7 +1341,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
             )
             if high_conviction:
                 summary_bits.append(
-                    "gas override active (0.80+ high conviction; bypassing max_gwei block)"
+                    f"gas override active ({high_conviction_threshold:.2f}+ high conviction; bypassing max_gwei block)"
                 )
             elif not bool(gst.get("gas_ok", False)):
                 summary_bits.append(
@@ -1333,6 +1397,7 @@ def evaluate_x_signal_equity_trade(
     strong_thr = float(trader.config.strong_signal_threshold)
     force_high_conviction = bool(trader.config.force_high_conviction)
     high_conviction_threshold = float(trader.config.high_conviction_threshold)
+    force_eligible_thr = float(trader.config.force_eligible_threshold)
     assets_seq = trader.load_followed_equities()
     _, eligible = _sorted_and_eligible_equities(
         assets_seq,
@@ -1340,6 +1405,7 @@ def evaluate_x_signal_equity_trade(
         strong_thr,
         force_high_conviction=force_high_conviction,
         high_conviction_threshold=high_conviction_threshold,
+        force_eligible_threshold=force_eligible_thr,
     )
     if not eligible:
         return None
