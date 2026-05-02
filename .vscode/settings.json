@@ -1,0 +1,12 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^python -m compileall -q nanoclaw/strategies/signal_equity_trader\\.py clean_swap\\.py ; python -m pytest -q tests/unit/test_clean_swap\\.py tests/unit/test_signal_equity_trader\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^python -m compileall -q nanoclaw/strategies/signal_equity_trader\\.py clean_swap\\.py; python -m pytest -q tests/unit/test_clean_swap\\.py tests/unit/test_signal_equity_trader\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

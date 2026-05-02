@@ -11,6 +11,7 @@ Nanoclaw is a risk-first trading bot for Polygon that executes real swaps and is
 | `nanokill`    | Stop the bot                              |
 | `nanoattach`  | Attach to live bot logs                   |
 | `sprintmon`   | One-line monitoring (balances + logs)     |
+| `auto_usdc_maintain` | Auto top-up USDC when low for X-Signal equity buys | Uses env `X_SIGNAL_USDC_SAFE_FLOOR` / `X_SIGNAL_AUTO_USDC_TARGET` |
 
 ### Safe Update Flow (use this every time)
 nanoup
@@ -22,6 +23,7 @@ Important: Never git stash while the bot is running. Always kill first (nanokill
 
 - **Install deps**: create/activate your Python environment and install requirements for this repo (project-specific).
 - **Configure env**: copy `.env.example` to `.env` (never commit secrets).
+  - X-Signal equity now includes proactive USDC top-up before any BUY decision when USDC drops below `X_SIGNAL_USDC_SAFE_FLOOR`. The top-up target is `X_SIGNAL_AUTO_USDC_TARGET`.
 - **Run**:
 
 ```bash
@@ -170,3 +172,23 @@ Then upload the generated `artifacts/share/*.tar.gz` to Drive and share the link
 Do not run two trading bots with the same wallet/private key at the same time.
 Use one writer bot per wallet (second instance only in dry-run/read-only mode).
 
+## 🚀 Quick Commands (Nano* Convention Only)
+
+| Command       | What it does                                      | Usage |
+|---------------|---------------------------------------------------|-------|
+| `nanoup`      | Safe update + restart (recommended)               | `nanoup` |
+| `nanomon`     | Quick status + balances + portfolio + recent logs | `nanomon` |
+| `nanokill`    | Stop the bot                                      | `nanokill` |
+| `nanoattach`  | Attach to live bot logs                           | `nanoattach` |
+
+All commands now follow the `nano*` convention. `sprintmon` has been completely removed.
+
+### Auto USDC Maintenance
+- Now integrated into the main bot code (no separate script).
+- The bot will automatically top-up USDC when low (proactive check in `try_x_signal_equity_decision`).
+- No more manual `auto_usdc_maintain.sh` needed.
+
+### How to stop/restart the bot
+```bash
+nanokill
+nanoup

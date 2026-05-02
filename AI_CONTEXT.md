@@ -213,17 +213,22 @@ Paste raw: https://raw.githubusercontent.com/krantikaridev/nanoclaw/V2/AI_CONTEX
 **Next milestone**  
 Earnings Volatility Capture Engine v1, while preserving strict hard risk limits and removing artificial profit caps (cooldown, small trade size, low frequency).
 
-## 🚀 Quick Commands (Sprint Mode)
+## 🚀 Quick Commands (Nano* Convention Only)
 
-| Command               | What it does                                      | Usage |
-|-----------------------|---------------------------------------------------|-------|
+| Command       | What it does                                      | Usage |
+|---------------|---------------------------------------------------|-------|
 | `nanoup`              | Safe update + restart (recommended)               | `nanoup` |
 | `nanomon`             | Quick status + balances + portfolio               | `nanomon` |
 | `nanokill`            | Stop the bot                                      | `nanokill` |
 | `nanoattach`          | Attach to live bot logs                           | `nanoattach` |
 | `sprintmon`           | One-line monitoring (balances + logs + recent trades) | `sprintmon` |
-| `auto_usdc_maintain`  | Auto top-up USDC when low (background script)     | Already running (`tail -8 ~/auto_usdc.log` to check) |
+| `auto_usdc_maintain`  | Auto top-up USDC when low for X-Signal equity buys | Uses env `X_SIGNAL_USDC_SAFE_FLOOR` / `X_SIGNAL_AUTO_USDC_TARGET` |
 
-### How to stop the auto USDC script
+> X-Signal now integrates proactive USDC maintenance in `try_x_signal_equity_decision` when USDC drops below `X_SIGNAL_USDC_SAFE_FLOOR`, targeting `X_SIGNAL_AUTO_USDC_TARGET` before BUY decisions.
+
+### How to stop/restart the bot
+
+### How to stop/restart the bot
 ```bash
-kill $(cat ~/auto_usdc.pid)
+nanokill
+nanoup

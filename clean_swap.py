@@ -64,6 +64,7 @@ ENABLE_X_SIGNAL_EQUITY = os.getenv("ENABLE_X_SIGNAL_EQUITY", "false").lower() ==
 X_SIGNAL_EQUITY_MIN_STRENGTH = float(os.getenv("X_SIGNAL_EQUITY_MIN_STRENGTH", "0.60"))
 X_SIGNAL_MAX_EARNINGS_DAYS = float(os.getenv("X_SIGNAL_MAX_EARNINGS_DAYS", "5.0"))
 X_SIGNAL_FORCE_HIGH_CONVICTION = os.getenv("X_SIGNAL_FORCE_HIGH_CONVICTION", "true").lower() == "true"
+X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD = float(os.getenv("X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD", "0.80"))
 FOLLOWED_EQUITIES_PATH = os.getenv("FOLLOWED_EQUITIES_PATH", "followed_equities.json")
 # Iron-fenced USDC population to prevent zero-USDC blocker.
 # Keep env precedence aligned with SignalEquityTraderBuilder to avoid sizing mismatches.
@@ -138,15 +139,16 @@ def _sorted_and_eligible_equities(
     min_strength: float,
     strong_threshold: float,
     force_high_conviction: bool = True,
+    high_conviction_threshold: float = 0.80,
 ) -> tuple[list[FollowedEquity], list[FollowedEquity]]:
     """
     Filter followed equities by eligibility criteria.
-    
+
     An asset is eligible if ANY of:
-    1. force_high_conviction=True AND signal >= 0.80 (high-conviction mode bypass)
+    1. force_high_conviction=True AND signal >= high_conviction_threshold (high-conviction bypass)
     2. signal >= strong_threshold (normal strong signal)
     3. signal >= asset_floor (asset has own floor override)
-    
+
     Returns (all_sorted_by_strength, eligible_only)
     """
     assets_list = sorted(
@@ -157,14 +159,17 @@ def _sorted_and_eligible_equities(
     eligible: list[FollowedEquity] = []
     
     print(f"{_nanolog()}=== ELIGIBILITY CHECK START ===")
-    print(f"{_nanolog()}  min_strength={min_strength:.3f} | strong_threshold={strong_threshold:.3f} | force_high_conviction={force_high_conviction}")
+    print(
+        f"{_nanolog()}  min_strength={min_strength:.3f} | strong_threshold={strong_threshold:.3f} | "
+        f"high_conviction_threshold={high_conviction_threshold:.3f} | force_high_conviction={force_high_conviction}"
+    )
     
     for a in assets_list:
         effective_floor = _effective_floor_for_equity(a, min_strength)
         strength = abs(float(a.signal_strength))
         
         # Eligibility criteria (any one makes asset eligible)
-        high_conv_bypass = bool(force_high_conviction and strength >= 0.80)
+        high_conv_bypass = bool(force_high_conviction and strength >= float(high_conviction_threshold))
         eligible_by_strong = strength >= float(strong_threshold)
         eligible_by_floor = strength >= float(effective_floor)
         
@@ -174,7 +179,9 @@ def _sorted_and_eligible_equities(
             eligible.append(a)
             reason_parts = []
             if high_conv_bypass:
-                reason_parts.append("force_high_conviction (0.80+)")
+                reason_parts.append(
+                    f"force_high_conviction (>= {high_conviction_threshold:.3f})"
+                )
             if eligible_by_strong:
                 reason_parts.append(f"strong_threshold ({strong_threshold:.3f}+)")
             if eligible_by_floor:
@@ -187,7 +194,9 @@ def _sorted_and_eligible_equities(
         else:
             print(
                 f"{_nanolog()}  ❌ FILTERED | {a.symbol:12s} | signal={strength:6.3f} | "
-                f"floor={effective_floor:.3f}, strong_threshold={strong_threshold:.3f}"
+                f"raw_floor={a.min_signal_strength!r} | effective_floor={effective_floor:.3f} | "
+                f"strong_threshold={strong_threshold:.3f} | "
+                f"high_conviction_threshold={high_conviction_threshold:.3f}"
             )
     
     print(f"{_nanolog()}=== ELIGIBILITY CHECK END: {len(eligible)}/{len(assets_list)} eligible ===\n")
@@ -279,6 +288,7 @@ X_SIGNAL_EQUITY_TRADER = (
     .with_max_earnings_days(float(os.getenv("X_SIGNAL_MAX_EARNINGS_DAYS", "5.0")))
     .with_min_signal_strength(float(os.getenv("X_SIGNAL_EQUITY_MIN_STRENGTH", "0.60")))
     .with_force_high_conviction(X_SIGNAL_FORCE_HIGH_CONVICTION)
+    .with_high_conviction_threshold(X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD)
     .with_per_asset_cooldown_seconds(PER_ASSET_COOLDOWN_SECONDS)
     .with_usdc_address(USDC)
     .with_gas_protector(GAS_PROTECTOR)
@@ -904,11 +914,15 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
     cfg = _load_followed_equities_json_dict()
     cfg_enabled = bool(cfg.get("enabled", True)) if isinstance(cfg, dict) else True
     min_strength = _effective_equity_signal_min(cfg)
-    strong_thr = float(getattr(getattr(X_SIGNAL_EQUITY_TRADER, 'config', None), 'strong_signal_threshold', 0.80))
-    force_high_conviction = bool(getattr(getattr(X_SIGNAL_EQUITY_TRADER, 'config', None), 'force_high_conviction', True))
+    config = X_SIGNAL_EQUITY_TRADER.config
+    strong_thr = float(config.strong_signal_threshold)
+    force_high_conviction = bool(config.force_high_conviction)
+    high_conviction_threshold = float(config.high_conviction_threshold)
     print(
         f"{_nanolog()}X-Signal eligibility floor = {min_strength:.4f}; "
-        f"strong_threshold = {strong_thr:.4f}; force_high_conviction = {force_high_conviction}"
+        f"strong_threshold = {strong_thr:.4f}; "
+        f"high_conviction_threshold = {high_conviction_threshold:.4f}; "
+        f"force_high_conviction = {force_high_conviction}"
     )
 
     assets_seq = X_SIGNAL_EQUITY_TRADER.load_followed_equities()
@@ -917,19 +931,20 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
         min_strength,
         strong_thr,
         force_high_conviction=force_high_conviction,
+        high_conviction_threshold=high_conviction_threshold,
     )
     eligible_count = len(eligible)
     high_conviction = bool(cfg_enabled) and any(
-        float(a.signal_strength) >= strong_thr for a in eligible if float(a.signal_strength) > 0
+        float(a.signal_strength) >= high_conviction_threshold for a in eligible if float(a.signal_strength) > 0
     )
-    if high_conviction and X_SIGNAL_FORCE_HIGH_CONVICTION:
+    if high_conviction and force_high_conviction:
         print(
-            f"🚀 HIGH-CONVICTION MODE ACTIVE — {strong_thr:.2f}+ signal present, "
+            f"🚀 HIGH-CONVICTION MODE ACTIVE — {high_conviction_threshold:.2f}+ signal present, "
             "force_high_conviction enabled, gas protection relaxed for this cycle"
         )
     elif high_conviction:
         print(
-            f"⚠️ HIGH-CONVICTION signal present ({strong_thr:.2f}+), but force_high_conviction is disabled"
+            f"⚠️ HIGH-CONVICTION signal present ({high_conviction_threshold:.2f}+), but force_high_conviction is disabled"
         )
 
     print(f"🟦 X-SIGNAL EQUITY CHECK | Checking {len(assets)} assets")
@@ -974,7 +989,6 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                         f"AUTO-USDC failed during high-conviction prep (have ${balances.usdc:.2f}, need $8.00)"
                     )
 
-        strong_thr = float(os.getenv("X_SIGNAL_STRONG_THRESHOLD", "0.80"))
         has_strong_buy = any(
             float(a.signal_strength) > 0 and float(a.signal_strength) >= strong_thr for a in eligible
         )
@@ -1318,17 +1332,19 @@ def evaluate_x_signal_equity_trade(
     min_strength = _effective_equity_signal_min(cfg)
     strong_thr = float(trader.config.strong_signal_threshold)
     force_high_conviction = bool(trader.config.force_high_conviction)
+    high_conviction_threshold = float(trader.config.high_conviction_threshold)
     assets_seq = trader.load_followed_equities()
     _, eligible = _sorted_and_eligible_equities(
         assets_seq,
         min_strength,
         strong_thr,
         force_high_conviction=force_high_conviction,
+        high_conviction_threshold=high_conviction_threshold,
     )
     if not eligible:
         return None
     high_conviction = any(
-        float(a.signal_strength) >= max(0.88, strong_thr) for a in eligible if float(a.signal_strength) > 0
+        float(a.signal_strength) >= high_conviction_threshold for a in eligible if float(a.signal_strength) > 0
     )
     tuned = _tuned_signal_equity_trader(min_strength)
     eligible_ordered = _order_eligible_x_signal_candidates(

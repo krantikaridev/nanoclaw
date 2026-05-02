@@ -29,7 +29,8 @@ class SignalEquityTraderConfig:
     strong_signal_threshold: float = 0.80
     max_earnings_days: float = 5.0
     min_signal_strength: float = 0.60
-    force_high_conviction: bool = True  # If True + signal >= 0.80, bypasses most eligibility filters
+    force_high_conviction: bool = True  # If True, bypasses most eligibility filters for strong signals
+    high_conviction_threshold: float = 0.80
     trade_pct_of_usdc: float = 0.18
     min_trade_usdc: float = 5.0
     max_trade_usdc: float = 28.0
@@ -61,6 +62,7 @@ class SignalEquityTraderBuilder:
         self._max_earnings_days = float(os.getenv("X_SIGNAL_MAX_EARNINGS_DAYS", "5.0"))
         self._min_signal_strength = float(os.getenv("X_SIGNAL_EQUITY_MIN_STRENGTH", "0.60"))
         self._force_high_conviction = os.getenv("X_SIGNAL_FORCE_HIGH_CONVICTION", "true").lower() == "true"
+        self._high_conviction_threshold = float(os.getenv("X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD", "0.80"))
         self._trade_pct_of_usdc = float(os.getenv("X_SIGNAL_EQUITY_TRADE_PCT", "0.18"))
         self._min_trade_usdc: Optional[float] = None
         self._max_trade_usdc = float(os.getenv("X_SIGNAL_EQUITY_MAX_TRADE", "28.0"))
@@ -120,6 +122,10 @@ class SignalEquityTraderBuilder:
         self._force_high_conviction = bool(force_high_conviction)
         return self
 
+    def with_high_conviction_threshold(self, high_conviction_threshold: float) -> "SignalEquityTraderBuilder":
+        self._high_conviction_threshold = float(high_conviction_threshold)
+        return self
+
     def with_min_pol_for_gas(self, min_pol_for_gas: float) -> "SignalEquityTraderBuilder":
         self._min_pol_for_gas = float(min_pol_for_gas)
         return self
@@ -164,6 +170,7 @@ class SignalEquityTraderBuilder:
                 per_asset_cooldown_seconds=self._per_asset_cooldown_seconds,
                 min_pol_for_gas=self._min_pol_for_gas,
                 strong_take_profit_pct=self._strong_take_profit_pct,
+                high_conviction_threshold=self._high_conviction_threshold,
             ),
             gas_protector=self._gas_protector,
             usdc_address=self._usdc_address,
@@ -280,13 +287,15 @@ class SignalEquityTrader:
 
         strength = float(signal_strength)
         is_high_conviction = (
-            bool(self.config.force_high_conviction) and strength >= 0.80
+            bool(self.config.force_high_conviction)
+            and strength >= float(self.config.high_conviction_threshold)
         )
-        
+
         # === ELIGIBILITY DEBUG LOG ===
         print(
             f"[nanoclaw] BUILD_PLAN_ENTRY | {sym} | signal={strength:.3f} | "
             f"force_high_conviction={self.config.force_high_conviction} | "
+            f"high_conviction_threshold={self.config.high_conviction_threshold:.3f} | "
             f"is_high_conviction={is_high_conviction} | "
             f"strong_threshold={self.config.strong_signal_threshold:.3f}"
         )
@@ -340,7 +349,7 @@ class SignalEquityTrader:
         else:
             print(
                 f"[nanoclaw] STRENGTH FILTER BYPASSED | {sym} | "
-                f"force_high_conviction=True + signal={strength:.3f} >= 0.80"
+                f"force_high_conviction=True + signal={strength:.3f} >= {self.config.high_conviction_threshold:.3f}"
             )
 
         # === BUY PATH ===
