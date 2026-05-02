@@ -1,0 +1,38 @@
+nohup: ignoring input
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+✅ V2.5.1 Protection Module loaded successfully
+Real USDT: 41.23 | USDC: 13.55 | WMATIC: 364.17 | POL: 41.36
+
+[nanoclaw] === CYCLE 1777664036 | BALANCES: USDT=$41.23 USDC=$13.55 WMATIC=$364.17 ===
+🔍 BALANCES | USDT=$41.23 USDC=$13.55 WMATIC≈34.43 USD | POL=41.3596 | copy_targets=8
+🔍 DECISION PATH | precedence: PROTECTION → PROFIT_TAKE → X_SIGNAL_EQUITY → USDC_COPY | POLYCOPY → MAIN_STRATEGY
+[nanoclaw] Runtime config | TAKE_PROFIT_PCT=8.00 STRONG_SIGNAL_TP=12.00 PER_ASSET_COOLDOWN_MINUTES=30
+📈 Holding open trade | buy $0.0947 -> now $0.0945 (-0.17%), peak $0.0947 (0.00%)
+[nanoclaw] X-Signal threshold (max(followed_equities.min_signal_strength, env X_SIGNAL_EQUITY_MIN_STRENGTH)) = 0.6000
+🚀 HIGH-CONVICTION MODE ACTIVE — 0.80+ signal present, gas protection relaxed for this cycle
+🟦 X-SIGNAL EQUITY CHECK | Checking 5 assets
+🚀 HIGH-CONVICTION GAS OVERRIDE | 0.80+ strength detected — bypassing 450 gwei limit (PnL+ Sprint Mode, high return high conviction, net expected positive)
+[nanoclaw] X-Signal candidate | WMATIC_ALPHA | signal=0.920 | floor=0.600 | cooldown_ok=True | buy_path_ok=True
+[nanoclaw] X-Signal candidate | WETH | signal=0.870 | floor=0.600 | cooldown_ok=True | buy_path_ok=True
+[nanoclaw] X-Signal candidate | WBTC_ALPHA | signal=0.830 | floor=0.600 | cooldown_ok=True | buy_path_ok=True
+[nanoclaw] X-Signal candidate | LINK_ALPHA | signal=0.810 | floor=0.600 | cooldown_ok=True | buy_path_ok=True
+[nanoclaw] X-Signal candidate | USDC | signal=0.800 | floor=0.600 | cooldown_ok=True | buy_path_ok=True
+🟦 X-SIGNAL EQUITY ACTIVE | WMATIC_ALPHA | Strength 0.920 | Action: BUY
+🚀 HIGH-CONVICTION BYPASS | Strength 0.92 — forcing trade even on high gas/low USDC (PnL+ Sprint Mode)
+[nanoclaw] X-Signal swap intent | USDC_TO_EQUITY | WMATIC_ALPHA | token_in=0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174 token_out=0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270
+X-SIGNAL EQUITY SUMMARY | Assets checked: 5 | USDC: $13.55 | Result: 🟪 X-SIGNAL EQUITY BUY: WMATIC_ALPHA | Strength 0.92 | TP 12% | Size: $12.00 (USDC→WMATIC_ALPHA)
+🔍 DECISION PATH: X_SIGNAL_EQUITY
+🟪 X-SIGNAL EQUITY BUY: WMATIC_ALPHA | Strength 0.92 | TP 12% | Size: $12.00 (USDC→WMATIC_ALPHA)
+[nanoclaw] swap EXEC | direction=USDC_TO_EQUITY | amount_in=12000000
+[nanoclaw] swap intent | 0x2791Bca1…a84174→0x0d500B1d…Df1270 | slippage_bps=100 | executor=1inch
+[nanoclaw] ONEINCH_API_KEY missing — using router fallback execution
+[nanoclaw] route | hops=1 | expected_out≈126124556208445341719 | min_out=124863310646360888301
+✅ Approve Tx: 7f0fb47c98e89028cec9a730eaddfd39725983a898eabf25a5ed32462aa33b5d
+✅ Approve confirmed!
+✅ REAL TX HASH: 5faf5dc8ce429657469ad538b3112ddddcc93385f31e7e53f49b0236d5ebb853
+https://polygonscan.com/tx/5faf5dc8ce429657469ad538b3112ddddcc93385f31e7e53f49b0236d5ebb853
+✅ Swap confirmed!
+✅ Swap executed successfully!
+📌 Asset WMATIC_ALPHA cooldown started (1800s)
+✅ Cycle done — next in ~2 min
