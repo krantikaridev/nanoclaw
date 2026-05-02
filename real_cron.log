@@ -18,7 +18,7 @@ Traceback (most recent call last):
   File "/home/ubuntu/.nanobot/workspace/nanoclaw/modules/swap_executor.py", line 261, in main
     current_price = cs.get_live_wmatic_price()
                     ^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/protection.py", line 29, in get_live_wmatic_price
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/protection.py", line 31, in get_live_wmatic_price
     amounts = router.functions.getAmountsOut(10**18, [WMATIC, USDT]).call()
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/contract/contract.py", line 291, in call
@@ -97,4 +97,4 @@ Traceback (most recent call last):
     response.raise_for_status()
   File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/requests/models.py", line 1028, in raise_for_status
     raise HTTPError(http_error_msg, response=self)
-requests.exceptions.HTTPError: 401 Client Error: Unauthorized for url: http://polygon-rpc.com/
+requests.exceptions.HTTPError: 401 Client Error: Unauthorized for url: https://polygon-rpc.com/
