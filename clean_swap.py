@@ -1224,7 +1224,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                 allow_high_gas_override=high_conviction,
             )
             
-            if plan:
+            if plan:  # try all eligible assets
                 dynamic_trade_size_usdc = float(plan.trade_size)
                 if str(plan.direction) == "USDC_TO_EQUITY":
                     strength = abs(sig)
@@ -1437,7 +1437,7 @@ def evaluate_x_signal_equity_trade(
             allow_high_gas_override=high_conviction,
         )
        
-        if plan:
+        if plan:  # try all eligible assets
             # Continue to next asset (try all eligible)
             pass
     return None
@@ -1574,7 +1574,7 @@ def determine_trade_decision(
                 wallet_address_for_gas=WALLET,
                 can_trade_wallet=can_trade_wallet,
             )
-            if plan:
+            if plan:  # try all eligible assets
                 print(f"🔍 DECISION PATH: USDC_COPY | Size ~${plan.trade_size:.2f}")
                 print(f"🟦 USDC COPY ACTIVE | Size: ${plan.trade_size:.2f}")
                 cw_usdc = (
