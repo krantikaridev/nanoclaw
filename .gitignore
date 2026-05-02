@@ -1,3 +1,6 @@
+# Secrets
+.env
+
 # Virtual environment
 .venv/
 __pycache__/
@@ -5,18 +8,15 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Backups and temporary files
-*.bak*
-*.bak.*
-
 # Runtime state files
 bot_state.json
 trade_exits.json
 real_cron.log
 nohup.out
 
-# Secrets
-.env
+# Backups
+*.bak*
+*.bak.*
 
 # Test artifacts
 tests/unit/__pycache__/
