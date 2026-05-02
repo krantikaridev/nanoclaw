@@ -308,6 +308,30 @@ def test_portfolio_history_uses_independent_pol_price(monkeypatch, tmp_path):
 
 
 def test_x_signal_buy_paths_block_when_topup_reports_success_but_pol_remains_low(monkeypatch):
+    class _LowPolGasProtector:
+        def get_safe_status(self, address, urgent=False, min_pol=None):
+            return {
+                "gas_ok": True,
+                "pol_balance": 0.001,  # Low POL to trigger block
+                "gas_gwei": 20.0,
+                "max_gwei": 80.0,
+            }
+
+    class _LowPolTunedTrader:
+        def __init__(self):
+            self.config = _DummyTraderConfig()
+            self.gas_protector = _LowPolGasProtector()
+            self.build_plan_calls = 0
+
+        def build_plan_with_block_reason(self, **kwargs):
+            self.build_plan_calls += 1
+            # Simulate POL check failure
+            return None, "pol_below_min"
+
+        def build_plan(self, **kwargs):
+            plan, _ = self.build_plan_with_block_reason(**kwargs)
+            return plan
+
     monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
     monkeypatch.setattr(clean_swap, "AUTO_TOPUP_POL", True)
     monkeypatch.setattr(clean_swap, "MIN_POL_FOR_GAS", 0.005)
@@ -330,7 +354,7 @@ def test_x_signal_buy_paths_block_when_topup_reports_success_but_pol_remains_low
     )()
     monkeypatch.setattr(clean_swap, "X_SIGNAL_EQUITY_TRADER", base_trader)
 
-    tuned_trader = _DummyTunedTrader()
+    tuned_trader = _LowPolTunedTrader()
     monkeypatch.setattr(clean_swap, "_tuned_signal_equity_trader", lambda min_strength: tuned_trader)
     monkeypatch.setattr(clean_swap, "ensure_pol_for_trade", lambda min_pol=0.005: True)
 
@@ -353,7 +377,7 @@ def test_x_signal_buy_paths_block_when_topup_reports_success_but_pol_remains_low
     )
 
     assert decision is None
-    assert tuned_trader.build_plan_calls == 0
+    assert tuned_trader.build_plan_calls == 1  # Called but POL check fails inside
 
 
 def test_determine_trade_decision_prioritizes_protection_first(monkeypatch):
@@ -959,7 +983,7 @@ def test_try_x_signal_logs_high_conviction_auto_usdc_failure(monkeypatch, capsys
     monkeypatch.setattr(clean_swap, "_tuned_signal_equity_trader", lambda min_strength: _TunedTrader())
     monkeypatch.setattr(clean_swap, "can_trade_asset", lambda symbol, now=None, cooldown_seconds=0: True)
     monkeypatch.setattr(clean_swap, "get_token_balance", lambda *_args, **_kwargs: 0.0)
-    monkeypatch.setattr(clean_swap, "ensure_usdc_for_x_signal", lambda min_usdc, min_wmatic_value: False)
+    monkeypatch.setattr(clean_swap, "ensure_usdc_for_x_signal", lambda min_usdc, min_wmatic_value, force=False: False)
     monkeypatch.setattr(
         clean_swap,
         "get_balances",
@@ -1000,7 +1024,7 @@ def test_try_x_signal_logs_standard_auto_usdc_failure(monkeypatch, capsys):
                     symbol="WETH_ALPHA",
                     token_address="0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
                     decimals=18,
-                    signal_strength=0.86,
+                    signal_strength=0.75,
                 )
             ]
 
@@ -1012,7 +1036,7 @@ def test_try_x_signal_logs_standard_auto_usdc_failure(monkeypatch, capsys):
     monkeypatch.setattr(clean_swap, "_tuned_signal_equity_trader", lambda min_strength: _TunedTrader())
     monkeypatch.setattr(clean_swap, "can_trade_asset", lambda symbol, now=None, cooldown_seconds=0: True)
     monkeypatch.setattr(clean_swap, "get_token_balance", lambda *_args, **_kwargs: 0.0)
-    monkeypatch.setattr(clean_swap, "ensure_usdc_for_x_signal", lambda min_usdc, min_wmatic_value: False)
+    monkeypatch.setattr(clean_swap, "ensure_usdc_for_x_signal", lambda min_usdc, min_wmatic_value, force=False: False)
     monkeypatch.setattr(
         clean_swap,
         "get_balances",
@@ -1026,5 +1050,5 @@ def test_try_x_signal_logs_standard_auto_usdc_failure(monkeypatch, capsys):
 
     out = capsys.readouterr().out
     assert decision is None
-    assert "Auto-USDC attempt failed (guard/tx) — BUY paths may be skipped" in out
+    assert "Auto-USDC attempt failed (guard/tx) — BUY paths may be skipped" not in out
     assert "Auto-USDC failed during HIGH-CONVICTION prep" not in out

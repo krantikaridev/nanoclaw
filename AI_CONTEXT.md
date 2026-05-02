@@ -164,6 +164,13 @@ Load order: `.env` then optional `.env.local` (`override=True`) when present.
   - `python -m pytest -q`
   - Coverage baseline check (periodic): `python -m pytest --cov=. --cov-report=term-missing -q`
   - Coverage history update (periodic): `python scripts/update_coverage_history.py`
+- Code quality baseline (as of 2026-05-01):
+  - Test coverage: 79% overall
+  - clean_swap.py: 58%
+  - signal_equity_trader.py: 79%
+  - gas_protector.py: 94%
+  - swap_executor.py: 60%
+  - protection.py: 72%
 - Deployment readiness:
   - Do not rely on `git stash -a && pull && stash pop` in VM for normal deploys.
   - Deploy from a clean checkout/branch and restart bot from known commit.

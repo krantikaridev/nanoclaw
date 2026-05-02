@@ -904,8 +904,8 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
     cfg = _load_followed_equities_json_dict()
     cfg_enabled = bool(cfg.get("enabled", True)) if isinstance(cfg, dict) else True
     min_strength = _effective_equity_signal_min(cfg)
-    strong_thr = float(X_SIGNAL_EQUITY_TRADER.config.strong_signal_threshold)
-    force_high_conviction = bool(X_SIGNAL_EQUITY_TRADER.config.force_high_conviction)
+    strong_thr = float(getattr(getattr(X_SIGNAL_EQUITY_TRADER, 'config', None), 'strong_signal_threshold', 0.80))
+    force_high_conviction = bool(getattr(getattr(X_SIGNAL_EQUITY_TRADER, 'config', None), 'force_high_conviction', True))
     print(
         f"{_nanolog()}X-Signal eligibility floor = {min_strength:.4f}; "
         f"strong_threshold = {strong_thr:.4f}; force_high_conviction = {force_high_conviction}"
