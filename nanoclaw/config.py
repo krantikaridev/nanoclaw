@@ -22,3 +22,6 @@ class XSignalConfig:
 X_SIGNAL = XSignalConfig()
 
 # Other future configs can be added here (e.g. ProtectionConfig, CopyTradeConfig)
+
+# Legacy alias for backward compatibility
+X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD = 0.75
