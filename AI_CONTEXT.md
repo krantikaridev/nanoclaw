@@ -7,7 +7,7 @@
 - **\$424.63 portfolio peak on 2026-05-01** reflected **test-mode / dummy instrumentation**, not verified on-chain wealth. Confirm any “peak” narrative against Polygonscan wallet history and live balances—**there was no real on-chain balance matching that headline figure**.
 - **Bleed-rate target**: **\$0/day** sustained drawdown from noise, gas bleed, or misconfigured paths—optimize for stability before increasing size.
 - **Profit-taking policy**: **`TAKE_PROFIT_PCT` lowered to 5%** effective **2026-05-02** (baseline take-profit tier; tune only with logged evidence).
-- **`portfolio_history.csv` hygiene**: Rows must not imply execution that never happened—**purge test-mode eras** using `scripts/clean_dummy_data.sh` (swap-correlated filtering via `real_cron.log`; see script docstring). **portfolio_history CSV last cleaned (automated)**: CSV_CLEAN_DUMMY_DATA_TS
+- **`portfolio_history.csv` hygiene**: Rows must not imply execution that never happened—**purge test-mode eras** using `scripts/clean_dummy_data.sh` (swap-correlated filtering via `real_cron.log`; see script docstring). **portfolio_history CSV last cleaned (automated)**: 2026-05-02 (UTC)
 - Operational rule: Prefer **fewer misleading charts** over **dense but false** telemetry.
 
 ## **New Thread Protocol** (Grok / agent handoff)
