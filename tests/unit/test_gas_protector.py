@@ -141,12 +141,19 @@ def test_missing_web3_dependency_still_returns_safe_values():
         .build()
     )
 
-    status = protector.get_safe_status("0xabc")
+    with patch.object(
+        protector,
+        "_build_web3",
+        side_effect=RuntimeError("web3 is not installed"),
+    ):
+        status = protector.get_safe_status("0xabc")
 
-    assert protector.get_gas_price_gwei() == 81.0
-    assert protector.get_pol_balance("0xabc") == 0.0
-    assert protector.is_gas_acceptable() is False
-    assert protector.has_enough_pol("0xabc") is False
-    assert status["ok"] is False
-    assert status["gas_rpc"] is None
-    assert status["pol_rpc"] is None
+        assert protector.get_gas_price_gwei() == 81.0
+        assert protector.get_pol_balance("0xabc") == 0.0
+        assert protector.is_gas_acceptable() is False
+        assert protector.has_enough_pol("0xabc") is False
+        assert status["ok"] is False
+        assert status["gas_ok"] is False
+        assert status["pol_ok"] is False
+        assert status["gas_rpc"] is None
+        assert status["pol_rpc"] is None

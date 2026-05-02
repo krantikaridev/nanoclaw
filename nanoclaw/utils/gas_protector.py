@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, List, Optional, Tuple, cast
 
-from nanoclaw.config import default_json_rpc_url
+from nanoclaw.config import connect_web3, default_json_rpc_url
 
 try:
     from web3 import Web3 as _Web3
@@ -59,8 +59,9 @@ class GasProtectorBuilder:
         self._max_gwei = 80.0
         self._urgent_gwei = 120.0
         self._min_pol_balance = 0.05
-        self._primary_rpc = default_json_rpc_url()
-        self._fallback_rpcs = self._split_rpcs(fallback_env)
+        _chain = default_json_rpc_url()
+        self._primary_rpc = _chain[0] if _chain else None
+        self._fallback_rpcs = list(_chain[1:]) + self._split_rpcs(fallback_env)
         self._retry_attempts = 2
         self._timeout_seconds = 10
 
@@ -132,11 +133,10 @@ class GasProtector:
         return urls
 
     def _build_web3(self, rpc_url: str) -> Web3:
-        provider = Web3.HTTPProvider(
-            rpc_url,
-            request_kwargs={"timeout": self.config.timeout_seconds},
+        return connect_web3(
+            urls=[rpc_url],
+            timeout=self.config.timeout_seconds,
         )
-        return Web3(provider)
 
     def _checksum_or_raw(self, address: str) -> str:
         converter = getattr(Web3, "to_checksum_address", None)

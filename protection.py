@@ -12,7 +12,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from constants import WALLET, USDT, WMATIC, ROUTER, ROUTER_ABI, GET_AMOUNTS_OUT_ABI
 
-from nanoclaw.config import default_json_rpc_url
+from nanoclaw.config import connect_web3
 
 load_dotenv()
 
@@ -24,21 +24,31 @@ GAS_MULTIPLIER = 1.25            # Dynamic gas (cheaper than 1.5x)
 FLUCTUATION_USDT_THRESHOLD = 30  # If USDT < $30 → force sell 25% WMATIC
 PROFIT_LOCK_PERCENT = 8          # Per-trade: sell when +8% from buy price
 
+_prot_w3: Web3 | None = None
+
+
+def _shared_web3() -> Web3:
+    global _prot_w3
+    if _prot_w3 is None:
+        _prot_w3 = connect_web3()
+    return _prot_w3
+
+
 # ====================== HELPER FUNCTIONS ======================
 def get_live_wmatic_price():
-    w3 = Web3(Web3.HTTPProvider(default_json_rpc_url()))
+    w3 = _shared_web3()
     router = w3.eth.contract(address=ROUTER, abi=ROUTER_ABI + [GET_AMOUNTS_OUT_ABI])
     amounts = router.functions.getAmountsOut(10**18, [WMATIC, USDT]).call()
     return amounts[1] / 1_000_000
 
 def get_balances():
-    w3 = Web3(Web3.HTTPProvider(default_json_rpc_url()))
+    w3 = _shared_web3()
     usdt = w3.eth.contract(address=USDT, abi=[{"constant":True,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"type":"function"}]).functions.balanceOf(WALLET).call() / 1_000_000
     wmatic = w3.eth.contract(address=WMATIC, abi=[{"constant":True,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"type":"function"}]).functions.balanceOf(WALLET).call() / 1e18
     return usdt, wmatic
 
 def get_pol_balance():
-    w3 = Web3(Web3.HTTPProvider(default_json_rpc_url()))
+    w3 = _shared_web3()
     return w3.eth.get_balance(WALLET) / 10**18
 
 # ====================== PER-TRADE EXIT PRICE LOCKING ======================
