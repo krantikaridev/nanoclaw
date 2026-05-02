@@ -3,6 +3,10 @@
 
 from __future__ import annotations
 
+import os
+os.environ.setdefault("RPC_URL", "https://polygon-rpc.com")
+os.environ.setdefault("WEB3_PROVIDER_URI", "https://polygon-rpc.com")
+
 import argparse
 import asyncio
 import logging
