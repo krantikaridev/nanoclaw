@@ -1,32 +1,28 @@
-
-# Legacy/optional local env files (defense-in-depth: keep ignored even if not used at runtime)
-*.env
-*.pyc
-*.pyd
-*.pyo
-.Python
-.coverage
-.env
-.env.local
-.env.prod
-.env.stage
+# Virtual environment
 .venv/
-ENV/
 __pycache__/
-artifacts/coverage/*.json
-bot_state.json
-env.bak/
-env/
-gateway.log
-nanoclaw.log
-portfolio_history.csv
-portfolio_history.json
-real_cron.log
-trade_exits.json
-trade_history.json
-venv.bak/
-venv/
-xwatcher/xwatcher_env/
-restart.sh
-restart_bot.sh
+*.pyc
+*.pyo
+*.pyd
+
+# Backups and temporary files
 *.bak*
+*.bak
+portfolio_history.csv.bak*
+
+# Runtime state files
+bot_state.json
+trade_exits.json
+real_cron.log
+nohup.out
+
+# Test artifacts
+tests/unit/__pycache__/
+
+# Ignore .env (secrets)
+.env
+
+# macOS / editor junk
+.DS_Store
+.vscode/
+.idea/

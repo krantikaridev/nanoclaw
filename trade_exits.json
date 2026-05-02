@@ -1,0 +1,962 @@
+[
+  {
+    "timestamp": "2026-04-28T15:30:38.667552",
+    "buy_price": 0.090747,
+    "target_price": 0.098007,
+    "amount_usd": 15.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-28T15:31:11.624013",
+    "buy_price": 0.090747,
+    "target_price": 0.098007,
+    "amount_usd": 19.112078160000003,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-28T18:56:41.278471",
+    "buy_price": 0.091122,
+    "target_price": 0.098412,
+    "amount_usd": 30.007476520000004,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-28T20:40:20.639837",
+    "buy_price": 0.091536,
+    "target_price": 0.098859,
+    "amount_usd": 30.262895880000002,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-28T22:10:09.051674",
+    "buy_price": 0.091576,
+    "target_price": 0.098902,
+    "amount_usd": 30.238784520000003,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-28T23:30:11.796675",
+    "buy_price": 0.091577,
+    "target_price": 0.098903,
+    "amount_usd": 30.191780920000003,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T00:50:12.359047",
+    "buy_price": 0.092332,
+    "target_price": 0.099719,
+    "amount_usd": 30.146294640000004,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T02:20:13.947405",
+    "buy_price": 0.092768,
+    "target_price": 0.100189,
+    "amount_usd": 12.91849848,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T02:30:13.041400",
+    "buy_price": 0.092811,
+    "target_price": 0.100236,
+    "amount_usd": 11.368278720000001,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T02:40:12.955758",
+    "buy_price": 0.092671,
+    "target_price": 0.100085,
+    "amount_usd": 10.00408536,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T02:50:14.237504",
+    "buy_price": 0.0927,
+    "target_price": 0.100116,
+    "amount_usd": 8.803595159999999,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T03:00:13.629664",
+    "buy_price": 0.0927,
+    "target_price": 0.100116,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T03:10:14.864292",
+    "buy_price": 0.092599,
+    "target_price": 0.100007,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T03:20:14.992614",
+    "buy_price": 0.092625,
+    "target_price": 0.100035,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T03:30:14.285529",
+    "buy_price": 0.092651,
+    "target_price": 0.100063,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T03:40:14.961542",
+    "buy_price": 0.092678,
+    "target_price": 0.100092,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T04:10:32.045176",
+    "buy_price": 0.093046,
+    "target_price": 0.10049,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T04:20:16.267727",
+    "buy_price": 0.093072,
+    "target_price": 0.100518,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T04:40:37.862580",
+    "buy_price": 0.093073,
+    "target_price": 0.100519,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T05:00:39.026027",
+    "buy_price": 0.093102,
+    "target_price": 0.10055,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T05:30:35.666216",
+    "buy_price": 0.093125,
+    "target_price": 0.100575,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T08:20:43.514625",
+    "buy_price": 0.092663,
+    "target_price": 0.100076,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T08:30:33.131220",
+    "buy_price": 0.092662,
+    "target_price": 0.100075,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T09:00:31.333217",
+    "buy_price": 0.092466,
+    "target_price": 0.099863,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T09:20:27.682486",
+    "buy_price": 0.092492,
+    "target_price": 0.099891,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T10:20:41.057900",
+    "buy_price": 0.092668,
+    "target_price": 0.100081,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T10:30:33.471509",
+    "buy_price": 0.092694,
+    "target_price": 0.10011,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T11:20:35.314240",
+    "buy_price": 0.092616,
+    "target_price": 0.100025,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T12:00:29.410300",
+    "buy_price": 0.092487,
+    "target_price": 0.099886,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T12:20:13.295705",
+    "buy_price": 0.091865,
+    "target_price": 0.099214,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T13:00:14.666249",
+    "buy_price": 0.091611,
+    "target_price": 0.09894,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T13:10:14.662690",
+    "buy_price": 0.091611,
+    "target_price": 0.09894,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T13:20:23.474886",
+    "buy_price": 0.091611,
+    "target_price": 0.09894,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T13:30:14.714423",
+    "buy_price": 0.091613,
+    "target_price": 0.098942,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T13:40:18.038756",
+    "buy_price": 0.091576,
+    "target_price": 0.098902,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T13:50:15.280318",
+    "buy_price": 0.0913,
+    "target_price": 0.098604,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T14:00:13.992265",
+    "buy_price": 0.0913,
+    "target_price": 0.098604,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T14:10:14.508145",
+    "buy_price": 0.091332,
+    "target_price": 0.098639,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T14:20:14.128142",
+    "buy_price": 0.091365,
+    "target_price": 0.098674,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T14:30:24.497449",
+    "buy_price": 0.091365,
+    "target_price": 0.098674,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T14:40:14.446541",
+    "buy_price": 0.09137,
+    "target_price": 0.09868,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T14:50:15.414029",
+    "buy_price": 0.091371,
+    "target_price": 0.098681,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T15:00:13.602433",
+    "buy_price": 0.091371,
+    "target_price": 0.098681,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T15:10:14.986980",
+    "buy_price": 0.091335,
+    "target_price": 0.098642,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T15:20:14.607316",
+    "buy_price": 0.090943,
+    "target_price": 0.098218,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T15:40:15.960165",
+    "buy_price": 0.09091,
+    "target_price": 0.098183,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T15:50:16.757008",
+    "buy_price": 0.090911,
+    "target_price": 0.098184,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T16:00:16.622446",
+    "buy_price": 0.090911,
+    "target_price": 0.098184,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T16:10:19.432271",
+    "buy_price": 0.090911,
+    "target_price": 0.098184,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T16:20:14.765161",
+    "buy_price": 0.09091,
+    "target_price": 0.098183,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T16:30:15.496330",
+    "buy_price": 0.09091,
+    "target_price": 0.098183,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T16:40:19.144104",
+    "buy_price": 0.09091,
+    "target_price": 0.098183,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T16:50:14.585379",
+    "buy_price": 0.090907,
+    "target_price": 0.09818,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T17:00:13.530434",
+    "buy_price": 0.090849,
+    "target_price": 0.098117,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T17:10:14.366303",
+    "buy_price": 0.090849,
+    "target_price": 0.098117,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T17:20:14.043271",
+    "buy_price": 0.090849,
+    "target_price": 0.098117,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T17:30:14.000426",
+    "buy_price": 0.090849,
+    "target_price": 0.098117,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T17:40:14.388907",
+    "buy_price": 0.090691,
+    "target_price": 0.097946,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T17:50:14.898080",
+    "buy_price": 0.090807,
+    "target_price": 0.098072,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T18:00:18.582102",
+    "buy_price": 0.091767,
+    "target_price": 0.099108,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T18:10:14.780326",
+    "buy_price": 0.091481,
+    "target_price": 0.098799,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T18:20:17.522172",
+    "buy_price": 0.090644,
+    "target_price": 0.097896,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T18:30:13.864922",
+    "buy_price": 0.090644,
+    "target_price": 0.097896,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T18:40:15.297796",
+    "buy_price": 0.090347,
+    "target_price": 0.097575,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T18:50:14.606221",
+    "buy_price": 0.090553,
+    "target_price": 0.097797,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T19:00:15.503601",
+    "buy_price": 0.09083,
+    "target_price": 0.098096,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T19:10:13.960971",
+    "buy_price": 0.09083,
+    "target_price": 0.098096,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T19:20:14.753728",
+    "buy_price": 0.09083,
+    "target_price": 0.098096,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T19:30:15.069348",
+    "buy_price": 0.09083,
+    "target_price": 0.098096,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T19:40:14.728917",
+    "buy_price": 0.09083,
+    "target_price": 0.098096,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-29T21:40:15.175902",
+    "buy_price": 0.091734,
+    "target_price": 0.099073,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-30T08:50:16.846862",
+    "buy_price": 0.093959,
+    "target_price": 0.101476,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-30T10:20:24.803447",
+    "buy_price": 0.094166,
+    "target_price": 0.101699,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-30T11:00:18.028422",
+    "buy_price": 0.094416,
+    "target_price": 0.101969,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-30T12:00:36.865402",
+    "buy_price": 0.095057,
+    "target_price": 0.102662,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-30T12:30:14.762375",
+    "buy_price": 0.094859,
+    "target_price": 0.102448,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-30T13:00:15.975237",
+    "buy_price": 0.094934,
+    "target_price": 0.102529,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-30T13:20:15.266593",
+    "buy_price": 0.095237,
+    "target_price": 0.102856,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-30T14:00:17.980678",
+    "buy_price": 0.094745,
+    "target_price": 0.102325,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-30T15:00:17.127015",
+    "buy_price": 0.094517,
+    "target_price": 0.102078,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-30T16:00:16.243255",
+    "buy_price": 0.095533,
+    "target_price": 0.103176,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-30T16:30:18.735238",
+    "buy_price": 0.095655,
+    "target_price": 0.103307,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-30T17:30:28.943419",
+    "buy_price": 0.0955,
+    "target_price": 0.10314,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-30T19:40:17.065151",
+    "buy_price": 0.095499,
+    "target_price": 0.103139,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-30T20:10:19.963003",
+    "buy_price": 0.0953,
+    "target_price": 0.102924,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-30T21:10:25.528445",
+    "buy_price": 0.095326,
+    "target_price": 0.102952,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-30T21:40:16.476767",
+    "buy_price": 0.095021,
+    "target_price": 0.102623,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-30T22:40:16.530869",
+    "buy_price": 0.094755,
+    "target_price": 0.102335,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-30T23:00:19.332216",
+    "buy_price": 0.09469,
+    "target_price": 0.102265,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-30T23:10:16.700104",
+    "buy_price": 0.094716,
+    "target_price": 0.102293,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-04-30T23:20:18.347639",
+    "buy_price": 0.094743,
+    "target_price": 0.102322,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-01T00:10:18.224385",
+    "buy_price": 0.094828,
+    "target_price": 0.102414,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-01T00:50:16.108428",
+    "buy_price": 0.094568,
+    "target_price": 0.102133,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-01T01:00:24.257674",
+    "buy_price": 0.094221,
+    "target_price": 0.101759,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-01T01:30:16.619735",
+    "buy_price": 0.093899,
+    "target_price": 0.101411,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-01T02:30:17.246335",
+    "buy_price": 0.093879,
+    "target_price": 0.101389,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-01T02:50:15.580633",
+    "buy_price": 0.093924,
+    "target_price": 0.101438,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-01T03:00:15.480734",
+    "buy_price": 0.094072,
+    "target_price": 0.101598,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-01T03:50:15.778433",
+    "buy_price": 0.094405,
+    "target_price": 0.101957,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-01T04:00:23.229160",
+    "buy_price": 0.094432,
+    "target_price": 0.101987,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-01T04:40:21.149978",
+    "buy_price": 0.094447,
+    "target_price": 0.102003,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-01T04:50:16.898094",
+    "buy_price": 0.094474,
+    "target_price": 0.102032,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-01T05:40:16.551884",
+    "buy_price": 0.094212,
+    "target_price": 0.101749,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-01T06:00:16.155440",
+    "buy_price": 0.094238,
+    "target_price": 0.101777,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-01T06:30:16.116191",
+    "buy_price": 0.094133,
+    "target_price": 0.101664,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-01T07:20:18.919245",
+    "buy_price": 0.09397,
+    "target_price": 0.101488,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-01T08:40:18.206149",
+    "buy_price": 0.093998,
+    "target_price": 0.101518,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-01T09:00:20.948045",
+    "buy_price": 0.094026,
+    "target_price": 0.101548,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-01T15:45:33.973955",
+    "buy_price": 0.094692,
+    "target_price": 0.102267,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-02T08:34:16.177210",
+    "buy_price": 0.096688,
+    "target_price": 0.104423,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-02T08:40:53.442144",
+    "buy_price": 0.096812,
+    "target_price": 0.104557,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-02T08:50:20.916509",
+    "buy_price": 0.096916,
+    "target_price": 0.104669,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-02T09:10:21.183962",
+    "buy_price": 0.097015,
+    "target_price": 0.104776,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-02T09:15:19.795624",
+    "buy_price": 0.097041,
+    "target_price": 0.104804,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-02T09:30:21.421332",
+    "buy_price": 0.097024,
+    "target_price": 0.104786,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-02T09:40:24.745428",
+    "buy_price": 0.096953,
+    "target_price": 0.104709,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-02T09:43:31.974832",
+    "buy_price": 0.096979,
+    "target_price": 0.104737,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-02T10:00:21.602129",
+    "buy_price": 0.096962,
+    "target_price": 0.104719,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-02T10:15:20.453930",
+    "buy_price": 0.09717,
+    "target_price": 0.104944,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-02T16:15:47.236398",
+    "buy_price": 0.097074,
+    "target_price": 0.10484,
+    "amount_usd": 8.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
+  }
+]

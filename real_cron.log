@@ -1,0 +1,46 @@
+nohup: ignoring input
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+✅ V2.5.1 Protection Module loaded successfully
+Real USDT: 12.00 | USDC: 52.42 | WMATIC: 127.79 | POL: 26.44
+[nanoclaw] skip cycle — global cooldown ~82s left (COOLDOWN_MINUTES=2; last_run was 38s ago)
+[nanoclaw] TRADE SKIPPED: cooldown (global, ~82s left)
+Traceback (most recent call last):
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/swap_executor.py", line 286, in approve_and_swap
+    swap_hash = w3.eth.send_raw_transaction(signed_swap.raw_transaction)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/eth/eth.py", line 399, in send_raw_transaction
+    return self._send_raw_transaction(transaction)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/module.py", line 112, in caller
+    result = w3.manager.request_blocking(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/manager.py", line 233, in request_blocking
+    return self.formatted_response(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/manager.py", line 199, in formatted_response
+    validate_rpc_response_and_raise_if_error(
+  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/_utils/validation.py", line 401, in validate_rpc_response_and_raise_if_error
+    raise web3_rpc_error
+web3.exceptions.Web3RPCError: {'code': -32000, 'message': 'nonce too low: next nonce 2789, tx nonce 2788'}
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+✅ V2.5.1 Protection Module loaded successfully
+Real USDT: 12.00 | USDC: 52.42 | WMATIC: 127.79 | POL: 26.44
+
+[nanoclaw] === CYCLE 1777743608 | BALANCES: USDT=$12.00 USDC=$52.42 WMATIC=$127.79 ===
+🔍 BALANCES | USDT=$12.00 USDC=$52.42 WMATIC≈12.40 USD | POL=26.4415 | copy_targets=8
+🔍 DECISION PATH | precedence: PROTECTION → PROFIT_TAKE → X_SIGNAL_EQUITY → USDC_COPY | POLYCOPY → MAIN_STRATEGY
+[nanoclaw] Runtime config | TAKE_PROFIT_PCT=8.00 STRONG_SIGNAL_TP=12.00 PER_ASSET_COOLDOWN_MINUTES=30
+⚠️ FLUCTUATION PROTECTION: USDT $12.00 < $30 → Selling 25% WMATIC
+🔍 DECISION PATH: PROTECTION (FLUCTUATION)
+🛡️ PROTECTION TRIGGERED: FLUCTUATION — Force selling
+[nanoclaw] swap EXEC | direction=WMATIC_TO_USDT | amount_in=57504076935482916864
+[nanoclaw] swap intent | 0x0d500B1d…Df1270→0xc2132D05…B58e8F | slippage_bps=100 | executor=1inch
+[nanoclaw] ONEINCH_API_KEY missing — using router fallback execution
+[nanoclaw] route | hops=1 | expected_out≈5580939 | min_out=5525129
+✅ Approve Tx: 146465dd85f0a29f5f36d675b6d1631893c3b8c2cbd1218cc602a656e3a28a89
+✅ Approve confirmed!
+❌ Error in approve_and_swap: {'code': -32000, 'message': 'nonce too low: next nonce 2789, tx nonce 2788'}
+[nanoclaw] Swap failed — per-asset/per-wallet cooldown not applied
+✅ Cycle done — next in ~2 min

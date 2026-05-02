@@ -1,0 +1,15 @@
+[
+  "tests/unit/test_clean_swap.py::test_evaluate_take_profit_hits_strong_take_profit",
+  "tests/unit/test_clean_swap.py::test_evaluate_take_profit_hits_trailing_stop_after_pullback",
+  "tests/unit/test_clean_swap.py::test_evaluate_take_profit_resets_tracking_without_open_trade",
+  "tests/unit/test_clean_swap.py::test_global_cooldown_uses_last_run_timestamp",
+  "tests/unit/test_clean_swap.py::test_select_main_strategy_buys_when_balances_are_healthy",
+  "tests/unit/test_clean_swap.py::test_select_main_strategy_prefers_usdt_reserve_protection",
+  "tests/unit/test_clean_swap.py::test_wallet_cooldown_blocks_until_threshold_passes",
+  "tests/unit/test_gas_protector.py::test_builder_supports_chaining_and_config_capture",
+  "tests/unit/test_gas_protector.py::test_missing_web3_dependency_still_returns_safe_values",
+  "tests/unit/test_gas_protector.py::test_pol_balance_check_never_raises",
+  "tests/unit/test_gas_protector.py::test_returns_safe_values_when_all_rpcs_fail",
+  "tests/unit/test_gas_protector.py::test_urgent_threshold_is_applied",
+  "tests/unit/test_gas_protector.py::test_uses_fallback_rpc_when_primary_fails"
+]
