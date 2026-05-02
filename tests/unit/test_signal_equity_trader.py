@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from nanoclaw.strategies.signal_equity_trader import SignalEquityTrader
 from nanoclaw.utils.gas_protector import GasProtector
 
@@ -24,6 +26,30 @@ def _build_strategy(*, gas_ok: bool, pol_balance: float) -> SignalEquityTrader:
     return (
         SignalEquityTrader.builder()
         .with_enabled(True)
+        .with_gas_protector(DummyProtector(gas_ok=gas_ok, pol_balance=pol_balance))
+        .with_usdc_address("0x" + "2" * 40)
+        .build()
+    )
+
+
+def _build_strategy_tuned(
+    *,
+    gas_ok: bool = True,
+    pol_balance: float = 1.0,
+    force_eligible_threshold: float = 0.80,
+    strong_signal_threshold: float = 0.80,
+    max_earnings_days: float = 5.0,
+    min_trade_usdc: float = 5.0,
+    max_trade_usdc: float = 28.0,
+) -> SignalEquityTrader:
+    return (
+        SignalEquityTrader.builder()
+        .with_enabled(True)
+        .with_force_eligible_threshold(force_eligible_threshold)
+        .with_strong_signal_threshold(strong_signal_threshold)
+        .with_max_earnings_days(max_earnings_days)
+        .with_min_trade_usdc(min_trade_usdc)
+        .with_max_trade_usdc(max_trade_usdc)
         .with_gas_protector(DummyProtector(gas_ok=gas_ok, pol_balance=pol_balance))
         .with_usdc_address("0x" + "2" * 40)
         .build()
@@ -248,3 +274,418 @@ def test_signal_equity_trader_config_builder_respects_force_high_conviction():
     )
 
     assert strategy.config.force_high_conviction is False
+
+
+def test_builder_raises_without_gas_protector():
+    b = SignalEquityTrader.builder().with_usdc_address("0x" + "2" * 40)
+    with pytest.raises(ValueError, match="GasProtector"):
+        b.build()
+
+
+def test_builder_raises_without_usdc_address(monkeypatch):
+    monkeypatch.delenv("USDC", raising=False)
+    b = SignalEquityTrader.builder().with_gas_protector(DummyProtector(gas_ok=True, pol_balance=1.0))
+    with pytest.raises(ValueError, match="USDC"):
+        b.build()
+
+
+def test_build_plan_returns_none_when_strategy_disabled(capsys):
+    s = _build_strategy(gas_ok=True, pol_balance=1.0)
+    s.config.enabled = False
+    plan = s.build_plan(
+        symbol="X",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.92,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=50.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+    )
+    assert plan is None
+    assert "strategy_disabled" in capsys.readouterr().out
+
+
+def test_build_plan_invalid_symbol_or_token(capsys):
+    s = _build_strategy(gas_ok=True, pol_balance=1.0)
+    plan = s.build_plan(
+        symbol="  ",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.92,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=50.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+    )
+    assert plan is None
+    assert "invalid_symbol_or_token" in capsys.readouterr().out
+
+
+def test_outside_earnings_window_when_not_force_eligible():
+    s = _build_strategy_tuned(
+        force_eligible_threshold=0.90,
+        strong_signal_threshold=0.70,
+        max_earnings_days=5.0,
+    )
+    _, reason = s.build_plan_with_block_reason(
+        symbol="WETH",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.75,
+        earnings_proximity_days=30.0,
+        current_price_usd=1.0,
+        usdc_balance=50.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+    )
+    assert reason == "outside_earnings_window"
+
+
+def test_force_eligible_bypasses_outside_earnings_window():
+    s = _build_strategy_tuned(max_earnings_days=5.0)
+    plan, reason = s.build_plan_with_block_reason(
+        symbol="WETH",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.88,
+        earnings_proximity_days=90.0,
+        current_price_usd=2.0,
+        usdc_balance=50.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+    )
+    assert reason is None
+    assert plan is not None and plan.direction == "USDC_TO_EQUITY"
+
+
+def test_gas_above_limit_when_not_force_eligible():
+    s = _build_strategy_tuned(
+        gas_ok=False,
+        force_eligible_threshold=0.92,
+        strong_signal_threshold=0.70,
+    )
+    _, reason = s.build_plan_with_block_reason(
+        symbol="WETH",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.78,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=50.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+        allow_high_gas_override=False,
+    )
+    assert reason == "gas_above_limit"
+
+
+def test_force_eligible_bypasses_high_gas_without_override():
+    s = _build_strategy_tuned(gas_ok=False)
+    plan, reason = s.build_plan_with_block_reason(
+        symbol="WETH",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.91,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=50.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+        allow_high_gas_override=False,
+    )
+    assert reason is None
+    assert plan is not None
+
+
+def test_per_asset_cooldown_when_not_force_eligible():
+    s = _build_strategy_tuned(force_eligible_threshold=0.92, strong_signal_threshold=0.70)
+
+    def _never(sym: str, now: float | None, cd: int) -> bool:
+        return False
+
+    _, reason = s.build_plan_with_block_reason(
+        symbol="WETH",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.78,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=50.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=_never,
+    )
+    assert reason == "per_asset_cooldown"
+
+
+def test_force_eligible_bypasses_cooldown_and_builds_buy():
+    s = _build_strategy_tuned()
+
+    def _never(sym: str, now: float | None, cd: int) -> bool:
+        return False
+
+    plan, reason = s.build_plan_with_block_reason(
+        symbol="WETH",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.91,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=50.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=_never,
+    )
+    assert reason is None
+    assert plan is not None and plan.direction == "USDC_TO_EQUITY"
+
+
+def test_buy_blocked_zero_usdc():
+    s = _build_strategy_tuned()
+    _, reason = s.build_plan_with_block_reason(
+        symbol="WETH",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.92,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=0.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+    )
+    assert reason == "zero_usdc"
+
+
+def test_buy_blocked_invalid_trade_size_min_exceeds_balance():
+    s = _build_strategy_tuned(min_trade_usdc=100.0, max_trade_usdc=200.0)
+    _, reason = s.build_plan_with_block_reason(
+        symbol="WETH",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.92,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=40.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+    )
+    assert reason == "invalid_trade_size"
+
+
+def test_sell_path_equity_to_usdc():
+    s = _build_strategy_tuned()
+    plan, reason = s.build_plan_with_block_reason(
+        symbol="WETH",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=-0.85,
+        earnings_proximity_days=None,
+        current_price_usd=2000.0,
+        usdc_balance=50.0,
+        equity_balance=2.5,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+    )
+    assert reason is None
+    assert plan is not None
+    assert plan.direction == "EQUITY_TO_USDC"
+    assert plan.amount_in > 0
+
+
+def test_sell_blocked_zero_equity():
+    s = _build_strategy_tuned()
+    _, reason = s.build_plan_with_block_reason(
+        symbol="WETH",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=-0.85,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=50.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+    )
+    assert reason == "zero_equity_balance"
+
+
+def test_load_followed_equities_empty_when_missing_file(tmp_path):
+    missing = tmp_path / "nope.json"
+    s = (
+        SignalEquityTrader.builder()
+        .with_enabled(True)
+        .with_followed_equities_path(str(missing))
+        .with_gas_protector(DummyProtector(gas_ok=True, pol_balance=1.0))
+        .with_usdc_address("0x" + "2" * 40)
+        .build()
+    )
+    assert s.load_followed_equities() == []
+
+
+def test_load_followed_equities_empty_on_invalid_json(tmp_path):
+    p = tmp_path / "bad.json"
+    p.write_text("{not json", encoding="utf-8")
+    s = (
+        SignalEquityTrader.builder()
+        .with_enabled(True)
+        .with_followed_equities_path(str(p))
+        .with_gas_protector(DummyProtector(gas_ok=True, pol_balance=1.0))
+        .with_usdc_address("0x" + "2" * 40)
+        .build()
+    )
+    assert s.load_followed_equities() == []
+
+
+def test_load_followed_equities_skips_bad_rows(tmp_path):
+    p = tmp_path / "fe.json"
+    p.write_text(
+        json.dumps(
+            {
+                "assets": [
+                    "not-a-dict",
+                    {"symbol": "BADLEN", "address": "0xshort"},
+                    {"symbol": "OK", "address": "0x5555555555555555555555555555555555555555", "signal_strength": 0.5},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    s = (
+        SignalEquityTrader.builder()
+        .with_enabled(True)
+        .with_followed_equities_path(str(p))
+        .with_gas_protector(DummyProtector(gas_ok=True, pol_balance=1.0))
+        .with_usdc_address("0x" + "2" * 40)
+        .build()
+    )
+    out = s.load_followed_equities()
+    assert len(out) == 1
+    assert out[0].symbol == "OK"
+
+
+def test_gas_override_branch_when_force_eligible_and_allow_high_gas_override(capfd):
+    """Logs GAS OVERRIDE line when gas hot but sprint override is on."""
+    s = _build_strategy_tuned(gas_ok=False)
+    s.build_plan_with_block_reason(
+        symbol="WETH",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.92,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=50.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+        allow_high_gas_override=True,
+    )
+    captured = capfd.readouterr()
+    assert "GAS OVERRIDE" in captured.out
+
+
+def test_compute_trade_size_and_addrs_equal_helpers():
+    s = _build_strategy(gas_ok=True, pol_balance=1.0)
+    assert s._compute_trade_size(100.0) > 0
+    assert s._addrs_equal_case_insensitive("0xAbC", "0xabc") is True
+
+
+def test_builder_fluent_setters_round_trip():
+    """Exercise optional builder chain (trade sizing / POL / TP wiring)."""
+    s = (
+        SignalEquityTrader.builder()
+        .with_enabled(True)
+        .with_trade_pct_of_usdc(0.19)
+        .with_max_trade_usdc(27.0)
+        .with_min_pol_for_gas(0.006)
+        .with_strong_take_profit_pct(11.0)
+        .with_gas_protector(DummyProtector(gas_ok=True, pol_balance=1.0))
+        .with_usdc_address("0x" + "2" * 40)
+        .build()
+    )
+    assert s.config.trade_pct_of_usdc == pytest.approx(0.19)
+    assert s.config.max_trade_usdc == pytest.approx(27.0)
+    assert s.config.min_pol_for_gas == pytest.approx(0.006)
+    assert s.config.strong_take_profit_pct == pytest.approx(11.0)
+
+
+def test_sell_path_blocks_dust_amount():
+    s = _build_strategy_tuned()
+    # Positive token units round down to 0 at this precision (still >0 float balance).
+    dust = 1e-22
+    _, reason = s.build_plan_with_block_reason(
+        symbol="WETH",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=-0.88,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=50.0,
+        equity_balance=dust,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+    )
+    assert reason == "sell_amount_below_min_units"
+
+
+def test_load_skips_asset_when_symbol_but_no_resolvable_address(tmp_path, monkeypatch):
+    monkeypatch.delenv("SOLO", raising=False)
+    p = tmp_path / "solo.json"
+    p.write_text(
+        json.dumps({"assets": [{"symbol": "SOLO"}]}),
+        encoding="utf-8",
+    )
+    s = (
+        SignalEquityTrader.builder()
+        .with_enabled(True)
+        .with_followed_equities_path(str(p))
+        .with_gas_protector(DummyProtector(gas_ok=True, pol_balance=1.0))
+        .with_usdc_address("0x" + "2" * 40)
+        .build()
+    )
+    assert s.load_followed_equities() == []
+
+
+def test_load_coerces_invalid_min_signal_string_and_out_of_range(tmp_path):
+    p = tmp_path / "mm.json"
+    p.write_text(
+        json.dumps(
+            {
+                "assets": [
+                    {
+                        "symbol": "A",
+                        "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                        "min_signal_strength": "bad",
+                    },
+                    {
+                        "symbol": "B",
+                        "address": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                        "min_signal_strength": 2.0,
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    s = (
+        SignalEquityTrader.builder()
+        .with_enabled(True)
+        .with_followed_equities_path(str(p))
+        .with_gas_protector(DummyProtector(gas_ok=True, pol_balance=1.0))
+        .with_usdc_address("0x" + "2" * 40)
+        .build()
+    )
+    out = s.load_followed_equities()
+    assert len(out) == 2
+    assert out[0].min_signal_strength is None
+    assert out[1].min_signal_strength is None
