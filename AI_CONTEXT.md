@@ -308,3 +308,9 @@ nanokill
 nanoup
 ```
 
+
+### TODO - High Priority (add 2026-05-03)
+- **Sizing bug from Cursor refactor**: Bot deployed full available USDC/USDT balance on high-conviction signals instead of fixed $12–$20 per signal. Happened once (large WMATIC/USDT/WETH buys) before crash. Fix: enforce fixed-size logic + proper balance checks before any swap.
+- Investigate why the refactored code ignored COPY_TRADE_PCT / fixed-size logic.
+- Add per-trade attribution (which signal/wallet caused each swap) so we can debug future anomalies.
+
