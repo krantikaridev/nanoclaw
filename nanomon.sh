@@ -1,6 +1,6 @@
 #!/bin/bash
 echo "=== $(date +%H:%M) ==="
-echo "✅ V2.5.9 Copy Trading EXECUTING REAL TRADES (Test Mode Active)"
+echo "✅ V2.5.10 Copy Trading EXECUTING REAL TRADES (Test Mode Active)"
 echo "Monitoring 8 wallets | Copy ratio: 28.0%"
 echo "✅ V2.5.1 Protection Module loaded successfully"
 
@@ -8,12 +8,11 @@ echo "✅ V2.5.1 Protection Module loaded successfully"
 LAST_TOTAL=$(tail -1 portfolio_history.csv | cut -d, -f7 2>/dev/null || echo "0")
 BASELINE=130.00
 
-# Robust calculations (string-based cutoffs for 4h/6h to avoid datetime parsing bugs)
+# Robust PnL calculations
 PNL_DATA=$(python3 -c '
 import sys, datetime, csv, subprocess
 last = float(sys.argv[1])
 base = float(sys.argv[2])
-now = datetime.datetime.now(datetime.timezone.utc)
 
 # All-time
 pnl_all = last - base
@@ -32,29 +31,19 @@ except: pass
 pnl_today = last - (first_today or last)
 pct_today = (pnl_today / first_today * 100) if first_today and first_today > 0 else 0
 
-# Last 4 hours (string-based ISO cutoff - fully reliable)
-cutoff_4h = (now - datetime.timedelta(hours=4)).isoformat()[:19]
+# Line-based approximation (reliable, no datetime parsing issues)
+# ~10 min per entry → last 24 lines ≈ 4 hours, last 36 lines ≈ 6 hours
 first_4h = None
+first_6h = None
 try:
-    with open("portfolio_history.csv") as f:
-        for row in csv.reader(f):
-            if row and row[0][:19] >= cutoff_4h:
-                first_4h = float(row[-1])
-                break
+    lines = open("portfolio_history.csv").readlines()
+    if len(lines) >= 24:
+        first_4h = float(lines[-24].strip().split(",")[-1])
+    if len(lines) >= 36:
+        first_6h = float(lines[-36].strip().split(",")[-1])
 except: pass
 pnl_4h = last - (first_4h or last)
 pct_4h = (pnl_4h / first_4h * 100) if first_4h and first_4h > 0 else 0
-
-# Last 6 hours (string-based ISO cutoff)
-cutoff_6h = (now - datetime.timedelta(hours=6)).isoformat()[:19]
-first_6h = None
-try:
-    with open("portfolio_history.csv") as f:
-        for row in csv.reader(f):
-            if row and row[0][:19] >= cutoff_6h:
-                first_6h = float(row[-1])
-                break
-except: pass
 pnl_6h = last - (first_6h or last)
 pct_6h = (pnl_6h / first_6h * 100) if first_6h and first_6h > 0 else 0
 
@@ -109,8 +98,8 @@ printf "Total Portfolio Value: \$%.2f\n" "$TOTAL"
 printf "Baseline (original seed): \$%.2f\n" "$BASELINE"
 printf "PnL All-time: \$%.2f (%.2f%%)\n" "$PNL_ALL" "$PNL_PCT"
 printf "PnL Today: \$%.2f (%.2f%%)\n" "$PNL_TODAY" "$PCT_TODAY"
-printf "PnL Last 4h: \$%.2f (%.2f%%)\n" "$PNL_4H" "$PCT_4H"
-printf "PnL Last 6h: \$%.2f (%.2f%%)\n" "$PNL_6H" "$PCT_6H"
+printf "PnL ~Last 4h (last 24 entries): \$%.2f (%.2f%%)\n" "$PNL_4H" "$PCT_4H"
+printf "PnL ~Last 6h (last 36 entries): \$%.2f (%.2f%%)\n" "$PNL_6H" "$PCT_6H"
 printf "PnL This Week (Week %d/52): \$%.2f (%.2f%%)\n" "$WEEK_NUM" "$PNL_WEEK" "$PCT_WEEK"
 printf "PnL Last Week: \$%.2f (%.2f%%)\n" "$PNL_LAST_WEEK" "$PCT_LAST_WEEK"
 printf "PnL This Month: \$%.2f (%.2f%%)\n" "$PNL_MONTH" "$PCT_MONTH"
