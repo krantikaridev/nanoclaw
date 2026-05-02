@@ -13,7 +13,15 @@ select = ["E", "F", "B"]
 ignore = ["E501"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["nanoclaw"]
+known-first-party = ["nanoclaw", "modules"]
+
+[tool.ruff.lint.per-file-ignores]
+# Public façade: symbols are imported so `clean_swap.X` / monkeypatch targets exist.
+"clean_swap.py" = ["F401"]
+
+[tool.coverage.run]
+branch = true
+omit = ["archive/*", "tests/*", "_src_clean_swap.py", "_build_swap_modules.py", "_restore_*.py"]
 
 [tool.mypy]
 python_version = "3.12"

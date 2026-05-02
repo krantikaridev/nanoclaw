@@ -38,7 +38,7 @@ When a Grok (or Cursor) thread hits the message limit—or you deliberately star
 |------|-------|-------|
 | **High ROI** | Risk & monetization | 5% take-profit tier (**active policy 2026-05-02**); **dynamic valuation baseline** (seed vs accrued growth); **per-trade / per-cycle PnL attribution** wired to exits and gas; **`portfolio_history`/telemetry never diverges from chain reality** |
 | **High ROI** | Execution | **Option C** routing / aggregator path tuning once gas normalizes; **cooldown lattice** tuning (global vs per-asset) with empirical cycle data |
-| **Medium ROI** | Quality | **Automated CSV clean** maturity (broader matchers if log format evolves); tighten **Pylance** / typing on `clean_swap.py`; incremental **coverage** on modified modules |
+| **Medium ROI** | Quality | **Modular bot core (V2)**: `clean_swap.py` is a thin façade; logic lives in `modules/runtime.py` (env, balances, TP, state), `modules/signal.py` (X-signal equity), `modules/swap_executor.py` (precedence + `main`), `modules/attribution.py` (trade/tx logging hooks), `modules/agent_layer.py` (optional Grok + Telegram). Monolith reference: `_src_clean_swap.py` / git history. **Automated CSV clean** maturity (broader matchers if log format evolves); tighten **Pylance** / typing on façade + modules; incremental **coverage** (see `tests/` and GitHub Actions `ci.yml`) |
 | **Medium ROI** | Platform | Smoke **Docker**/`deploy_vm_safe.sh` parity after risky merges |
 
 Parking lot: earnings-volatility engine (see roadmap below), **see also DB Migration Discussion.**

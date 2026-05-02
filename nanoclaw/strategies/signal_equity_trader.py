@@ -294,7 +294,7 @@ class SignalEquityTrader:
     ) -> Tuple[Optional[EquityTradePlan], Optional[str]]:
         """Build a trade plan with detailed block reasons for DEBUG."""
         if not self.config.enabled:
-            print(f"[nanoclaw] BLOCK: strategy_disabled")
+            print("[nanoclaw] BLOCK: strategy_disabled")
             logger.debug("build_plan block reason=strategy_disabled")
             return None, "strategy_disabled"
 

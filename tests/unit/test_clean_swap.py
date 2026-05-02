@@ -520,8 +520,9 @@ def test_try_x_signal_equity_decision_applies_dynamic_size_for_strong_buy(monkey
 
     assert decision is not None
     assert decision.direction == "USDC_TO_EQUITY"
-    assert decision.trade_size == 12.0
-    assert decision.amount_in == int(12.0 * 1_000_000)
+    # Strength 0.92 ≥ tier-high min → X_SIGNAL.USDC_GTE_TIER_HIGH (default 20); capped by USDC on hand ($20).
+    assert decision.trade_size == 20.0
+    assert decision.amount_in == int(20.0 * 1_000_000)
 
 
 def test_try_x_signal_equity_decision_caps_dynamic_size_to_available_usdc(monkeypatch):

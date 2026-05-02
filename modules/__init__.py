@@ -1,5 +1,5 @@
-"""Nanoclaw modular core - V2.5.11+"""
-from .signal import build_plan, x_signal
-from .swap_executor import execute_swap
-from .attribution import log_trade_attribution
-from .agent_layer import grok_agent_decision
+"""Nanoclaw modular swap core (`runtime`, `signal`, `swap_executor`)."""
+
+from __future__ import annotations
+
+__all__ = ["agent_layer", "attribution", "runtime", "signal", "swap_executor"]
