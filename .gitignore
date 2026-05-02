@@ -7,8 +7,7 @@ __pycache__/
 
 # Backups and temporary files
 *.bak*
-*.bak
-portfolio_history.csv.bak*
+*.bak.*
 
 # Runtime state files
 bot_state.json
@@ -19,7 +18,7 @@ nohup.out
 # Test artifacts
 tests/unit/__pycache__/
 
-# Ignore .env (secrets)
+# Secrets
 .env
 
 # macOS / editor junk
