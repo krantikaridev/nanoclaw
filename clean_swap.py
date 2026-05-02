@@ -1420,7 +1420,6 @@ def evaluate_x_signal_equity_trade(
         eligible,
         per_asset_cooldown_seconds=int(tuned.config.per_asset_cooldown_seconds),
     )
-    plans = []
     for a in eligible_ordered:
         equity_balance = get_token_balance(a.token_address, int(a.decimals))
         sym = str(a.symbol).strip()
@@ -1439,11 +1438,7 @@ def evaluate_x_signal_equity_trade(
         )
        
         if plan:  # try all eligible assets
-            plans.append((plan, float(a.signal_strength)))
-    if plans:
-    # Best plan wins (highest signal)
-        plans.sort(key=lambda x: x[1], reverse=True)
-        return plans[0][0]
+            pass
     return None
 
 
