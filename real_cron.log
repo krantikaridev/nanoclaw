@@ -3,98 +3,14 @@ nohup: ignoring input
 Monitoring 8 wallets | Copy ratio: 20.0%
 ✅ V2.5.1 Protection Module loaded successfully
 Real USDT: 0.00 | USDC: 0.00 | WMATIC: 0.00 | POL: 0.00
-Traceback (most recent call last):
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/clean_swap.py", line 127, in <module>
-    asyncio.run(main(dry_run=args.dry_run))
-  File "/usr/lib/python3.12/asyncio/runners.py", line 194, in run
-    return runner.run(main)
-           ^^^^^^^^^^^^^^^^
-  File "/usr/lib/python3.12/asyncio/runners.py", line 118, in run
-    return self._loop.run_until_complete(task)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/lib/python3.12/asyncio/base_events.py", line 687, in run_until_complete
-    return future.result()
-           ^^^^^^^^^^^^^^^
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/modules/swap_executor.py", line 261, in main
-    current_price = cs.get_live_wmatic_price()
-                    ^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/protection.py", line 31, in get_live_wmatic_price
-    amounts = router.functions.getAmountsOut(10**18, [WMATIC, USDT]).call()
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/contract/contract.py", line 291, in call
-    return call_contract_function(
-           ^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/contract/utils.py", line 153, in call_contract_function
-    return_data = w3.eth.call(
-                  ^^^^^^^^^^^^
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/eth/eth.py", line 247, in call
-    return self._durin_call(transaction, block_identifier, state_override)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/eth/eth.py", line 266, in _durin_call
-    return self._call(transaction, block_identifier, state_override)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/module.py", line 112, in caller
-    result = w3.manager.request_blocking(
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/manager.py", line 232, in request_blocking
-    response = self._make_request(method, params)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/manager.py", line 163, in _make_request
-    return request_func(method, params)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/middleware/base.py", line 56, in middleware
-    return self.response_processor(method, make_request(method, params))
-                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/middleware/base.py", line 56, in middleware
-    return self.response_processor(method, make_request(method, params))
-                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/middleware/base.py", line 56, in middleware
-    return self.response_processor(method, make_request(method, params))
-                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/middleware/base.py", line 55, in middleware
-    method, params = self.request_processor(method, params)
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/middleware/formatting.py", line 156, in request_processor
-    self.sync_formatters_builder(cast("Web3", self._w3), method),
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/middleware/validation.py", line 141, in build_method_validators
-    w3_chain_id = w3.eth.chain_id
-                  ^^^^^^^^^^^^^^^
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/eth/eth.py", line 156, in chain_id
-    return self._chain_id()
-           ^^^^^^^^^^^^^^^^
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/module.py", line 112, in caller
-    result = w3.manager.request_blocking(
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/manager.py", line 232, in request_blocking
-    response = self._make_request(method, params)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/manager.py", line 163, in _make_request
-    return request_func(method, params)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/middleware/base.py", line 56, in middleware
-    return self.response_processor(method, make_request(method, params))
-                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/middleware/base.py", line 56, in middleware
-    return self.response_processor(method, make_request(method, params))
-                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/middleware/base.py", line 56, in middleware
-    return self.response_processor(method, make_request(method, params))
-                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  [Previous line repeated 2 more times]
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/_utils/caching/caching_utils.py", line 261, in wrapper
-    return func(provider, method, params)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/providers/rpc/rpc.py", line 166, in make_request
-    raw_response = self._make_request(method, request_data)
-                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/providers/rpc/rpc.py", line 153, in _make_request
-    raise e
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/providers/rpc/rpc.py", line 143, in _make_request
-    return self._request_session_manager.make_post_request(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/web3/_utils/http_session_manager.py", line 155, in make_post_request
-    response.raise_for_status()
-  File "/home/ubuntu/.nanobot/workspace/nanoclaw/.venv/lib/python3.12/site-packages/requests/models.py", line 1028, in raise_for_status
-    raise HTTPError(http_error_msg, response=self)
-requests.exceptions.HTTPError: 401 Client Error: Unauthorized for url: https://polygon-rpc.com/
+
+[nanoclaw] === CYCLE 1777756260 | BALANCES: USDT=$0.00 USDC=$0.00 WMATIC=$0.00 ===
+🔍 BALANCES | USDT=$0.00 USDC=$0.00 WMATIC≈0.00 USD | POL=0.0043 | copy_targets=8
+🔍 DECISION PATH | precedence: PROTECTION → PROFIT_TAKE → X_SIGNAL_EQUITY → USDC_COPY | POLYCOPY → MAIN_STRATEGY
+[nanoclaw] Runtime config | TAKE_PROFIT_PCT=8.00 STRONG_SIGNAL_TP=12.00 PER_ASSET_COOLDOWN_MINUTES=30
+📈 Holding open trade | buy $0.0971 -> now $0.0972 (0.09%), peak $0.0972 (0.09%)
+🔍 DECISION PATH: POLYCOPY_TARGET_WALLETS
+🔄 REAL POLYCOPY MODE (28%) - Monitoring live wallets
+[nanoclaw] AUTO-POL skipped — no private key
+[nanoclaw] TRADE SKIPPED: POL low (auto top-up failed; need 0.0050)
+[nanoclaw] AUTO-POL failed — trade blocked (pol<0.005)
