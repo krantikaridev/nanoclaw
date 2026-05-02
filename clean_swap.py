@@ -1163,6 +1163,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                 chain_notes.append(hint)
 
         print(f"{_nanolog()}=== BUILDING TRADE PLANS ===")
+        plans = []
         for a in eligible_ordered:
             sym = str(a.symbol).strip()
             sig = float(a.signal_strength)
@@ -1273,8 +1274,9 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                     token_out=plan.token_out,
                     cooldown_asset=(sym, secs_plan),
                 )
-                result = decision.message or (decision.direction or "TRADE")
-                break
+                plans.append((decision, float(a.signal_strength)))
+                
+                continue
             else:
                 pb = plan_block or "unknown"
                 print(
@@ -1328,7 +1330,13 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                 reason_parts.append(f"{sym}: " + "; ".join(dict.fromkeys(hints)))
         
         print(f"{_nanolog()}=== END PLAN BUILDING ===\n")
-
+        if plans:
+            # BEST PLAN WINS (highest signal)
+            plans.sort(key=lambda x: x[1], reverse=True)
+            decision = plans[0][0]
+            result = decision.message or (decision.direction or "TRADE")
+        else:
+            decision = None
         if not decision:
             summary_bits: list[str] = []
             if chain_notes:
