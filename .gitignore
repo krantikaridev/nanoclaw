@@ -1,27 +1,23 @@
-# Secrets
-.env
-
-# Virtual environment
-.venv/
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-
-# Runtime state files
-bot_state.json
-trade_exits.json
-real_cron.log
-nohup.out
 
 # Backups
+# Runtime state files
+# Secrets
+# Test artifacts
+# Virtual environment
+# macOS / editor junk
 *.bak*
 *.bak.*
-
-# Test artifacts
-tests/unit/__pycache__/
-
-# macOS / editor junk
+*.pyc
+*.pyd
+*.pyo
 .DS_Store
-.vscode/
+.env
 .idea/
+.venv/
+.vscode/
+__pycache__/
+bot_state.json
+nohup.out
+real_cron.log
+tests/unit/__pycache__/
+trade_exits.json
