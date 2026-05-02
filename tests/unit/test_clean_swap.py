@@ -253,6 +253,7 @@ def test_select_copy_trade_skips_when_all_wallets_are_on_cooldown(monkeypatch):
 
 
 def test_select_copy_trade_executes_when_at_least_one_wallet_is_eligible(monkeypatch):
+    monkeypatch.setattr(clean_swap, "COPY_TRADE_PCT", 0.28)
     monkeypatch.setattr(clean_swap, "can_trade_wallet", lambda wallet: wallet == "0x2")
 
     decision = clean_swap.select_copy_trade(

@@ -6,6 +6,8 @@ import os
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, List, Optional, Tuple, cast
 
+from nanoclaw.config import default_json_rpc_url
+
 try:
     from web3 import Web3 as _Web3
     Web3 = _Web3
@@ -57,7 +59,7 @@ class GasProtectorBuilder:
         self._max_gwei = 80.0
         self._urgent_gwei = 120.0
         self._min_pol_balance = 0.05
-        self._primary_rpc = os.getenv("RPC")
+        self._primary_rpc = default_json_rpc_url()
         self._fallback_rpcs = self._split_rpcs(fallback_env)
         self._retry_attempts = 2
         self._timeout_seconds = 10

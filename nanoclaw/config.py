@@ -4,6 +4,16 @@ import os
 from dataclasses import dataclass
 
 
+def default_json_rpc_url() -> str:
+    """JSON-RPC endpoint for Web3; avoids implicit localhost when ``RPC`` is unset."""
+    return (
+        os.getenv("RPC")
+        or os.getenv("RPC_URL")
+        or os.getenv("WEB3_PROVIDER_URI")
+        or "https://polygon-rpc.com"
+    )
+
+
 @dataclass
 class XSignalConfig:
     TIER_HIGH_MIN: float = float(os.getenv("X_SIGNAL_DYNAMIC_TIER_HIGH_MIN", "0.90"))

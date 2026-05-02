@@ -34,6 +34,7 @@ load_dotenv(".env.local", override=True)
 
 
 from constants import ERC20_ABI, LOG_PREFIX, USDC, USDT, WALLET, WMATIC  # noqa: E402
+from nanoclaw.config import default_json_rpc_url  # noqa: E402
 from nanoclaw.utils.gas_protector import GasProtector  # noqa: E402
 from nanoclaw.strategies.usdc_copy import USDCopyStrategy  # noqa: E402
 from nanoclaw.strategies.signal_equity_trader import (  # noqa: E402
@@ -180,7 +181,7 @@ class TradeDecision:
 
 
 def build_web3_client(rpc_url: Optional[str] = None) -> Web3:
-    return Web3(Web3.HTTPProvider(rpc_url or os.getenv("RPC")))
+    return Web3(Web3.HTTPProvider(rpc_url or default_json_rpc_url()))
 
 
 def build_gas_protector() -> GasProtector:
@@ -189,7 +190,7 @@ def build_gas_protector() -> GasProtector:
         .with_max_gwei(float(os.getenv("MAX_GWEI", "80")))
         .with_urgent_gwei(float(os.getenv("URGENT_GWEI", "120")))
         .with_min_pol_balance(MIN_POL_FOR_GAS)
-        .with_primary_rpc(os.getenv("RPC"))
+        .with_primary_rpc(default_json_rpc_url())
         .with_fallback_rpcs(os.getenv("RPC_FALLBACKS", "").split(","))
         .with_retry_attempts(int(os.getenv("GAS_RPC_RETRY_ATTEMPTS", "2")))
         .build()
