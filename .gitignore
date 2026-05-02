@@ -15,11 +15,11 @@ trade_exits.json
 real_cron.log
 nohup.out
 
-# Test artifacts
-tests/unit/__pycache__/
-
 # Secrets
 .env
+
+# Test artifacts
+tests/unit/__pycache__/
 
 # macOS / editor junk
 .DS_Store
