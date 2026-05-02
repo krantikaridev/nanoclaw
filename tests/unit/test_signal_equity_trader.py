@@ -169,6 +169,7 @@ def test_below_strong_signal_threshold_returns_explained_reason():
         SignalEquityTrader.builder()
         .with_enabled(True)
         .with_strong_signal_threshold(0.90)
+        .with_force_high_conviction(False)
         .with_gas_protector(DummyProtector(gas_ok=True, pol_balance=1.0))
         .with_usdc_address("0x" + "2" * 40)
         .build()
@@ -188,3 +189,62 @@ def test_below_strong_signal_threshold_returns_explained_reason():
         now=1000.0,
     )
     assert reason is not None and "below_strong_threshold" in reason
+
+
+def test_below_threshold_is_allowed_when_force_high_conviction_true():
+    strategy = (
+        SignalEquityTrader.builder()
+        .with_enabled(True)
+        .with_strong_signal_threshold(0.90)
+        .with_force_high_conviction(True)
+        .with_gas_protector(DummyProtector(gas_ok=True, pol_balance=1.0))
+        .with_usdc_address("0x" + "2" * 40)
+        .build()
+    )
+
+    plan, reason = strategy.build_plan_with_block_reason(
+        symbol="WETH_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.85,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=50.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda symbol, now, cooldown: True,
+        now=1000.0,
+    )
+    assert plan is not None
+    assert reason is None
+
+
+def test_sorted_and_eligible_equities_keeps_high_conviction_assets(monkeypatch):
+    from clean_swap import _sorted_and_eligible_equities, FollowedEquity
+
+    assets = [
+        FollowedEquity(symbol="WETH", token_address="0x" + "1" * 40, signal_strength=0.87),
+        FollowedEquity(symbol="LINK", token_address="0x" + "2" * 40, signal_strength=0.79),
+    ]
+    eligible = _sorted_and_eligible_equities(
+        assets,
+        min_strength=0.80,
+        strong_threshold=0.80,
+        force_high_conviction=True,
+    )[1]
+
+    assert len(eligible) == 1
+    assert eligible[0].symbol == "WETH"
+
+
+def test_signal_equity_trader_config_builder_respects_force_high_conviction():
+    strategy = (
+        SignalEquityTrader.builder()
+        .with_enabled(True)
+        .with_force_high_conviction(False)
+        .with_gas_protector(DummyProtector(gas_ok=True, pol_balance=1.0))
+        .with_usdc_address("0x" + "2" * 40)
+        .build()
+    )
+
+    assert strategy.config.force_high_conviction is False

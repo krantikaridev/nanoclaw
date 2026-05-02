@@ -62,6 +62,8 @@ STRONG_TP_SELL_PCT = float(os.getenv("STRONG_TP_SELL_PCT", "0.60"))
 ENABLE_USDC_COPY = os.getenv("ENABLE_USDC_COPY", "false").lower() == "true"
 ENABLE_X_SIGNAL_EQUITY = os.getenv("ENABLE_X_SIGNAL_EQUITY", "false").lower() == "true"
 X_SIGNAL_EQUITY_MIN_STRENGTH = float(os.getenv("X_SIGNAL_EQUITY_MIN_STRENGTH", "0.60"))
+X_SIGNAL_MAX_EARNINGS_DAYS = float(os.getenv("X_SIGNAL_MAX_EARNINGS_DAYS", "5.0"))
+X_SIGNAL_FORCE_HIGH_CONVICTION = os.getenv("X_SIGNAL_FORCE_HIGH_CONVICTION", "true").lower() == "true"
 FOLLOWED_EQUITIES_PATH = os.getenv("FOLLOWED_EQUITIES_PATH", "followed_equities.json")
 # Iron-fenced USDC population to prevent zero-USDC blocker.
 # Keep env precedence aligned with SignalEquityTraderBuilder to avoid sizing mismatches.
@@ -135,6 +137,7 @@ def _sorted_and_eligible_equities(
     assets_seq: Sequence[FollowedEquity],
     min_strength: float,
     strong_threshold: float,
+    force_high_conviction: bool = True,
 ) -> tuple[list[FollowedEquity], list[FollowedEquity]]:
     assets_list = sorted(
         assets_seq,
@@ -146,18 +149,27 @@ def _sorted_and_eligible_equities(
         effective_floor = _effective_floor_for_equity(a, min_strength)
         strength = abs(float(a.signal_strength))
         eligible_by_strong = strength >= float(strong_threshold)
+        eligible_by_force = bool(force_high_conviction and eligible_by_strong)
         eligible_by_floor = strength >= float(effective_floor)
-        if eligible_by_strong or eligible_by_floor:
+        if eligible_by_force or eligible_by_strong or eligible_by_floor:
             eligible.append(a)
+            reason = (
+                "force_high_conviction"
+                if eligible_by_force
+                else "strong_threshold"
+                if eligible_by_strong
+                else "asset_floor"
+            )
             print(
                 f"{_nanolog()}X-SIGNAL ELIGIBILITY | {a.symbol} | signal={strength:.3f} | "
                 f"floor={effective_floor:.3f} | strong_threshold={float(strong_threshold):.3f} | "
-                f"eligible_by={'strong_threshold' if eligible_by_strong else 'asset_floor'}"
+                f"force_high_conviction={force_high_conviction} | eligible_by={reason}"
             )
         else:
             print(
                 f"{_nanolog()}X-SIGNAL ELIGIBILITY FILTERED | {a.symbol} | signal={strength:.3f} | "
-                f"floor={effective_floor:.3f} | strong_threshold={float(strong_threshold):.3f}"
+                f"floor={effective_floor:.3f} | strong_threshold={float(strong_threshold):.3f} | "
+                f"force_high_conviction={force_high_conviction}"
             )
     return assets_list, eligible
 
@@ -243,6 +255,10 @@ X_SIGNAL_EQUITY_TRADER = (
     SignalEquityTrader.builder()
     .with_enabled(ENABLE_X_SIGNAL_EQUITY)
     .with_followed_equities_path(FOLLOWED_EQUITIES_PATH)
+    .with_strong_signal_threshold(float(os.getenv("X_SIGNAL_STRONG_THRESHOLD", "0.80")))
+    .with_max_earnings_days(float(os.getenv("X_SIGNAL_MAX_EARNINGS_DAYS", "5.0")))
+    .with_min_signal_strength(float(os.getenv("X_SIGNAL_EQUITY_MIN_STRENGTH", "0.60")))
+    .with_force_high_conviction(X_SIGNAL_FORCE_HIGH_CONVICTION)
     .with_per_asset_cooldown_seconds(PER_ASSET_COOLDOWN_SECONDS)
     .with_usdc_address(USDC)
     .with_gas_protector(GAS_PROTECTOR)
@@ -868,21 +884,32 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
     cfg = _load_followed_equities_json_dict()
     cfg_enabled = bool(cfg.get("enabled", True)) if isinstance(cfg, dict) else True
     min_strength = _effective_equity_signal_min(cfg)
+    strong_thr = float(X_SIGNAL_EQUITY_TRADER.config.strong_signal_threshold)
+    force_high_conviction = bool(X_SIGNAL_EQUITY_TRADER.config.force_high_conviction)
     print(
-        f"{_nanolog()}X-Signal threshold (max(followed_equities.min_signal_strength, "
-        f"env X_SIGNAL_EQUITY_MIN_STRENGTH)) = {min_strength:.4f}"
+        f"{_nanolog()}X-Signal eligibility floor = {min_strength:.4f}; "
+        f"strong_threshold = {strong_thr:.4f}; force_high_conviction = {force_high_conviction}"
     )
 
     assets_seq = X_SIGNAL_EQUITY_TRADER.load_followed_equities()
-    strong_thr = float(os.getenv("X_SIGNAL_STRONG_THRESHOLD", "0.80"))
-    assets, eligible = _sorted_and_eligible_equities(assets_seq, min_strength, strong_thr)
+    assets, eligible = _sorted_and_eligible_equities(
+        assets_seq,
+        min_strength,
+        strong_thr,
+        force_high_conviction=force_high_conviction,
+    )
     eligible_count = len(eligible)
     high_conviction = bool(cfg_enabled) and any(
         float(a.signal_strength) >= strong_thr for a in eligible if float(a.signal_strength) > 0
     )
-    if high_conviction:
+    if high_conviction and X_SIGNAL_FORCE_HIGH_CONVICTION:
         print(
-            f"🚀 HIGH-CONVICTION MODE ACTIVE — {strong_thr:.2f}+ signal present, gas protection relaxed for this cycle"
+            f"🚀 HIGH-CONVICTION MODE ACTIVE — {strong_thr:.2f}+ signal present, "
+            "force_high_conviction enabled, gas protection relaxed for this cycle"
+        )
+    elif high_conviction:
+        print(
+            f"⚠️ HIGH-CONVICTION signal present ({strong_thr:.2f}+), but force_high_conviction is disabled"
         )
 
     print(f"🟦 X-SIGNAL EQUITY CHECK | Checking {len(assets)} assets")
@@ -1242,9 +1269,15 @@ def evaluate_x_signal_equity_trade(
     if not cfg_enabled:
         return None
     min_strength = _effective_equity_signal_min(cfg)
-    strong_thr = float(os.getenv("X_SIGNAL_STRONG_THRESHOLD", "0.80"))
+    strong_thr = float(trader.config.strong_signal_threshold)
+    force_high_conviction = bool(trader.config.force_high_conviction)
     assets_seq = trader.load_followed_equities()
-    _, eligible = _sorted_and_eligible_equities(assets_seq, min_strength, strong_thr)
+    _, eligible = _sorted_and_eligible_equities(
+        assets_seq,
+        min_strength,
+        strong_thr,
+        force_high_conviction=force_high_conviction,
+    )
     if not eligible:
         return None
     high_conviction = any(

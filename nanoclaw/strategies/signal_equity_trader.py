@@ -27,6 +27,8 @@ class SignalEquityTraderConfig:
     followed_equities_path: str = "followed_equities.json"
     strong_signal_threshold: float = 0.80
     max_earnings_days: float = 5.0
+    min_signal_strength: float = 0.60
+    force_high_conviction: bool = True
     trade_pct_of_usdc: float = 0.18
     min_trade_usdc: float = 5.0
     max_trade_usdc: float = 28.0
@@ -56,6 +58,8 @@ class SignalEquityTraderBuilder:
         self._followed_equities_path = os.getenv("FOLLOWED_EQUITIES_PATH", "followed_equities.json")
         self._strong_signal_threshold = float(os.getenv("X_SIGNAL_STRONG_THRESHOLD", "0.80"))
         self._max_earnings_days = float(os.getenv("X_SIGNAL_MAX_EARNINGS_DAYS", "5.0"))
+        self._min_signal_strength = float(os.getenv("X_SIGNAL_EQUITY_MIN_STRENGTH", "0.60"))
+        self._force_high_conviction = os.getenv("X_SIGNAL_FORCE_HIGH_CONVICTION", "true").lower() == "true"
         self._trade_pct_of_usdc = float(os.getenv("X_SIGNAL_EQUITY_TRADE_PCT", "0.18"))
         self._min_trade_usdc: Optional[float] = None
         self._max_trade_usdc = float(os.getenv("X_SIGNAL_EQUITY_MAX_TRADE", "28.0"))
@@ -107,6 +111,14 @@ class SignalEquityTraderBuilder:
         self._per_asset_cooldown_seconds = int(per_asset_cooldown_seconds)
         return self
 
+    def with_min_signal_strength(self, min_signal_strength: float) -> "SignalEquityTraderBuilder":
+        self._min_signal_strength = float(min_signal_strength)
+        return self
+
+    def with_force_high_conviction(self, force_high_conviction: bool) -> "SignalEquityTraderBuilder":
+        self._force_high_conviction = bool(force_high_conviction)
+        return self
+
     def with_min_pol_for_gas(self, min_pol_for_gas: float) -> "SignalEquityTraderBuilder":
         self._min_pol_for_gas = float(min_pol_for_gas)
         return self
@@ -135,6 +147,8 @@ class SignalEquityTraderBuilder:
                 strong_signal_threshold=self._strong_signal_threshold,
                 max_earnings_days=self._max_earnings_days,
                 trade_pct_of_usdc=self._trade_pct_of_usdc,
+                min_signal_strength=self._min_signal_strength,
+                force_high_conviction=self._force_high_conviction,
                 min_trade_usdc=(
                     self._min_trade_usdc
                     if self._min_trade_usdc is not None
@@ -281,10 +295,20 @@ class SignalEquityTrader:
             return None, "per_asset_cooldown"
 
         strength = float(signal_strength)
-        if abs(strength) < float(self.config.strong_signal_threshold):
+        is_force_high_conviction_signal = (
+            bool(self.config.force_high_conviction)
+            and strength >= 0.80
+        )
+        if abs(strength) < float(self.config.strong_signal_threshold) and not is_force_high_conviction_signal:
             return (
                 None,
                 f"below_strong_threshold (need abs>={float(self.config.strong_signal_threshold):.3f})",
+            )
+        if is_force_high_conviction_signal and abs(strength) < float(self.config.strong_signal_threshold):
+            print(
+                f"[nanoclaw] HIGH-CONVICTION BYPASS | {sym} | signal={strength:.3f} | "
+                f"force_high_conviction={self.config.force_high_conviction} | "
+                f"threshold={float(self.config.strong_signal_threshold):.3f}"
             )
 
         if strength > 0:
