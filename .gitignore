@@ -24,3 +24,4 @@ portfolio_history.json
 trade_exits.json
 trade_history.json
 artifacts/coverage/*.json
+portfolio_history.csv
