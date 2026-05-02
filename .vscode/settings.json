@@ -7,6 +7,22 @@
         "/^python -m compileall -q nanoclaw/strategies/signal_equity_trader\\.py clean_swap\\.py; python -m pytest -q tests/unit/test_clean_swap\\.py tests/unit/test_signal_equity_trader\\.py$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^python -m pytest tests/unit/test_clean_swap\\.py -xvs -k \"test_try_x_signal_equity\" --tb=short 2>&1 \\| head -100$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^python -m pytest tests/unit/test_clean_swap\\.py -q -k \"test_try_x_signal_equity\" 2>&1 \\| Select-Object -First 50$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^python -m pytest tests/unit/test_clean_swap\\.py::test_try_x_signal_equity_decision_applies_dynamic_size_for_strong_buy -xvs --tb=line 2>&1$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^python -m pytest tests/unit/test_clean_swap\\.py::test_try_x_signal_equity_decision_applies_dynamic_size_for_strong_buy -xvs --tb=short 2>&1 \\| Select-Object -Last 30$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }

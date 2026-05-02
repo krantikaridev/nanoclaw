@@ -203,6 +203,30 @@ Replace proxy addresses when Ondo/other issuers publish **Polygon POS** deployme
 
 - Earnings Volatility Capture Engine v1 (dynamic tokenized equity trading based on earnings calendar + X signals).
 
+## TODO & Backlog (2 May 2026)
+
+### P0 BLOCKER: Only WMATIC_ALPHA Trading (X-Signal Asset Rotation Broken) ✅ FIXED
+**Status**: Fixed  
+**Root causes identified & resolved**:
+- ✅ Symbol mismatch: `followed_equities.json` "WETH" → "WETH_ALPHA"
+- ✅ JSON field mapping: `timeline_hours` → `earnings_days` (code was looking for earnings_days field)
+- ✅ Critical bug: `try_x_signal_equity_decision` function was missing `return decision` statement (had `pass` instead)
+- ✅ Enhanced diagnostics: improved logging when build_plan fails for assets (now shows signal, equity_balance, block reason)
+
+**Deployment readiness**: Ready to test on stage bot
+- Restart bot with: `nanokill && nanoup`
+- Monitor logs for asset rotation: should see WETH_ALPHA, WBTC_ALPHA, LINK_ALPHA trading after WMATIC_ALPHA 30-min cooldown
+- Confirm in logs: look for "X-SIGNAL EQUITY SUMMARY | Assets checked: 5" (all 5 assets should be eligible)
+
+### P1: Pylance Type Errors (186 errors in clean_swap.py)
+**Status**: Backlog  
+**Impact**: Editor DX only; no runtime impact  
+**Fix**: Use `TYPE_CHECKING` pattern for Web3 imports  
+**Effort**: ~30min  
+
+### P1: Code coverage baseline (as of 2026-05-01)
+- Overall: 79% | clean_swap.py: 58% | signal_equity_trader.py: 79% | gas_protector.py: 94% | swap_executor.py: 60% | protection.py: 72%
+
 ## Design rules
 
 - Builder pattern where used; `.env`-driven; risk-first.

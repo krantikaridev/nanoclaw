@@ -1,5 +1,5 @@
 {
-  "_note": "Only Polygon-valid addresses are kept active. Tier 1 adds liquid Polygon assets with per-asset min_signal_strength floors.",
+  "_note": "Only Polygon-valid addresses are kept active. Tier 1 adds liquid Polygon assets with per-asset min_signal_strength floors. earnings_days controls earnings window filter (None = no restriction).",
   "enabled": true,
   "min_signal_strength": 0.6,
   "assets": [
@@ -9,16 +9,16 @@
       "decimals": 18,
       "signal_strength": 0.92,
       "upside_pct": 22,
-      "timeline_hours": 8
+      "earnings_days": null
     },
     {
-      "symbol": "WETH",
+      "symbol": "WETH_ALPHA",
       "address": "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
       "decimals": 18,
       "min_signal_strength": 0.6,
       "signal_strength": 0.87,
       "upside_pct": 16,
-      "timeline_hours": 24
+      "earnings_days": null
     },
     {
       "symbol": "USDC",
@@ -27,7 +27,7 @@
       "min_signal_strength": 0.6,
       "signal_strength": 0.8,
       "upside_pct": 8,
-      "timeline_hours": 12
+      "earnings_days": null
     },
     {
       "symbol": "WBTC_ALPHA",
@@ -35,7 +35,7 @@
       "decimals": 8,
       "signal_strength": 0.83,
       "upside_pct": 14,
-      "timeline_hours": 30
+      "earnings_days": null
     },
     {
       "symbol": "LINK_ALPHA",
@@ -43,7 +43,7 @@
       "decimals": 18,
       "signal_strength": 0.81,
       "upside_pct": 13,
-      "timeline_hours": 36
+      "earnings_days": null
     }
   ]
 }

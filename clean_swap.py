@@ -1277,7 +1277,10 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                 break
             else:
                 pb = plan_block or "unknown"
-                print(f"{_nanolog()}❌ PLAN FAILED | {sym} | reason={pb}")
+                print(
+                    f"{_nanolog()}❌ PLAN FAILED | {sym} | signal={sig:.3f} | "
+                    f"equity_balance={equity_bal:.6f} | reason={pb}"
+                )
                 hints: list[str] = [f"strategy:{pb}"]
                 if balances.usdc <= 0 and sig > 0:
                     hints.append("zero_usdc_for_buy_path")
@@ -1378,7 +1381,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
 
     print(f"X-SIGNAL EQUITY SUMMARY | Assets checked: {eligible_count} | USDC: ${balances.usdc:.2f} | Result: {result or 'NO TRADE'}")
 
-    pass  # Continue to next asset
+    return decision
 
 
 def evaluate_x_signal_equity_trade(
