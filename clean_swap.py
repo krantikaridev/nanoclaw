@@ -1165,101 +1165,32 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
         print(f"{_nanolog()}=== BUILDING TRADE PLANS ===")
         plans = []
         for a in eligible_ordered:
+            equity_balance = get_token_balance(a.token_address, int(a.decimals))
             sym = str(a.symbol).strip()
-            sig = float(a.signal_strength)
-            action_label = "BUY" if sig > 0 else "SELL"
-            fe_thr_run = float(
-                getattr(tuned_trader.config, "force_eligible_threshold", X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD)
-            )
-            is_force_eligible = abs(sig) >= fe_thr_run
-            
-            print(
-                f"🟦 X-SIGNAL EQUITY ACTIVE | {sym:12s} | sig={sig:6.3f} | action={action_label} | "
-                f"force_eligible={is_force_eligible}"
-            )
-            
-            # === Force-eligible: skip POL/USDC pre-checks that gate BUY (matches build_plan bypass) ===
-            if is_force_eligible and sig > 0:
-                print(
-                    f"{_nanolog()}  ➜ FORCE-ELIGIBLE BYPASS for {sym} "
-                    f"(abs(signal)>={fe_thr_run:.3f})"
-                )
-            
-            # === POL check for BUY paths (safety-critical, not bypassed) ===
-            if sig > 0 and not buy_paths_allowed and not is_force_eligible:
-                print(
-                    f"{_nanolog()}  ❌ BUY blocked for {sym}: {buy_paths_block_reason} "
-                    f"(signal abs={abs(sig):.3f} < {fe_thr_run:.3f} force-eligible)"
-                )
-                reason_parts.append(f"{sym}: buy_skipped_pol ({buy_paths_block_reason})")
-                _log_trade_skipped(f"POL low ({sym} buy blocked, not force-eligible)")
-                continue
-            
-            # === USDC check for BUY paths (unless force-eligible with auto-fill) ===
-            if sig > 0 and balances.usdc < required_usdc_floor and not is_force_eligible:
-                print(
-                    f"{_nanolog()}  ❌ BUY blocked for {sym}: USDC low "
-                    f"(${balances.usdc:.2f} < ${required_usdc_floor:.2f}, not force-eligible)"
-                )
-                reason_parts.append(
-                    f"{sym}: buy_skipped_usdc (have ${balances.usdc:.2f}, need ${required_usdc_floor:.2f})"
-                )
-                _log_trade_skipped(f"USDC low ({sym} buy blocked, not force-eligible)")
-                continue
-            
-            # === Retrieve equity balance ===
-            equity_bal = get_token_balance(a.token_address, int(a.decimals))
-            
-            # === BUILD PLAN ===
             plan, plan_block = trader.build_plan_with_block_reason(
                 symbol=sym,
                 token_address=str(a.token_address).strip(),
                 token_decimals=int(a.decimals),
-                signal_strength=sig,
+                signal_strength=float(a.signal_strength),
                 earnings_proximity_days=a.earnings_days,
                 current_price_usd=a.current_price_usd,
                 usdc_balance=balances.usdc,
-                equity_balance=equity_bal,
+                equity_balance=equity_balance,
                 wallet_address_for_gas=WALLET,
                 can_trade_asset=can_trade_asset,
                 allow_high_gas_override=high_conviction,
             )
-            
-            if plan:  # try all eligible assets
+            if plan:
                 dynamic_trade_size_usdc = float(plan.trade_size)
                 if str(plan.direction) == "USDC_TO_EQUITY":
-                    strength = abs(sig)
-                    fe_floor = float(
-                        getattr(tuned_trader.config, "force_eligible_threshold", X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD)
-                    )
+                    strength = abs(float(a.signal_strength))
                     if strength >= X_SIGNAL_DYNAMIC_TIER_HIGH_MIN:
                         trade_size_usdc = X_SIGNAL_DYNAMIC_USDC_GTE_TIER_HIGH
-                    elif strength >= fe_floor:
+                    elif strength >= X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD:
                         trade_size_usdc = X_SIGNAL_DYNAMIC_USDC_GTE_FORCE_ELIGIBLE
                     else:
                         trade_size_usdc = X_SIGNAL_DYNAMIC_USDC_BELOW_FORCE_ELIGIBLE
-                    desired_trade_size_usdc = float(trade_size_usdc)
-                    available_usdc = float(balances.usdc)
-                    # Safety: never request more USDC than wallet balance.
-                    dynamic_trade_size_usdc = min(desired_trade_size_usdc, available_usdc)
-                    if dynamic_trade_size_usdc < min_trade_usdc:
-                        print(
-                            f"{_nanolog()}  ⚠️ {sym}: dynamic size ${dynamic_trade_size_usdc:.2f} < min ${min_trade_usdc:.2f}"
-                        )
-                        reason_parts.append(
-                            f"{sym}: size_too_small (dynamic=${dynamic_trade_size_usdc:.2f} < min=${min_trade_usdc:.2f})"
-                        )
-                        _log_trade_skipped(
-                            f"USDC low ({sym} dynamic size capped below min trade: ${dynamic_trade_size_usdc:.2f})"
-                        )
-                        continue
-                _checksum = getattr(Web3, "to_checksum_address", lambda x: x)
-                tin_p = _checksum(str(plan.token_in).strip())
-                tout_p = _checksum(str(plan.token_out).strip())
-                print(
-                    f"{_nanolog()}✅ PLAN SUCCESS | {sym} | direction={plan.direction} | "
-                    f"amount=${dynamic_trade_size_usdc:.2f}"
-                )
+                    dynamic_trade_size_usdc = min(float(trade_size_usdc), float(balances.usdc))
                 secs_plan = int(trader.config.per_asset_cooldown_seconds)
                 decision = TradeDecision(
                     direction=plan.direction,
@@ -1275,121 +1206,26 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                     cooldown_asset=(sym, secs_plan),
                 )
                 plans.append((decision, float(a.signal_strength)))
-                
-                continue
             else:
-                pb = plan_block or "unknown"
-                print(
-                    f"{_nanolog()}❌ PLAN FAILED | {sym} | signal={sig:.3f} | "
-                    f"equity_balance={equity_bal:.6f} | reason={pb}"
-                )
-                hints: list[str] = [f"strategy:{pb}"]
-                if balances.usdc <= 0 and sig > 0:
-                    hints.append("zero_usdc_for_buy_path")
-                if equity_bal <= 0 and sig < 0:
-                    hints.append("zero_equity_balance_for_sell_path")
-                gst_early = trader.gas_protector.get_safe_status(
-                    address=WALLET, urgent=False, min_pol=float(trader.config.min_pol_for_gas)
-                )
-                gas_ok_early = bool(gst_early.get("gas_ok", False))
-                fresh_pol_early = float(gst_early.get("pol_balance", 0.0) or 0.0)
-                pol_ok_early = fresh_pol_early >= float(trader.config.min_pol_for_gas)
-                if not gas_ok_early:
-                    hints.append(
-                        f"gas_guard_blocked (gas {float(gst_early.get('gas_gwei', 0.0)):.2f} > "
-                        f"{float(gst_early.get('max_gwei', 0.0)):.2f} gwei)"
-                    )
-                if not pol_ok_early:
-                    hints.append(
-                        f"pol_guard_blocked (pol {fresh_pol_early:.4f} < "
-                        f"{float(trader.config.min_pol_for_gas):.4f})"
-                    )
-                if not can_trade_asset(
-                    sym,
-                    now=None,
-                    cooldown_seconds=int(trader.config.per_asset_cooldown_seconds),
-                ):
-                    hints.append(f"per_asset_cooldown={trader.config.per_asset_cooldown_seconds}s")
-                    _log_trade_skipped(f"cooldown ({sym}: {trader.config.per_asset_cooldown_seconds}s)")
-                min_usdc_trade = float(trader.config.min_trade_usdc)
-                if not hints and gas_ok_early and pol_ok_early:
-                    if sig > 0 and balances.usdc >= min_usdc_trade:
-                        hints.append(
-                            "build_plan_returned_none (BUY: earnings_window/strong_threshold_internal/risk_filters)"
-                        )
-                    elif sig < 0 and equity_bal > 0:
-                        hints.append(
-                            "build_plan_returned_none (SELL: earnings_window/dust_below_min_units/risk_filters)"
-                        )
-                    elif sig > 0 and 0 < balances.usdc < min_usdc_trade:
-                        hints.append(
-                            f"below_min_trade_usdc (have ${balances.usdc:.2f}, need≥${min_usdc_trade:.2f})"
-                        )
-                if not hints:
-                    hints.append(f"risk_filters_or_router_none_for_{sym}")
-                reason_parts.append(f"{sym}: " + "; ".join(dict.fromkeys(hints)))
-        
-        print(f"{_nanolog()}=== END PLAN BUILDING ===\n")
+                print(f"PLAN FAILED | {sym} | reason={plan_block or 'unknown'}")
+
         if plans:
             # BEST PLAN WINS (highest signal)
             plans.sort(key=lambda x: x[1], reverse=True)
             decision = plans[0][0]
-            result = decision.message or (decision.direction or "TRADE")
         else:
             decision = None
+
         if not decision:
-            summary_bits: list[str] = []
+            summary_bits = list[str] = []
             if chain_notes:
-                summary_bits.append("chain: " + " | ".join(chain_notes[:2]))
-            if balances.usdc < float(trader.config.min_trade_usdc) and any(
-                float(x.signal_strength) > 0 for x in eligible
-            ):
-                summary_bits.append(
-                    f"usdc=${balances.usdc:.2f} < min_trade_usdc={trader.config.min_trade_usdc:.2f} (cannot size BUY)"
-                )
-            gst = trader.gas_protector.get_safe_status(
-                address=WALLET, urgent=False, min_pol=float(trader.config.min_pol_for_gas)
-            )
-            if high_conviction:
-                summary_bits.append(
-                    f"gas override active ({high_conviction_threshold:.2f}+ high conviction; bypassing max_gwei block)"
-                )
-            elif not bool(gst.get("gas_ok", False)):
-                summary_bits.append(
-                    f"gas blocked (gas≈{float(gst.get('gas_gwei', 0)):.2f}, "
-                    f"limit≤{float(gst.get('max_gwei', 0)):.2f})"
-                )
-            else:
-                summary_bits.append("gas_ok")
-            fresh_pol = float(gst.get("pol_balance", 0.0) or 0.0)
-            if fresh_pol < float(trader.config.min_pol_for_gas):
-                summary_bits.append(
-                    f"POL blocked (pol≈{fresh_pol:.4f}, "
-                    f"need≥{float(trader.config.min_pol_for_gas):.4f})"
-                )
-            merged = (
-                " | ".join(reason_parts[:4])
-                + (f" …(+{len(reason_parts)-4} more symbols)" if len(reason_parts) > 4 else "")
-            )
-            if summary_bits:
-                print(
-                    "🟦 X-SIGNAL EQUITY NO PLAN — "
-                    + " | ".join(summary_bits)
-                    + (" | detail: " + merged if merged else "")
-                )
-            else:
-                print(f"🟦 X-SIGNAL EQUITY | No valid plan this cycle (reason: {merged})")
+                summary_bits.append("chain: " + " | ".join(chain_notes))
+            if balances.usdc < float(trader.config.min_trade_usdc):
+                summary_bits.append(f"usdc low: ${balances.usdc:.2f}")
+            print(f"{_nanolog()}X-SIGNAL EQUITY | No valid plan this cycle (reason: {' | '.join(summary_bits) or 'no_plan'})")
+            return None
 
-            compact = "; ".join(summary_bits) + (" — " + merged if merged else "")
-            result = (compact[:500] + "…") if len(compact) > 500 else compact if compact else merged
-
-        if ENABLE_X_SIGNAL_EQUITY and decision is None and eligible and cfg_enabled:
-            if not result:
-                result = "NO TRADE"
-
-    print(f"X-SIGNAL EQUITY SUMMARY | Assets checked: {eligible_count} | USDC: ${balances.usdc:.2f} | Result: {result or 'NO TRADE'}")
-
-    return decision
+        return decision
 
 
 def evaluate_x_signal_equity_trade(
