@@ -27,3 +27,5 @@ trade_history.json
 venv.bak/
 venv/
 xwatcher/xwatcher_env/
+restart.sh
+restart_bot.sh
