@@ -57,7 +57,7 @@ POL_USD_PRICE = float(os.getenv("POL_USD_PRICE", "0.10"))
 MIN_POL_FOR_GAS = float(os.getenv("MIN_POL_FOR_GAS", "0.005"))
 AUTO_TOPUP_POL = os.getenv("AUTO_TOPUP_POL", "true").lower() == "true"
 POL_TOPUP_AMOUNT = float(os.getenv("POL_TOPUP_AMOUNT", "0.03"))
-COPY_TRADE_PCT = float(os.getenv("COPY_TRADE_PCT", "0.25"))
+COPY_TRADE_PCT = float(os.getenv("COPY_TRADE_PCT", "0.28"))
 PER_WALLET_COOLDOWN = int(os.getenv("PER_WALLET_COOLDOWN", "180"))
 TRAILING_STOP_PCT = float(os.getenv("TRAILING_STOP_PCT", "5.0"))
 TAKE_PROFIT_PCT = float(os.getenv("TAKE_PROFIT_PCT", "8.0"))
@@ -703,7 +703,7 @@ def select_copy_trade(balances: Balances, wallets: list[str]) -> TradeDecision:
         direction="USDT_TO_WMATIC",
         amount_in=int(trade_size * 1_000_000),
         trade_size=trade_size,
-        message="🔄 REAL POLYCOPY MODE (20%) - Monitoring live wallets",
+        message="🔄 REAL POLYCOPY MODE (28%) - Monitoring live wallets",
     )
 
 def _strong_x_signal_buy_present() -> bool:

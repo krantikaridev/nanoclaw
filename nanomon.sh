@@ -1,7 +1,7 @@
 #!/bin/bash
 echo "=== $(date +%H:%M) ==="
 echo "✅ V2.5.5 Copy Trading EXECUTING REAL TRADES (Test Mode Active)"
-echo "Monitoring 8 wallets | Copy ratio: 20.0%"
+echo "Monitoring 8 wallets | Copy ratio: 28.0%"
 echo "✅ V2.5.1 Protection Module loaded successfully"
 
 # === PORTFOLIO VALUE & PnL (from CSV) ===
