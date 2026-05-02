@@ -1,6 +1,7 @@
 import asyncio
 import csv
 import json
+import logging
 import os
 import time
 import tempfile
@@ -23,22 +24,26 @@ except ImportError:  # pragma: no cover - exercised in lightweight test environm
             self.provider = provider
             self.eth = None
 
-from constants import ERC20_ABI, LOG_PREFIX, USDC, USDT, WALLET, WMATIC
-from nanoclaw.utils.gas_protector import GasProtector
-from nanoclaw.strategies.usdc_copy import USDCopyStrategy
-from nanoclaw.strategies.signal_equity_trader import (
+load_dotenv()
+# Optional local override file (kept for VM/operator compatibility).
+load_dotenv(".env.local", override=True)
+
+from nanoclaw.config import X_SIGNAL  # noqa: E402
+
+from constants import ERC20_ABI, LOG_PREFIX, USDC, USDT, WALLET, WMATIC  # noqa: E402
+from nanoclaw.utils.gas_protector import GasProtector  # noqa: E402
+from nanoclaw.strategies.usdc_copy import USDCopyStrategy  # noqa: E402
+from nanoclaw.strategies.signal_equity_trader import (  # noqa: E402
     EquityTradePlan,
     SignalEquityTrader,
     SignalEquityTraderConfig,
     FollowedEquity,
 )
-from swap_executor import approve_and_swap
-from copy_trading import get_target_wallets
-from protection import check_exit_conditions, get_live_wmatic_price, record_buy
+from swap_executor import approve_and_swap  # noqa: E402
+from copy_trading import get_target_wallets  # noqa: E402
+from protection import check_exit_conditions, get_live_wmatic_price, record_buy  # noqa: E402
 
-load_dotenv()
-# Optional local override file (kept for VM/operator compatibility).
-load_dotenv(".env.local", override=True)
+logger = logging.getLogger(__name__)
 
 LOCK_FILE = os.path.join(tempfile.gettempdir(), "nanoclaw.lock")
 STATE_FILE = "bot_state.json"
@@ -74,10 +79,6 @@ X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD = float(
 )
 X_SIGNAL_HIGH_CONVICTION_PREP_MIN_USDC = float(os.getenv("X_SIGNAL_HIGH_CONVICTION_PREP_MIN_USDC", "8.0"))
 X_SIGNAL_HIGH_CONVICTION_PREP_MIN_WMATIC = float(os.getenv("X_SIGNAL_HIGH_CONVICTION_PREP_MIN_WMATIC", "12.0"))
-X_SIGNAL_DYNAMIC_TIER_HIGH_MIN = float(os.getenv("X_SIGNAL_DYNAMIC_TIER_HIGH_MIN", "0.90"))
-X_SIGNAL_DYNAMIC_USDC_GTE_TIER_HIGH = float(os.getenv("X_SIGNAL_DYNAMIC_USDC_GTE_TIER_HIGH", "20.0"))
-X_SIGNAL_DYNAMIC_USDC_GTE_FORCE_ELIGIBLE = float(os.getenv("X_SIGNAL_DYNAMIC_USDC_GTE_FORCE_ELIGIBLE", "15.0"))
-X_SIGNAL_DYNAMIC_USDC_BELOW_FORCE_ELIGIBLE = float(os.getenv("X_SIGNAL_DYNAMIC_USDC_BELOW_FORCE_ELIGIBLE", "12.0"))
 FOLLOWED_EQUITIES_PATH = os.getenv("FOLLOWED_EQUITIES_PATH", "followed_equities.json")
 # Iron-fenced USDC population to prevent zero-USDC blocker.
 # Keep env precedence aligned with SignalEquityTraderBuilder to avoid sizing mismatches.
@@ -1130,8 +1131,8 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                         f"{_nanolog()}POL low (pol≈{float(balances.pol):.4f} < {MIN_POL_FOR_GAS:.4f}) "
                         f"and AUTO_TOPUP_POL=false — BUY paths skipped"
                     )
-                    buy_paths_allowed = False
-                    buy_paths_block_reason = f"pol<{MIN_POL_FOR_GAS:.4f} and AUTO_TOPUP_POL=false"
+                    buy_paths_allowed = False  # noqa: F841
+                    buy_paths_block_reason = f"pol<{MIN_POL_FOR_GAS:.4f} and AUTO_TOPUP_POL=false"  # noqa: F841
                     _log_trade_skipped(
                         f"POL low for BUY path (pol={float(balances.pol):.4f}, min={MIN_POL_FOR_GAS:.4f})"
                     )
@@ -1154,7 +1155,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
             )
         print(f"{_nanolog()}=== END ORDERING ===\n")
 
-        reason_parts: list[str] = []
+        reason_parts: list[str] = []  # noqa: F841
         chain_notes: list[str] = []
 
         for a in eligible:
@@ -1184,13 +1185,16 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                 dynamic_trade_size_usdc = float(plan.trade_size)
                 if str(plan.direction) == "USDC_TO_EQUITY":
                     strength = abs(float(a.signal_strength))
-                    if strength >= X_SIGNAL_DYNAMIC_TIER_HIGH_MIN:
-                        trade_size_usdc = X_SIGNAL_DYNAMIC_USDC_GTE_TIER_HIGH
+                    if strength >= X_SIGNAL.TIER_HIGH_MIN:
+                        trade_size_usdc = X_SIGNAL.USDC_GTE_TIER_HIGH
                     elif strength >= X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD:
-                        trade_size_usdc = X_SIGNAL_DYNAMIC_USDC_GTE_FORCE_ELIGIBLE
+                        trade_size_usdc = X_SIGNAL.USDC_GTE_FORCE_ELIGIBLE
                     else:
-                        trade_size_usdc = X_SIGNAL_DYNAMIC_USDC_BELOW_FORCE_ELIGIBLE
+                        trade_size_usdc = X_SIGNAL.USDC_BELOW_FORCE_ELIGIBLE
                     dynamic_trade_size_usdc = min(float(trade_size_usdc), float(balances.usdc))
+                    logger.info(
+                        f"X-SIGNAL EQUITY BUY: {sym} | Strength {strength:.2f} | Size: ${dynamic_trade_size_usdc:.2f}"
+                    )
                 secs_plan = int(trader.config.per_asset_cooldown_seconds)
                 decision = TradeDecision(
                     direction=plan.direction,
@@ -1207,7 +1211,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                 )
                 plans.append((decision, float(a.signal_strength)))
             else:
-                print(f"PLAN FAILED | {sym} | reason={plan_block or 'unknown'}")
+                logger.warning(f"PLAN FAILED for {sym}: {plan_block or 'unknown'}")
 
         if plans:
             # BEST PLAN WINS (highest signal)
@@ -1217,7 +1221,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
             decision = None
 
         if not decision:
-            summary_bits = list[str] = []
+            summary_bits: list[str] = []
             if chain_notes:
                 summary_bits.append("chain: " + " | ".join(chain_notes))
             if balances.usdc < float(trader.config.min_trade_usdc):
@@ -1551,6 +1555,8 @@ async def main(*, dry_run: bool = False) -> None:
 
 
 if __name__ == "__main__":
+    if not logging.root.handlers:
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true", help="Evaluate decision-making without submitting swaps")
     args = parser.parse_args()
