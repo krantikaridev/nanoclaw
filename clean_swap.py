@@ -139,38 +139,58 @@ def _sorted_and_eligible_equities(
     strong_threshold: float,
     force_high_conviction: bool = True,
 ) -> tuple[list[FollowedEquity], list[FollowedEquity]]:
+    """
+    Filter followed equities by eligibility criteria.
+    
+    An asset is eligible if ANY of:
+    1. force_high_conviction=True AND signal >= 0.80 (high-conviction mode bypass)
+    2. signal >= strong_threshold (normal strong signal)
+    3. signal >= asset_floor (asset has own floor override)
+    
+    Returns (all_sorted_by_strength, eligible_only)
+    """
     assets_list = sorted(
         assets_seq,
         key=lambda a: abs(float(a.signal_strength)),
         reverse=True,
     )
     eligible: list[FollowedEquity] = []
+    
+    print(f"{_nanolog()}=== ELIGIBILITY CHECK START ===")
+    print(f"{_nanolog()}  min_strength={min_strength:.3f} | strong_threshold={strong_threshold:.3f} | force_high_conviction={force_high_conviction}")
+    
     for a in assets_list:
         effective_floor = _effective_floor_for_equity(a, min_strength)
         strength = abs(float(a.signal_strength))
+        
+        # Eligibility criteria (any one makes asset eligible)
+        high_conv_bypass = bool(force_high_conviction and strength >= 0.80)
         eligible_by_strong = strength >= float(strong_threshold)
-        eligible_by_force = bool(force_high_conviction and eligible_by_strong)
         eligible_by_floor = strength >= float(effective_floor)
-        if eligible_by_force or eligible_by_strong or eligible_by_floor:
+        
+        is_eligible = high_conv_bypass or eligible_by_strong or eligible_by_floor
+        
+        if is_eligible:
             eligible.append(a)
-            reason = (
-                "force_high_conviction"
-                if eligible_by_force
-                else "strong_threshold"
-                if eligible_by_strong
-                else "asset_floor"
-            )
+            reason_parts = []
+            if high_conv_bypass:
+                reason_parts.append("force_high_conviction (0.80+)")
+            if eligible_by_strong:
+                reason_parts.append(f"strong_threshold ({strong_threshold:.3f}+)")
+            if eligible_by_floor:
+                reason_parts.append(f"asset_floor ({effective_floor:.3f}+)")
+            reason = " | ".join(reason_parts)
             print(
-                f"{_nanolog()}X-SIGNAL ELIGIBILITY | {a.symbol} | signal={strength:.3f} | "
-                f"floor={effective_floor:.3f} | strong_threshold={float(strong_threshold):.3f} | "
-                f"force_high_conviction={force_high_conviction} | eligible_by={reason}"
+                f"{_nanolog()}  ✅ ELIGIBLE | {a.symbol:12s} | signal={strength:6.3f} | "
+                f"by: {reason}"
             )
         else:
             print(
-                f"{_nanolog()}X-SIGNAL ELIGIBILITY FILTERED | {a.symbol} | signal={strength:.3f} | "
-                f"floor={effective_floor:.3f} | strong_threshold={float(strong_threshold):.3f} | "
-                f"force_high_conviction={force_high_conviction}"
+                f"{_nanolog()}  ❌ FILTERED | {a.symbol:12s} | signal={strength:6.3f} | "
+                f"floor={effective_floor:.3f}, strong_threshold={strong_threshold:.3f}"
             )
+    
+    print(f"{_nanolog()}=== ELIGIBILITY CHECK END: {len(eligible)}/{len(assets_list)} eligible ===\n")
     return assets_list, eligible
 
 
@@ -1049,16 +1069,18 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
 
         secs_order = int(trader.config.per_asset_cooldown_seconds)
         eligible_ordered = _order_eligible_x_signal_candidates(eligible, per_asset_cooldown_seconds=secs_order)
+        
+        print(f"{_nanolog()}=== ELIGIBLE ASSET ORDERING ===")
         for _a in eligible_ordered:
             _sym = str(_a.symbol).strip()
             _sig = float(_a.signal_strength)
             _floor = _effective_floor_for_equity(_a, min_strength)
             _cd_ok = can_trade_asset(_sym, None, secs_order)
-            _buy_preview = _sig > 0 and buy_paths_allowed
+            _is_hc = _sig >= 0.80
             print(
-                f"{_nanolog()}X-Signal candidate | {_sym} | signal={_sig:.3f} | floor={_floor:.3f} | "
-                f"cooldown_ok={_cd_ok} | buy_path_ok={_buy_preview}"
+                f"{_nanolog()}  {_sym:12s} | sig={_sig:6.3f} | high_conviction={_is_hc:5} | cooldown_ok={_cd_ok:5}"
             )
+        print(f"{_nanolog()}=== END ORDERING ===\n")
 
         reason_parts: list[str] = []
         chain_notes: list[str] = []
@@ -1068,31 +1090,50 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
             if hint:
                 chain_notes.append(hint)
 
+        print(f"{_nanolog()}=== BUILDING TRADE PLANS ===")
         for a in eligible_ordered:
             sym = str(a.symbol).strip()
             sig = float(a.signal_strength)
             action_label = "BUY" if sig > 0 else "SELL"
+            is_high_conviction = sig >= 0.80
+            
             print(
-                f"🟦 X-SIGNAL EQUITY ACTIVE | {sym} | Strength {sig:.3f} | Action: {action_label}"
+                f"🟦 X-SIGNAL EQUITY ACTIVE | {sym:12s} | sig={sig:6.3f} | action={action_label} | hc={is_high_conviction}"
             )
-            if sig > 0 and not buy_paths_allowed and not (sig >= strong_thr):
-                print(f"DEBUG: {sym} skipped due to POL low (buy_paths_allowed=False) and signal {sig:.3f} < {strong_thr:.3f}")
-                reason_parts.append(f"{sym}: buy_skipped ({buy_paths_block_reason})")
-                _log_trade_skipped(f"POL low ({sym} buy blocked)")
+            
+            # === HIGH-CONVICTION BYPASS: skip non-safety filters for 0.80+ ===
+            if is_high_conviction and sig > 0:
+                print(
+                    f"{_nanolog()}  ➜ HIGH-CONVICTION BYPASS ACTIVE for {sym} "
+                    f"(force_high_conviction={force_high_conviction})"
+                )
+            
+            # === POL check for BUY paths (safety-critical, not bypassed) ===
+            if sig > 0 and not buy_paths_allowed and not is_high_conviction:
+                print(
+                    f"{_nanolog()}  ❌ BUY blocked for {sym}: {buy_paths_block_reason} "
+                    f"(signal {sig:.3f} < 0.80 high-conviction)"
+                )
+                reason_parts.append(f"{sym}: buy_skipped_pol ({buy_paths_block_reason})")
+                _log_trade_skipped(f"POL low ({sym} buy blocked, not high-conviction)")
                 continue
-            if sig >= strong_thr:
-                print(f"🚀 HIGH-CONVICTION BYPASS | Strength {sig:.2f} — forcing trade even on high gas/low USDC (PnL+ Sprint Mode)")
-            if sig > 0 and balances.usdc < required_usdc_floor and not (sig >= strong_thr):
-                print(f"DEBUG: {sym} skipped due to USDC low (${balances.usdc:.2f} < ${required_usdc_floor:.2f}) and signal {sig:.3f} < {strong_thr:.3f}")
+            
+            # === USDC check for BUY paths (unless high-conviction with auto-fill) ===
+            if sig > 0 and balances.usdc < required_usdc_floor and not is_high_conviction:
+                print(
+                    f"{_nanolog()}  ❌ BUY blocked for {sym}: USDC low "
+                    f"(${balances.usdc:.2f} < ${required_usdc_floor:.2f}, not high-conviction)"
+                )
                 reason_parts.append(
-                    f"{sym}: buy_skipped (USDC ${balances.usdc:.2f} < required_floor ${required_usdc_floor:.2f}; "
-                    f"min_trade_usdc ${min_trade_usdc:.2f})"
+                    f"{sym}: buy_skipped_usdc (have ${balances.usdc:.2f}, need ${required_usdc_floor:.2f})"
                 )
-                _log_trade_skipped(
-                    f"USDC low ({sym} buy blocked: ${balances.usdc:.2f} < ${required_usdc_floor:.2f})"
-                )
+                _log_trade_skipped(f"USDC low ({sym} buy blocked, not high-conviction)")
                 continue
+            
+            # === Retrieve equity balance ===
             equity_bal = get_token_balance(a.token_address, int(a.decimals))
+            
+            # === BUILD PLAN ===
             plan, plan_block = trader.build_plan_with_block_reason(
                 symbol=sym,
                 token_address=str(a.token_address).strip(),
@@ -1106,6 +1147,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                 can_trade_asset=can_trade_asset,
                 allow_high_gas_override=high_conviction,
             )
+            
             if plan:
                 dynamic_trade_size_usdc = float(plan.trade_size)
                 if str(plan.direction) == "USDC_TO_EQUITY":
@@ -1122,9 +1164,11 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                     # Safety: never request more USDC than wallet balance.
                     dynamic_trade_size_usdc = min(desired_trade_size_usdc, available_usdc)
                     if dynamic_trade_size_usdc < min_trade_usdc:
+                        print(
+                            f"{_nanolog()}  ⚠️ {sym}: dynamic size ${dynamic_trade_size_usdc:.2f} < min ${min_trade_usdc:.2f}"
+                        )
                         reason_parts.append(
-                            f"{sym}: buy_skipped (dynamic_size ${desired_trade_size_usdc:.2f}, "
-                            f"available_usdc ${available_usdc:.2f}, min_trade_usdc ${min_trade_usdc:.2f})"
+                            f"{sym}: size_too_small (dynamic=${dynamic_trade_size_usdc:.2f} < min=${min_trade_usdc:.2f})"
                         )
                         _log_trade_skipped(
                             f"USDC low ({sym} dynamic size capped below min trade: ${dynamic_trade_size_usdc:.2f})"
@@ -1134,8 +1178,8 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                 tin_p = _checksum(str(plan.token_in).strip())
                 tout_p = _checksum(str(plan.token_out).strip())
                 print(
-                    f"{_nanolog()}X-Signal swap intent | {plan.direction} | "
-                    f"{sym} | token_in={tin_p} token_out={tout_p}"
+                    f"{_nanolog()}✅ PLAN SUCCESS | {sym} | direction={plan.direction} | "
+                    f"amount=${dynamic_trade_size_usdc:.2f}"
                 )
                 secs_plan = int(trader.config.per_asset_cooldown_seconds)
                 decision = TradeDecision(
@@ -1153,53 +1197,56 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                 )
                 result = decision.message or (decision.direction or "TRADE")
                 break
-            pb = plan_block or "unknown"
-            print(f"{_nanolog()}X-Signal plan blocked | {sym} | reason={pb}")
-            hints: list[str] = [f"strategy:{pb}"]
-            if balances.usdc <= 0 and sig > 0:
-                hints.append("zero_usdc_for_buy_path")
-            if equity_bal <= 0 and sig < 0:
-                hints.append("zero_equity_balance_for_sell_path")
-            gst_early = trader.gas_protector.get_safe_status(
-                address=WALLET, urgent=False, min_pol=float(trader.config.min_pol_for_gas)
-            )
-            gas_ok_early = bool(gst_early.get("gas_ok", False))
-            fresh_pol_early = float(gst_early.get("pol_balance", 0.0) or 0.0)
-            pol_ok_early = fresh_pol_early >= float(trader.config.min_pol_for_gas)
-            if not gas_ok_early:
-                hints.append(
-                    f"gas_guard_blocked (gas {float(gst_early.get('gas_gwei', 0.0)):.2f} > "
-                    f"{float(gst_early.get('max_gwei', 0.0)):.2f} gwei)"
+            else:
+                pb = plan_block or "unknown"
+                print(f"{_nanolog()}❌ PLAN FAILED | {sym} | reason={pb}")
+                hints: list[str] = [f"strategy:{pb}"]
+                if balances.usdc <= 0 and sig > 0:
+                    hints.append("zero_usdc_for_buy_path")
+                if equity_bal <= 0 and sig < 0:
+                    hints.append("zero_equity_balance_for_sell_path")
+                gst_early = trader.gas_protector.get_safe_status(
+                    address=WALLET, urgent=False, min_pol=float(trader.config.min_pol_for_gas)
                 )
-            if not pol_ok_early:
-                hints.append(
-                    f"pol_guard_blocked (pol {fresh_pol_early:.4f} < "
-                    f"{float(trader.config.min_pol_for_gas):.4f})"
-                )
-            if not can_trade_asset(
-                sym,
-                now=None,
-                cooldown_seconds=int(trader.config.per_asset_cooldown_seconds),
-            ):
-                hints.append(f"per_asset_cooldown={trader.config.per_asset_cooldown_seconds}s")
-                _log_trade_skipped(f"cooldown ({sym}: {trader.config.per_asset_cooldown_seconds}s)")
-            min_usdc_trade = float(trader.config.min_trade_usdc)
-            if not hints and gas_ok_early and pol_ok_early:
-                if sig > 0 and balances.usdc >= min_usdc_trade:
+                gas_ok_early = bool(gst_early.get("gas_ok", False))
+                fresh_pol_early = float(gst_early.get("pol_balance", 0.0) or 0.0)
+                pol_ok_early = fresh_pol_early >= float(trader.config.min_pol_for_gas)
+                if not gas_ok_early:
                     hints.append(
-                        "build_plan_returned_none (BUY: earnings_window/strong_threshold_internal/risk_filters)"
+                        f"gas_guard_blocked (gas {float(gst_early.get('gas_gwei', 0.0)):.2f} > "
+                        f"{float(gst_early.get('max_gwei', 0.0)):.2f} gwei)"
                     )
-                elif sig < 0 and equity_bal > 0:
+                if not pol_ok_early:
                     hints.append(
-                        "build_plan_returned_none (SELL: earnings_window/dust_below_min_units/risk_filters)"
+                        f"pol_guard_blocked (pol {fresh_pol_early:.4f} < "
+                        f"{float(trader.config.min_pol_for_gas):.4f})"
                     )
-                elif sig > 0 and 0 < balances.usdc < min_usdc_trade:
-                    hints.append(
-                        f"below_min_trade_usdc (have ${balances.usdc:.2f}, need≥${min_usdc_trade:.2f})"
-                    )
-            if not hints:
-                hints.append(f"risk_filters_or_router_none_for_{sym}")
-            reason_parts.append(f"{sym}: " + "; ".join(dict.fromkeys(hints)))
+                if not can_trade_asset(
+                    sym,
+                    now=None,
+                    cooldown_seconds=int(trader.config.per_asset_cooldown_seconds),
+                ):
+                    hints.append(f"per_asset_cooldown={trader.config.per_asset_cooldown_seconds}s")
+                    _log_trade_skipped(f"cooldown ({sym}: {trader.config.per_asset_cooldown_seconds}s)")
+                min_usdc_trade = float(trader.config.min_trade_usdc)
+                if not hints and gas_ok_early and pol_ok_early:
+                    if sig > 0 and balances.usdc >= min_usdc_trade:
+                        hints.append(
+                            "build_plan_returned_none (BUY: earnings_window/strong_threshold_internal/risk_filters)"
+                        )
+                    elif sig < 0 and equity_bal > 0:
+                        hints.append(
+                            "build_plan_returned_none (SELL: earnings_window/dust_below_min_units/risk_filters)"
+                        )
+                    elif sig > 0 and 0 < balances.usdc < min_usdc_trade:
+                        hints.append(
+                            f"below_min_trade_usdc (have ${balances.usdc:.2f}, need≥${min_usdc_trade:.2f})"
+                        )
+                if not hints:
+                    hints.append(f"risk_filters_or_router_none_for_{sym}")
+                reason_parts.append(f"{sym}: " + "; ".join(dict.fromkeys(hints)))
+        
+        print(f"{_nanolog()}=== END PLAN BUILDING ===\n")
 
         if not decision:
             summary_bits: list[str] = []
