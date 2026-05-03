@@ -317,3 +317,30 @@ nanoup
 - Investigate why the refactored code ignored COPY_TRADE_PCT / fixed-size logic.
 - Add per-trade attribution (which signal/wallet caused each swap) so we can debug future anomalies.
 
+
+## Constitution Update — 2026-05-04 (post V2 High-Conviction Task)
+
+**Rule 7 — Never Assume Pushed**  
+Never assume code is on GitHub or VM unless you personally verified it with `git log --oneline -5` AND `grep` for the changed logic on BOTH local (Cursor) and VM. This is non-negotiable for every code review.
+
+**Rule 8 — Full Feedback & Improvement Loop (Mandatory)**  
+Every task must end with a documented section in AI_CONTEXT.md under “Task Log: [Task Name]” containing:
+- What worked
+- What didn’t (including unexpected side-effects)
+- Bleeding / PnL / risk impact discussion
+- Proposed improvements for next iteration
+- Dual verification confirmation (Grok + user both confirmed)
+
+**Rule 9 — Sizing & Bleeding Protection**  
+Any change to high-conviction sizing must:
+- Respect `min_trade_usdc` ($5.00)
+- Preserve diversification (do not make 3/4 assets untradeable)
+- Include quick PnL vs fee + slippage estimate before aggressive caps
+- Default high-conviction cap to $6.00–$8.00 unless bleeding analysis shows otherwise
+
+**Rule 10 — Dual Verification Before “Done”**  
+Grok may never say “task complete / loop closed” until BOTH sides have:
+1. Run the verification commands
+2. Confirmed the exact expected output
+3. Agreed the task is working as intended
+

@@ -118,7 +118,7 @@ def _best_quote_path(
             "No quotable router path — check liquidity/token addresses." + err_tail
         ) from last_err
 
-    min_out = max(1, (best_amt * (10000 - min(slip, 9999))) // 10000)
+    min_out = max(1, (best_amt * (6000 - min(slip, 9999))) // 6000)
     return best_path, best_amt, min_out
 
 
