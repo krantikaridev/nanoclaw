@@ -17,7 +17,8 @@ _CSV = Path("portfolio_history.csv")
 def resolve_portfolio_baseline_usd(last_total_fallback: float) -> float:
     """
     Precedence:
-    1) PORTFOLIO_BASELINE_USD in environment
+    1) PORTFOLIO_BASELINE_USD in environment, if set to a **non-zero** number.
+       ``0`` (or empty) means "not pinned" — same as unset; continue to 2.
     2) portfolio_baseline.json { \"wallet\", \"baseline_usd\" } if wallet matches env WALLET
     3) First data row of portfolio_history.csv (total_value column)
     4) last_total_fallback (current on-chain total from caller)
@@ -28,7 +29,9 @@ def resolve_portfolio_baseline_usd(last_total_fallback: float) -> float:
     env_wallet = (os.getenv("WALLET") or "").strip().lower()
     env_baseline = (os.getenv("PORTFOLIO_BASELINE_USD") or "").strip()
     if env_baseline:
-        return float(env_baseline)
+        v = float(env_baseline)
+        if v != 0.0:
+            return v
 
     if _BASELINE_JSON.is_file():
         try:

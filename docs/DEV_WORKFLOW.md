@@ -15,7 +15,9 @@ Windows shortcut: `powershell -ExecutionPolicy Bypass -File .\scripts\pre_commit
 
 - **`.env`** is gitignored; **`.env.example`** is the canonical template for safe keys and stage policy.
 - **Secrets first**, **new non-secret tuning at the bottom** of `.env` to avoid merge corruption when agents append lines.
-- **One primary Polygon RPC**: prefer `RPC=` aligned with `RPC_URL` / `WEB3_PROVIDER_URI` if you set them (`nanoclaw.config.default_json_rpc_url`).
+- **Wallet key**: set either **`POLYGON_PRIVATE_KEY`** (preferred) or **`PRIVATE_KEY`** (alias); code uses the first that is set.
+- **RPC + fallbacks + gas-probe extras**: see **`docs/ENV_RPC.md`** (primary `RPC` / `RPC_URL` / `WEB3_PROVIDER_URI`, built-in public list, and optional `RPC_FALLBACKS`).
+- **ROI / PnL labels** (nanomon): **`PORTFOLIO_BASELINE_USD`** — use **`0`** (template default) or leave unset for automatic baseline; set a positive number to pin starting capital (`modules/baseline.py`). See `.env.example` and `docs/ENV_RPC.md`.
 
 ### Refresh `.env.example` from a live `.env` (strip secrets)
 

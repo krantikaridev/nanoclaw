@@ -15,6 +15,29 @@ def test_baseline_from_env_overrides_file(monkeypatch, tmp_path: Path):
     assert bl.resolve_portfolio_baseline_usd(50.0) == 101.5
 
 
+def test_baseline_env_zero_falls_through_to_json(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PORTFOLIO_BASELINE_USD", "0")
+    monkeypatch.setenv("WALLET", "0xAAAABBBBCCCCDDEEEFFFdddddddddddddddddddd")
+    (tmp_path / "portfolio_baseline.json").write_text(
+        json.dumps(
+            {
+                "wallet": "0xAAAABBBBCCCCDDEEEFFFdddddddddddddddddddd",
+                "baseline_usd": 95.45,
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert bl.resolve_portfolio_baseline_usd(12.0) == 95.45
+
+
+def test_baseline_env_zero_falls_through_to_fallback(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PORTFOLIO_BASELINE_USD", "0.0")
+    monkeypatch.delenv("WALLET", raising=False)
+    assert bl.resolve_portfolio_baseline_usd(42.25) == 42.25
+
+
 def test_baseline_json_when_wallet_matches(monkeypatch, tmp_path: Path):
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("PORTFOLIO_BASELINE_USD", raising=False)
