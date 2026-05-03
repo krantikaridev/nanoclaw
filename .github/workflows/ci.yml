@@ -14,6 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PYTHONUTF8: "1"
+      # Opt in early to upcoming GitHub runner default and avoid Node 20 deprecation drift.
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
     steps:
       - uses: actions/checkout@v4
