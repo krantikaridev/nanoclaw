@@ -1,27 +1,3 @@
-
-# Backups
-# Runtime state files
-# Secrets
-# Test artifacts
-# Virtual environment
-# macOS / editor junk
-*.bak*
-*.bak.*
-*.pyc
-*.pyd
-*.pyo
-.DS_Store
-.env
-.idea/
-.venv/
-.vscode/
-__pycache__/
-bot_state.json
-nohup.out
-real_cron.log
-tests/unit/__pycache__/
-trade_exits.json
-
 # Virtual environment
 .venv/
 venv/
@@ -32,7 +8,7 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Runtime files (already ignored but make sure)
+# Runtime files
 real_cron.log
 portfolio_history.csv
 bot_state.json
