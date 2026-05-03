@@ -13,6 +13,9 @@ from nanoclaw.utils.gas_protector import GasProtector
 
 logger = logging.getLogger(__name__)
 
+# BUY notional at high conviction: WMATIC-tier reference cap (USD); other symbols use ``_high_conviction_symbol_size_factor``.
+_HIGH_CONVICTION_WMATIC_MAX_USD = 4.50
+
 
 @dataclass(frozen=True)
 class FollowedEquity:
@@ -319,7 +322,34 @@ class SignalEquityTrader:
         current_time = time.time() if now is None else now
         return can_trade_asset(symbol, current_time, self.config.per_asset_cooldown_seconds)
 
-    def _compute_trade_size(self, usdc_balance: float, signal_strength: float, usdt_balance: float = 0.0) -> float:
+    @staticmethod
+    def _high_conviction_symbol_size_factor(symbol: str) -> float:
+        """Scale vs WMATIC reference cap (liquidity / volatility tier)."""
+        sym = str(symbol).strip().upper()
+        if "WMATIC" in sym:
+            return 1.0
+        if "WBTC" in sym or "BTC" in sym:
+            return 0.75
+        if "WETH" in sym:
+            return 0.90
+        if "LINK" in sym:
+            return 0.85
+        return 0.90
+
+    def _high_conviction_cap_usd(self, symbol: str, signal_strength: float) -> Optional[float]:
+        """USD cap for high-conviction BUY, or None if below high-conviction threshold."""
+        if float(signal_strength) < float(self.config.high_conviction_threshold):
+            return None
+        return float(_HIGH_CONVICTION_WMATIC_MAX_USD) * self._high_conviction_symbol_size_factor(symbol)
+
+    def _compute_trade_size(
+        self,
+        usdc_balance: float,
+        signal_strength: float,
+        usdt_balance: float = 0.0,
+        *,
+        symbol: str = "",
+    ) -> float:
         """USD size between FIXED_TRADE_USD_MIN/MAX (runtime), scaled by |signal| vs strong threshold; capped by USDC."""
         from modules import runtime as rt
 
@@ -336,6 +366,9 @@ class SignalEquityTrader:
         t = max(0.0, min(1.0, t))
         raw = lo + (hi - lo) * t
         sized = min(float(raw), float(usdc_balance))
+        cap = self._high_conviction_cap_usd(symbol, signal_strength)
+        if cap is not None:
+            sized = min(float(sized), cap)
         _lp = (LOG_PREFIX or "").strip() or "[nanoclaw]"
         print(f"{_lp} DYNAMIC SIZING | Size=${sized:.2f} | Signal={float(signal_strength):.2f}")
         return max(0.0, float(sized))
@@ -486,11 +519,29 @@ class SignalEquityTrader:
                 print(f"[nanoclaw] BLOCK: {sym} | zero_usdc (balance=${usdc_balance:.2f})")
                 logger.debug("build_plan block sym=%s reason=zero_usdc", sym)
                 return None, "zero_usdc"
-            trade_size = self._compute_trade_size(usdc_balance, strength, usdt_balance)
+            trade_size = self._compute_trade_size(usdc_balance, strength, usdt_balance, symbol=sym)
             if trade_size <= 0 or trade_size > usdc_balance:
                 print(f"[nanoclaw] BLOCK: {sym} | invalid_trade_size (computed=${trade_size:.2f}, available=${usdc_balance:.2f})")
                 logger.debug("build_plan block sym=%s reason=invalid_trade_size", sym)
                 return None, "invalid_trade_size"
+            min_sz = float(self.config.min_trade_usdc)
+            if trade_size < min_sz:
+                hc_cap = self._high_conviction_cap_usd(sym, strength)
+                wmatic_ref = "WMATIC" in sym.upper()
+                # Reference tier may trade at the $4.50 cap even when that is below global min_trade_usdc.
+                allow_at_sub_min_cap = (
+                    hc_cap is not None
+                    and hc_cap < min_sz
+                    and wmatic_ref
+                    and trade_size >= hc_cap - 1e-6
+                )
+                if not allow_at_sub_min_cap:
+                    print(
+                        f"[nanoclaw] BLOCK: {sym} | below_min_trade_usdc "
+                        f"(computed=${trade_size:.2f} < min=${min_sz:.2f})"
+                    )
+                    logger.debug("build_plan block sym=%s reason=below_min_trade_usdc", sym)
+                    return None, "below_min_trade_usdc"
             tp = float(self.config.strong_take_profit_pct)
             price_note = f" @ ${current_price_usd:.2f}" if isinstance(current_price_usd, (int, float)) else ""
             earn_note = (

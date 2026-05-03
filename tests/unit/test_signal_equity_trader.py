@@ -245,6 +245,7 @@ def test_below_threshold_is_allowed_when_force_high_conviction_true():
         .with_enabled(True)
         .with_strong_signal_threshold(0.90)
         .with_force_high_conviction(True)
+        .with_min_trade_usdc(4.0)
         .with_gas_protector(DummyProtector(gas_ok=True, pol_balance=1.0))
         .with_usdc_address("0x" + "2" * 40)
         .build()
@@ -370,7 +371,7 @@ def test_outside_earnings_window_when_not_force_eligible():
 
 
 def test_force_eligible_bypasses_outside_earnings_window():
-    s = _build_strategy_tuned(max_earnings_days=5.0)
+    s = _build_strategy_tuned(max_earnings_days=5.0, min_trade_usdc=4.0)
     plan, reason = s.build_plan_with_block_reason(
         symbol="WETH",
         token_address="0x" + "1" * 40,
@@ -410,7 +411,7 @@ def test_gas_above_limit_when_not_force_eligible():
 
 
 def test_force_eligible_bypasses_high_gas_without_override():
-    s = _build_strategy_tuned(gas_ok=False)
+    s = _build_strategy_tuned(gas_ok=False, min_trade_usdc=4.0)
     plan, reason = s.build_plan_with_block_reason(
         symbol="WETH",
         token_address="0x" + "1" * 40,
@@ -450,7 +451,7 @@ def test_per_asset_cooldown_when_not_force_eligible():
 
 
 def test_force_eligible_bypasses_cooldown_and_builds_buy():
-    s = _build_strategy_tuned()
+    s = _build_strategy_tuned(min_trade_usdc=4.0)
 
     def _never(sym: str, now: float | None, cd: int) -> bool:
         return False
@@ -489,8 +490,8 @@ def test_buy_blocked_zero_usdc():
 
 
 def test_buy_fixed_size_ignores_legacy_min_trade_usdc_range():
-    """BUY notional uses FIXED_TRADE_USD_* dynamic band vs strength; ignores legacy min/max_trade_usdc."""
-    s = _build_strategy_tuned(min_trade_usdc=100.0, max_trade_usdc=200.0)
+    """BUY notional uses FIXED_TRADE_USD_* dynamic band vs strength; ignores legacy max_trade_usdc (min must allow final size)."""
+    s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
     plan, reason = s.build_plan_with_block_reason(
         symbol="WETH",
         token_address="0x" + "1" * 40,
@@ -504,8 +505,26 @@ def test_buy_fixed_size_ignores_legacy_min_trade_usdc_range():
         can_trade_asset=lambda *_a, **_k: True,
     )
     assert reason is None
-    # Defaults FIXED 5–10 USD; signal 0.92 vs strong 0.80 → t=0.6 → 5+5*0.6 = 8
-    assert plan is not None and plan.trade_size == 8.0
+    # Defaults FIXED 5–10 USD; signal 0.92 vs strong 0.80 → raw $8, then high-conviction WETH cap 4.50*0.90
+    assert plan is not None and plan.trade_size == pytest.approx(4.05)
+
+
+def test_buy_high_conviction_capped_below_min_trade_usdc_blocked():
+    """High-conviction per-asset cap can sit under min_trade_usdc; such plans must not execute."""
+    s = _build_strategy_tuned(min_trade_usdc=5.0)
+    _, reason = s.build_plan_with_block_reason(
+        symbol="WBTC_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=8,
+        signal_strength=0.92,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=40.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+    )
+    assert reason == "below_min_trade_usdc"
 
 
 def test_sell_path_equity_to_usdc():

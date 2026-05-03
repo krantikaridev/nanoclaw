@@ -38,18 +38,21 @@ ONEINCH_SPENDER_ENDPOINT = os.getenv(
 _prefix = LOG_PREFIX + " " if LOG_PREFIX else ""
 
 
+_FALLBACK_ROUTER_SLIPPAGE_FLOOR_BPS = 600
+
+
 def _fallback_router_slippage_bps() -> int:
     """Slippage for QuickSwap-style router when 1inch is not used (typically looser than primary)."""
     if FALLBACK_ROUTER_SLIPPAGE_BPS_RAW:
-        return int(FALLBACK_ROUTER_SLIPPAGE_BPS_RAW)
-    return max(SWAP_SLIPPAGE_BPS + 150, 250)
+        return max(int(FALLBACK_ROUTER_SLIPPAGE_BPS_RAW), _FALLBACK_ROUTER_SLIPPAGE_FLOOR_BPS)
+    return max(SWAP_SLIPPAGE_BPS + 150, 250, _FALLBACK_ROUTER_SLIPPAGE_FLOOR_BPS)
 
 
 def _fallback_router_retry_slippage_bps(primary_bps: int) -> int:
     """Second attempt after an on-chain revert; +ONCHAIN_SWAP_RETRY_EXTRA_BPS vs first fallback quote."""
     if FALLBACK_ROUTER_RETRY_SLIPPAGE_BPS_RAW:
-        return int(FALLBACK_ROUTER_RETRY_SLIPPAGE_BPS_RAW)
-    return min(primary_bps + ONCHAIN_SWAP_RETRY_EXTRA_BPS, 9999)
+        return max(int(FALLBACK_ROUTER_RETRY_SLIPPAGE_BPS_RAW), _FALLBACK_ROUTER_SLIPPAGE_FLOOR_BPS)
+    return min(max(primary_bps + ONCHAIN_SWAP_RETRY_EXTRA_BPS, _FALLBACK_ROUTER_SLIPPAGE_FLOOR_BPS), 9999)
 
 
 def _addr_probe(addr: str) -> str:

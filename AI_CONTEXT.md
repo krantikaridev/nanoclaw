@@ -4,6 +4,7 @@
 
 ## **Systematic Learning & History**
 
+- Hard cap $4.50 on high-conviction size + 600 bps fallback.
 - **\$424.63 portfolio peak on 2026-05-01** reflected **test-mode / dummy instrumentation**, not verified on-chain wealth. Confirm any “peak” narrative against Polygonscan wallet history and live balances—**there was no real on-chain balance matching that headline figure**.
 - **Bleed-rate target**: **\$0/day** sustained drawdown from noise, gas bleed, or misconfigured paths—optimize for stability before increasing size.
 - **Profit-taking policy**: **`TAKE_PROFIT_PCT` lowered to 5%** effective **2026-05-02** (baseline take-profit tier; tune only with logged evidence).
