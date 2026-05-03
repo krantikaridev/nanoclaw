@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -53,6 +54,26 @@ USDT = os.getenv("USDT", "0xc2132D05D31c914a87C6611C10748AEb04B58e8F")
 USDC = os.getenv("USDC", "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174")
 WMATIC = os.getenv("WMATIC", "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270")
 ROUTER = os.getenv("ROUTER", "0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff")
+
+
+@dataclass(frozen=True)
+class PolygonAddresses:
+    """Single bundle for Polygon routing — prefer `POLYGON` for new code; module-level names remain for imports/tests."""
+
+    wallet: str
+    usdt: str
+    usdc: str
+    wmatic: str
+    router: str
+
+
+POLYGON = PolygonAddresses(
+    wallet=WALLET,
+    usdt=USDT,
+    usdc=USDC,
+    wmatic=WMATIC,
+    router=ROUTER,
+)
 
 # Tokenized equities (placeholders; set real addresses in .env)
 GOOGLON = os.getenv("GOOGLON", "")

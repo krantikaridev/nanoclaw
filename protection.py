@@ -16,13 +16,15 @@ from nanoclaw.config import connect_web3
 
 load_dotenv()
 
-# ====================== CONFIG (Easy to change) ======================
-MAX_DAILY_LOSS_PCT = 15          # Stop trading if daily loss > 15%
-MIN_POL_BALANCE = 2.0            # Minimum POL to allow trades
-MAX_TRADE_SIZE_USD = 35          # Never trade more than $35 in one go
-GAS_MULTIPLIER = 1.25            # Dynamic gas (cheaper than 1.5x)
-FLUCTUATION_USDT_THRESHOLD = 30  # If USDT < $30 → force sell 25% WMATIC
-PROFIT_LOCK_PERCENT = 8          # Per-trade: sell when +8% from buy price
+# ====================== CONFIG (override via .env; defaults preserve legacy behavior) ======================
+MAX_DAILY_LOSS_PCT = int(os.getenv("PROTECTION_MAX_DAILY_LOSS_PCT", "15"))
+MIN_POL_BALANCE = float(os.getenv("PROTECTION_MIN_POL_BALANCE", "2.0"))
+MAX_TRADE_SIZE_USD = float(os.getenv("PROTECTION_MAX_TRADE_SIZE_USD", "35"))
+GAS_MULTIPLIER = float(os.getenv("PROTECTION_GAS_MULTIPLIER", "1.25"))
+FLUCTUATION_USDT_THRESHOLD = float(os.getenv("PROTECTION_FLUCTUATION_USDT_THRESHOLD", "30"))
+PROTECTION_FLUCTUATION_MIN_WMATIC = float(os.getenv("PROTECTION_FLUCTUATION_MIN_WMATIC", "50"))
+PROTECTION_FLUCTUATION_SELL_FRACTION = float(os.getenv("PROTECTION_FLUCTUATION_SELL_FRACTION", "0.25"))
+PROFIT_LOCK_PERCENT = float(os.getenv("PROTECTION_PROFIT_LOCK_PERCENT", "8"))
 
 _prot_w3: Web3 | None = None
 
@@ -79,8 +81,11 @@ def check_exit_conditions():
     usdt, wmatic = get_balances()
     
     # 1. Fluctuation protection (USDT too low)
-    if usdt < FLUCTUATION_USDT_THRESHOLD and wmatic > 50:
-        print(f"⚠️ FLUCTUATION PROTECTION: USDT ${usdt:.2f} < ${FLUCTUATION_USDT_THRESHOLD} → Selling 25% WMATIC")
+    if usdt < FLUCTUATION_USDT_THRESHOLD and wmatic > PROTECTION_FLUCTUATION_MIN_WMATIC:
+        print(
+            f"⚠️ FLUCTUATION PROTECTION: USDT ${usdt:.2f} < ${FLUCTUATION_USDT_THRESHOLD} → "
+            f"Selling {PROTECTION_FLUCTUATION_SELL_FRACTION * 100:.0f}% WMATIC"
+        )
         return True, "FLUCTUATION"
     
     # 2. Check open trades for per-trade exit
@@ -111,6 +116,7 @@ def has_enough_pol():
     return get_pol_balance() >= MIN_POL_BALANCE
 
 def get_safe_trade_size(usdt_balance):
-    return min(MAX_TRADE_SIZE_USD, usdt_balance * 0.28)
+    pct = float(os.getenv("COPY_TRADE_PCT", "0.28"))
+    return min(MAX_TRADE_SIZE_USD, usdt_balance * pct)
 
 print("✅ V2.5.1 Protection Module loaded successfully")

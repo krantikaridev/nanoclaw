@@ -466,9 +466,10 @@ def test_buy_blocked_zero_usdc():
     assert reason == "zero_usdc"
 
 
-def test_buy_blocked_invalid_trade_size_min_exceeds_balance():
+def test_buy_fixed_size_ignores_legacy_min_trade_usdc_range():
+    """Fixed $12–$20 sizing (2026-05-03) no longer uses wide min/max_trade_usdc for BUY notional."""
     s = _build_strategy_tuned(min_trade_usdc=100.0, max_trade_usdc=200.0)
-    _, reason = s.build_plan_with_block_reason(
+    plan, reason = s.build_plan_with_block_reason(
         symbol="WETH",
         token_address="0x" + "1" * 40,
         token_decimals=18,
@@ -480,7 +481,8 @@ def test_buy_blocked_invalid_trade_size_min_exceeds_balance():
         wallet_address_for_gas="0x" + "3" * 40,
         can_trade_asset=lambda *_a, **_k: True,
     )
-    assert reason == "invalid_trade_size"
+    assert reason is None
+    assert plan is not None and plan.trade_size == 12.0
 
 
 def test_sell_path_equity_to_usdc():

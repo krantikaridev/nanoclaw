@@ -36,6 +36,11 @@ AUTO_USDC_FOR_X_SIGNAL_MIN_WMATIC_VALUE = runtime.AUTO_USDC_FOR_X_SIGNAL_MIN_WMA
 ASSET_LAST_TRADE = runtime.ASSET_LAST_TRADE
 Balances = runtime.Balances
 COPY_TRADE_PCT = runtime.COPY_TRADE_PCT
+MAX_GWEI = runtime.MAX_GWEI
+FIXED_TRADE_USD_MIN = runtime.FIXED_TRADE_USD_MIN
+FIXED_TRADE_USD_MAX = runtime.FIXED_TRADE_USD_MAX
+# FIXED SIZING: $12–$20 per signal (bug fix 2026-05-03) — see runtime.fixed_copy_trade_usd and signal_equity_trader._compute_trade_size
+fixed_copy_trade_usd = runtime.fixed_copy_trade_usd
 COOLDOWN_MINUTES = runtime.COOLDOWN_MINUTES
 ENABLE_USDC_COPY = runtime.ENABLE_USDC_COPY
 ENABLE_X_SIGNAL_EQUITY = runtime.ENABLE_X_SIGNAL_EQUITY

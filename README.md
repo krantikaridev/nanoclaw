@@ -4,14 +4,17 @@ Nanoclaw is a risk-first trading bot for Polygon that executes real swaps and is
 
 For operators and agents, **`AI_CONTEXT.md`** on branch **`V2`** is the authoritative process and backlog; this README is the onboarding surface.
 
+**Development workflow** (commit gate, env sync, deploy helpers): **`docs/DEV_WORKFLOW.md`**.
+
 ## Quick commands (`nano*` convention)
 
 | Command | What it does |
 |---------|----------------|
-| `nanoup` | Safe update + restart (recommended) |
+| `nanoup` | Safe update + restart (recommended); repo script: **`scripts/nanoup.sh`** |
 | `nanomon` | Status, balances, CSV portfolio summary, recent activity from `real_cron.log` |
 | `nanokill` | Stop the bot |
 | `nanoattach` | Attach to live bot logs |
+| `python scripts/nanoenv_example.py --write` | Redact secrets from `.env` → refresh `.env.example` (review diff before commit) |
 
 **`sprintmon`** is not in this repo; use **`nanomon`** for a quick snapshot and **`nanoattach`** when you need the live stream.
 

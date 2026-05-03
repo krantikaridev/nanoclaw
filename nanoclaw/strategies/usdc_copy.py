@@ -104,11 +104,14 @@ class USDCopyStrategy:
                 return wallet
         return None
 
-    def _compute_trade_size(self, usdc_balance: float) -> float:
-        sized = usdc_balance * float(self.config.copy_trade_pct)
-        sized = max(float(self.config.min_trade_usdc), sized)
-        sized = min(float(self.config.max_trade_usdc), sized)
-        return max(0.0, float(sized))
+    def _compute_trade_size(self, usdc_balance: float, usdt_balance: float = 0.0) -> float:
+        from modules import runtime
+
+        # FIXED SIZING: $12–$20 per signal (bug fix 2026-05-03); same band as X-signal / copy paths
+        cap = runtime.fixed_copy_trade_usd(
+            usdc_balance, usdt_balance, float(self.config.copy_trade_pct)
+        )
+        return min(cap, usdc_balance)
 
     def build_plan(
         self,
@@ -117,6 +120,7 @@ class USDCopyStrategy:
         wallets: Iterable[str],
         wallet_address_for_gas: str,
         can_trade_wallet: WalletCooldownFn,
+        usdt_balance: float = 0.0,
         now: Optional[float] = None,
         urgent_gas: bool = False,
     ) -> Optional[USDCopyPlan]:
@@ -143,7 +147,7 @@ class USDCopyStrategy:
         if not chosen_wallet:
             return None
 
-        trade_size = self._compute_trade_size(usdc_balance)
+        trade_size = self._compute_trade_size(usdc_balance, usdt_balance)
         if trade_size <= 0 or trade_size > usdc_balance:
             return None
 

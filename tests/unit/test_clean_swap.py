@@ -262,8 +262,8 @@ def test_select_copy_trade_executes_when_at_least_one_wallet_is_eligible(monkeyp
     )
 
     assert decision.direction == "USDT_TO_WMATIC"
-    assert decision.trade_size == 18.0
-    assert decision.amount_in == int(18.0 * 1_000_000)
+    assert decision.trade_size == 20.0  # 100*0.28→$28 capped to $20 fixed band (2026-05-03)
+    assert decision.amount_in == int(20.0 * 1_000_000)
 
 
 def test_global_cooldown_uses_last_run_timestamp():
@@ -474,7 +474,7 @@ def test_try_x_signal_equity_decision_applies_dynamic_size_for_strong_buy(monkey
     class _Plan:
         direction = "USDC_TO_EQUITY"
         amount_in = 1
-        trade_size = 5.0
+        trade_size = 20.0
         message = "buy"
         token_in = "0x" + "2" * 40
         token_out = "0x" + "1" * 40
@@ -521,7 +521,7 @@ def test_try_x_signal_equity_decision_applies_dynamic_size_for_strong_buy(monkey
 
     assert decision is not None
     assert decision.direction == "USDC_TO_EQUITY"
-    # Strength 0.92 ≥ tier-high min → X_SIGNAL.USDC_GTE_TIER_HIGH (default 20); capped by USDC on hand ($20).
+    # Execution uses plan size capped by USDC (fixed-sizing tier override removed 2026-05-03).
     assert decision.trade_size == 20.0
     assert decision.amount_in == int(20.0 * 1_000_000)
 
@@ -530,7 +530,7 @@ def test_try_x_signal_equity_decision_caps_dynamic_size_to_available_usdc(monkey
     class _Plan:
         direction = "USDC_TO_EQUITY"
         amount_in = 1
-        trade_size = 5.0
+        trade_size = 20.0
         message = "buy"
         token_in = "0x" + "2" * 40
         token_out = "0x" + "1" * 40
@@ -1002,7 +1002,11 @@ def test_try_x_signal_high_conviction_no_plan_logs_override_not_gas_blocked(monk
 
     out = capsys.readouterr().out
     assert decision is None
-    assert "gas override active (0.80+ high conviction; bypassing max_gwei block)" in out
+    thr = clean_swap.X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD
+    assert (
+        f"gas override active ({thr:.2f}+ high conviction; bypassing {clean_swap.MAX_GWEI:.0f} gwei block)"
+        in out
+    )
     assert "gas blocked (gas≈" not in out
 
 

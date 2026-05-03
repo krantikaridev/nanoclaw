@@ -23,6 +23,15 @@ from .runtime import (
     w3,
 )
 
+# WMATIC↔USDT main path tuning (was hardcoded; see .env.example).
+MAIN_STRATEGY_MIN_USDT_RESERVE = float(os.getenv("MAIN_STRATEGY_MIN_USDT_RESERVE", "25"))
+MAIN_STRATEGY_TP_TRIGGER_WMATIC_USD = float(os.getenv("MAIN_STRATEGY_TP_TRIGGER_WMATIC_USD", "52"))
+MAIN_STRATEGY_CUT_LOSS_WMATIC_USD = float(os.getenv("MAIN_STRATEGY_CUT_LOSS_WMATIC_USD", "40"))
+MAIN_STRATEGY_CUT_LOSS_MIN_WMATIC_BALANCE = float(os.getenv("MAIN_STRATEGY_CUT_LOSS_MIN_WMATIC_BALANCE", "50"))
+MAIN_STRATEGY_RESERVE_SELL_FRACTION = float(os.getenv("MAIN_STRATEGY_RESERVE_SELL_FRACTION", "0.45"))
+MAIN_STRATEGY_CUT_LOSS_SELL_FRACTION = float(os.getenv("MAIN_STRATEGY_CUT_LOSS_SELL_FRACTION", "0.28"))
+COPY_TRADE_AGGRESSIVE_THRESHOLD = float(os.getenv("COPY_TRADE_AGGRESSIVE_THRESHOLD", "0.20"))
+
 
 def _facade():
     """Tests monkeypatch attrs on ``clean_swap`` — always read knobs from that module."""
@@ -78,7 +87,9 @@ def select_copy_trade(balances: Balances, wallets: list[str]) -> TradeDecision:
         cs._log_trade_skipped(f"cooldown (all wallets in {cs.PER_WALLET_COOLDOWN}s window)")
         return TradeDecision(message=f"TRADE SKIPPED: cooldown (all wallets in {cs.PER_WALLET_COOLDOWN}s window)")
 
-    trade_size = max(8.0, min(18.0, balances.usdt * cs.COPY_TRADE_PCT))
+    # FIXED SIZING: $12–$20 per signal (bug fix 2026-05-03); spend USDT leg only
+    trade_size = cs.fixed_copy_trade_usd(balances.usdc, balances.usdt, cs.COPY_TRADE_PCT)
+    trade_size = min(trade_size, balances.usdt)
     return TradeDecision(
         direction="USDT_TO_WMATIC",
         amount_in=int(trade_size * 1_000_000),
@@ -100,6 +111,7 @@ async def evaluate_usdc_copy_trade(
     usdc_strategy = strategy if strategy is not None else USDC_COPY_STRATEGY
     plan = usdc_strategy.build_plan(
         usdc_balance=balances.usdc,
+        usdt_balance=balances.usdt,
         wallets=wallets,
         wallet_address_for_gas=cs.WALLET,
         can_trade_wallet=cs.can_trade_wallet,
@@ -123,27 +135,33 @@ def select_main_strategy_trade(
     balances: Balances,
     current_price: float,
 ) -> TradeDecision:
-    trade_size = max(15.0, min(35.0, balances.usdt * 0.28))
+    cs = _facade()
+    # FIXED SIZING: $12–$20 per signal (bug fix 2026-05-03)
+    trade_size = cs.fixed_copy_trade_usd(balances.usdc, balances.usdt, cs.COPY_TRADE_PCT)
+    trade_size = min(trade_size, balances.usdt)
     wmatic_value_usd = balances.wmatic * current_price
 
-    if balances.usdt < 25:
+    if balances.usdt < MAIN_STRATEGY_MIN_USDT_RESERVE:
         return TradeDecision(
             direction="WMATIC_TO_USDT",
-            amount_in=int(balances.wmatic * 0.45 * 1e18),
-            message=f"🔄 USDT RESERVE PROTECTION: ${balances.usdt:.2f} < $25",
+            amount_in=int(balances.wmatic * MAIN_STRATEGY_RESERVE_SELL_FRACTION * 1e18),
+            message=(
+                f"🔄 USDT RESERVE PROTECTION: ${balances.usdt:.2f} < $"
+                f"{MAIN_STRATEGY_MIN_USDT_RESERVE:.0f}"
+            ),
         )
 
-    if wmatic_value_usd > 52:
+    if wmatic_value_usd > MAIN_STRATEGY_TP_TRIGGER_WMATIC_USD:
         return TradeDecision(
             direction="WMATIC_TO_USDT",
-            amount_in=int(balances.wmatic * 0.45 * 1e18),
+            amount_in=int(balances.wmatic * MAIN_STRATEGY_RESERVE_SELL_FRACTION * 1e18),
             message=f"🔄 Taking profit (WMATIC high: ${wmatic_value_usd:.2f})",
         )
 
-    if wmatic_value_usd < 40 and balances.wmatic > 50:
+    if wmatic_value_usd < MAIN_STRATEGY_CUT_LOSS_WMATIC_USD and balances.wmatic > MAIN_STRATEGY_CUT_LOSS_MIN_WMATIC_BALANCE:
         return TradeDecision(
             direction="WMATIC_TO_USDT",
-            amount_in=int(balances.wmatic * 0.28 * 1e18),
+            amount_in=int(balances.wmatic * MAIN_STRATEGY_CUT_LOSS_SELL_FRACTION * 1e18),
             message=f"🔄 Cutting loss (WMATIC down: ${wmatic_value_usd:.2f})",
         )
 
@@ -183,7 +201,7 @@ def determine_trade_decision(
         f"PER_ASSET_COOLDOWN_MINUTES={cs.PER_ASSET_COOLDOWN_MINUTES}"
     )
 
-    if cs.COPY_TRADE_PCT >= 0.20:
+    if cs.COPY_TRADE_PCT >= COPY_TRADE_AGGRESSIVE_THRESHOLD:
         print(f"🔥 AGGRESSIVE MODE ACTIVE | COPY_TRADE_PCT={cs.COPY_TRADE_PCT:.2f}")
 
     should_force_sell, reason = cs_check_exit_conditions()
@@ -218,6 +236,7 @@ def determine_trade_decision(
                 wallets=target_wallets,
                 wallet_address_for_gas=cs.WALLET,
                 can_trade_wallet=cs.can_trade_wallet,
+                usdt_balance=balances.usdt,
             )
             if plan:  # try all eligible assets
                 print(f"🔍 DECISION PATH: USDC_COPY | Size ~${plan.trade_size:.2f}")

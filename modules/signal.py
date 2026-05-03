@@ -8,8 +8,8 @@ import logging
 import os
 from typing import Optional, Sequence
 
-from nanoclaw.config import X_SIGNAL
 from nanoclaw.strategies.signal_equity_trader import (
+    EquityBuildPlanParams,
     EquityTradePlan,
     FollowedEquity,
     SignalEquityTrader,
@@ -20,6 +20,7 @@ from . import runtime
 from .runtime import (
     AUTO_POPULATE_USDC_AMOUNT,
     Balances,
+    MAX_GWEI,
     TradeDecision,
     USDC,
     X_SIGNAL_AUTO_USDC_TARGET,
@@ -37,6 +38,50 @@ from .runtime import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _wrong_chain_eth_like_addresses() -> frozenset[str]:
+    """Optional env CHAIN_HINT_WRONG_ETH_ADDRESSES=comma-separated; else defaults (Ethereum-mainnet-style tokens)."""
+    raw = (os.getenv("CHAIN_HINT_WRONG_ETH_ADDRESSES") or "").strip()
+    if raw:
+        return frozenset(x.strip().lower() for x in raw.split(",") if x.strip())
+    return frozenset(
+        (
+            "0xb812837b81a3a6b81d7cd74cfb19a7f2784555e5",
+            "0xba47214edd2bb43099611b208f75e4b42fdcfedc",
+            "0x2d1f7226bd1f780af6b9a49dcc0ae00e8df4bdee",
+        )
+    )
+
+
+_CHAIN_HINT_ETH_LIKE = _wrong_chain_eth_like_addresses()
+
+
+def _invoke_equity_build_plan(
+    trader: SignalEquityTrader,
+    params: EquityBuildPlanParams,
+) -> tuple[Optional[EquityTradePlan], Optional[str]]:
+    """Prefer ``build_plan_from_params``; fall back to kwargs for test doubles that only stub ``build_plan_with_block_reason``."""
+    direct = getattr(trader, "build_plan_from_params", None)
+    if callable(direct):
+        return direct(params)
+    return trader.build_plan_with_block_reason(
+        symbol=params.symbol,
+        token_address=params.token_address,
+        token_decimals=params.token_decimals,
+        signal_strength=params.signal_strength,
+        earnings_proximity_days=params.earnings_proximity_days,
+        current_price_usd=params.current_price_usd,
+        usdc_balance=params.usdc_balance,
+        equity_balance=params.equity_balance,
+        usdt_balance=params.usdt_balance,
+        wallet_address_for_gas=params.wallet_address_for_gas,
+        can_trade_asset=params.can_trade_asset,
+        now=params.now,
+        urgent_gas=params.urgent_gas,
+        allow_high_gas_override=params.allow_high_gas_override,
+        upside_pct=params.upside_pct,
+    )
 
 
 def _cs_mod():
@@ -393,12 +438,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
 
     def _polygon_chain_hint(sym: str, token_address: str) -> Optional[str]:
         t = (token_address or "").strip().lower()
-        eth_like = {
-            "0xb812837b81a3a6b81d7cd74cfb19a7f2784555e5",
-            "0xba47214edd2bb43099611b208f75e4b42fdcfedc",
-            "0x2d1f7226bd1f780af6b9a49dcc0ae00e8df4bdee",
-        }
-        if t in eth_like:
+        if t in _CHAIN_HINT_ETH_LIKE:
             return f"{sym}: token may be wrong chain (not Polygon)"
         return None
 
@@ -483,7 +523,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
         # === PnL+ SPRINT OVERRIDE (high-conviction bypass) ===
         if high_conviction:
             print(
-                f"🚀 HIGH-CONVICTION GAS OVERRIDE | {strong_thr:.2f}+ strength detected — bypassing 450 gwei limit "
+                f"🚀 HIGH-CONVICTION GAS OVERRIDE | {strong_thr:.2f}+ strength detected — bypassing {MAX_GWEI:.0f} gwei limit "
                 "(PnL+ Sprint Mode, high return high conviction, net expected positive)"
             )
             # Force USDC top-up for high-conviction.
@@ -632,33 +672,26 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
         for a in eligible_ordered:
             equity_balance = fcb.get_token_balance(a.token_address, int(a.decimals))
             sym = str(a.symbol).strip()
-            plan, plan_block = trader.build_plan_with_block_reason(
-                symbol=sym,
-                token_address=str(a.token_address).strip(),
-                token_decimals=int(a.decimals),
-                signal_strength=float(a.signal_strength),
-                earnings_proximity_days=a.earnings_days,
-                current_price_usd=a.current_price_usd,
-                usdc_balance=balances.usdc,
-                equity_balance=equity_balance,
-                wallet_address_for_gas=fcb.WALLET,
-                can_trade_asset=fcb.can_trade_asset,
-                allow_high_gas_override=high_conviction,
+            plan, plan_block = _invoke_equity_build_plan(
+                trader,
+                EquityBuildPlanParams.for_eligible_asset(
+                    a,
+                    usdc_balance=balances.usdc,
+                    usdt_balance=balances.usdt,
+                    equity_balance=equity_balance,
+                    wallet_address_for_gas=fcb.WALLET,
+                    can_trade_asset=fcb.can_trade_asset,
+                    allow_high_gas_override=high_conviction,
+                ),
             )
             if plan:
+                # Plan trade_size already uses FIXED SIZING $12–$20 (signal_equity_trader); never re-expand to full USDC.
                 dynamic_trade_size_usdc = float(plan.trade_size)
                 if str(plan.direction) == "USDC_TO_EQUITY":
-                    strength = abs(float(a.signal_strength))
-                    fe_thr_dyn = float(fcb.X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD)
-                    if strength >= X_SIGNAL.TIER_HIGH_MIN:
-                        trade_size_usdc = X_SIGNAL.USDC_GTE_TIER_HIGH
-                    elif strength >= fe_thr_dyn:
-                        trade_size_usdc = X_SIGNAL.USDC_GTE_FORCE_ELIGIBLE
-                    else:
-                        trade_size_usdc = X_SIGNAL.USDC_BELOW_FORCE_ELIGIBLE
-                    dynamic_trade_size_usdc = min(float(trade_size_usdc), float(balances.usdc))
+                    dynamic_trade_size_usdc = min(dynamic_trade_size_usdc, float(balances.usdc))
                     logger.info(
-                        f"X-SIGNAL EQUITY BUY: {sym} | Strength {strength:.2f} | Size: ${dynamic_trade_size_usdc:.2f}"
+                        f"X-SIGNAL EQUITY BUY: {sym} | Strength {abs(float(a.signal_strength)):.2f} | "
+                        f"Size: ${dynamic_trade_size_usdc:.2f}"
                     )
                 secs_plan = int(trader.config.per_asset_cooldown_seconds)
                 decision = TradeDecision(
@@ -693,7 +726,8 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                 summary_bits.append(f"usdc low: ${balances.usdc:.2f}")
             if high_conviction and dry_run:
                 print(
-                    "[nanoclaw] gas override active (0.80+ high conviction; bypassing max_gwei block)"
+                    f"[nanoclaw] gas override active ({high_conviction_threshold:.2f}+ high conviction; "
+                    f"bypassing {MAX_GWEI:.0f} gwei block)"
                 )
             print(f"{runtime._nanolog()}X-SIGNAL EQUITY | No valid plan this cycle (reason: {' | '.join(summary_bits) or 'no_plan'})")
             return None
@@ -752,7 +786,9 @@ def evaluate_x_signal_equity_trade(
             equity_balance=equity_balance,
             wallet_address_for_gas=fcb.WALLET,
             can_trade_asset=fcb.can_trade_asset,
+            usdt_balance=balances.usdt,
             allow_high_gas_override=high_conviction,
+            upside_pct=a.upside_pct,
         )
        
         if plan:  # try all eligible assets

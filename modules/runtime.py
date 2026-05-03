@@ -33,7 +33,7 @@ load_dotenv()
 load_dotenv(".env.local", override=True)
 
 
-from constants import ERC20_ABI, LOG_PREFIX, USDC, USDT, WALLET, WMATIC  # noqa: E402
+from constants import ERC20_ABI, LOG_PREFIX, ROUTER, USDC, USDT, WALLET, WMATIC  # noqa: E402
 from nanoclaw.config import connect_web3  # noqa: E402
 from nanoclaw.utils.gas_protector import GasProtector  # noqa: E402
 from nanoclaw.strategies.usdc_copy import USDCopyStrategy  # noqa: E402
@@ -58,6 +58,11 @@ MIN_POL_FOR_GAS = float(os.getenv("MIN_POL_FOR_GAS", "0.005"))
 AUTO_TOPUP_POL = os.getenv("AUTO_TOPUP_POL", "true").lower() == "true"
 POL_TOPUP_AMOUNT = float(os.getenv("POL_TOPUP_AMOUNT", "0.03"))
 COPY_TRADE_PCT = float(os.getenv("COPY_TRADE_PCT", "0.28"))
+# Align with GasProtector builder (`MAX_GWEI`); used in logs / diagnostics.
+MAX_GWEI = float(os.getenv("MAX_GWEI", "80"))
+# Fixed USD band for copy + X-signal sizing (`fixed_copy_trade_usd`).
+FIXED_TRADE_USD_MIN = float(os.getenv("FIXED_TRADE_USD_MIN", "12"))
+FIXED_TRADE_USD_MAX = float(os.getenv("FIXED_TRADE_USD_MAX", "20"))
 PER_WALLET_COOLDOWN = int(os.getenv("PER_WALLET_COOLDOWN", "180"))
 TRAILING_STOP_PCT = float(os.getenv("TRAILING_STOP_PCT", "5.0"))
 TAKE_PROFIT_PCT = float(os.getenv("TAKE_PROFIT_PCT", "5.0"))
@@ -162,6 +167,10 @@ class Balances:
     wmatic: float
     pol: float
     usdc: float = 0.0
+    # Mark-to-USDT (router quote) for followed equity tokens (WETH/LINK/...) not in core balances; bug fix 2026-05-03
+    followed_equity_usd: float = 0.0
+    # usdt+usdc+WMATIC*px+POL*px+followed_equity_usd; for dashboard / nanomon when liquid stables are 0 but positions exist
+    total_portfolio_usd: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -187,7 +196,7 @@ def build_web3_client(rpc_url: Optional[str] = None) -> Web3:
 def build_gas_protector() -> GasProtector:
     return (
         GasProtector.builder()
-        .with_max_gwei(float(os.getenv("MAX_GWEI", "80")))
+        .with_max_gwei(MAX_GWEI)
         .with_urgent_gwei(float(os.getenv("URGENT_GWEI", "120")))
         .with_min_pol_balance(MIN_POL_FOR_GAS)
         .with_retry_attempts(int(os.getenv("GAS_RPC_RETRY_ATTEMPTS", "2")))
@@ -383,12 +392,73 @@ def get_gas_status(
     )
 
 
+def fixed_copy_trade_usd(usdc: float, usdt: float, copy_trade_pct: float) -> float:
+    # FIXED SIZING: band per signal — bounds from FIXED_TRADE_USD_MIN / FIXED_TRADE_USD_MAX (.env).
+    stable = max(0.0, float(usdc)) + max(0.0, float(usdt))
+    raw = stable * float(copy_trade_pct)
+    lo, hi = FIXED_TRADE_USD_MIN, FIXED_TRADE_USD_MAX
+    if hi < lo:
+        lo, hi = hi, lo
+    return max(lo, min(hi, float(raw)))
+
+
+def _followed_equity_tokens_usdt_usd() -> float:
+    """Router-quoted USDT value for non-core followed tokens (excludes USDC/USDT/WMATIC already in Balances)."""
+    from web3 import Web3
+
+    from swap_executor import _best_quote_path, build_polygon_swap_path_candidates
+
+    total = 0.0
+    try:
+        assets = X_SIGNAL_EQUITY_TRADER.load_followed_equities()
+    except Exception:
+        return 0.0
+    for a in assets:
+        addr = (a.token_address or "").strip()
+        if not addr:
+            continue
+        al = addr.lower()
+        if al in (USDC.lower(), USDT.lower(), WMATIC.lower()):
+            continue
+        bal = get_token_balance(addr, int(a.decimals))
+        if bal <= 0:
+            continue
+        amt = int(bal * (10 ** int(a.decimals)))
+        if amt <= 0:
+            continue
+        try:
+            paths = build_polygon_swap_path_candidates(
+                Web3.to_checksum_address(addr),
+                Web3.to_checksum_address(USDT),
+            )
+            _, best_amt, _ = _best_quote_path(w3, router=ROUTER, amount_in=amt, paths=paths)
+            total += best_amt / 1_000_000
+        except Exception:
+            continue
+    return total
+
+
 def get_balances() -> Balances:
+    from protection import get_live_wmatic_price
+
+    usdt = get_token_balance(USDT, 6)
+    wmatic = get_token_balance(WMATIC, 18)
+    pol = get_pol_balance()
+    usdc = get_token_balance(USDC, 6)
+    fe_usd = _followed_equity_tokens_usdt_usd()
+    try:
+        wmatic_px = float(get_live_wmatic_price())
+    except Exception:
+        wmatic_px = 0.0
+    pol_price_usd = float(POL_USD_PRICE)
+    total_pf = usdt + usdc + (wmatic * wmatic_px) + (pol * pol_price_usd) + fe_usd
     return Balances(
-        usdt=get_token_balance(USDT, 6),
-        wmatic=get_token_balance(WMATIC, 18),
-        pol=get_pol_balance(),
-        usdc=get_token_balance(USDC, 6),
+        usdt=usdt,
+        wmatic=wmatic,
+        pol=pol,
+        usdc=usdc,
+        followed_equity_usd=fe_usd,
+        total_portfolio_usd=total_pf,
     )
 
 
@@ -413,7 +483,9 @@ def write_portfolio_history_snapshot(current_price: float) -> None:
     pol = cs.get_pol_balance(wallet_address=wallet_address)
     usdc = cs.get_token_balance(cs.USDC, 6, wallet_address=wallet_address)
 
-    total_value = usdt + usdc + (wmatic * current_price) + (pol * pol_price_usd)
+    # Deployed equity tokens (WETH/LINK/…) quoted via router — keeps CSV aligned with nanomon when stables are drained.
+    fe_usd = _followed_equity_tokens_usdt_usd()
+    total_value = usdt + usdc + (wmatic * current_price) + (pol * pol_price_usd) + fe_usd
     row = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "usdt": f"{usdt:.6f}",
@@ -585,7 +657,7 @@ def build_protection_exit_decision(
     open_trade: Optional[dict],
 ) -> TradeDecision:
     cs = importlib.import_module("clean_swap")
-    sell_fraction = 0.45
+    sell_fraction = float(cs.TAKE_PROFIT_SELL_PCT)
     _, strong_signal_tp = cs._effective_take_profit_thresholds()
 
     if reason == "PER_TRADE_EXIT" and open_trade:

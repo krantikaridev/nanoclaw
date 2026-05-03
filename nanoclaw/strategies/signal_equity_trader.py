@@ -22,6 +22,7 @@ class FollowedEquity:
     min_signal_strength: Optional[float] = None
     earnings_days: Optional[float] = None
     current_price_usd: Optional[float] = None
+    upside_pct: Optional[float] = None
 
 
 @dataclass
@@ -56,6 +57,55 @@ class EquityTradePlan:
 
 
 AssetCooldownGetFn = Callable[[str, Optional[float], int], bool]
+
+
+@dataclass(frozen=True)
+class EquityBuildPlanParams:
+    """Encapsulates kwargs for ``build_plan_with_block_reason`` (reduces long call sites in signal orchestration)."""
+
+    symbol: str
+    token_address: str
+    token_decimals: int
+    signal_strength: float
+    earnings_proximity_days: Optional[float]
+    current_price_usd: Optional[float]
+    usdc_balance: float
+    equity_balance: float
+    usdt_balance: float
+    wallet_address_for_gas: str
+    can_trade_asset: AssetCooldownGetFn
+    now: Optional[float] = None
+    urgent_gas: bool = False
+    allow_high_gas_override: bool = False
+    upside_pct: Optional[float] = None
+
+    @classmethod
+    def for_eligible_asset(
+        cls,
+        asset: FollowedEquity,
+        *,
+        usdc_balance: float,
+        usdt_balance: float,
+        equity_balance: float,
+        wallet_address_for_gas: str,
+        can_trade_asset: AssetCooldownGetFn,
+        allow_high_gas_override: bool,
+    ) -> EquityBuildPlanParams:
+        return cls(
+            symbol=str(asset.symbol).strip(),
+            token_address=str(asset.token_address).strip(),
+            token_decimals=int(asset.decimals),
+            signal_strength=float(asset.signal_strength),
+            earnings_proximity_days=asset.earnings_days,
+            current_price_usd=asset.current_price_usd,
+            usdc_balance=usdc_balance,
+            equity_balance=equity_balance,
+            usdt_balance=usdt_balance,
+            wallet_address_for_gas=wallet_address_for_gas,
+            can_trade_asset=can_trade_asset,
+            allow_high_gas_override=allow_high_gas_override,
+            upside_pct=asset.upside_pct,
+        )
 
 
 class SignalEquityTraderBuilder:
@@ -243,6 +293,8 @@ class SignalEquityTrader:
             earnings_days_f = float(earnings_days) if earnings_days is not None else None
             current_price = item.get("current_price_usd", None)
             current_price_f = float(current_price) if current_price is not None else None
+            up = item.get("upside_pct", None)
+            upside_f = float(up) if up is not None else None
             out.append(
                 FollowedEquity(
                     symbol=symbol,
@@ -252,6 +304,7 @@ class SignalEquityTrader:
                     min_signal_strength=min_signal_strength,
                     earnings_days=earnings_days_f,
                     current_price_usd=current_price_f,
+                    upside_pct=upside_f,
                 )
             )
         return out
@@ -265,15 +318,39 @@ class SignalEquityTrader:
         current_time = time.time() if now is None else now
         return can_trade_asset(symbol, current_time, self.config.per_asset_cooldown_seconds)
 
-    def _compute_trade_size(self, usdc_balance: float) -> float:
-        sized = usdc_balance * float(self.config.trade_pct_of_usdc)
-        sized = max(float(self.config.min_trade_usdc), sized)
-        sized = min(float(self.config.max_trade_usdc), sized)
+    def _compute_trade_size(self, usdc_balance: float, usdt_balance: float = 0.0) -> float:
+        from modules import runtime as rt
+
+        # FIXED SIZING: $12–$20 per signal (bug fix 2026-05-03)
+        pct = float(os.getenv("COPY_TRADE_PCT", "0.28"))
+        cap = rt.fixed_copy_trade_usd(usdc_balance, usdt_balance, pct)
+        sized = min(cap, float(usdc_balance))
         return max(0.0, float(sized))
 
     @staticmethod
     def _addrs_equal_case_insensitive(a: str, b: str) -> bool:
         return str(a).strip().lower() == str(b).strip().lower()
+
+    def build_plan_from_params(
+        self, params: EquityBuildPlanParams
+    ) -> Tuple[Optional[EquityTradePlan], Optional[str]]:
+        return self.build_plan_with_block_reason(
+            symbol=params.symbol,
+            token_address=params.token_address,
+            token_decimals=params.token_decimals,
+            signal_strength=params.signal_strength,
+            earnings_proximity_days=params.earnings_proximity_days,
+            current_price_usd=params.current_price_usd,
+            usdc_balance=params.usdc_balance,
+            equity_balance=params.equity_balance,
+            usdt_balance=params.usdt_balance,
+            wallet_address_for_gas=params.wallet_address_for_gas,
+            can_trade_asset=params.can_trade_asset,
+            now=params.now,
+            urgent_gas=params.urgent_gas,
+            allow_high_gas_override=params.allow_high_gas_override,
+            upside_pct=params.upside_pct,
+        )
 
     def build_plan_with_block_reason(
         self,
@@ -286,11 +363,13 @@ class SignalEquityTrader:
         current_price_usd: Optional[float],
         usdc_balance: float,
         equity_balance: float,
+        usdt_balance: float = 0.0,
         wallet_address_for_gas: str,
         can_trade_asset: AssetCooldownGetFn,
         now: Optional[float] = None,
         urgent_gas: bool = False,
         allow_high_gas_override: bool = False,
+        upside_pct: Optional[float] = None,
     ) -> Tuple[Optional[EquityTradePlan], Optional[str]]:
         """Build a trade plan with detailed block reasons for DEBUG."""
         if not self.config.enabled:
@@ -393,7 +472,7 @@ class SignalEquityTrader:
                 print(f"[nanoclaw] BLOCK: {sym} | zero_usdc (balance=${usdc_balance:.2f})")
                 logger.debug("build_plan block sym=%s reason=zero_usdc", sym)
                 return None, "zero_usdc"
-            trade_size = self._compute_trade_size(usdc_balance)
+            trade_size = self._compute_trade_size(usdc_balance, usdt_balance)
             if trade_size <= 0 or trade_size > usdc_balance:
                 print(f"[nanoclaw] BLOCK: {sym} | invalid_trade_size (computed=${trade_size:.2f}, available=${usdc_balance:.2f})")
                 logger.debug("build_plan block sym=%s reason=invalid_trade_size", sym)
@@ -419,6 +498,15 @@ class SignalEquityTrader:
                 ),
             )
             print(f"[nanoclaw] PLAN_BUILD_SUCCESS | {sym} | BUY | ${trade_size:.2f}")
+            exp_pnl = (
+                float(trade_size) * (float(upside_pct) / 100.0)
+                if isinstance(upside_pct, (int, float))
+                else 0.0
+            )
+            print(
+                f"TRADE_ATTRIBUTION | Asset={sym} | Size=${trade_size:.2f} | Signal={strength:.2f} | "
+                f"Wallet=X-SIGNAL | Expected_PnL={exp_pnl:.2f}"
+            )
             logger.debug("build_plan success sym=%s direction=BUY trade_size=%s", sym, trade_size)
             return plan, None
 
@@ -456,6 +544,16 @@ class SignalEquityTrader:
             ),
         )
         print(f"[nanoclaw] PLAN_BUILD_SUCCESS | {sym} | SELL | {sell_fraction*100:.0f}%")
+        sell_sz = (
+            float(equity_balance) * float(sell_fraction) * float(current_price_usd)
+            if isinstance(current_price_usd, (int, float))
+            else 0.0
+        )
+        exp_pnl = sell_sz * (float(upside_pct) / 100.0) if isinstance(upside_pct, (int, float)) else 0.0
+        print(
+            f"TRADE_ATTRIBUTION | Asset={sym} | Size=${sell_sz:.2f} | Signal={strength:.2f} | "
+            f"Wallet=X-SIGNAL | Expected_PnL={exp_pnl:.2f}"
+        )
         logger.debug("build_plan success sym=%s direction=SELL fraction=%s", sym, sell_fraction)
         return plan, None
 
@@ -472,9 +570,11 @@ class SignalEquityTrader:
         equity_balance: float,
         wallet_address_for_gas: str,
         can_trade_asset: AssetCooldownGetFn,
+        usdt_balance: float = 0.0,
         now: Optional[float] = None,
         urgent_gas: bool = False,
         allow_high_gas_override: bool = False,
+        upside_pct: Optional[float] = None,
     ) -> Optional[EquityTradePlan]:
         logger.debug(
             "build_plan entry sym=%s signal=%s usdc=%s equity=%s",
@@ -492,11 +592,13 @@ class SignalEquityTrader:
             current_price_usd=current_price_usd,
             usdc_balance=usdc_balance,
             equity_balance=equity_balance,
+            usdt_balance=usdt_balance,
             wallet_address_for_gas=wallet_address_for_gas,
             can_trade_asset=can_trade_asset,
             now=now,
             urgent_gas=urgent_gas,
             allow_high_gas_override=allow_high_gas_override,
+            upside_pct=upside_pct,
         )
         if plan is None:
             logger.debug("build_plan exit None sym=%s reason=%s", symbol, reason)

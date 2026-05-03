@@ -11,6 +11,7 @@ __pycache__/
 # Runtime files
 real_cron.log
 portfolio_history.csv
+portfolio_baseline.json
 bot_state.json
 *.csv
 *.json

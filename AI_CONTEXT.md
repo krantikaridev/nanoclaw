@@ -24,7 +24,8 @@ When a Grok (or Cursor) thread hits the message limit—or you deliberately star
 ## **House-Cleaning Checklist** (end of every substantive session)
 
 - [ ] **`git status` / `git diff --name-only`** — scope matches intention; no surprise files.
-- [ ] **`python -m compileall -q .`** and **`python -m pytest -q`** after code changes.
+- [ ] **`python -m compileall -q .`** and **`python -m pytest -q`** after code changes (or **`scripts/pre_commit_gate.ps1`** / **`scripts/pre_commit_gate.sh`**).
+- [ ] **Dev workflow** — follow **`docs/DEV_WORKFLOW.md`** (commit gate, `.env` hygiene, `nanoenv_example.py`, `nanoup.sh`).
 - [ ] **Commit** with a factual message (what / why).
 - [ ] **Update `AI_CONTEXT.md`** — backlog, dates, incidents, roadmap (this file stays current).
 - [ ] **CSV sanity** — if anything looked like test-mode spikes, run **`scripts/clean_dummy_data.sh`** after backup approval; reconcile with Polygonscan.

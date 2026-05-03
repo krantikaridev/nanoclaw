@@ -9,9 +9,13 @@ echo "✅ V2.5.10 Copy Trading EXECUTING REAL TRADES (Test Mode Active)"
 echo "Monitoring 8 wallets | Copy ratio: 28.0%"
 echo "✅ V2.5.1 Protection Module loaded successfully"
 
-# === PORTFOLIO VALUE & PnL (from CSV) ===
-LAST_TOTAL=$(tail -1 portfolio_history.csv | cut -d, -f7 2>/dev/null || echo "0")
-BASELINE=95.45
+# === PORTFOLIO VALUE & PnL (live chain total includes deployed equity; CSV fallback) ===
+LAST_TOTAL="$(python3 -c 'from clean_swap import get_balances; print(f"{get_balances().total_portfolio_usd:.2f}")' 2>/dev/null || true)"
+if [ -z "${LAST_TOTAL}" ]; then
+  LAST_TOTAL=$(tail -1 portfolio_history.csv | cut -d, -f7 2>/dev/null || echo "0")
+fi
+# Baseline: PORTFOLIO_BASELINE_USD → portfolio_baseline.json → first CSV row → current total (see modules/baseline.py)
+BASELINE="$(python3 scripts/nanomon_baseline.py "${LAST_TOTAL}" 2>/dev/null || echo "${LAST_TOTAL}")"
 
 # Robust PnL calculations
 PNL_DATA=$(python3 -c '
