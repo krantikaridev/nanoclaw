@@ -1,23 +1,24 @@
-
-# OS and editor junk
-# Python cache
-# Runtime files
-# Virtual environment
-*.csv
-*.json
-*.pyc
-*.pyd
-*.pyo
-*.swo
-*.swp
-.DS_Store
+# Secrets - NEVER commit
 .env
-.idea/
+.env.*
+*.backup*
+
+# Virtual environment
 .venv/
-.vscode/
-__pycache__/
-bot_state.json
-portfolio_baseline.json
-portfolio_history.csv
-real_cron.log
 venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Runtime files (we commit these manually)
+!portfolio_history.csv
+!real_cron.log
+
+# OS & editor
+.DS_Store
+.vscode/
+.idea/
+*.swp
