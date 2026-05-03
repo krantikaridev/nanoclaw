@@ -103,6 +103,23 @@ def test_best_quote_path_raises_when_no_paths_are_quotable():
         raise AssertionError("Expected RuntimeError for all-failing quote paths")
 
 
+def test_best_quote_path_accepts_explicit_slippage_bps(monkeypatch):
+    monkeypatch.setattr(swap_executor, "SWAP_SLIPPAGE_BPS", 100)
+    p1 = [swap_executor.USDC, swap_executor.WMATIC]
+    responses = {tuple(p1): [1, 1000]}
+
+    _path, best_amt, min_out = swap_executor._best_quote_path(
+        _FakeW3(responses),
+        router=swap_executor.ROUTER,
+        amount_in=1,
+        paths=[p1],
+        slippage_bps=250,
+    )
+
+    assert best_amt == 1000
+    assert min_out == 975
+
+
 def test_best_quote_path_caps_slippage_and_enforces_min_out_floor(monkeypatch):
     monkeypatch.setattr(swap_executor, "SWAP_SLIPPAGE_BPS", 15000)
     p1 = [swap_executor.USDC, swap_executor.WMATIC]

@@ -130,6 +130,7 @@ Operational focus: correctness of this precedence, USDC liquidity for equity **b
 - Rejects **`token_in == token_out`** (misconfiguration / wrong `USDC` env).
 - **`getAmountsOut`** quote on Router with combined ABI (`ROUTER_SWAP_AND_QUOTE_ABI`); tries **direct** path first, then **WMATIC hop**, then **USDC hop** between non-endpoint intermediates (`build_polygon_swap_path_candidates`).
 - **`swapExactTokensForTokens`** uses **`amount_out_min`** from quoted output × `(1 - SWAP_SLIPPAGE_BPS/10000)` (default slippage 1%; env `SWAP_SLIPPAGE_BPS`). Longer paths use higher gas limits.
+- **Router fallback (when 1inch is missing or errors, e.g. HTTP 403):** logs **`[FALLBACK ROUTER]`** plus clearer 1inch error typing (HTTP vs URL). Fallback quoting uses **looser slippage** than `SWAP_SLIPPAGE_BPS` by default (`max(base+150 bps, 250 bps)`, overridable via `FALLBACK_ROUTER_SLIPPAGE_BPS`). **One on-chain retry** after a revert uses **`+ONCHAIN_SWAP_RETRY_EXTRA_BPS`** (default **50** = +0.5%) over the first fallback slippage, with log `RETRY ATTEMPT 1/1 | Increasing slippage to … bps` (override absolute second tier via `FALLBACK_ROUTER_RETRY_SLIPPAGE_BPS`). **1inch path:** same single retry with refreshed quote at **`SWAP_SLIPPAGE_BPS + ONCHAIN_SWAP_RETRY_EXTRA_BPS`** if the first swap reverts on-chain.
 - **Directions** without explicit tokens: backward-compatible resolutions for USDT/WPOL paths; equity directions supply `token_in` / `token_out` from plans.
 
 ## **Strategies**
@@ -294,7 +295,7 @@ Earnings Volatility Capture Engine v1, while preserving strict hard risk limits 
 | Command | What it does |
 |---------|----------------|
 | `nanoup` | Safe update + restart (recommended) |
-| `nanomon` | Status, balances, CSV portfolio summary, recent activity from `real_cron.log` |
+| `nanomon` | Runs `scripts/nanomon.py`: **LAST TRADE SUMMARY** (attempts / successes / fails / last OK / USDC), **tail** of `real_cron.log` (default **18** lines; `--tail N`) with **green/red/yellow** highlights; streams large logs; USDC via subprocess RPC with **log-line fallback**; **`--no-chain`** skips RPC |
 | `nanokill` | Stop the bot |
 | `nanoattach` | Attach to live bot logs |
 
