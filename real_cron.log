@@ -1,21 +1,30 @@
 nohup: ignoring input
-2026-05-03 12:07:03,308 | WARNING | PLAN FAILED for WMATIC_ALPHA: pol_below_min
-2026-05-03 12:07:08,996 | WARNING | PLAN FAILED for WETH_ALPHA: pol_below_min
-2026-05-03 12:07:14,369 | WARNING | PLAN FAILED for WBTC_ALPHA: pol_below_min
-2026-05-03 12:07:19,394 | WARNING | PLAN FAILED for LINK_ALPHA: pol_below_min
-2026-05-03 12:07:25,084 | WARNING | PLAN FAILED for USDC: pol_below_min
 ✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
 Monitoring 8 wallets | Copy ratio: 20.0%
 ✅ V2.5.1 Protection Module loaded successfully
-Real USDT: 0.00 | USDC: 0.00 | WMATIC: 0.00 | POL: 0.00
+[nanoclaw] SECRETS CHECK | All sensitive variables loaded from .env only (not hardcoded)
+[nanoclaw] WALLET BALANCE | USDC=$102.87 | Address=0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6
+Real USDT: 0.00 | USDC: 102.87 | WMATIC: 0.00 | POL: 9.88
+[nanoclaw] skip cycle — global cooldown ~63s left (COOLDOWN_MINUTES=3; last_run was 117s ago)
+[nanoclaw] TRADE SKIPPED: cooldown (global, ~63s left)
+2026-05-03 16:40:53,037 | INFO | X-SIGNAL EQUITY BUY: WMATIC_ALPHA | Strength 0.92 | Size: $8.00
+2026-05-03 16:40:58,636 | INFO | X-SIGNAL EQUITY BUY: WETH_ALPHA | Strength 0.87 | Size: $6.75
+2026-05-03 16:41:04,279 | INFO | X-SIGNAL EQUITY BUY: WBTC_ALPHA | Strength 0.83 | Size: $5.75
+2026-05-03 16:41:09,535 | INFO | X-SIGNAL EQUITY BUY: LINK_ALPHA | Strength 0.81 | Size: $5.25
+2026-05-03 16:41:15,296 | WARNING | PLAN FAILED for USDC: usdc_identity_noop
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+✅ V2.5.1 Protection Module loaded successfully
+[nanoclaw] SECRETS CHECK | All sensitive variables loaded from .env only (not hardcoded)
+[nanoclaw] WALLET BALANCE | USDC=$102.87 | Address=0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6
+Real USDT: 0.00 | USDC: 102.87 | WMATIC: 0.00 | POL: 9.88
 
-[nanoclaw] === CYCLE 1777809950 | BALANCES: USDT=$0.00 USDC=$0.00 WMATIC=$0.00 ===
-🔍 BALANCES | USDT=$0.00 USDC=$0.00 WMATIC≈0.00 USD | POL=0.0000 | copy_targets=8
+[nanoclaw] === CYCLE 1777826421 | BALANCES: USDT=$0.00 USDC=$102.87 WMATIC=$0.00 ===
+🔍 BALANCES | USDT=$0.00 USDC=$102.87 WMATIC≈0.00 USD | POL=9.8792 | copy_targets=8
 🔍 DECISION PATH | precedence: PROTECTION → PROFIT_TAKE → X_SIGNAL_EQUITY → USDC_COPY | POLYCOPY → MAIN_STRATEGY
-[nanoclaw] Runtime config | TAKE_PROFIT_PCT=8.00 STRONG_SIGNAL_TP=12.00 PER_ASSET_COOLDOWN_MINUTES=30
-📈 Holding open trade | buy $0.0971 -> now $0.0964 (-0.68%), peak $0.0974 (0.29%)
-🚀 PROACTIVE USDC TOP-UP triggered (have $0.00 < $20.00, target $25.00)
-[nanoclaw] AUTO-USDC skipped — gas/POL guard
+[nanoclaw] Runtime config | TAKE_PROFIT_PCT=1.50 STRONG_SIGNAL_TP=12.00 PER_ASSET_COOLDOWN_MINUTES=30
+🔥 AGGRESSIVE MODE ACTIVE | COPY_TRADE_PCT=0.28
+📈 Holding open trade | buy $0.0971 -> now $0.0963 (-0.78%), peak $0.0974 (0.29%)
 [nanoclaw] X-Signal eligibility floor = 0.6000; strong_threshold = 0.8000; force_eligible_threshold = 0.8000; high_conviction_threshold = 0.8000; force_high_conviction = True
 [nanoclaw] === ELIGIBILITY CHECK START ===
 [nanoclaw]   min_strength=0.600 | strong_threshold=0.800 | force_eligible_threshold=0.800 | high_conviction_threshold=0.800 | force_high_conviction=True
@@ -29,35 +38,6 @@ Real USDT: 0.00 | USDC: 0.00 | WMATIC: 0.00 | POL: 0.00
 🚀 HIGH-CONVICTION MODE ACTIVE — 0.80+ signal present, force_high_conviction enabled, gas protection relaxed for this cycle
 🟦 X-SIGNAL EQUITY CHECK | Checking 5 assets
 🚀 HIGH-CONVICTION GAS OVERRIDE | 0.80+ strength detected — bypassing 80 gwei limit (PnL+ Sprint Mode, high return high conviction, net expected positive)
-[nanoclaw] === ELIGIBILITY CHECK START ===
-[nanoclaw]   min_strength=0.600 | strong_threshold=0.800 | force_eligible_threshold=0.800 | high_conviction_threshold=0.800 | force_high_conviction=True
-[nanoclaw]   ✅ ELIGIBLE | WMATIC_ALPHA | signal= 0.920 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
-[nanoclaw]   ✅ ELIGIBLE | WETH_ALPHA   | signal= 0.870 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
-[nanoclaw]   ✅ ELIGIBLE | WBTC_ALPHA   | signal= 0.830 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
-[nanoclaw]   ✅ ELIGIBLE | LINK_ALPHA   | signal= 0.810 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
-[nanoclaw]   ✅ ELIGIBLE | USDC         | signal= 0.800 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
-[nanoclaw] === ELIGIBILITY CHECK END: 5/5 eligible ===
-
-[nanoclaw] AUTO-USDC skipped — gas/POL guard
-🟦 X-SIGNAL EQUITY | Auto-USDC failed during HIGH-CONVICTION prep (PnL+ Sprint Mode, high return high conviction)
-[nanoclaw] TRADE SKIPPED: AUTO-USDC failed during high-conviction prep (have $0.00, need $8.00)
-[nanoclaw] === ELIGIBILITY CHECK START ===
-[nanoclaw]   min_strength=0.600 | strong_threshold=0.800 | force_eligible_threshold=0.800 | high_conviction_threshold=0.800 | force_high_conviction=True
-[nanoclaw]   ✅ ELIGIBLE | WMATIC_ALPHA | signal= 0.920 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
-[nanoclaw]   ✅ ELIGIBLE | WETH_ALPHA   | signal= 0.870 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
-[nanoclaw]   ✅ ELIGIBLE | WBTC_ALPHA   | signal= 0.830 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
-[nanoclaw]   ✅ ELIGIBLE | LINK_ALPHA   | signal= 0.810 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
-[nanoclaw]   ✅ ELIGIBLE | USDC         | signal= 0.800 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
-[nanoclaw] === ELIGIBILITY CHECK END: 5/5 eligible ===
-
-[nanoclaw] AUTO-USDC skipped — gas/POL guard
-🟦 X-SIGNAL EQUITY | Auto-USDC attempt failed (guard/tx) — BUY paths may be skipped
-[nanoclaw] TRADE SKIPPED: AUTO-USDC failed (have $0.00, need $5.00)
-🟦 X-SIGNAL EQUITY | Auto-USDC insufficient for BUY equity (USDC $0.00 < $5.00) — BUY paths skipped
-[nanoclaw] TRADE SKIPPED: USDC low (have $0.00, need $5.00)
-🔄 AUTO-POL | Topping up 0.03 POL (current: 0.0)
-[nanoclaw] AUTO-POL skipped — insufficient WMATIC/USDT for top-up
-[nanoclaw] AUTO-POL failed during X-SIGNAL prep (pol<0.0050) — BUY paths skipped
 [nanoclaw] === ELIGIBLE ASSET ORDERING ===
 [nanoclaw]   WMATIC_ALPHA | sig= 0.920 | force_eligible=    1 | cooldown_ok=    1
 [nanoclaw]   WETH_ALPHA   | sig= 0.870 | force_eligible=    1 | cooldown_ok=    1
@@ -67,43 +47,66 @@ Real USDT: 0.00 | USDC: 0.00 | WMATIC: 0.00 | POL: 0.00
 [nanoclaw] === END ORDERING ===
 
 [nanoclaw] === BUILDING TRADE PLANS ===
-[nanoclaw] BUILD_PLAN_ENTRY | WMATIC_ALPHA | signal=0.920 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$0.00 | equity_balance=0.00
-[nanoclaw] GAS OVERRIDE | WMATIC_ALPHA | high_conviction bypass (gas 127.2 > 80.0, allow_high_gas_override=True)
-[nanoclaw] BLOCK: WMATIC_ALPHA | pol_below_min (0.0000 < 0.0050)
-[nanoclaw] BUILD_PLAN_ENTRY | WETH_ALPHA | signal=0.870 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$0.00 | equity_balance=0.00
-[nanoclaw] GAS OVERRIDE | WETH_ALPHA | high_conviction bypass (gas 125.6 > 80.0, allow_high_gas_override=True)
-[nanoclaw] BLOCK: WETH_ALPHA | pol_below_min (0.0000 < 0.0050)
-[nanoclaw] BUILD_PLAN_ENTRY | WBTC_ALPHA | signal=0.830 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$0.00 | equity_balance=0.00
-[nanoclaw] GAS OVERRIDE | WBTC_ALPHA | high_conviction bypass (gas 129.5 > 80.0, allow_high_gas_override=True)
-[nanoclaw] BLOCK: WBTC_ALPHA | pol_below_min (0.0000 < 0.0050)
-[nanoclaw] BUILD_PLAN_ENTRY | LINK_ALPHA | signal=0.810 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$0.00 | equity_balance=0.00
-[nanoclaw] GAS OVERRIDE | LINK_ALPHA | high_conviction bypass (gas 127.9 > 80.0, allow_high_gas_override=True)
-[nanoclaw] BLOCK: LINK_ALPHA | pol_below_min (0.0000 < 0.0050)
-[nanoclaw] BUILD_PLAN_ENTRY | USDC | signal=0.800 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$0.00 | equity_balance=0.00
-[nanoclaw] GAS OVERRIDE | USDC | high_conviction bypass (gas 127.2 > 80.0, allow_high_gas_override=True)
-[nanoclaw] BLOCK: USDC | pol_below_min (0.0000 < 0.0050)
-[nanoclaw] X-SIGNAL EQUITY | No valid plan this cycle (reason: usdc low: $0.00)
-🔍 DECISION PATH: POLYCOPY_TARGET_WALLETS
-🔄 REAL POLYCOPY MODE (28%) - Monitoring live wallets
-[nanoclaw] TRADE SKIPPED: protection/strategy returned no actionable trade
-ℹ️ No actionable trade this cycle
-2026-05-03 12:11:27,692 | WARNING | PLAN FAILED for WMATIC_ALPHA: pol_below_min
-2026-05-03 12:11:33,437 | WARNING | PLAN FAILED for WETH_ALPHA: pol_below_min
-2026-05-03 12:11:38,518 | WARNING | PLAN FAILED for WBTC_ALPHA: pol_below_min
-2026-05-03 12:11:43,624 | WARNING | PLAN FAILED for LINK_ALPHA: pol_below_min
-2026-05-03 12:11:49,659 | WARNING | PLAN FAILED for USDC: pol_below_min
+[nanoclaw] BUILD_PLAN_ENTRY | WMATIC_ALPHA | signal=0.920 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$102.87 | equity_balance=0.00
+[nanoclaw] GAS OVERRIDE | WMATIC_ALPHA | high_conviction bypass (gas 132.4 > 80.0, allow_high_gas_override=True)
+[nanoclaw] STRENGTH FILTER BYPASSED | WMATIC_ALPHA | abs(signal)>=0.800 (force-eligible)
+[nanoclaw] DYNAMIC SIZING | Size=$8.00 | Signal=0.92
+[nanoclaw] PLAN_BUILD_SUCCESS | WMATIC_ALPHA | BUY | $8.00
+TRADE_ATTRIBUTION | Asset=WMATIC_ALPHA | Size=$8.00 | Signal=0.92 | Wallet=X-SIGNAL | Expected_PnL=1.76
+[nanoclaw] BUILD_PLAN_ENTRY | WETH_ALPHA | signal=0.870 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$102.87 | equity_balance=0.00
+[nanoclaw] GAS OVERRIDE | WETH_ALPHA | high_conviction bypass (gas 130.5 > 80.0, allow_high_gas_override=True)
+[nanoclaw] STRENGTH FILTER BYPASSED | WETH_ALPHA | abs(signal)>=0.800 (force-eligible)
+[nanoclaw] DYNAMIC SIZING | Size=$6.75 | Signal=0.87
+[nanoclaw] PLAN_BUILD_SUCCESS | WETH_ALPHA | BUY | $6.75
+TRADE_ATTRIBUTION | Asset=WETH_ALPHA | Size=$6.75 | Signal=0.87 | Wallet=X-SIGNAL | Expected_PnL=1.08
+[nanoclaw] BUILD_PLAN_ENTRY | WBTC_ALPHA | signal=0.830 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$102.87 | equity_balance=0.00
+[nanoclaw] GAS OVERRIDE | WBTC_ALPHA | high_conviction bypass (gas 130.8 > 80.0, allow_high_gas_override=True)
+[nanoclaw] STRENGTH FILTER BYPASSED | WBTC_ALPHA | abs(signal)>=0.800 (force-eligible)
+[nanoclaw] DYNAMIC SIZING | Size=$5.75 | Signal=0.83
+[nanoclaw] PLAN_BUILD_SUCCESS | WBTC_ALPHA | BUY | $5.75
+TRADE_ATTRIBUTION | Asset=WBTC_ALPHA | Size=$5.75 | Signal=0.83 | Wallet=X-SIGNAL | Expected_PnL=0.80
+[nanoclaw] BUILD_PLAN_ENTRY | LINK_ALPHA | signal=0.810 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$102.87 | equity_balance=0.00
+[nanoclaw] GAS OVERRIDE | LINK_ALPHA | high_conviction bypass (gas 130.7 > 80.0, allow_high_gas_override=True)
+[nanoclaw] STRENGTH FILTER BYPASSED | LINK_ALPHA | abs(signal)>=0.800 (force-eligible)
+[nanoclaw] DYNAMIC SIZING | Size=$5.25 | Signal=0.81
+[nanoclaw] PLAN_BUILD_SUCCESS | LINK_ALPHA | BUY | $5.25
+TRADE_ATTRIBUTION | Asset=LINK_ALPHA | Size=$5.25 | Signal=0.81 | Wallet=X-SIGNAL | Expected_PnL=0.68
+[nanoclaw] BUILD_PLAN_ENTRY | USDC | signal=0.800 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$102.87 | equity_balance=0.00
+[nanoclaw] GAS OVERRIDE | USDC | high_conviction bypass (gas 134.1 > 80.0, allow_high_gas_override=True)
+[nanoclaw] STRENGTH FILTER BYPASSED | USDC | abs(signal)>=0.800 (force-eligible)
+[nanoclaw] BLOCK: USDC | usdc_identity_noop
+🔍 DECISION PATH: X_SIGNAL_EQUITY
+🟪 X-SIGNAL EQUITY BUY: WMATIC_ALPHA | Strength 0.92 | TP 12% | Size: $8.00 (USDC→WMATIC_ALPHA)
+⚠️ High gas but forcing trade (urgent mode)
+[nanoclaw] swap EXEC | direction=USDC_TO_EQUITY | amount_in=8000000
+[nanoclaw] swap intent | 0x2791Bca1…a84174→0x0d500B1d…Df1270 | slippage_bps=100 | executor=1inch
+[nanoclaw] 1inch unavailable (HTTP Error 403: Forbidden) — falling back to router path quoting
+[nanoclaw] route | hops=1 | expected_out≈82670728080593078454 | min_out=81844020799787147669
+✅ Approve Tx: f32fd464f613f29b6a43902264646787b606b92c6a1e58c926d2916596026d61
+✅ Approve confirmed!
+✅ REAL TX HASH: 9c9ff63c120944bb513fcba3cbee90c22b957e89eb13f25e0860452af2b43621
+https://polygonscan.com/tx/9c9ff63c120944bb513fcba3cbee90c22b957e89eb13f25e0860452af2b43621
+❌ Swap failed on-chain!
+[nanoclaw] Swap failed — per-asset/per-wallet cooldown not applied
+✅ Cycle done — next in ~3 min
+2026-05-03 16:46:01,080 | INFO | X-SIGNAL EQUITY BUY: WMATIC_ALPHA | Strength 0.92 | Size: $8.00
+2026-05-03 16:46:06,570 | INFO | X-SIGNAL EQUITY BUY: WETH_ALPHA | Strength 0.87 | Size: $6.75
+2026-05-03 16:46:12,454 | INFO | X-SIGNAL EQUITY BUY: WBTC_ALPHA | Strength 0.83 | Size: $5.75
+2026-05-03 16:46:18,491 | INFO | X-SIGNAL EQUITY BUY: LINK_ALPHA | Strength 0.81 | Size: $5.25
+2026-05-03 16:46:24,235 | WARNING | PLAN FAILED for USDC: usdc_identity_noop
 ✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
 Monitoring 8 wallets | Copy ratio: 20.0%
 ✅ V2.5.1 Protection Module loaded successfully
-Real USDT: 0.00 | USDC: 0.00 | WMATIC: 0.00 | POL: 0.00
+[nanoclaw] SECRETS CHECK | All sensitive variables loaded from .env only (not hardcoded)
+[nanoclaw] WALLET BALANCE | USDC=$102.87 | Address=0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6
+Real USDT: 0.00 | USDC: 102.87 | WMATIC: 0.00 | POL: 9.86
 
-[nanoclaw] === CYCLE 1777810216 | BALANCES: USDT=$0.00 USDC=$0.00 WMATIC=$0.00 ===
-🔍 BALANCES | USDT=$0.00 USDC=$0.00 WMATIC≈0.00 USD | POL=0.0000 | copy_targets=8
+[nanoclaw] === CYCLE 1777826720 | BALANCES: USDT=$0.00 USDC=$102.87 WMATIC=$0.00 ===
+🔍 BALANCES | USDT=$0.00 USDC=$102.87 WMATIC≈0.00 USD | POL=9.8614 | copy_targets=8
 🔍 DECISION PATH | precedence: PROTECTION → PROFIT_TAKE → X_SIGNAL_EQUITY → USDC_COPY | POLYCOPY → MAIN_STRATEGY
-[nanoclaw] Runtime config | TAKE_PROFIT_PCT=8.00 STRONG_SIGNAL_TP=12.00 PER_ASSET_COOLDOWN_MINUTES=30
-📈 Holding open trade | buy $0.0971 -> now $0.0964 (-0.68%), peak $0.0974 (0.29%)
-🚀 PROACTIVE USDC TOP-UP triggered (have $0.00 < $20.00, target $25.00)
-[nanoclaw] AUTO-USDC skipped — gas/POL guard
+[nanoclaw] Runtime config | TAKE_PROFIT_PCT=1.50 STRONG_SIGNAL_TP=12.00 PER_ASSET_COOLDOWN_MINUTES=30
+🔥 AGGRESSIVE MODE ACTIVE | COPY_TRADE_PCT=0.28
+📈 Holding open trade | buy $0.0971 -> now $0.0963 (-0.78%), peak $0.0974 (0.29%)
 [nanoclaw] X-Signal eligibility floor = 0.6000; strong_threshold = 0.8000; force_eligible_threshold = 0.8000; high_conviction_threshold = 0.8000; force_high_conviction = True
 [nanoclaw] === ELIGIBILITY CHECK START ===
 [nanoclaw]   min_strength=0.600 | strong_threshold=0.800 | force_eligible_threshold=0.800 | high_conviction_threshold=0.800 | force_high_conviction=True
@@ -117,35 +120,6 @@ Real USDT: 0.00 | USDC: 0.00 | WMATIC: 0.00 | POL: 0.00
 🚀 HIGH-CONVICTION MODE ACTIVE — 0.80+ signal present, force_high_conviction enabled, gas protection relaxed for this cycle
 🟦 X-SIGNAL EQUITY CHECK | Checking 5 assets
 🚀 HIGH-CONVICTION GAS OVERRIDE | 0.80+ strength detected — bypassing 80 gwei limit (PnL+ Sprint Mode, high return high conviction, net expected positive)
-[nanoclaw] === ELIGIBILITY CHECK START ===
-[nanoclaw]   min_strength=0.600 | strong_threshold=0.800 | force_eligible_threshold=0.800 | high_conviction_threshold=0.800 | force_high_conviction=True
-[nanoclaw]   ✅ ELIGIBLE | WMATIC_ALPHA | signal= 0.920 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
-[nanoclaw]   ✅ ELIGIBLE | WETH_ALPHA   | signal= 0.870 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
-[nanoclaw]   ✅ ELIGIBLE | WBTC_ALPHA   | signal= 0.830 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
-[nanoclaw]   ✅ ELIGIBLE | LINK_ALPHA   | signal= 0.810 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
-[nanoclaw]   ✅ ELIGIBLE | USDC         | signal= 0.800 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
-[nanoclaw] === ELIGIBILITY CHECK END: 5/5 eligible ===
-
-[nanoclaw] AUTO-USDC skipped — gas/POL guard
-🟦 X-SIGNAL EQUITY | Auto-USDC failed during HIGH-CONVICTION prep (PnL+ Sprint Mode, high return high conviction)
-[nanoclaw] TRADE SKIPPED: AUTO-USDC failed during high-conviction prep (have $0.00, need $8.00)
-[nanoclaw] === ELIGIBILITY CHECK START ===
-[nanoclaw]   min_strength=0.600 | strong_threshold=0.800 | force_eligible_threshold=0.800 | high_conviction_threshold=0.800 | force_high_conviction=True
-[nanoclaw]   ✅ ELIGIBLE | WMATIC_ALPHA | signal= 0.920 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
-[nanoclaw]   ✅ ELIGIBLE | WETH_ALPHA   | signal= 0.870 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
-[nanoclaw]   ✅ ELIGIBLE | WBTC_ALPHA   | signal= 0.830 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
-[nanoclaw]   ✅ ELIGIBLE | LINK_ALPHA   | signal= 0.810 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
-[nanoclaw]   ✅ ELIGIBLE | USDC         | signal= 0.800 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
-[nanoclaw] === ELIGIBILITY CHECK END: 5/5 eligible ===
-
-[nanoclaw] AUTO-USDC skipped — gas/POL guard
-🟦 X-SIGNAL EQUITY | Auto-USDC attempt failed (guard/tx) — BUY paths may be skipped
-[nanoclaw] TRADE SKIPPED: AUTO-USDC failed (have $0.00, need $5.00)
-🟦 X-SIGNAL EQUITY | Auto-USDC insufficient for BUY equity (USDC $0.00 < $5.00) — BUY paths skipped
-[nanoclaw] TRADE SKIPPED: USDC low (have $0.00, need $5.00)
-🔄 AUTO-POL | Topping up 0.03 POL (current: 0.0)
-[nanoclaw] AUTO-POL skipped — insufficient WMATIC/USDT for top-up
-[nanoclaw] AUTO-POL failed during X-SIGNAL prep (pol<0.0050) — BUY paths skipped
 [nanoclaw] === ELIGIBLE ASSET ORDERING ===
 [nanoclaw]   WMATIC_ALPHA | sig= 0.920 | force_eligible=    1 | cooldown_ok=    1
 [nanoclaw]   WETH_ALPHA   | sig= 0.870 | force_eligible=    1 | cooldown_ok=    1
@@ -155,23 +129,138 @@ Real USDT: 0.00 | USDC: 0.00 | WMATIC: 0.00 | POL: 0.00
 [nanoclaw] === END ORDERING ===
 
 [nanoclaw] === BUILDING TRADE PLANS ===
-[nanoclaw] BUILD_PLAN_ENTRY | WMATIC_ALPHA | signal=0.920 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$0.00 | equity_balance=0.00
-[nanoclaw] GAS OVERRIDE | WMATIC_ALPHA | high_conviction bypass (gas 130.4 > 80.0, allow_high_gas_override=True)
-[nanoclaw] BLOCK: WMATIC_ALPHA | pol_below_min (0.0000 < 0.0050)
-[nanoclaw] BUILD_PLAN_ENTRY | WETH_ALPHA | signal=0.870 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$0.00 | equity_balance=0.00
-[nanoclaw] GAS OVERRIDE | WETH_ALPHA | high_conviction bypass (gas 129.1 > 80.0, allow_high_gas_override=True)
-[nanoclaw] BLOCK: WETH_ALPHA | pol_below_min (0.0000 < 0.0050)
-[nanoclaw] BUILD_PLAN_ENTRY | WBTC_ALPHA | signal=0.830 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$0.00 | equity_balance=0.00
-[nanoclaw] GAS OVERRIDE | WBTC_ALPHA | high_conviction bypass (gas 127.8 > 80.0, allow_high_gas_override=True)
-[nanoclaw] BLOCK: WBTC_ALPHA | pol_below_min (0.0000 < 0.0050)
-[nanoclaw] BUILD_PLAN_ENTRY | LINK_ALPHA | signal=0.810 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$0.00 | equity_balance=0.00
-[nanoclaw] GAS OVERRIDE | LINK_ALPHA | high_conviction bypass (gas 130.4 > 80.0, allow_high_gas_override=True)
-[nanoclaw] BLOCK: LINK_ALPHA | pol_below_min (0.0000 < 0.0050)
-[nanoclaw] BUILD_PLAN_ENTRY | USDC | signal=0.800 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$0.00 | equity_balance=0.00
-[nanoclaw] GAS OVERRIDE | USDC | high_conviction bypass (gas 128.1 > 80.0, allow_high_gas_override=True)
-[nanoclaw] BLOCK: USDC | pol_below_min (0.0000 < 0.0050)
-[nanoclaw] X-SIGNAL EQUITY | No valid plan this cycle (reason: usdc low: $0.00)
-🔍 DECISION PATH: POLYCOPY_TARGET_WALLETS
-🔄 REAL POLYCOPY MODE (28%) - Monitoring live wallets
-[nanoclaw] TRADE SKIPPED: protection/strategy returned no actionable trade
-ℹ️ No actionable trade this cycle
+[nanoclaw] BUILD_PLAN_ENTRY | WMATIC_ALPHA | signal=0.920 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$102.87 | equity_balance=0.00
+[nanoclaw] GAS OVERRIDE | WMATIC_ALPHA | high_conviction bypass (gas 131.3 > 80.0, allow_high_gas_override=True)
+[nanoclaw] STRENGTH FILTER BYPASSED | WMATIC_ALPHA | abs(signal)>=0.800 (force-eligible)
+[nanoclaw] DYNAMIC SIZING | Size=$8.00 | Signal=0.92
+[nanoclaw] PLAN_BUILD_SUCCESS | WMATIC_ALPHA | BUY | $8.00
+TRADE_ATTRIBUTION | Asset=WMATIC_ALPHA | Size=$8.00 | Signal=0.92 | Wallet=X-SIGNAL | Expected_PnL=1.76
+[nanoclaw] BUILD_PLAN_ENTRY | WETH_ALPHA | signal=0.870 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$102.87 | equity_balance=0.00
+[nanoclaw] GAS OVERRIDE | WETH_ALPHA | high_conviction bypass (gas 131.7 > 80.0, allow_high_gas_override=True)
+[nanoclaw] STRENGTH FILTER BYPASSED | WETH_ALPHA | abs(signal)>=0.800 (force-eligible)
+[nanoclaw] DYNAMIC SIZING | Size=$6.75 | Signal=0.87
+[nanoclaw] PLAN_BUILD_SUCCESS | WETH_ALPHA | BUY | $6.75
+TRADE_ATTRIBUTION | Asset=WETH_ALPHA | Size=$6.75 | Signal=0.87 | Wallet=X-SIGNAL | Expected_PnL=1.08
+[nanoclaw] BUILD_PLAN_ENTRY | WBTC_ALPHA | signal=0.830 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$102.87 | equity_balance=0.00
+[nanoclaw] GAS OVERRIDE | WBTC_ALPHA | high_conviction bypass (gas 131.9 > 80.0, allow_high_gas_override=True)
+[nanoclaw] STRENGTH FILTER BYPASSED | WBTC_ALPHA | abs(signal)>=0.800 (force-eligible)
+[nanoclaw] DYNAMIC SIZING | Size=$5.75 | Signal=0.83
+[nanoclaw] PLAN_BUILD_SUCCESS | WBTC_ALPHA | BUY | $5.75
+TRADE_ATTRIBUTION | Asset=WBTC_ALPHA | Size=$5.75 | Signal=0.83 | Wallet=X-SIGNAL | Expected_PnL=0.80
+[nanoclaw] BUILD_PLAN_ENTRY | LINK_ALPHA | signal=0.810 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$102.87 | equity_balance=0.00
+[nanoclaw] GAS OVERRIDE | LINK_ALPHA | high_conviction bypass (gas 129.9 > 80.0, allow_high_gas_override=True)
+[nanoclaw] STRENGTH FILTER BYPASSED | LINK_ALPHA | abs(signal)>=0.800 (force-eligible)
+[nanoclaw] DYNAMIC SIZING | Size=$5.25 | Signal=0.81
+[nanoclaw] PLAN_BUILD_SUCCESS | LINK_ALPHA | BUY | $5.25
+TRADE_ATTRIBUTION | Asset=LINK_ALPHA | Size=$5.25 | Signal=0.81 | Wallet=X-SIGNAL | Expected_PnL=0.68
+[nanoclaw] BUILD_PLAN_ENTRY | USDC | signal=0.800 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$102.87 | equity_balance=0.00
+[nanoclaw] GAS OVERRIDE | USDC | high_conviction bypass (gas 131.3 > 80.0, allow_high_gas_override=True)
+[nanoclaw] STRENGTH FILTER BYPASSED | USDC | abs(signal)>=0.800 (force-eligible)
+[nanoclaw] BLOCK: USDC | usdc_identity_noop
+🔍 DECISION PATH: X_SIGNAL_EQUITY
+🟪 X-SIGNAL EQUITY BUY: WMATIC_ALPHA | Strength 0.92 | TP 12% | Size: $8.00 (USDC→WMATIC_ALPHA)
+⚠️ High gas but forcing trade (urgent mode)
+[nanoclaw] swap EXEC | direction=USDC_TO_EQUITY | amount_in=8000000
+[nanoclaw] swap intent | 0x2791Bca1…a84174→0x0d500B1d…Df1270 | slippage_bps=100 | executor=1inch
+[nanoclaw] 1inch unavailable (HTTP Error 403: Forbidden) — falling back to router path quoting
+[nanoclaw] route | hops=1 | expected_out≈82670728080593078454 | min_out=81844020799787147669
+✅ Approve Tx: 40abc185e666bc56cb591222e66cc325cc834af755438452e72d4c299ddfe5c5
+✅ Approve confirmed!
+✅ REAL TX HASH: c9e71ed422affcdb342c254bdcfb1ae327924329902d408366181d346eb86422
+https://polygonscan.com/tx/c9e71ed422affcdb342c254bdcfb1ae327924329902d408366181d346eb86422
+❌ Swap failed on-chain!
+[nanoclaw] Swap failed — per-asset/per-wallet cooldown not applied
+✅ Cycle done — next in ~3 min
+2026-05-03 16:51:02,125 | INFO | X-SIGNAL EQUITY BUY: WMATIC_ALPHA | Strength 0.92 | Size: $8.00
+2026-05-03 16:51:07,839 | INFO | X-SIGNAL EQUITY BUY: WETH_ALPHA | Strength 0.87 | Size: $6.75
+2026-05-03 16:51:13,655 | INFO | X-SIGNAL EQUITY BUY: WBTC_ALPHA | Strength 0.83 | Size: $5.75
+2026-05-03 16:51:19,447 | INFO | X-SIGNAL EQUITY BUY: LINK_ALPHA | Strength 0.81 | Size: $5.25
+2026-05-03 16:51:24,963 | WARNING | PLAN FAILED for USDC: usdc_identity_noop
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+✅ V2.5.1 Protection Module loaded successfully
+[nanoclaw] SECRETS CHECK | All sensitive variables loaded from .env only (not hardcoded)
+[nanoclaw] WALLET BALANCE | USDC=$102.87 | Address=0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6
+Real USDT: 0.00 | USDC: 102.87 | WMATIC: 0.00 | POL: 9.84
+
+[nanoclaw] === CYCLE 1777827021 | BALANCES: USDT=$0.00 USDC=$102.87 WMATIC=$0.00 ===
+🔍 BALANCES | USDT=$0.00 USDC=$102.87 WMATIC≈0.00 USD | POL=9.8436 | copy_targets=8
+🔍 DECISION PATH | precedence: PROTECTION → PROFIT_TAKE → X_SIGNAL_EQUITY → USDC_COPY | POLYCOPY → MAIN_STRATEGY
+[nanoclaw] Runtime config | TAKE_PROFIT_PCT=1.50 STRONG_SIGNAL_TP=12.00 PER_ASSET_COOLDOWN_MINUTES=30
+🔥 AGGRESSIVE MODE ACTIVE | COPY_TRADE_PCT=0.28
+📈 Holding open trade | buy $0.0971 -> now $0.0963 (-0.78%), peak $0.0974 (0.29%)
+[nanoclaw] X-Signal eligibility floor = 0.6000; strong_threshold = 0.8000; force_eligible_threshold = 0.8000; high_conviction_threshold = 0.8000; force_high_conviction = True
+[nanoclaw] === ELIGIBILITY CHECK START ===
+[nanoclaw]   min_strength=0.600 | strong_threshold=0.800 | force_eligible_threshold=0.800 | high_conviction_threshold=0.800 | force_high_conviction=True
+[nanoclaw]   ✅ ELIGIBLE | WMATIC_ALPHA | signal= 0.920 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
+[nanoclaw]   ✅ ELIGIBLE | WETH_ALPHA   | signal= 0.870 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
+[nanoclaw]   ✅ ELIGIBLE | WBTC_ALPHA   | signal= 0.830 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
+[nanoclaw]   ✅ ELIGIBLE | LINK_ALPHA   | signal= 0.810 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
+[nanoclaw]   ✅ ELIGIBLE | USDC         | signal= 0.800 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
+[nanoclaw] === ELIGIBILITY CHECK END: 5/5 eligible ===
+
+🚀 HIGH-CONVICTION MODE ACTIVE — 0.80+ signal present, force_high_conviction enabled, gas protection relaxed for this cycle
+🟦 X-SIGNAL EQUITY CHECK | Checking 5 assets
+🚀 HIGH-CONVICTION GAS OVERRIDE | 0.80+ strength detected — bypassing 80 gwei limit (PnL+ Sprint Mode, high return high conviction, net expected positive)
+[nanoclaw] === ELIGIBLE ASSET ORDERING ===
+[nanoclaw]   WMATIC_ALPHA | sig= 0.920 | force_eligible=    1 | cooldown_ok=    1
+[nanoclaw]   WETH_ALPHA   | sig= 0.870 | force_eligible=    1 | cooldown_ok=    1
+[nanoclaw]   WBTC_ALPHA   | sig= 0.830 | force_eligible=    1 | cooldown_ok=    1
+[nanoclaw]   LINK_ALPHA   | sig= 0.810 | force_eligible=    1 | cooldown_ok=    1
+[nanoclaw]   USDC         | sig= 0.800 | force_eligible=    1 | cooldown_ok=    1
+[nanoclaw] === END ORDERING ===
+
+[nanoclaw] === BUILDING TRADE PLANS ===
+[nanoclaw] BUILD_PLAN_ENTRY | WMATIC_ALPHA | signal=0.920 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$102.87 | equity_balance=0.00
+[nanoclaw] GAS OVERRIDE | WMATIC_ALPHA | high_conviction bypass (gas 131.3 > 80.0, allow_high_gas_override=True)
+[nanoclaw] STRENGTH FILTER BYPASSED | WMATIC_ALPHA | abs(signal)>=0.800 (force-eligible)
+[nanoclaw] DYNAMIC SIZING | Size=$8.00 | Signal=0.92
+[nanoclaw] PLAN_BUILD_SUCCESS | WMATIC_ALPHA | BUY | $8.00
+TRADE_ATTRIBUTION | Asset=WMATIC_ALPHA | Size=$8.00 | Signal=0.92 | Wallet=X-SIGNAL | Expected_PnL=1.76
+[nanoclaw] BUILD_PLAN_ENTRY | WETH_ALPHA | signal=0.870 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$102.87 | equity_balance=0.00
+[nanoclaw] GAS OVERRIDE | WETH_ALPHA | high_conviction bypass (gas 132.8 > 80.0, allow_high_gas_override=True)
+[nanoclaw] STRENGTH FILTER BYPASSED | WETH_ALPHA | abs(signal)>=0.800 (force-eligible)
+[nanoclaw] DYNAMIC SIZING | Size=$6.75 | Signal=0.87
+[nanoclaw] PLAN_BUILD_SUCCESS | WETH_ALPHA | BUY | $6.75
+TRADE_ATTRIBUTION | Asset=WETH_ALPHA | Size=$6.75 | Signal=0.87 | Wallet=X-SIGNAL | Expected_PnL=1.08
+[nanoclaw] BUILD_PLAN_ENTRY | WBTC_ALPHA | signal=0.830 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$102.87 | equity_balance=0.00
+[nanoclaw] GAS OVERRIDE | WBTC_ALPHA | high_conviction bypass (gas 131.9 > 80.0, allow_high_gas_override=True)
+[nanoclaw] STRENGTH FILTER BYPASSED | WBTC_ALPHA | abs(signal)>=0.800 (force-eligible)
+[nanoclaw] DYNAMIC SIZING | Size=$5.75 | Signal=0.83
+[nanoclaw] PLAN_BUILD_SUCCESS | WBTC_ALPHA | BUY | $5.75
+TRADE_ATTRIBUTION | Asset=WBTC_ALPHA | Size=$5.75 | Signal=0.83 | Wallet=X-SIGNAL | Expected_PnL=0.80
+[nanoclaw] BUILD_PLAN_ENTRY | LINK_ALPHA | signal=0.810 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$102.87 | equity_balance=0.00
+[nanoclaw] GAS OVERRIDE | LINK_ALPHA | high_conviction bypass (gas 129.0 > 80.0, allow_high_gas_override=True)
+[nanoclaw] STRENGTH FILTER BYPASSED | LINK_ALPHA | abs(signal)>=0.800 (force-eligible)
+[nanoclaw] DYNAMIC SIZING | Size=$5.25 | Signal=0.81
+[nanoclaw] PLAN_BUILD_SUCCESS | LINK_ALPHA | BUY | $5.25
+TRADE_ATTRIBUTION | Asset=LINK_ALPHA | Size=$5.25 | Signal=0.81 | Wallet=X-SIGNAL | Expected_PnL=0.68
+[nanoclaw] BUILD_PLAN_ENTRY | USDC | signal=0.800 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$102.87 | equity_balance=0.00
+[nanoclaw] GAS OVERRIDE | USDC | high_conviction bypass (gas 130.3 > 80.0, allow_high_gas_override=True)
+[nanoclaw] STRENGTH FILTER BYPASSED | USDC | abs(signal)>=0.800 (force-eligible)
+[nanoclaw] BLOCK: USDC | usdc_identity_noop
+🔍 DECISION PATH: X_SIGNAL_EQUITY
+🟪 X-SIGNAL EQUITY BUY: WMATIC_ALPHA | Strength 0.92 | TP 12% | Size: $8.00 (USDC→WMATIC_ALPHA)
+⚠️ High gas but forcing trade (urgent mode)
+[nanoclaw] swap EXEC | direction=USDC_TO_EQUITY | amount_in=8000000
+[nanoclaw] swap intent | 0x2791Bca1…a84174→0x0d500B1d…Df1270 | slippage_bps=100 | executor=1inch
+[nanoclaw] 1inch unavailable (HTTP Error 403: Forbidden) — falling back to router path quoting
+[nanoclaw] route | hops=1 | expected_out≈82670455689572822214 | min_out=81843751132677093991
+✅ Approve Tx: e6aa42b006c614833f333b4e16d57c184448eaa908f346ea22ace980bf19fa66
+✅ Approve confirmed!
+✅ REAL TX HASH: 6a2e96635c67947bfa5ce0ed9bca5dcd0ae911cbe0ceb3921ee5b4c91adee41b
+https://polygonscan.com/tx/6a2e96635c67947bfa5ce0ed9bca5dcd0ae911cbe0ceb3921ee5b4c91adee41b
+❌ Swap failed on-chain!
+[nanoclaw] Swap failed — per-asset/per-wallet cooldown not applied
+✅ Cycle done — next in ~3 min
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+✅ V2.5.1 Protection Module loaded successfully
+[nanoclaw] SECRETS CHECK | All sensitive variables loaded from .env only (not hardcoded)
+[nanoclaw] WALLET BALANCE | USDC=$102.87 | Address=0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6
+Real USDT: 0.00 | USDC: 102.87 | WMATIC: 0.00 | POL: 9.83
+⛔ Lock active — skipping
+2026-05-03 17:01:00,785 | INFO | X-SIGNAL EQUITY BUY: WMATIC_ALPHA | Strength 0.92 | Size: $8.00
+2026-05-03 17:01:07,020 | INFO | X-SIGNAL EQUITY BUY: WETH_ALPHA | Strength 0.87 | Size: $6.75
+2026-05-03 17:01:13,221 | INFO | X-SIGNAL EQUITY BUY: WBTC_ALPHA | Strength 0.83 | Size: $5.75
+2026-05-03 17:01:27,298 | INFO | X-SIGNAL EQUITY BUY: LINK_ALPHA | Strength 0.81 | Size: $5.25
