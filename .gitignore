@@ -57,3 +57,10 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
+
+# Runtime files (never commit)
+bot_state.json
+portfolio_history.csv
+real_cron.log
+__pycache__/
+*.pyc
