@@ -4,9 +4,10 @@ Use this so code review feedback and operator habits stay consistent across sess
 
 ## Before commit
 
-1. **`python -m compileall -q .`**
-2. **`python -m pytest -q`**
-3. **`git diff --stat`** — scope matches intent.
+1. **`python -m ruff check .`**
+2. **`python -m compileall -q .`**
+3. **`python -m pytest tests/ --cov=. --cov-report=term-missing:skip-covered --cov-report=xml`**
+4. **`git diff --stat`** — scope matches intent.
 
 Windows shortcut: `powershell -ExecutionPolicy Bypass -File .\scripts\pre_commit_gate.ps1`  
 (or `.\scripts\pre_commit_gate.cmd`)
