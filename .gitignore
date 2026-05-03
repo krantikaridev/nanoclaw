@@ -1,24 +1,23 @@
-# Virtual environment
-.venv/
-venv/
-
-# Python cache
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-
-# Runtime files
-real_cron.log
-portfolio_history.csv
-portfolio_baseline.json
-bot_state.json
-*.csv
-*.json
 
 # OS and editor junk
-.DS_Store
-.vscode/
-.idea/
-*.swp
+# Python cache
+# Runtime files
+# Virtual environment
+*.csv
+*.json
+*.pyc
+*.pyd
+*.pyo
 *.swo
+*.swp
+.DS_Store
+.env
+.idea/
+.venv/
+.vscode/
+__pycache__/
+bot_state.json
+portfolio_baseline.json
+portfolio_history.csv
+real_cron.log
+venv/
