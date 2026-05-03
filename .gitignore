@@ -15,6 +15,12 @@ __pycache__/
 *.pyo
 *.pyd
 
+# Coverage (coverage.py / pytest-cov; never commit)
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
 # Runtime files (we commit these manually)
 !portfolio_history.csv
 !real_cron.log
