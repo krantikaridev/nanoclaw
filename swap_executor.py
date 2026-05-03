@@ -39,6 +39,7 @@ _prefix = LOG_PREFIX + " " if LOG_PREFIX else ""
 
 
 _FALLBACK_ROUTER_SLIPPAGE_FLOOR_BPS = 600
+_QUICKSWAP_V2_ROUTER = Web3.to_checksum_address("0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff")
 
 
 def _fallback_router_slippage_bps() -> int:
@@ -58,6 +59,39 @@ def _fallback_router_retry_slippage_bps(primary_bps: int) -> int:
 def _addr_probe(addr: str) -> str:
     cs = Web3.to_checksum_address(addr)
     return f"{cs[:10]}…{cs[-6:]}"
+
+
+def _ensure_usdc_allowance(w3, resolved_key: str, amount_in: int, router_address: str) -> None:
+    router_cs = Web3.to_checksum_address(router_address)
+    usdc_cs = Web3.to_checksum_address(USDC)
+    current_allowance = int(
+        w3.eth.contract(address=usdc_cs, abi=ERC20_ABI).functions.allowance(WALLET, router_cs).call()
+    )
+    if current_allowance >= int(amount_in):
+        print(
+            f"{_prefix}Allowance check | router={router_cs} | current={current_allowance} | "
+            f"needed={int(amount_in)} | action=none"
+        )
+        return
+
+    approve_tx = w3.eth.contract(address=usdc_cs, abi=ERC20_ABI).functions.approve(
+        router_cs, 2**256 - 1
+    ).build_transaction({
+        "from": WALLET,
+        "nonce": w3.eth.get_transaction_count(WALLET),
+        "gas": 140000,
+        "gasPrice": w3.eth.gas_price * 15 // 10,
+        "chainId": 137,
+    })
+    signed_approve = w3.eth.account.sign_transaction(approve_tx, resolved_key)
+    approve_hash = w3.eth.send_raw_transaction(signed_approve.raw_transaction)
+    receipt = w3.eth.wait_for_transaction_receipt(approve_hash, timeout=300)
+    if receipt["status"] == 0:
+        raise RuntimeError(f"{_prefix}USDC max approval failed for router {router_cs}")
+    print(
+        f"{_prefix}Allowance check | router={router_cs} | current={current_allowance} | "
+        f"needed={int(amount_in)} | action=approved/max"
+    )
 
 
 def build_polygon_swap_path_candidates(token_in_checksum: str, token_out_checksum: str) -> list[list[str]]:
@@ -247,7 +281,7 @@ async def approve_and_swap(
 
         use_oneinch = bool(_oneinch_api_key())
         tx_payload: dict | None = None
-        router = Web3.to_checksum_address(ROUTER)
+        router = _QUICKSWAP_V2_ROUTER
         approve_spender = router
         if use_oneinch:
             try:
@@ -274,6 +308,8 @@ async def approve_and_swap(
                 print(f"{_prefix}[FALLBACK ROUTER] ONEINCH_API_KEY missing — using on-chain router execution.")
             else:
                 print(f"{_prefix}[FALLBACK ROUTER] Using on-chain router execution (see 1inch message above).")
+            if token_in_cs.lower() == Web3.to_checksum_address(USDC).lower():
+                _ensure_usdc_allowance(w3, resolved_key, amount_in, router)
             path_candidates = build_polygon_swap_path_candidates(token_in_cs, token_out_cs)
             fb_primary = _fallback_router_slippage_bps()
             fb_retry = _fallback_router_retry_slippage_bps(fb_primary)
