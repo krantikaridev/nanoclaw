@@ -21,3 +21,27 @@ nohup.out
 real_cron.log
 tests/unit/__pycache__/
 trade_exits.json
+
+# Virtual environment
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Runtime files (already ignored but make sure)
+real_cron.log
+portfolio_history.csv
+bot_state.json
+*.csv
+*.json
+
+# OS and editor junk
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
