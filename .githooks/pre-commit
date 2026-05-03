@@ -1,4 +1,4 @@
 #!/usr/bin/env sh
 # Nanoclaw: block commits that stage .env files or secret-looking assignments.
 ROOT="$(git rev-parse --show-toplevel)"
-exec python "$ROOT/scripts/check_committed_secrets.py" --staged
+exec python3 "$ROOT/scripts/check_committed_secrets.py" --staged
