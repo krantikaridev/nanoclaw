@@ -1,136 +1,87 @@
 nohup: ignoring input
+2026-05-03 04:32:06,654 | WARNING | PLAN FAILED for WMATIC_ALPHA: pol_below_min
+2026-05-03 04:32:12,535 | WARNING | PLAN FAILED for WETH_ALPHA: pol_below_min
+2026-05-03 04:32:17,666 | WARNING | PLAN FAILED for WBTC_ALPHA: pol_below_min
+2026-05-03 04:32:22,946 | WARNING | PLAN FAILED for LINK_ALPHA: pol_below_min
+2026-05-03 04:32:28,734 | WARNING | PLAN FAILED for USDC: pol_below_min
 ✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
 Monitoring 8 wallets | Copy ratio: 20.0%
 ✅ V2.5.1 Protection Module loaded successfully
 Real USDT: 0.00 | USDC: 0.00 | WMATIC: 0.00 | POL: 0.00
 
-[nanoclaw] === CYCLE 1777779019 | BALANCES: USDT=$0.00 USDC=$0.00 WMATIC=$0.00 ===
+[nanoclaw] === CYCLE 1777782656 | BALANCES: USDT=$0.00 USDC=$0.00 WMATIC=$0.00 ===
 🔍 BALANCES | USDT=$0.00 USDC=$0.00 WMATIC≈0.00 USD | POL=0.0043 | copy_targets=8
 🔍 DECISION PATH | precedence: PROTECTION → PROFIT_TAKE → X_SIGNAL_EQUITY → USDC_COPY | POLYCOPY → MAIN_STRATEGY
 [nanoclaw] Runtime config | TAKE_PROFIT_PCT=8.00 STRONG_SIGNAL_TP=12.00 PER_ASSET_COOLDOWN_MINUTES=30
 📈 Holding open trade | buy $0.0971 -> now $0.0971 (0.01%), peak $0.0974 (0.29%)
-🔍 DECISION PATH: POLYCOPY_TARGET_WALLETS
-🔄 REAL POLYCOPY MODE (28%) - Monitoring live wallets
-[nanoclaw] TRADE SKIPPED: protection/strategy returned no actionable trade
-ℹ️ No actionable trade this cycle
-✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
-Monitoring 8 wallets | Copy ratio: 20.0%
-✅ V2.5.1 Protection Module loaded successfully
-Real USDT: 0.00 | USDC: 0.00 | WMATIC: 0.00 | POL: 0.00
-⛔ Lock active — skipping
-✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
-Monitoring 8 wallets | Copy ratio: 20.0%
-✅ V2.5.1 Protection Module loaded successfully
-Real USDT: 0.00 | USDC: 0.00 | WMATIC: 0.00 | POL: 0.00
+🚀 PROACTIVE USDC TOP-UP triggered (have $0.00 < $20.00, target $25.00)
+[nanoclaw] AUTO-USDC skipped — gas/POL guard
+[nanoclaw] X-Signal eligibility floor = 0.6000; strong_threshold = 0.8000; force_eligible_threshold = 0.8000; high_conviction_threshold = 0.8000; force_high_conviction = True
+[nanoclaw] === ELIGIBILITY CHECK START ===
+[nanoclaw]   min_strength=0.600 | strong_threshold=0.800 | force_eligible_threshold=0.800 | high_conviction_threshold=0.800 | force_high_conviction=True
+[nanoclaw]   ✅ ELIGIBLE | WMATIC_ALPHA | signal= 0.920 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
+[nanoclaw]   ✅ ELIGIBLE | WETH_ALPHA   | signal= 0.870 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
+[nanoclaw]   ✅ ELIGIBLE | WBTC_ALPHA   | signal= 0.830 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
+[nanoclaw]   ✅ ELIGIBLE | LINK_ALPHA   | signal= 0.810 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
+[nanoclaw]   ✅ ELIGIBLE | USDC         | signal= 0.800 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
+[nanoclaw] === ELIGIBILITY CHECK END: 5/5 eligible ===
 
-[nanoclaw] === CYCLE 1777779057 | BALANCES: USDT=$0.00 USDC=$0.00 WMATIC=$0.00 ===
-🔍 BALANCES | USDT=$0.00 USDC=$0.00 WMATIC≈0.00 USD | POL=0.0043 | copy_targets=8
-🔍 DECISION PATH | precedence: PROTECTION → PROFIT_TAKE → X_SIGNAL_EQUITY → USDC_COPY | POLYCOPY → MAIN_STRATEGY
-[nanoclaw] Runtime config | TAKE_PROFIT_PCT=8.00 STRONG_SIGNAL_TP=12.00 PER_ASSET_COOLDOWN_MINUTES=30
-📈 Holding open trade | buy $0.0971 -> now $0.0971 (0.01%), peak $0.0974 (0.29%)
-🔍 DECISION PATH: POLYCOPY_TARGET_WALLETS
-🔄 REAL POLYCOPY MODE (28%) - Monitoring live wallets
-[nanoclaw] TRADE SKIPPED: protection/strategy returned no actionable trade
-ℹ️ No actionable trade this cycle
-✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
-Monitoring 8 wallets | Copy ratio: 20.0%
-✅ V2.5.1 Protection Module loaded successfully
-Real USDT: 0.00 | USDC: 0.00 | WMATIC: 0.00 | POL: 0.00
+🚀 HIGH-CONVICTION MODE ACTIVE — 0.80+ signal present, force_high_conviction enabled, gas protection relaxed for this cycle
+🟦 X-SIGNAL EQUITY CHECK | Checking 5 assets
+🚀 HIGH-CONVICTION GAS OVERRIDE | 0.80+ strength detected — bypassing 80 gwei limit (PnL+ Sprint Mode, high return high conviction, net expected positive)
+[nanoclaw] === ELIGIBILITY CHECK START ===
+[nanoclaw]   min_strength=0.600 | strong_threshold=0.800 | force_eligible_threshold=0.800 | high_conviction_threshold=0.800 | force_high_conviction=True
+[nanoclaw]   ✅ ELIGIBLE | WMATIC_ALPHA | signal= 0.920 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
+[nanoclaw]   ✅ ELIGIBLE | WETH_ALPHA   | signal= 0.870 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
+[nanoclaw]   ✅ ELIGIBLE | WBTC_ALPHA   | signal= 0.830 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
+[nanoclaw]   ✅ ELIGIBLE | LINK_ALPHA   | signal= 0.810 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
+[nanoclaw]   ✅ ELIGIBLE | USDC         | signal= 0.800 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
+[nanoclaw] === ELIGIBILITY CHECK END: 5/5 eligible ===
 
-[nanoclaw] === CYCLE 1777779655 | BALANCES: USDT=$0.00 USDC=$0.00 WMATIC=$0.00 ===
-🔍 BALANCES | USDT=$0.00 USDC=$0.00 WMATIC≈0.00 USD | POL=0.0043 | copy_targets=8
-🔍 DECISION PATH | precedence: PROTECTION → PROFIT_TAKE → X_SIGNAL_EQUITY → USDC_COPY | POLYCOPY → MAIN_STRATEGY
-[nanoclaw] Runtime config | TAKE_PROFIT_PCT=8.00 STRONG_SIGNAL_TP=12.00 PER_ASSET_COOLDOWN_MINUTES=30
-📈 Holding open trade | buy $0.0971 -> now $0.0971 (0.01%), peak $0.0974 (0.29%)
-🔍 DECISION PATH: POLYCOPY_TARGET_WALLETS
-🔄 REAL POLYCOPY MODE (28%) - Monitoring live wallets
-[nanoclaw] TRADE SKIPPED: protection/strategy returned no actionable trade
-ℹ️ No actionable trade this cycle
-✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
-Monitoring 8 wallets | Copy ratio: 20.0%
-✅ V2.5.1 Protection Module loaded successfully
-Real USDT: 0.00 | USDC: 0.00 | WMATIC: 0.00 | POL: 0.00
+[nanoclaw] AUTO-USDC skipped — gas/POL guard
+🟦 X-SIGNAL EQUITY | Auto-USDC failed during HIGH-CONVICTION prep (PnL+ Sprint Mode, high return high conviction)
+[nanoclaw] TRADE SKIPPED: AUTO-USDC failed during high-conviction prep (have $0.00, need $8.00)
+[nanoclaw] === ELIGIBILITY CHECK START ===
+[nanoclaw]   min_strength=0.600 | strong_threshold=0.800 | force_eligible_threshold=0.800 | high_conviction_threshold=0.800 | force_high_conviction=True
+[nanoclaw]   ✅ ELIGIBLE | WMATIC_ALPHA | signal= 0.920 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
+[nanoclaw]   ✅ ELIGIBLE | WETH_ALPHA   | signal= 0.870 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
+[nanoclaw]   ✅ ELIGIBLE | WBTC_ALPHA   | signal= 0.830 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
+[nanoclaw]   ✅ ELIGIBLE | LINK_ALPHA   | signal= 0.810 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
+[nanoclaw]   ✅ ELIGIBLE | USDC         | signal= 0.800 | by: force_eligible (>=0.800) | strong_threshold (0.800+) | asset_floor (0.600+)
+[nanoclaw] === ELIGIBILITY CHECK END: 5/5 eligible ===
 
-[nanoclaw] === CYCLE 1777779960 | BALANCES: USDT=$0.00 USDC=$0.00 WMATIC=$0.00 ===
-🔍 BALANCES | USDT=$0.00 USDC=$0.00 WMATIC≈0.00 USD | POL=0.0043 | copy_targets=8
-🔍 DECISION PATH | precedence: PROTECTION → PROFIT_TAKE → X_SIGNAL_EQUITY → USDC_COPY | POLYCOPY → MAIN_STRATEGY
-[nanoclaw] Runtime config | TAKE_PROFIT_PCT=8.00 STRONG_SIGNAL_TP=12.00 PER_ASSET_COOLDOWN_MINUTES=30
-📈 Holding open trade | buy $0.0971 -> now $0.0971 (0.01%), peak $0.0974 (0.29%)
-🔍 DECISION PATH: POLYCOPY_TARGET_WALLETS
-🔄 REAL POLYCOPY MODE (28%) - Monitoring live wallets
-[nanoclaw] TRADE SKIPPED: protection/strategy returned no actionable trade
-ℹ️ No actionable trade this cycle
-✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
-Monitoring 8 wallets | Copy ratio: 20.0%
-✅ V2.5.1 Protection Module loaded successfully
-Real USDT: 0.00 | USDC: 0.00 | WMATIC: 0.00 | POL: 0.00
+[nanoclaw] AUTO-USDC skipped — gas/POL guard
+🟦 X-SIGNAL EQUITY | Auto-USDC attempt failed (guard/tx) — BUY paths may be skipped
+[nanoclaw] TRADE SKIPPED: AUTO-USDC failed (have $0.00, need $5.00)
+🟦 X-SIGNAL EQUITY | Auto-USDC insufficient for BUY equity (USDC $0.00 < $5.00) — BUY paths skipped
+[nanoclaw] TRADE SKIPPED: USDC low (have $0.00, need $5.00)
+[nanoclaw] AUTO-POL skipped — no private key
+[nanoclaw] AUTO-POL failed during X-SIGNAL prep (pol<0.0050) — BUY paths skipped
+[nanoclaw] === ELIGIBLE ASSET ORDERING ===
+[nanoclaw]   WMATIC_ALPHA | sig= 0.920 | force_eligible=    1 | cooldown_ok=    1
+[nanoclaw]   WETH_ALPHA   | sig= 0.870 | force_eligible=    1 | cooldown_ok=    1
+[nanoclaw]   WBTC_ALPHA   | sig= 0.830 | force_eligible=    1 | cooldown_ok=    1
+[nanoclaw]   LINK_ALPHA   | sig= 0.810 | force_eligible=    1 | cooldown_ok=    1
+[nanoclaw]   USDC         | sig= 0.800 | force_eligible=    1 | cooldown_ok=    1
+[nanoclaw] === END ORDERING ===
 
-[nanoclaw] === CYCLE 1777780255 | BALANCES: USDT=$0.00 USDC=$0.00 WMATIC=$0.00 ===
-🔍 BALANCES | USDT=$0.00 USDC=$0.00 WMATIC≈0.00 USD | POL=0.0043 | copy_targets=8
-🔍 DECISION PATH | precedence: PROTECTION → PROFIT_TAKE → X_SIGNAL_EQUITY → USDC_COPY | POLYCOPY → MAIN_STRATEGY
-[nanoclaw] Runtime config | TAKE_PROFIT_PCT=8.00 STRONG_SIGNAL_TP=12.00 PER_ASSET_COOLDOWN_MINUTES=30
-📈 Holding open trade | buy $0.0971 -> now $0.0971 (0.01%), peak $0.0974 (0.29%)
-🔍 DECISION PATH: POLYCOPY_TARGET_WALLETS
-🔄 REAL POLYCOPY MODE (28%) - Monitoring live wallets
-[nanoclaw] TRADE SKIPPED: protection/strategy returned no actionable trade
-ℹ️ No actionable trade this cycle
-✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
-Monitoring 8 wallets | Copy ratio: 20.0%
-✅ V2.5.1 Protection Module loaded successfully
-Real USDT: 0.00 | USDC: 0.00 | WMATIC: 0.00 | POL: 0.00
-⛔ Lock active — skipping
-✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
-Monitoring 8 wallets | Copy ratio: 20.0%
-✅ V2.5.1 Protection Module loaded successfully
-Real USDT: 0.00 | USDC: 0.00 | WMATIC: 0.00 | POL: 0.00
-
-[nanoclaw] === CYCLE 1777780854 | BALANCES: USDT=$0.00 USDC=$0.00 WMATIC=$0.00 ===
-🔍 BALANCES | USDT=$0.00 USDC=$0.00 WMATIC≈0.00 USD | POL=0.0043 | copy_targets=8
-🔍 DECISION PATH | precedence: PROTECTION → PROFIT_TAKE → X_SIGNAL_EQUITY → USDC_COPY | POLYCOPY → MAIN_STRATEGY
-[nanoclaw] Runtime config | TAKE_PROFIT_PCT=8.00 STRONG_SIGNAL_TP=12.00 PER_ASSET_COOLDOWN_MINUTES=30
-📈 Holding open trade | buy $0.0971 -> now $0.0971 (0.01%), peak $0.0974 (0.29%)
-🔍 DECISION PATH: POLYCOPY_TARGET_WALLETS
-🔄 REAL POLYCOPY MODE (28%) - Monitoring live wallets
-[nanoclaw] TRADE SKIPPED: protection/strategy returned no actionable trade
-ℹ️ No actionable trade this cycle
-✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
-Monitoring 8 wallets | Copy ratio: 20.0%
-✅ V2.5.1 Protection Module loaded successfully
-Real USDT: 0.00 | USDC: 0.00 | WMATIC: 0.00 | POL: 0.00
-
-[nanoclaw] === CYCLE 1777781455 | BALANCES: USDT=$0.00 USDC=$0.00 WMATIC=$0.00 ===
-🔍 BALANCES | USDT=$0.00 USDC=$0.00 WMATIC≈0.00 USD | POL=0.0043 | copy_targets=8
-🔍 DECISION PATH | precedence: PROTECTION → PROFIT_TAKE → X_SIGNAL_EQUITY → USDC_COPY | POLYCOPY → MAIN_STRATEGY
-[nanoclaw] Runtime config | TAKE_PROFIT_PCT=8.00 STRONG_SIGNAL_TP=12.00 PER_ASSET_COOLDOWN_MINUTES=30
-📈 Holding open trade | buy $0.0971 -> now $0.0971 (0.01%), peak $0.0974 (0.29%)
-🔍 DECISION PATH: POLYCOPY_TARGET_WALLETS
-🔄 REAL POLYCOPY MODE (28%) - Monitoring live wallets
-[nanoclaw] TRADE SKIPPED: protection/strategy returned no actionable trade
-ℹ️ No actionable trade this cycle
-✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
-Monitoring 8 wallets | Copy ratio: 20.0%
-✅ V2.5.1 Protection Module loaded successfully
-Real USDT: 0.00 | USDC: 0.00 | WMATIC: 0.00 | POL: 0.00
-
-[nanoclaw] === CYCLE 1777781755 | BALANCES: USDT=$0.00 USDC=$0.00 WMATIC=$0.00 ===
-🔍 BALANCES | USDT=$0.00 USDC=$0.00 WMATIC≈0.00 USD | POL=0.0043 | copy_targets=8
-🔍 DECISION PATH | precedence: PROTECTION → PROFIT_TAKE → X_SIGNAL_EQUITY → USDC_COPY | POLYCOPY → MAIN_STRATEGY
-[nanoclaw] Runtime config | TAKE_PROFIT_PCT=8.00 STRONG_SIGNAL_TP=12.00 PER_ASSET_COOLDOWN_MINUTES=30
-📈 Holding open trade | buy $0.0971 -> now $0.0971 (0.01%), peak $0.0974 (0.29%)
-🔍 DECISION PATH: POLYCOPY_TARGET_WALLETS
-🔄 REAL POLYCOPY MODE (28%) - Monitoring live wallets
-[nanoclaw] TRADE SKIPPED: protection/strategy returned no actionable trade
-ℹ️ No actionable trade this cycle
-✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
-Monitoring 8 wallets | Copy ratio: 20.0%
-✅ V2.5.1 Protection Module loaded successfully
-Real USDT: 0.00 | USDC: 0.00 | WMATIC: 0.00 | POL: 0.00
-
-[nanoclaw] === CYCLE 1777782055 | BALANCES: USDT=$0.00 USDC=$0.00 WMATIC=$0.00 ===
-🔍 BALANCES | USDT=$0.00 USDC=$0.00 WMATIC≈0.00 USD | POL=0.0043 | copy_targets=8
-🔍 DECISION PATH | precedence: PROTECTION → PROFIT_TAKE → X_SIGNAL_EQUITY → USDC_COPY | POLYCOPY → MAIN_STRATEGY
-[nanoclaw] Runtime config | TAKE_PROFIT_PCT=8.00 STRONG_SIGNAL_TP=12.00 PER_ASSET_COOLDOWN_MINUTES=30
-📈 Holding open trade | buy $0.0971 -> now $0.0971 (0.01%), peak $0.0974 (0.29%)
+[nanoclaw] === BUILDING TRADE PLANS ===
+[nanoclaw] BUILD_PLAN_ENTRY | WMATIC_ALPHA | signal=0.920 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$0.00 | equity_balance=0.00
+[nanoclaw] GAS OVERRIDE | WMATIC_ALPHA | high_conviction bypass (gas 131.5 > 80.0, allow_high_gas_override=True)
+[nanoclaw] BLOCK: WMATIC_ALPHA | pol_below_min (0.0043 < 0.0050)
+[nanoclaw] BUILD_PLAN_ENTRY | WETH_ALPHA | signal=0.870 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$0.00 | equity_balance=0.00
+[nanoclaw] GAS OVERRIDE | WETH_ALPHA | high_conviction bypass (gas 130.0 > 80.0, allow_high_gas_override=True)
+[nanoclaw] BLOCK: WETH_ALPHA | pol_below_min (0.0043 < 0.0050)
+[nanoclaw] BUILD_PLAN_ENTRY | WBTC_ALPHA | signal=0.830 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$0.00 | equity_balance=0.00
+[nanoclaw] GAS OVERRIDE | WBTC_ALPHA | high_conviction bypass (gas 133.9 > 80.0, allow_high_gas_override=True)
+[nanoclaw] BLOCK: WBTC_ALPHA | pol_below_min (0.0043 < 0.0050)
+[nanoclaw] BUILD_PLAN_ENTRY | LINK_ALPHA | signal=0.810 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$0.00 | equity_balance=0.00
+[nanoclaw] GAS OVERRIDE | LINK_ALPHA | high_conviction bypass (gas 133.0 > 80.0, allow_high_gas_override=True)
+[nanoclaw] BLOCK: LINK_ALPHA | pol_below_min (0.0043 < 0.0050)
+[nanoclaw] BUILD_PLAN_ENTRY | USDC | signal=0.800 | force_eligible_threshold=0.800 | is_force_eligible=True | force_high_conviction=True | high_conviction_threshold=0.800 | strong_threshold=0.800 | earnings_days=None | usdc_balance=$0.00 | equity_balance=0.00
+[nanoclaw] GAS OVERRIDE | USDC | high_conviction bypass (gas 131.0 > 80.0, allow_high_gas_override=True)
+[nanoclaw] BLOCK: USDC | pol_below_min (0.0043 < 0.0050)
+[nanoclaw] X-SIGNAL EQUITY | No valid plan this cycle (reason: usdc low: $0.00)
 🔍 DECISION PATH: POLYCOPY_TARGET_WALLETS
 🔄 REAL POLYCOPY MODE (28%) - Monitoring live wallets
 [nanoclaw] TRADE SKIPPED: protection/strategy returned no actionable trade
