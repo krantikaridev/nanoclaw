@@ -63,7 +63,8 @@ def test_build_plan_blocks_when_fresh_pol_from_gas_guard_is_low():
         symbol="WMATIC_ALPHA",
         token_address="0x" + "1" * 40,
         token_decimals=18,
-        signal_strength=0.92,
+        # Below 0.85 so POL bypass does not apply; above strong threshold so strength filter passes.
+        signal_strength=0.84,
         earnings_proximity_days=None,
         current_price_usd=1.23,
         usdc_balance=100.0,
@@ -74,6 +75,27 @@ def test_build_plan_blocks_when_fresh_pol_from_gas_guard_is_low():
     )
 
     assert plan is None
+
+
+def test_build_plan_bypasses_pol_when_high_conviction_signal_over_085():
+    strategy = _build_strategy(gas_ok=True, pol_balance=0.0)
+
+    plan = strategy.build_plan(
+        symbol="WMATIC_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.86,
+        earnings_proximity_days=None,
+        current_price_usd=1.23,
+        usdc_balance=100.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda symbol, now, cooldown: True,
+        now=1000.0,
+    )
+
+    assert plan is not None
+    assert plan.direction == "USDC_TO_EQUITY"
 
 
 def test_build_plan_uses_fresh_guard_pol_and_builds_buy_when_sufficient():
@@ -467,7 +489,7 @@ def test_buy_blocked_zero_usdc():
 
 
 def test_buy_fixed_size_ignores_legacy_min_trade_usdc_range():
-    """Fixed $12–$20 sizing (2026-05-03) no longer uses wide min/max_trade_usdc for BUY notional."""
+    """BUY notional uses FIXED_TRADE_USD_* dynamic band vs strength; ignores legacy min/max_trade_usdc."""
     s = _build_strategy_tuned(min_trade_usdc=100.0, max_trade_usdc=200.0)
     plan, reason = s.build_plan_with_block_reason(
         symbol="WETH",
@@ -482,7 +504,8 @@ def test_buy_fixed_size_ignores_legacy_min_trade_usdc_range():
         can_trade_asset=lambda *_a, **_k: True,
     )
     assert reason is None
-    assert plan is not None and plan.trade_size == 12.0
+    # Defaults FIXED 5–10 USD; signal 0.92 vs strong 0.80 → t=0.6 → 5+5*0.6 = 8
+    assert plan is not None and plan.trade_size == 8.0
 
 
 def test_sell_path_equity_to_usdc():
@@ -598,7 +621,7 @@ def test_gas_override_branch_when_force_eligible_and_allow_high_gas_override(cap
 
 def test_compute_trade_size_and_addrs_equal_helpers():
     s = _build_strategy(gas_ok=True, pol_balance=1.0)
-    assert s._compute_trade_size(100.0) > 0
+    assert s._compute_trade_size(100.0, 0.90) > 0
     assert s._addrs_equal_case_insensitive("0xAbC", "0xabc") is True
 
 

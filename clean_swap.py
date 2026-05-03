@@ -39,7 +39,7 @@ COPY_TRADE_PCT = runtime.COPY_TRADE_PCT
 MAX_GWEI = runtime.MAX_GWEI
 FIXED_TRADE_USD_MIN = runtime.FIXED_TRADE_USD_MIN
 FIXED_TRADE_USD_MAX = runtime.FIXED_TRADE_USD_MAX
-# FIXED SIZING: $12–$20 per signal (bug fix 2026-05-03) — see runtime.fixed_copy_trade_usd and signal_equity_trader._compute_trade_size
+# Copy/main: runtime.fixed_copy_trade_usd (FIXED_TRADE_USD_*); X-signal: dynamic band + signal in signal_equity_trader._compute_trade_size
 fixed_copy_trade_usd = runtime.fixed_copy_trade_usd
 COOLDOWN_MINUTES = runtime.COOLDOWN_MINUTES
 ENABLE_USDC_COPY = runtime.ENABLE_USDC_COPY

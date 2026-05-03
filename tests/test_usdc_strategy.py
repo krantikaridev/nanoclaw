@@ -55,8 +55,8 @@ def test_enabled_strategy_builds_plan_without_immediate_wallet_mark():
     )
 
     assert plan is not None
-    assert plan.trade_size == 12.0
-    assert plan.amount_in == 12_000_000
+    assert plan.trade_size == 10.0
+    assert plan.amount_in == 10_000_000
     assert "USDC COPY" in plan.message
     assert plan.wallet == "0xbbb"
 

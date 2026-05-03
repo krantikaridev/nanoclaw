@@ -1,6 +1,8 @@
-# Secrets - NEVER commit
+# Secrets - NEVER commit (templates stay tracked)
 .env
 .env.*
+!.env.example
+!.env.sample
 *.backup*
 
 # Virtual environment

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional, Sequence, Tuple
 
+from constants import LOG_PREFIX
 from nanoclaw.utils.gas_protector import GasProtector
 
 logger = logging.getLogger(__name__)
@@ -318,13 +319,25 @@ class SignalEquityTrader:
         current_time = time.time() if now is None else now
         return can_trade_asset(symbol, current_time, self.config.per_asset_cooldown_seconds)
 
-    def _compute_trade_size(self, usdc_balance: float, usdt_balance: float = 0.0) -> float:
+    def _compute_trade_size(self, usdc_balance: float, signal_strength: float, usdt_balance: float = 0.0) -> float:
+        """USD size between FIXED_TRADE_USD_MIN/MAX (runtime), scaled by |signal| vs strong threshold; capped by USDC."""
         from modules import runtime as rt
 
-        # FIXED SIZING: $12–$20 per signal (bug fix 2026-05-03)
-        pct = float(os.getenv("COPY_TRADE_PCT", "0.28"))
-        cap = rt.fixed_copy_trade_usd(usdc_balance, usdt_balance, pct)
-        sized = min(cap, float(usdc_balance))
+        lo = float(rt.FIXED_TRADE_USD_MIN)
+        hi = float(rt.FIXED_TRADE_USD_MAX)
+        if hi < lo:
+            lo, hi = hi, lo
+        thr = float(self.config.strong_signal_threshold)
+        s_abs = abs(float(signal_strength))
+        if thr >= 1.0:
+            t = 1.0
+        else:
+            t = (s_abs - thr) / (1.0 - thr)
+        t = max(0.0, min(1.0, t))
+        raw = lo + (hi - lo) * t
+        sized = min(float(raw), float(usdc_balance))
+        _lp = (LOG_PREFIX or "").strip() or "[nanoclaw]"
+        print(f"{_lp} DYNAMIC SIZING | Size=${sized:.2f} | Signal={float(signal_strength):.2f}")
         return max(0.0, float(sized))
 
     @staticmethod
@@ -429,9 +442,10 @@ class SignalEquityTrader:
         if not gas_ok and is_force_eligible and bool(allow_high_gas_override):
             print(f"[nanoclaw] GAS OVERRIDE | {sym} | high_conviction bypass (gas {gas_gwei:.1f} > {max_gwei:.1f}, allow_high_gas_override=True)")
 
-        # === POL check (always on — not bypassed) ===
+        # === POL check (bypass when high-conviction X-SIGNAL: |signal| > 0.85) ===
         effective_pol = float(gas_status.get("pol_balance", 0.0) or 0.0)
-        if effective_pol < float(self.config.min_pol_for_gas):
+        high_conviction_pol_bypass = abs(float(strength)) > 0.85
+        if effective_pol < float(self.config.min_pol_for_gas) and not high_conviction_pol_bypass:
             print(f"[nanoclaw] BLOCK: {sym} | pol_below_min ({effective_pol:.4f} < {self.config.min_pol_for_gas:.4f})")
             logger.debug("build_plan block sym=%s reason=pol_below_min", sym)
             return None, "pol_below_min"
@@ -472,7 +486,7 @@ class SignalEquityTrader:
                 print(f"[nanoclaw] BLOCK: {sym} | zero_usdc (balance=${usdc_balance:.2f})")
                 logger.debug("build_plan block sym=%s reason=zero_usdc", sym)
                 return None, "zero_usdc"
-            trade_size = self._compute_trade_size(usdc_balance, usdt_balance)
+            trade_size = self._compute_trade_size(usdc_balance, strength, usdt_balance)
             if trade_size <= 0 or trade_size > usdc_balance:
                 print(f"[nanoclaw] BLOCK: {sym} | invalid_trade_size (computed=${trade_size:.2f}, available=${usdc_balance:.2f})")
                 logger.debug("build_plan block sym=%s reason=invalid_trade_size", sym)

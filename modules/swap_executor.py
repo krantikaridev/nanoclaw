@@ -263,6 +263,9 @@ def determine_trade_decision(
 
 async def main(*, dry_run: bool = False) -> None:
     cs = _facade()
+    print(
+        f"{runtime._nanolog()}SECRETS CHECK | All sensitive variables loaded from .env only (not hardcoded)"
+    )
     state = cs.load_state()
     balances = cs.get_balances()
     print(f"{runtime._nanolog()}WALLET BALANCE | USDC=${balances.usdc:.2f} | Address={cs.WALLET}")

@@ -262,8 +262,8 @@ def test_select_copy_trade_executes_when_at_least_one_wallet_is_eligible(monkeyp
     )
 
     assert decision.direction == "USDT_TO_WMATIC"
-    assert decision.trade_size == 20.0  # 100*0.28→$28 capped to $20 fixed band (2026-05-03)
-    assert decision.amount_in == int(20.0 * 1_000_000)
+    assert decision.trade_size == 10.0  # 100*0.28→$28 capped to FIXED_TRADE_USD_MAX (default 10)
+    assert decision.amount_in == int(10.0 * 1_000_000)
 
 
 def test_global_cooldown_uses_last_run_timestamp():
