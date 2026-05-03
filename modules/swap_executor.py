@@ -265,7 +265,7 @@ async def main(*, dry_run: bool = False) -> None:
     cs = _facade()
     state = cs.load_state()
     balances = cs.get_balances()
-
+    print(f"{runtime._nanolog()}WALLET BALANCE | USDC=${balances.usdc:.2f} | Address={cs.WALLET}")
     print(
         f"Real USDT: {balances.usdt:.2f} | USDC: {balances.usdc:.2f} | "
         f"WMATIC: {balances.wmatic:.2f} | POL: {balances.pol:.2f}"

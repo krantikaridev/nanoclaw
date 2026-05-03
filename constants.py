@@ -52,6 +52,13 @@ PER_ASSET_COOLDOWN_SECONDS = PER_ASSET_COOLDOWN_MINUTES * 60
 WALLET = os.getenv("WALLET", "0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6")
 USDT = os.getenv("USDT", "0xc2132D05D31c914a87C6611C10748AEb04B58e8F")
 USDC = os.getenv("USDC", "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174")
+# Native Circle USDC on Polygon (distinct from bridged USDC.e). Set USDC_NATIVE= empty to sum only ``USDC``.
+_usdc_native_env = os.getenv("USDC_NATIVE")
+USDC_NATIVE = (
+    "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"
+    if _usdc_native_env is None
+    else str(_usdc_native_env).strip()
+)
 WMATIC = os.getenv("WMATIC", "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270")
 ROUTER = os.getenv("ROUTER", "0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff")
 

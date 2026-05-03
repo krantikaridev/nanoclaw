@@ -33,7 +33,7 @@ load_dotenv()
 load_dotenv(".env.local", override=True)
 
 
-from constants import ERC20_ABI, LOG_PREFIX, ROUTER, USDC, USDT, WALLET, WMATIC  # noqa: E402
+from constants import ERC20_ABI, LOG_PREFIX, ROUTER, USDC, USDC_NATIVE, USDT, WALLET, WMATIC  # noqa: E402
 from nanoclaw.config import connect_web3  # noqa: E402
 from nanoclaw.utils.gas_protector import GasProtector  # noqa: E402
 from nanoclaw.strategies.usdc_copy import USDCopyStrategy  # noqa: E402
@@ -279,10 +279,30 @@ def get_token_balance(
 ) -> float:
     client = web3_client or w3
     try:
-        contract = client.eth.contract(address=token_address, abi=ERC20_ABI)
-        return contract.functions.balanceOf(wallet_address).call() / (10**decimals)
+        from web3 import Web3 as Web3Checksum
+
+        token_a = Web3Checksum.to_checksum_address(str(token_address).strip())
+        wallet_a = Web3Checksum.to_checksum_address(str(wallet_address).strip())
+    except Exception:
+        token_a = str(token_address).strip()
+        wallet_a = str(wallet_address).strip()
+    try:
+        contract = client.eth.contract(address=token_a, abi=ERC20_ABI)
+        return contract.functions.balanceOf(wallet_a).call() / (10**decimals)
     except Exception:
         return 0.0
+
+
+def _total_usdc_balance(
+    web3_client: Optional[Web3] = None,
+    wallet_address: str = WALLET,
+) -> float:
+    """USDC.e (``USDC``) plus native Polygon USDC when it is a distinct contract."""
+    total = get_token_balance(USDC, 6, web3_client=web3_client, wallet_address=wallet_address)
+    native = (USDC_NATIVE or "").strip()
+    if native and native.lower() != str(USDC).strip().lower():
+        total += get_token_balance(native, 6, web3_client=web3_client, wallet_address=wallet_address)
+    return total
 
 
 def get_pol_balance(
@@ -418,7 +438,11 @@ def _followed_equity_tokens_usdt_usd() -> float:
         if not addr:
             continue
         al = addr.lower()
-        if al in (USDC.lower(), USDT.lower(), WMATIC.lower()):
+        core_tokens = {USDC.lower(), USDT.lower(), WMATIC.lower()}
+        native = (USDC_NATIVE or "").strip().lower()
+        if native:
+            core_tokens.add(native)
+        if al in core_tokens:
             continue
         bal = get_token_balance(addr, int(a.decimals))
         if bal <= 0:
@@ -444,7 +468,7 @@ def get_balances() -> Balances:
     usdt = get_token_balance(USDT, 6)
     wmatic = get_token_balance(WMATIC, 18)
     pol = get_pol_balance()
-    usdc = get_token_balance(USDC, 6)
+    usdc = _total_usdc_balance()
     fe_usd = _followed_equity_tokens_usdt_usd()
     try:
         wmatic_px = float(get_live_wmatic_price())
@@ -481,7 +505,11 @@ def write_portfolio_history_snapshot(current_price: float) -> None:
     usdt = cs.get_token_balance(cs.USDT, 6, wallet_address=wallet_address)
     wmatic = cs.get_token_balance(cs.WMATIC, 18, wallet_address=wallet_address)
     pol = cs.get_pol_balance(wallet_address=wallet_address)
-    usdc = cs.get_token_balance(cs.USDC, 6, wallet_address=wallet_address)
+    # Use façade get_token_balance so tests monkeypatching ``clean_swap.get_token_balance`` stay consistent.
+    usdc_addr = str(getattr(cs, "USDC", USDC)).strip()
+    usdc = cs.get_token_balance(usdc_addr, 6, wallet_address=wallet_address)
+    if USDC_NATIVE and USDC_NATIVE.lower() != usdc_addr.lower():
+        usdc += cs.get_token_balance(USDC_NATIVE, 6, wallet_address=wallet_address)
 
     # Deployed equity tokens (WETH/LINK/…) quoted via router — keeps CSV aligned with nanomon when stables are drained.
     fe_usd = _followed_equity_tokens_usdt_usd()
