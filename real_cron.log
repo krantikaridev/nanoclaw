@@ -1,0 +1,9 @@
+nohup: ignoring input
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+✅ V2.5.1 Protection Module loaded successfully
+[nanoclaw] SECRETS CHECK | All sensitive variables loaded from .env only (not hardcoded)
+[nanoclaw] WALLET BALANCE | USDC=$102.87 | Address=0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6
+Real USDT: 0.00 | USDC: 102.87 | WMATIC: 0.00 | POL: 9.28
+[nanoclaw] skip cycle — global cooldown ~130s left (COOLDOWN_MINUTES=3; last_run was 50s ago)
+[nanoclaw] TRADE SKIPPED: cooldown (global, ~130s left)
