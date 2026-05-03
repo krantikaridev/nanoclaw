@@ -20,14 +20,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Secret pattern guard (no committed .env / secret values)
-        run: python scripts/check_committed_secrets.py --all-tracked
-
       - name: Setup Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
+
+      # Stdlib-only script; needs checkout + python on PATH (same as local `python3` hook).
+      - name: Secret pattern guard (no committed .env / secret values)
+        run: python3 scripts/check_committed_secrets.py --all-tracked
 
       # Runtime deps for imports during tests (minimal; shrink/expand if CI import errors appear).
       - name: Install tools and dependencies

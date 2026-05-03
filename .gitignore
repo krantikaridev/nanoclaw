@@ -1,8 +1,12 @@
-# Secrets - NEVER commit (templates stay tracked)
+# --- Environment files ---
+# Ignore secret and machine-specific env files. Allow only committed templates:
+#   tracked: .env.example, .env.sample
+# Git applies the last matching rule per path; `!` entries must appear after `.env.*`.
 .env
 .env.*
 !.env.example
 !.env.sample
+
 *.backup*
 
 # Virtual environment
