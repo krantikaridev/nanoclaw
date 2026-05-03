@@ -4,13 +4,134 @@ Monitoring 8 wallets | Copy ratio: 20.0%
 ✅ V2.5.1 Protection Module loaded successfully
 Real USDT: 0.00 | USDC: 0.00 | WMATIC: 0.00 | POL: 0.00
 
-[nanoclaw] === CYCLE 1777778913 | BALANCES: USDT=$0.00 USDC=$0.00 WMATIC=$0.00 ===
+[nanoclaw] === CYCLE 1777779019 | BALANCES: USDT=$0.00 USDC=$0.00 WMATIC=$0.00 ===
 🔍 BALANCES | USDT=$0.00 USDC=$0.00 WMATIC≈0.00 USD | POL=0.0043 | copy_targets=8
 🔍 DECISION PATH | precedence: PROTECTION → PROFIT_TAKE → X_SIGNAL_EQUITY → USDC_COPY | POLYCOPY → MAIN_STRATEGY
 [nanoclaw] Runtime config | TAKE_PROFIT_PCT=8.00 STRONG_SIGNAL_TP=12.00 PER_ASSET_COOLDOWN_MINUTES=30
 📈 Holding open trade | buy $0.0971 -> now $0.0971 (0.01%), peak $0.0974 (0.29%)
 🔍 DECISION PATH: POLYCOPY_TARGET_WALLETS
 🔄 REAL POLYCOPY MODE (28%) - Monitoring live wallets
-[nanoclaw] AUTO-POL skipped — no private key
-[nanoclaw] TRADE SKIPPED: POL low (auto top-up failed; need 0.0050)
-[nanoclaw] AUTO-POL failed — trade blocked (pol<0.005)
+[nanoclaw] TRADE SKIPPED: protection/strategy returned no actionable trade
+ℹ️ No actionable trade this cycle
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+✅ V2.5.1 Protection Module loaded successfully
+Real USDT: 0.00 | USDC: 0.00 | WMATIC: 0.00 | POL: 0.00
+⛔ Lock active — skipping
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+✅ V2.5.1 Protection Module loaded successfully
+Real USDT: 0.00 | USDC: 0.00 | WMATIC: 0.00 | POL: 0.00
+
+[nanoclaw] === CYCLE 1777779057 | BALANCES: USDT=$0.00 USDC=$0.00 WMATIC=$0.00 ===
+🔍 BALANCES | USDT=$0.00 USDC=$0.00 WMATIC≈0.00 USD | POL=0.0043 | copy_targets=8
+🔍 DECISION PATH | precedence: PROTECTION → PROFIT_TAKE → X_SIGNAL_EQUITY → USDC_COPY | POLYCOPY → MAIN_STRATEGY
+[nanoclaw] Runtime config | TAKE_PROFIT_PCT=8.00 STRONG_SIGNAL_TP=12.00 PER_ASSET_COOLDOWN_MINUTES=30
+📈 Holding open trade | buy $0.0971 -> now $0.0971 (0.01%), peak $0.0974 (0.29%)
+🔍 DECISION PATH: POLYCOPY_TARGET_WALLETS
+🔄 REAL POLYCOPY MODE (28%) - Monitoring live wallets
+[nanoclaw] TRADE SKIPPED: protection/strategy returned no actionable trade
+ℹ️ No actionable trade this cycle
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+✅ V2.5.1 Protection Module loaded successfully
+Real USDT: 0.00 | USDC: 0.00 | WMATIC: 0.00 | POL: 0.00
+
+[nanoclaw] === CYCLE 1777779655 | BALANCES: USDT=$0.00 USDC=$0.00 WMATIC=$0.00 ===
+🔍 BALANCES | USDT=$0.00 USDC=$0.00 WMATIC≈0.00 USD | POL=0.0043 | copy_targets=8
+🔍 DECISION PATH | precedence: PROTECTION → PROFIT_TAKE → X_SIGNAL_EQUITY → USDC_COPY | POLYCOPY → MAIN_STRATEGY
+[nanoclaw] Runtime config | TAKE_PROFIT_PCT=8.00 STRONG_SIGNAL_TP=12.00 PER_ASSET_COOLDOWN_MINUTES=30
+📈 Holding open trade | buy $0.0971 -> now $0.0971 (0.01%), peak $0.0974 (0.29%)
+🔍 DECISION PATH: POLYCOPY_TARGET_WALLETS
+🔄 REAL POLYCOPY MODE (28%) - Monitoring live wallets
+[nanoclaw] TRADE SKIPPED: protection/strategy returned no actionable trade
+ℹ️ No actionable trade this cycle
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+✅ V2.5.1 Protection Module loaded successfully
+Real USDT: 0.00 | USDC: 0.00 | WMATIC: 0.00 | POL: 0.00
+
+[nanoclaw] === CYCLE 1777779960 | BALANCES: USDT=$0.00 USDC=$0.00 WMATIC=$0.00 ===
+🔍 BALANCES | USDT=$0.00 USDC=$0.00 WMATIC≈0.00 USD | POL=0.0043 | copy_targets=8
+🔍 DECISION PATH | precedence: PROTECTION → PROFIT_TAKE → X_SIGNAL_EQUITY → USDC_COPY | POLYCOPY → MAIN_STRATEGY
+[nanoclaw] Runtime config | TAKE_PROFIT_PCT=8.00 STRONG_SIGNAL_TP=12.00 PER_ASSET_COOLDOWN_MINUTES=30
+📈 Holding open trade | buy $0.0971 -> now $0.0971 (0.01%), peak $0.0974 (0.29%)
+🔍 DECISION PATH: POLYCOPY_TARGET_WALLETS
+🔄 REAL POLYCOPY MODE (28%) - Monitoring live wallets
+[nanoclaw] TRADE SKIPPED: protection/strategy returned no actionable trade
+ℹ️ No actionable trade this cycle
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+✅ V2.5.1 Protection Module loaded successfully
+Real USDT: 0.00 | USDC: 0.00 | WMATIC: 0.00 | POL: 0.00
+
+[nanoclaw] === CYCLE 1777780255 | BALANCES: USDT=$0.00 USDC=$0.00 WMATIC=$0.00 ===
+🔍 BALANCES | USDT=$0.00 USDC=$0.00 WMATIC≈0.00 USD | POL=0.0043 | copy_targets=8
+🔍 DECISION PATH | precedence: PROTECTION → PROFIT_TAKE → X_SIGNAL_EQUITY → USDC_COPY | POLYCOPY → MAIN_STRATEGY
+[nanoclaw] Runtime config | TAKE_PROFIT_PCT=8.00 STRONG_SIGNAL_TP=12.00 PER_ASSET_COOLDOWN_MINUTES=30
+📈 Holding open trade | buy $0.0971 -> now $0.0971 (0.01%), peak $0.0974 (0.29%)
+🔍 DECISION PATH: POLYCOPY_TARGET_WALLETS
+🔄 REAL POLYCOPY MODE (28%) - Monitoring live wallets
+[nanoclaw] TRADE SKIPPED: protection/strategy returned no actionable trade
+ℹ️ No actionable trade this cycle
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+✅ V2.5.1 Protection Module loaded successfully
+Real USDT: 0.00 | USDC: 0.00 | WMATIC: 0.00 | POL: 0.00
+⛔ Lock active — skipping
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+✅ V2.5.1 Protection Module loaded successfully
+Real USDT: 0.00 | USDC: 0.00 | WMATIC: 0.00 | POL: 0.00
+
+[nanoclaw] === CYCLE 1777780854 | BALANCES: USDT=$0.00 USDC=$0.00 WMATIC=$0.00 ===
+🔍 BALANCES | USDT=$0.00 USDC=$0.00 WMATIC≈0.00 USD | POL=0.0043 | copy_targets=8
+🔍 DECISION PATH | precedence: PROTECTION → PROFIT_TAKE → X_SIGNAL_EQUITY → USDC_COPY | POLYCOPY → MAIN_STRATEGY
+[nanoclaw] Runtime config | TAKE_PROFIT_PCT=8.00 STRONG_SIGNAL_TP=12.00 PER_ASSET_COOLDOWN_MINUTES=30
+📈 Holding open trade | buy $0.0971 -> now $0.0971 (0.01%), peak $0.0974 (0.29%)
+🔍 DECISION PATH: POLYCOPY_TARGET_WALLETS
+🔄 REAL POLYCOPY MODE (28%) - Monitoring live wallets
+[nanoclaw] TRADE SKIPPED: protection/strategy returned no actionable trade
+ℹ️ No actionable trade this cycle
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+✅ V2.5.1 Protection Module loaded successfully
+Real USDT: 0.00 | USDC: 0.00 | WMATIC: 0.00 | POL: 0.00
+
+[nanoclaw] === CYCLE 1777781455 | BALANCES: USDT=$0.00 USDC=$0.00 WMATIC=$0.00 ===
+🔍 BALANCES | USDT=$0.00 USDC=$0.00 WMATIC≈0.00 USD | POL=0.0043 | copy_targets=8
+🔍 DECISION PATH | precedence: PROTECTION → PROFIT_TAKE → X_SIGNAL_EQUITY → USDC_COPY | POLYCOPY → MAIN_STRATEGY
+[nanoclaw] Runtime config | TAKE_PROFIT_PCT=8.00 STRONG_SIGNAL_TP=12.00 PER_ASSET_COOLDOWN_MINUTES=30
+📈 Holding open trade | buy $0.0971 -> now $0.0971 (0.01%), peak $0.0974 (0.29%)
+🔍 DECISION PATH: POLYCOPY_TARGET_WALLETS
+🔄 REAL POLYCOPY MODE (28%) - Monitoring live wallets
+[nanoclaw] TRADE SKIPPED: protection/strategy returned no actionable trade
+ℹ️ No actionable trade this cycle
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+✅ V2.5.1 Protection Module loaded successfully
+Real USDT: 0.00 | USDC: 0.00 | WMATIC: 0.00 | POL: 0.00
+
+[nanoclaw] === CYCLE 1777781755 | BALANCES: USDT=$0.00 USDC=$0.00 WMATIC=$0.00 ===
+🔍 BALANCES | USDT=$0.00 USDC=$0.00 WMATIC≈0.00 USD | POL=0.0043 | copy_targets=8
+🔍 DECISION PATH | precedence: PROTECTION → PROFIT_TAKE → X_SIGNAL_EQUITY → USDC_COPY | POLYCOPY → MAIN_STRATEGY
+[nanoclaw] Runtime config | TAKE_PROFIT_PCT=8.00 STRONG_SIGNAL_TP=12.00 PER_ASSET_COOLDOWN_MINUTES=30
+📈 Holding open trade | buy $0.0971 -> now $0.0971 (0.01%), peak $0.0974 (0.29%)
+🔍 DECISION PATH: POLYCOPY_TARGET_WALLETS
+🔄 REAL POLYCOPY MODE (28%) - Monitoring live wallets
+[nanoclaw] TRADE SKIPPED: protection/strategy returned no actionable trade
+ℹ️ No actionable trade this cycle
+✅ V2.5.2 Copy Trading EXECUTING REAL TRADES (Test Mode Active)
+Monitoring 8 wallets | Copy ratio: 20.0%
+✅ V2.5.1 Protection Module loaded successfully
+Real USDT: 0.00 | USDC: 0.00 | WMATIC: 0.00 | POL: 0.00
+
+[nanoclaw] === CYCLE 1777782055 | BALANCES: USDT=$0.00 USDC=$0.00 WMATIC=$0.00 ===
+🔍 BALANCES | USDT=$0.00 USDC=$0.00 WMATIC≈0.00 USD | POL=0.0043 | copy_targets=8
+🔍 DECISION PATH | precedence: PROTECTION → PROFIT_TAKE → X_SIGNAL_EQUITY → USDC_COPY | POLYCOPY → MAIN_STRATEGY
+[nanoclaw] Runtime config | TAKE_PROFIT_PCT=8.00 STRONG_SIGNAL_TP=12.00 PER_ASSET_COOLDOWN_MINUTES=30
+📈 Holding open trade | buy $0.0971 -> now $0.0971 (0.01%), peak $0.0974 (0.29%)
+🔍 DECISION PATH: POLYCOPY_TARGET_WALLETS
+🔄 REAL POLYCOPY MODE (28%) - Monitoring live wallets
+[nanoclaw] TRADE SKIPPED: protection/strategy returned no actionable trade
+ℹ️ No actionable trade this cycle
