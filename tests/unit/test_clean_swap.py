@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 import json
 
 import clean_swap
@@ -33,6 +34,69 @@ class _DummyTunedTrader:
     def build_plan(self, **kwargs):
         plan, _ = self.build_plan_with_block_reason(**kwargs)
         return plan
+
+
+def test_parse_balance_config_reads_expected_values(tmp_path):
+    config_path = tmp_path / "balance_config.txt"
+    config_path.write_text(
+        "\n".join(
+            [
+                "USDC=66.85",
+                "WMATIC=4.60",
+                "USDT=31.13",
+                "IGNORED=1.0",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    usdc, wmatic, usdt = clean_swap._parse_balance_config(config_path)
+
+    assert usdc == 66.85
+    assert wmatic == 4.60
+    assert usdt == 31.13
+
+
+def test_parse_balance_config_returns_none_when_file_missing_or_empty(tmp_path):
+    missing = tmp_path / "missing_balance_config.txt"
+    assert clean_swap._parse_balance_config(missing) is None
+
+    empty = tmp_path / "empty_balance_config.txt"
+    empty.write_text("", encoding="utf-8")
+    assert clean_swap._parse_balance_config(empty) is None
+
+
+def test_append_balance_log_line_writes_total_and_source(tmp_path):
+    log_file = tmp_path / "real_cron.log"
+
+    line = clean_swap._append_balance_log_line(
+        66.85,
+        4.60,
+        31.13,
+        source="BotLogger",
+        log_file=log_file,
+        now=datetime(2026, 5, 4, 10, 22, 33),
+    )
+
+    assert "MANUAL CORRECT BALANCE" in line
+    assert "USDC=$66.85" in line
+    assert "WMATIC=$4.60" in line
+    assert "USDT=$31.13" in line
+    assert "TOTAL=$102.58" in line
+    assert "Source=BotLogger" in line
+    assert log_file.read_text(encoding="utf-8").strip() == line
+
+
+def test_log_balance_from_config_skips_missing_or_empty_without_writing(tmp_path):
+    missing = tmp_path / "missing_balance_config.txt"
+    log_file = tmp_path / "real_cron.log"
+    clean_swap._log_balance_from_config(config_path=missing, log_file=log_file, source="BotLogger")
+    assert not log_file.exists()
+
+    empty = tmp_path / "empty_balance_config.txt"
+    empty.write_text("", encoding="utf-8")
+    clean_swap._log_balance_from_config(config_path=empty, log_file=log_file, source="BotLogger")
+    assert not log_file.exists()
 
 
 def test_evaluate_usdc_copy_trade_defaults_strategy_without_build_call(monkeypatch):
@@ -179,6 +243,38 @@ def test_build_protection_exit_decision_uses_default_message_for_non_trade_reaso
     assert decision.direction == "WMATIC_TO_USDT"
     assert decision.amount_in == int(10.0 * 0.45 * 1e18)
     assert "PROTECTION TRIGGERED" in decision.message
+
+
+def test_build_protection_exit_decision_includes_fluctuation_context(monkeypatch):
+    import protection
+
+    monkeypatch.setattr(
+        protection,
+        "get_last_fluctuation_context",
+        lambda: {
+            "usdt": 22.5,
+            "wmatic": 55.0,
+            "usdt_threshold": 30.0,
+            "wmatic_min": 50.0,
+            "sell_fraction": 0.25,
+            "sell_amount_wmatic": 20.0,
+            "sell_notional_usd": 16.2,
+            "min_sell_usd": 8.0,
+        },
+    )
+    decision = clean_swap.build_protection_exit_decision(
+        reason="FLUCTUATION",
+        current_price=1.0,
+        wmatic_balance=80.0,
+        open_trade=None,
+    )
+
+    assert "PROTECTION TRIGGERED: FLUCTUATION" in decision.message
+    assert "USDT=$22.50" in decision.message
+    assert "WMATIC=55.0000" in decision.message
+    assert "sell=25%" in decision.message
+    assert "notional=$16.20 (min=$8.00)" in decision.message
+    assert decision.amount_in == int(80.0 * 0.25 * 1e18)
 
 
 def test_build_profit_exit_decision_clamps_sell_fraction_bounds():

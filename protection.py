@@ -9,9 +9,12 @@ from web3 import Web3
 import json
 import os
 from datetime import datetime
+import time
 from config import (
     COPY_TRADE_PCT,
+    PROTECTION_FLUCTUATION_COOLDOWN_SECONDS,
     PROTECTION_FLUCTUATION_MIN_WMATIC,
+    PROTECTION_FLUCTUATION_MIN_SELL_USD,
     PROTECTION_FLUCTUATION_SELL_FRACTION,
     PROTECTION_FLUCTUATION_USDT_THRESHOLD,
     PROTECTION_GAS_MULTIPLIER,
@@ -31,8 +34,12 @@ MAX_TRADE_SIZE_USD = PROTECTION_MAX_TRADE_SIZE_USD
 GAS_MULTIPLIER = PROTECTION_GAS_MULTIPLIER
 FLUCTUATION_USDT_THRESHOLD = PROTECTION_FLUCTUATION_USDT_THRESHOLD
 PROFIT_LOCK_PERCENT = PROTECTION_PROFIT_LOCK_PERCENT
+FLUCTUATION_COOLDOWN_SECONDS = PROTECTION_FLUCTUATION_COOLDOWN_SECONDS
+FLUCTUATION_MIN_SELL_USD = PROTECTION_FLUCTUATION_MIN_SELL_USD
 
 _prot_w3: Web3 | None = None
+_last_fluctuation_trigger_ts: float | None = None
+_last_fluctuation_context: dict[str, float] = {}
 
 
 def _shared_web3() -> Web3:
@@ -48,6 +55,10 @@ def get_live_wmatic_price():
     router = w3.eth.contract(address=ROUTER, abi=ROUTER_ABI + [GET_AMOUNTS_OUT_ABI])
     amounts = router.functions.getAmountsOut(10**18, [WMATIC, USDT]).call()
     return amounts[1] / 1_000_000
+
+
+def get_last_fluctuation_context() -> dict[str, float]:
+    return dict(_last_fluctuation_context)
 
 def get_balances():
     w3 = _shared_web3()
@@ -84,15 +95,69 @@ def record_buy(buy_price, amount_usd, tx_hash):
 
 def check_exit_conditions():
     """Call this before every cycle. Returns True if we should force sell"""
+    global _last_fluctuation_trigger_ts
+    global _last_fluctuation_context
     usdt, wmatic = get_balances()
     
     # 1. Fluctuation protection (USDT too low)
     if usdt < FLUCTUATION_USDT_THRESHOLD and wmatic > PROTECTION_FLUCTUATION_MIN_WMATIC:
-        print(
-            f"⚠️ FLUCTUATION PROTECTION: USDT ${usdt:.2f} < ${FLUCTUATION_USDT_THRESHOLD} → "
-            f"Selling {PROTECTION_FLUCTUATION_SELL_FRACTION * 100:.0f}% WMATIC"
+        now_ts = time.time()
+        elapsed = (
+            (now_ts - _last_fluctuation_trigger_ts)
+            if _last_fluctuation_trigger_ts is not None
+            else None
         )
-        return True, "FLUCTUATION"
+        if elapsed is not None and elapsed < FLUCTUATION_COOLDOWN_SECONDS:
+            remaining = FLUCTUATION_COOLDOWN_SECONDS - elapsed
+            print(
+                "🛡️ FLUCTUATION PROTECTION SUPPRESSED | "
+                f"USDT=${usdt:.2f} (<${FLUCTUATION_USDT_THRESHOLD:.2f}) | "
+                f"WMATIC={wmatic:.4f} (>{PROTECTION_FLUCTUATION_MIN_WMATIC:.4f}) | "
+                f"cooldown_remaining={remaining:.0f}s/{FLUCTUATION_COOLDOWN_SECONDS}s"
+            )
+        else:
+            sell_amount = wmatic * PROTECTION_FLUCTUATION_SELL_FRACTION
+            estimated_wmatic_price: float | None = None
+            sell_notional_usd: float | None = None
+            try:
+                estimated_wmatic_price = float(get_live_wmatic_price())
+                sell_notional_usd = sell_amount * estimated_wmatic_price
+            except Exception as exc:
+                print(f"⚠️ FLUCTUATION PRICE CHECK UNAVAILABLE | using balance-only guard | err={exc}")
+
+            if (
+                sell_notional_usd is not None
+                and sell_notional_usd < FLUCTUATION_MIN_SELL_USD
+            ):
+                print(
+                    "🛡️ FLUCTUATION PROTECTION SUPPRESSED | "
+                    f"sell_notional=${sell_notional_usd:.2f} < min=${FLUCTUATION_MIN_SELL_USD:.2f} | "
+                    f"USDT=${usdt:.2f} WMATIC={wmatic:.4f}"
+                )
+            else:
+                _last_fluctuation_trigger_ts = now_ts
+                _last_fluctuation_context = {
+                    "usdt": usdt,
+                    "wmatic": wmatic,
+                    "usdt_threshold": FLUCTUATION_USDT_THRESHOLD,
+                    "wmatic_min": PROTECTION_FLUCTUATION_MIN_WMATIC,
+                    "sell_fraction": PROTECTION_FLUCTUATION_SELL_FRACTION,
+                    "sell_amount_wmatic": sell_amount,
+                    "sell_notional_usd": float(sell_notional_usd) if sell_notional_usd is not None else 0.0,
+                    "wmatic_price": float(estimated_wmatic_price) if estimated_wmatic_price is not None else 0.0,
+                    "min_sell_usd": FLUCTUATION_MIN_SELL_USD,
+                    "cooldown_seconds": float(FLUCTUATION_COOLDOWN_SECONDS),
+                }
+                print(
+                    "⚠️ FLUCTUATION PROTECTION TRIGGERED | "
+                    f"USDT=${usdt:.2f} (<${FLUCTUATION_USDT_THRESHOLD:.2f}) | "
+                    f"WMATIC={wmatic:.4f} (>{PROTECTION_FLUCTUATION_MIN_WMATIC:.4f}) | "
+                    f"sell_fraction={PROTECTION_FLUCTUATION_SELL_FRACTION:.2f} "
+                    f"(~{sell_amount:.4f} WMATIC) | "
+                    f"notional=${(sell_notional_usd or 0.0):.2f} (min=${FLUCTUATION_MIN_SELL_USD:.2f}) | "
+                    f"cooldown={FLUCTUATION_COOLDOWN_SECONDS}s"
+                )
+                return True, "FLUCTUATION"
     
     # 2. Check open trades for per-trade exit
     if not os.path.exists(TRADE_LOG_FILE):

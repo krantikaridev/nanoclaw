@@ -658,6 +658,7 @@ def build_protection_exit_decision(
     open_trade: Optional[dict],
 ) -> TradeDecision:
     cs = importlib.import_module("clean_swap")
+    prot = importlib.import_module("protection")
     sell_fraction = float(cs.TAKE_PROFIT_SELL_PCT)
     _, strong_signal_tp = cs._effective_take_profit_thresholds()
 
@@ -673,7 +674,32 @@ def build_protection_exit_decision(
             f"({gain_pct:.2f}%) | selling {sell_fraction * 100:.0f}% WMATIC"
         )
     else:
-        message = f"🛡️ PROTECTION TRIGGERED: {reason} — Force selling"
+        if reason == "FLUCTUATION":
+            ctx_getter = getattr(prot, "get_last_fluctuation_context", None)
+            ctx = ctx_getter() if callable(ctx_getter) else {}
+            sell_fraction = float(
+                ctx.get(
+                    "sell_fraction",
+                    getattr(prot, "PROTECTION_FLUCTUATION_SELL_FRACTION", sell_fraction),
+                )
+            )
+            sell_fraction = max(0.0, min(1.0, sell_fraction))
+            usdt = float(ctx.get("usdt", 0.0))
+            usdt_threshold = float(ctx.get("usdt_threshold", 0.0))
+            wmatic_min = float(ctx.get("wmatic_min", 0.0))
+            trigger_wmatic = float(ctx.get("wmatic", wmatic_balance))
+            sell_amount = float(ctx.get("sell_amount_wmatic", 0.0))
+            sell_notional = float(ctx.get("sell_notional_usd", 0.0))
+            min_sell_usd = float(ctx.get("min_sell_usd", 0.0))
+            message = (
+                f"🛡️ PROTECTION TRIGGERED: {reason} — Force selling | "
+                f"USDT=${usdt:.2f} (<${usdt_threshold:.2f}) | "
+                f"WMATIC={trigger_wmatic:.4f} (min>{wmatic_min:.4f}) | "
+                f"sell={sell_fraction * 100:.0f}% (~{sell_amount:.4f} WMATIC) | "
+                f"notional=${sell_notional:.2f} (min=${min_sell_usd:.2f})"
+            )
+        else:
+            message = f"🛡️ PROTECTION TRIGGERED: {reason} — Force selling"
 
     return TradeDecision(
         direction="WMATIC_TO_USDT",

@@ -123,6 +123,9 @@ Operational focus: correctness of this precedence, USDC liquidity for equity **b
 - **`followed_equities.json`**: `min_signal_strength` in JSON and `X_SIGNAL_EQUITY_MIN_STRENGTH` in env both apply — **effective floor = max(JSON, env)**. Logged each X-Signal check as `[nanoclaw] X-Signal threshold …`.
 - **Polygon test proxies**: current repo config uses Polygon-native staples (WMATIC / WETH / WBTC) plus `_note` where Ondo tickers remain off-chain-Polygon until official listings; replace `address` when real Polygon contracts exist.
 - **Logs**: `[nanoclaw]` prefix via env `LOG_PREFIX`; cycle banner; path tags (`🔍 DECISION PATH`). X-Signal emits threshold line, ACTIVE lines, SUMMARY line, and (when a plan exists) checksum `token_in` / `token_out` before swap.
+- **Balance logger**: integrated into `clean_swap.py` (`Source=BotLogger`) reading `balance_config.txt` every 600s; no separate `scripts/auto_balance_logger.sh` process needed.
+- **Balance logger guardrail**: skips writing snapshots when `balance_config.txt` is missing/empty/invalid to avoid zero-value noise in `real_cron.log`.
+- **Fluctuation protection**: `FLUCTUATION` now emits rich trigger context, honors `PROTECTION_FLUCTUATION_COOLDOWN_SECONDS` to suppress repeated force-sell triggers in short windows, and applies `PROTECTION_FLUCTUATION_MIN_SELL_USD` to ignore low-notional noise triggers.
 - **Cooldowns**: per-asset and per-wallet marks run **after a successful on-chain swap** (`approve_and_swap` returns tx hash), not when a plan is merely built (`SignalEquityTrader.build_plan`, `USDCopyStrategy.build_plan`).
 - **Global cooldown**: skips full cycle until `COOLDOWN_MINUTES` since `last_run`; log prints approximate seconds remaining.
 

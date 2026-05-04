@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Balance logging integrated - no need for separate auto_balance_logger.sh
 """Nanoclaw V2 — thin façade; implementation in ``modules.runtime``, ``modules.signal``, ``modules.swap_executor``."""
 
 from __future__ import annotations
@@ -9,7 +10,10 @@ os.environ.setdefault("WEB3_PROVIDER_URI", "https://polygon-rpc.com")
 
 import argparse
 import asyncio
+from datetime import datetime
 import logging
+from pathlib import Path
+import threading
 import time
 
 from config import PRIVATE_KEY, UNISWAP_V3_SWAP_ROUTER
@@ -108,6 +112,97 @@ write_portfolio_history_snapshot = runtime.write_portfolio_history_snapshot
 _effective_take_profit_thresholds = runtime._effective_take_profit_thresholds
 _log_trade_skipped = runtime._log_trade_skipped
 
+
+BALANCE_LOG_INTERVAL_SECONDS = 600
+BALANCE_CONFIG_FILE = Path("balance_config.txt")
+REAL_CRON_LOG_FILE = Path("real_cron.log")
+_BALANCE_LOGGER_LOCK = threading.Lock()
+_BALANCE_LOGGER_STARTED = False
+
+
+def _parse_balance_config(config_path: Path = BALANCE_CONFIG_FILE) -> tuple[float, float, float] | None:
+    values: dict[str, float] = {"USDC": 0.0, "WMATIC": 0.0, "USDT": 0.0}
+    found_valid_entry = False
+    try:
+        for raw_line in config_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or "=" not in line:
+                continue
+            key, raw_value = line.split("=", 1)
+            key = key.strip().upper()
+            if key not in values:
+                continue
+            try:
+                values[key] = float(raw_value.strip() or 0.0)
+                found_valid_entry = True
+            except ValueError:
+                continue
+    except FileNotFoundError:
+        return None
+    if not found_valid_entry:
+        return None
+    return values["USDC"], values["WMATIC"], values["USDT"]
+
+
+def _append_balance_log_line(
+    usdc: float,
+    wmatic: float,
+    usdt: float,
+    *,
+    source: str = "BotLogger",
+    log_file: Path = REAL_CRON_LOG_FILE,
+    now: datetime | None = None,
+) -> str:
+    total = usdc + wmatic + usdt
+    timestamp = (now or datetime.now()).strftime("%Y-%m-%d %H:%M:%S")
+    line = (
+        f"[{timestamp}] MANUAL CORRECT BALANCE | "
+        f"USDC=${usdc:.2f} | WMATIC=${wmatic:.2f} | USDT=${usdt:.2f} | TOTAL=${total:.2f} | "
+        f"Source={source}"
+    )
+    with log_file.open("a", encoding="utf-8") as handle:
+        handle.write(f"{line}\n")
+    return line
+
+
+def _log_balance_from_config(
+    *,
+    config_path: Path = BALANCE_CONFIG_FILE,
+    log_file: Path = REAL_CRON_LOG_FILE,
+    source: str = "BotLogger",
+) -> None:
+    parsed_balances = _parse_balance_config(config_path)
+    if parsed_balances is None:
+        print(f"{LOG_PREFIX}BotLogger skipped: missing/empty/invalid balance_config.txt")
+        return
+    usdc, wmatic, usdt = parsed_balances
+    _append_balance_log_line(usdc, wmatic, usdt, source=source, log_file=log_file)
+
+
+def _start_balance_logger(
+    *,
+    interval_seconds: int = BALANCE_LOG_INTERVAL_SECONDS,
+    config_path: Path = BALANCE_CONFIG_FILE,
+    log_file: Path = REAL_CRON_LOG_FILE,
+) -> None:
+    global _BALANCE_LOGGER_STARTED
+    with _BALANCE_LOGGER_LOCK:
+        if _BALANCE_LOGGER_STARTED:
+            return
+        _BALANCE_LOGGER_STARTED = True
+
+    safe_interval = max(1, int(interval_seconds))
+
+    def _worker() -> None:
+        while True:
+            try:
+                _log_balance_from_config(config_path=config_path, log_file=log_file, source="BotLogger")
+            except Exception as exc:  # pragma: no cover - defensive logging only
+                print(f"{LOG_PREFIX}BotLogger error: {exc}")
+            time.sleep(safe_interval)
+
+    threading.Thread(target=_worker, name="bot-balance-logger", daemon=True).start()
+
 # Signal / X-equity hooks
 _load_followed_equities_json_dict = signal._load_followed_equities_json_dict
 _order_eligible_x_signal_candidates = signal._order_eligible_x_signal_candidates
@@ -124,6 +219,7 @@ try_x_signal_equity_decision = signal.try_x_signal_equity_decision
 if __name__ == "__main__":
     if not logging.root.handlers:
         logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+    _start_balance_logger()
     if PRIVATE_KEY:
         print("🚀 Running one-time max approval at startup...")
         _force_max_approval(w3, PRIVATE_KEY, UNISWAP_V3_SWAP_ROUTER)

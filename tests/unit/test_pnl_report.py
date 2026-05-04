@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from scripts import pnl_report
 from scripts.pnl_report import extract_snapshots
 
 
@@ -77,3 +78,23 @@ def test_extract_snapshots_discards_orphan_wallet_balance_at_eof(tmp_path: Path)
     snapshots = extract_snapshots(log_file)
 
     assert snapshots == []
+
+
+def test_get_current_balance_prefers_botlogger_or_autologger(tmp_path: Path, monkeypatch) -> None:
+    log_file = _write_log(
+        tmp_path,
+        "\n".join(
+            [
+                "[2026-05-04 10:00:00] MANUAL CORRECT BALANCE | USDC=$66.00 | WMATIC=$4.00 | USDT=$30.00 | TOTAL=$100.00 | Source=MetaMask",
+                "2026-05-04 10:01:00 Real USDT: 10.00 | USDC: 80.00 | WMATIC: 5.00",
+                "[2026-05-04 10:02:00] MANUAL CORRECT BALANCE | USDC=$67.00 | WMATIC=$4.00 | USDT=$31.00 | TOTAL=$102.00 | Source=AutoLogger",
+            ]
+        ),
+    )
+    monkeypatch.setattr(pnl_report, "LOG_FILE", str(log_file))
+
+    current = pnl_report.get_current_balance()
+
+    assert current is not None
+    assert current["source"] == "MANUAL (AutoLogger)"
+    assert current["total"] == 102.0
