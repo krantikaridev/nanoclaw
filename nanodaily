@@ -1,16 +1,26 @@
 #!/bin/bash
+# nanodaily — 5-second health dashboard (fixed 4 May 2026 v2)
+source ~/.bashrc 2>/dev/null || source ~/.profile 2>/dev/null || true
+
 echo "═══════════════════════════════════════════════"
 echo "           NANODAILY HEALTH — $(date '+%Y-%m-%d %H:%M')"
 echo "═══════════════════════════════════════════════"
 echo "💰 BALANCE:"
-nanopnl | grep -E "(USDC|WMATIC|USDT|TOTAL)"
+if command -v nanopnl >/dev/null 2>&1; then
+    nanopnl | grep -E "(USDC|WMATIC|USDT|TOTAL)"
+else
+    echo "   (nanopnl command not found in this shell)"
+fi
 echo ""
 echo "📊 TODAY STATS:"
-echo "Small trades bypassed: $(grep -c 'HARD BYPASS' real_cron.log 2>/dev/null || echo 0)"
-echo "Cooldown skips: $(grep -c 'skip cycle' real_cron.log 2>/dev/null || echo 0)"
-echo "Protection triggers: $(grep -c 'TRADE SKIPPED' real_cron.log 2>/dev/null || echo 0)"
+bypassed=$(grep -c 'HARD BYPASS' real_cron.log 2>/dev/null || echo 0)
+cooldown=$(grep -c 'skip cycle' real_cron.log 2>/dev/null || echo 0)
+protected=$(grep -c 'TRADE SKIPPED' real_cron.log 2>/dev/null || echo 0)
+echo "Small trades bypassed: $bypassed"
+echo "Cooldown skips: $cooldown"
+echo "Protection triggers: $protected"
 echo ""
 echo "🔧 SYSTEM:"
 echo "Commit: $(git rev-parse --short HEAD)"
-echo "Test Mode: $(grep TEST_MODE .env || echo 'not set')"
+echo "Test Mode: $(grep '^TEST_MODE=' .env | cut -d= -f2 || echo 'unknown')"
 echo "═══════════════════════════════════════════════"
