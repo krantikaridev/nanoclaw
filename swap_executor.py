@@ -43,13 +43,42 @@ _QUICKSWAP_V2_ROUTER = Web3.to_checksum_address("0xa5E0829CaCEd8fFDD4De3c43696c5
 _HIGH_CONVICTION_FALLBACK_PRIMARY_BPS = int(os.getenv("HIGH_CONVICTION_FALLBACK_SLIPPAGE_BPS", "4000"))
 _HIGH_CONVICTION_FALLBACK_RETRY_BPS = int(os.getenv("HIGH_CONVICTION_FALLBACK_RETRY_SLIPPAGE_BPS", "5000"))
 
+def _force_max_approval(w3, private_key, router_address, token_address="0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"):
+    """Force MAX approval every cycle + 8s sleep for stubborn Polygon RPC lag."""
+    from web3 import Web3
+    import time
+    account = w3.eth.account.from_key(private_key)
+    wallet = account.address
+    token = w3.eth.contract(
+        address=Web3.to_checksum_address(token_address),
+        abi=[
+            {"constant": False, "inputs": [{"name": "_spender", "type": "address"}, {"name": "_value", "type": "uint256"}], "name": "approve", "outputs": [{"name": "", "type": "bool"}], "type": "function"},
+            {"constant": True, "inputs": [{"name": "_owner", "type": "address"}, {"name": "_spender", "type": "address"}], "name": "allowance", "outputs": [{"name": "", "type": "uint256"}], "type": "function"}
+        ]
+    )
+    MAX = (1 << 256) - 1
+    print(f"[FORCE-MAX-APPROVE] Forcing fresh MAX approval for router {router_address}")
+    tx = token.functions.approve(router_address, MAX).build_transaction({
+        "from": wallet,
+        "nonce": w3.eth.get_transaction_count(wallet),
+        "gas": 80000,
+        "gasPrice": int(w3.eth.gas_price * 2.2),
+    })
+    signed = w3.eth.account.sign_transaction(tx, private_key)
+    tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+    print(f"[FORCE-MAX-APPROVE] Sent: {tx_hash.hex()}")
+    receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=180)
+    if receipt.status == 1:
+        time.sleep(8)  # ← Increased to 8 seconds for maximum propagation safety
+        print(f"[FORCE-MAX-APPROVE] ✅ Fresh MAX confirmed + fully propagated (ready for swap)")
+    else:
+        print("[FORCE-MAX-APPROVE] ❌ Approval tx failed")
 
 def _fallback_router_slippage_bps() -> int:
     """Slippage for QuickSwap-style router when 1inch is not used (typically looser than primary)."""
     if FALLBACK_ROUTER_SLIPPAGE_BPS_RAW:
         return max(int(FALLBACK_ROUTER_SLIPPAGE_BPS_RAW), _FALLBACK_ROUTER_SLIPPAGE_FLOOR_BPS)
     return max(SWAP_SLIPPAGE_BPS + 150, 250, _FALLBACK_ROUTER_SLIPPAGE_FLOOR_BPS)
-
 
 def _fallback_router_retry_slippage_bps(primary_bps: int) -> int:
     """Second attempt after an on-chain revert; +ONCHAIN_SWAP_RETRY_EXTRA_BPS vs first fallback quote."""
@@ -463,7 +492,7 @@ async def approve_and_swap(
                         f"{slip_bps} bps): {qex}"
                     )
                     return None
-
+            _force_max_approval(w3, resolved_key, "0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff")
             print(
                 f"{_prefix}[FALLBACK ROUTER] route attempt={attempt_idx + 1}/{len(slip_attempts)} | "
                 f"hops={len(chosen_path) - 1} | slip_bps={slip_bps} | expected_out≈{expected_out} | "
