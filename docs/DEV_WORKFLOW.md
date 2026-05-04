@@ -47,6 +47,7 @@ Always review the diff: the script redacts known secret keys but does not reorga
   Bash helper: `nanoup() { bash "${NANOCLAW_ROOT:-$HOME/.nanobot/workspace/nanoclaw}/scripts/nanoup.sh"; }`
 - **`nanostatus`** / **`nanopnl`** / **`show_balances.py`**: portfolio uses on-chain totals + optional `PORTFOLIO_BASELINE_USD` / `portfolio_baseline.json`.
 - Full reusable deploy sequence (including one-time exceptional `.env.example` -> `.env` reset path): **`docs/readme-vm-update.md`**.
+- If VM says `nanoup: command not found`, run `scripts/nanobot_aliases.sh --install`, then `source ~/.bashrc`, and verify with `type nanoup`, `type nanokill`, `type nanorestart`, `type nanostatus`.
 
 ### VM quick runbook (ops-safe)
 
