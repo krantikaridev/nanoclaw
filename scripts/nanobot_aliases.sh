@@ -121,22 +121,3 @@ Use one of:
   scripts/nanobot_aliases.sh --install
 EOF
 fi
-#!/usr/bin/env bash
-# Source this file in your shell to enable nano* shortcuts.
-
-NANOCLAW_ROOT="${NANOCLAW_ROOT:-$HOME/.nanobot/workspace/nanoclaw}"
-
-alias nanoup='bash "$NANOCLAW_ROOT/scripts/nanoup.sh"'
-alias nanokill='pkill -f "python clean_swap.py" || true'
-alias nanoattach='tail -f "$NANOCLAW_ROOT/real_cron.log"'
-alias nanopnl='python "$NANOCLAW_ROOT/scripts/pnl_report.py"'
-alias nanostatus='python "$NANOCLAW_ROOT/scripts/pnl_report.py"'
-alias nanobot='tail -f "$NANOCLAW_ROOT/real_cron.log"'
-alias nanorestart='nanoup && nanostatus'
-alias nanoguardgit='git config core.hooksPath .githooks && git config --get core.hooksPath'
-alias nanoenvsync='python "$NANOCLAW_ROOT/scripts/nanoenv_example.py" --write && python "$NANOCLAW_ROOT/scripts/verify_env_example_keys.py"'
-alias nanoenvcheck='python "$NANOCLAW_ROOT/scripts/verify_env_example_keys.py"'
-alias nanoenvstage='nanoguardgit >/dev/null && nanoenvsync && git add .env.example'
-alias nanocommit='nanoguardgit >/dev/null && python "$NANOCLAW_ROOT/scripts/check_committed_secrets.py" --staged && git commit'
-# Push helper: keep env template synced before push.
-alias nanopush='nanoguardgit >/dev/null && python "$NANOCLAW_ROOT/scripts/check_committed_secrets.py" --all-tracked && nanoenvstage && git push'

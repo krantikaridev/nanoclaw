@@ -23,6 +23,9 @@ def test_nanobot_aliases_script_supports_install_mode():
 
     assert "--install" in content
     assert "source ~/.bashrc" in content
+    # Guard against accidental legacy alias block duplication.
+    assert content.count("#!/usr/bin/env bash") == 1
+    assert 'alias nanoup=' not in content
 
 
 def test_nanokill_and_nanorestart_scripts_exist():

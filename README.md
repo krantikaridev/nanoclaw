@@ -6,6 +6,15 @@ For operators and agents, **`AI_CONTEXT.md`** on branch **`V2`** is the authorit
 
 **Development workflow** (commit gate, env sync, deploy helpers): **`docs/DEV_WORKFLOW.md`**.
 **Reusable VM deploy runbook** (including exceptional `.env.example` -> `.env` path): **`docs/readme-vm-update.md`**.
+**Roles and collaboration loop** (Grok/Human/Cursor): **`docs/OPERATING_MODEL.md`**.
+
+## Who Does What
+
+- **Grok + Human** set vision/priorities and validate outcomes.
+- **Grok -> Human -> Cursor**: human passes prioritized implementation prompt to Cursor.
+- **Cursor** implements major functionality locally (code + tests + docs).
+- **Human** reviews/pushes local code and runs VM-stage deploy/validation.
+- **Grok + Human** analyze results and decide small env tweaks or next code delta.
 
 ## Quick commands (`nano*` convention)
 

@@ -2,6 +2,16 @@
 
 **Canonical governance**: All process steps, backlog items, handoff rules, and session hygiene for this repo are defined **here first**. Cross-link from README or chat, but avoid duplicating TODO lists elsewhere—update this file.
 
+## **Operating Model (roles + loop)**
+
+- Canonical role split and collaboration loop live in `docs/OPERATING_MODEL.md`.
+- Working loop:
+  1) Grok + Human set vision/priorities/acceptance
+  2) Grok provides prompt -> Human runs in Cursor
+  3) Cursor implements major functionality locally (tests + docs + env-template alignment)
+  4) Human reviews/pushes and deploys to VM/stage
+  5) Grok + Human validate runtime and decide env/small follow-up deltas
+
 ## **Systematic Learning & History**
 
 - Hard cap $4.50 on high-conviction size + 600 bps fallback.

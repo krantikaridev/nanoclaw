@@ -2,6 +2,8 @@
 
 Canonical stage VM deploy flow for branch `V2`. Use this whenever promoting local changes to VM, including release/tag runs.
 
+Role split and decision loop: `docs/OPERATING_MODEL.md`.
+
 ## Scope
 
 - Repo path: `~/.nanobot/workspace/nanoclaw`
