@@ -1,9 +1,6 @@
-import json
 import asyncio
 import time
 import urllib.error
-import urllib.parse
-import urllib.request
 
 from web3 import Web3
 
@@ -36,6 +33,7 @@ from nanoclaw.execution.uniswap_v3_helpers import (
     quote_exact_input_single,
     resolve_spendable_usdc_token,
 )
+from nanoclaw.execution.oneinch_helpers import oneinch_approve_spender, oneinch_swap_payload
 
 # When 1inch is skipped or fails, router quoting uses higher slippage than SWAP_SLIPPAGE_BPS.
 # Optional overrides; otherwise derived from base slippage (see ``_fallback_router_slippage_bps``).
@@ -246,32 +244,11 @@ def _log_oneinch_fallback_reason(ex: BaseException) -> None:
     )
 
 
-def _oneinch_headers() -> dict[str, str]:
-    api_key = _oneinch_api_key()
-    if not api_key:
-        raise ValueError("Missing ONEINCH_API_KEY (required for 1inch swap API)")
-    return {
-        "Authorization": f"Bearer {api_key}",
-        "Accept": "application/json",
-    }
-
-
-def _oneinch_get_json(url: str) -> dict:
-    req = urllib.request.Request(url=url, headers=_oneinch_headers(), method="GET")
-    with urllib.request.urlopen(req, timeout=20) as response:  # noqa: S310
-        payload = response.read().decode("utf-8")
-    data = json.loads(payload or "{}")
-    if not isinstance(data, dict):
-        raise ValueError("Invalid 1inch response format")
-    return data
-
-
 def _oneinch_approve_spender() -> str:
-    data = _oneinch_get_json(ONEINCH_SPENDER_ENDPOINT)
-    spender = str(data.get("address", "")).strip()
-    if not spender:
-        raise ValueError("1inch approve/spender response missing address")
-    return spender
+    return oneinch_approve_spender(
+        spender_endpoint=ONEINCH_SPENDER_ENDPOINT,
+        api_key=_oneinch_api_key(),
+    )
 
 
 def _oneinch_swap_payload(
@@ -281,27 +258,17 @@ def _oneinch_swap_payload(
     amount_in: int,
     swap_slippage_bps: int | None = None,
 ) -> dict:
-    bps = SWAP_SLIPPAGE_BPS if swap_slippage_bps is None else int(swap_slippage_bps)
-    slippage_percent = max(0.1, float(bps) / 100.0)
-    params = {
-        "src": token_in,
-        "dst": token_out,
-        "amount": str(int(amount_in)),
-        "from": WALLET,
-        "origin": WALLET,
-        "receiver": WALLET,
-        "slippage": f"{slippage_percent:.2f}",
-        "disableEstimate": "false",
-        "allowPartialFill": "false",
-    }
-    # Using 1inch for better execution (Tier 1 - 2026-05-01)
-    query = urllib.parse.urlencode(params)
-    url = f"{ONEINCH_SWAP_ENDPOINT}?{query}"
-    data = _oneinch_get_json(url)
-    tx_data = data.get("tx")
-    if not isinstance(tx_data, dict) or not tx_data.get("to") or not tx_data.get("data"):
-        raise ValueError("1inch swap response missing tx payload")
-    return data
+    # Thin compatibility wrapper: tests monkeypatch this symbol in swap_executor.
+    return oneinch_swap_payload(
+        swap_endpoint=ONEINCH_SWAP_ENDPOINT,
+        api_key=_oneinch_api_key(),
+        wallet=WALLET,
+        token_in=token_in,
+        token_out=token_out,
+        amount_in=int(amount_in),
+        default_slippage_bps=int(SWAP_SLIPPAGE_BPS),
+        swap_slippage_bps=swap_slippage_bps,
+    )
 
 
 async def approve_and_swap(

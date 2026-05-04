@@ -316,6 +316,7 @@ nanoup
 - **Sizing bug from Cursor refactor**: Bot deployed full available USDC/USDT balance on high-conviction signals instead of fixed $12–$20 per signal. Happened once (large WMATIC/USDT/WETH buys) before crash. Fix: enforce fixed-size logic + proper balance checks before any swap.
 - Investigate why the refactored code ignored COPY_TRADE_PCT / fixed-size logic.
 - Add per-trade attribution (which signal/wallet caused each swap) so we can debug future anomalies.
+- 1inch readiness gate: once API key registration is completed, validate the live 1inch path end-to-end on VM (quote, spender, tx payload, and receipt logs) and then decide whether to promote it back to preferred executor or keep Uniswap V3 fallback as default.
 
 
 ## Constitution Update — 2026-05-04 (post V2 High-Conviction Task)
