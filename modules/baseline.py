@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import csv
 import json
-import os
 from pathlib import Path
 
-from dotenv import load_dotenv
+import config as cfg
 
 # Optional operator file (gitignored pattern in .gitignore); wallet must match WALLET for trust.
 _BASELINE_JSON = Path("portfolio_baseline.json")
@@ -23,11 +22,8 @@ def resolve_portfolio_baseline_usd(last_total_fallback: float) -> float:
     3) First data row of portfolio_history.csv (total_value column)
     4) last_total_fallback (current on-chain total from caller)
     """
-    load_dotenv()
-    load_dotenv(".env.local", override=True)
-
-    env_wallet = (os.getenv("WALLET") or "").strip().lower()
-    env_baseline = (os.getenv("PORTFOLIO_BASELINE_USD") or "").strip()
+    env_wallet = cfg.env_str("WALLET", "").strip().lower()
+    env_baseline = cfg.env_str("PORTFOLIO_BASELINE_USD", "")
     if env_baseline:
         v = float(env_baseline)
         if v != 0.0:
