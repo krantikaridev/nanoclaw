@@ -34,6 +34,8 @@ logger = logging.getLogger(__name__)
 
 # BUY notional at high conviction: WMATIC-tier reference cap (USD); other symbols use ``_high_conviction_symbol_size_factor``.
 _HIGH_CONVICTION_WMATIC_MAX_USD = 4.50
+_HARD_BYPASS_ENABLED = cfg.env_bool("HARD_BYPASS_ENABLED", True)
+_HARD_BYPASS_MIN_TRADE_USD = cfg.env_float("MIN_TRADE_USD", 15.0)
 
 
 @dataclass(frozen=True)
@@ -537,13 +539,6 @@ class SignalEquityTrader:
                 print(f"[nanoclaw] BLOCK: {sym} | invalid_trade_size (computed=${trade_size:.2f}, available=${usdc_balance:.2f})")
                 logger.debug("build_plan block sym=%s reason=invalid_trade_size", sym)
                 return None, "invalid_trade_size"
-            trade_amount_usd = trade_size
-            # ========== HARD BYPASS: KILL $4.5 MICRO-TRADES (4 May 2026) ==========
-            MIN_TRADE_USD = 15.0
-            if 'trade_amount_usd' in locals() and trade_amount_usd < MIN_TRADE_USD:
-                logger.warning(f"[HARD BYPASS] Small trade ${trade_amount_usd:.2f} < ${MIN_TRADE_USD} — SKIPPED permanently")
-                return False, "small_trade_bypass"
-            # ======================================================================
             min_sz = float(self.config.min_trade_usdc)
             if trade_size < min_sz:
                 print(
@@ -552,6 +547,14 @@ class SignalEquityTrader:
                 )
                 logger.debug("build_plan block sym=%s reason=below_min_trade_usdc", sym)
                 return None, "below_min_trade_usdc"
+            trade_amount_usd = trade_size
+            if _HARD_BYPASS_ENABLED and trade_amount_usd < float(_HARD_BYPASS_MIN_TRADE_USD):
+                logger.warning(
+                    "[HARD BYPASS] Small trade $%.2f < $%.2f — skipped",
+                    trade_amount_usd,
+                    float(_HARD_BYPASS_MIN_TRADE_USD),
+                )
+                return None, "small_trade_bypass"
             tp = float(self.config.strong_take_profit_pct)
             price_note = f" @ ${current_price_usd:.2f}" if isinstance(current_price_usd, (int, float)) else ""
             earn_note = (
@@ -675,9 +678,8 @@ class SignalEquityTrader:
             allow_high_gas_override=allow_high_gas_override,
             upside_pct=upside_pct,
         )
-        if not plan:
+        if plan is None:
             logger.debug("build_plan exit None sym=%s reason=%s", symbol, reason)
-            return None
         else:
             logger.debug("build_plan exit OK sym=%s direction=%s", symbol, plan.direction)
         return plan

@@ -262,7 +262,7 @@ def test_below_threshold_is_allowed_when_force_high_conviction_true():
         can_trade_asset=lambda symbol, now, cooldown: True,
         now=1000.0,
     )
-    assert plan is False
+    assert plan is None
     assert reason == "small_trade_bypass"
 
 
@@ -382,7 +382,7 @@ def test_force_eligible_bypasses_outside_earnings_window():
         wallet_address_for_gas="0x" + "3" * 40,
         can_trade_asset=lambda *_a, **_k: True,
     )
-    assert plan is False
+    assert plan is None
     assert reason == "small_trade_bypass"
 
 
@@ -423,7 +423,7 @@ def test_force_eligible_bypasses_high_gas_without_override():
         can_trade_asset=lambda *_a, **_k: True,
         allow_high_gas_override=False,
     )
-    assert plan is False
+    assert plan is None
     assert reason == "small_trade_bypass"
 
 
@@ -466,7 +466,7 @@ def test_force_eligible_bypasses_cooldown_and_builds_buy():
         wallet_address_for_gas="0x" + "3" * 40,
         can_trade_asset=_never,
     )
-    assert plan is False
+    assert plan is None
     assert reason == "small_trade_bypass"
 
 
@@ -502,7 +502,7 @@ def test_buy_fixed_size_is_now_stopped_by_hard_bypass_when_under_15():
         wallet_address_for_gas="0x" + "3" * 40,
         can_trade_asset=lambda *_a, **_k: True,
     )
-    assert plan is False
+    assert plan is None
     assert reason == "small_trade_bypass"
 
 
@@ -521,7 +521,7 @@ def test_buy_high_conviction_capped_below_min_trade_usdc_blocked():
         wallet_address_for_gas="0x" + "3" * 40,
         can_trade_asset=lambda *_a, **_k: True,
     )
-    assert reason == "small_trade_bypass"
+    assert reason == "below_min_trade_usdc"
 
 
 def test_buy_wmatic_high_conviction_cap_is_blocked_when_min_trade_usd_is_22():
@@ -539,7 +539,7 @@ def test_buy_wmatic_high_conviction_cap_is_blocked_when_min_trade_usd_is_22():
         wallet_address_for_gas="0x" + "3" * 40,
         can_trade_asset=lambda *_a, **_k: True,
     )
-    assert reason == "small_trade_bypass"
+    assert reason == "below_min_trade_usdc"
 
 
 def test_hard_bypass_blocks_micro_trade_under_15_usd():
@@ -556,7 +556,7 @@ def test_hard_bypass_blocks_micro_trade_under_15_usd():
         wallet_address_for_gas="0x" + "3" * 40,
         can_trade_asset=lambda *_a, **_k: True,
     )
-    assert plan is False
+    assert plan is None
     assert reason == "small_trade_bypass"
 
 
