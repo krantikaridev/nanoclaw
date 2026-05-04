@@ -18,6 +18,8 @@ from config import (
     ONEINCH_SWAP_ENDPOINT,
     ONCHAIN_SWAP_RETRY_EXTRA_BPS,
     SWAP_SLIPPAGE_BPS,
+    UNISWAP_V3_QUOTER,
+    UNISWAP_V3_SWAP_ROUTER,
 )
 from constants import (
     LOG_PREFIX,
@@ -27,6 +29,12 @@ from constants import (
     WALLET,
     USDT,
     WMATIC,
+)
+from nanoclaw.abi.uniswap_v3_abi import UNISWAP_V3_QUOTER_ABI, UNISWAP_V3_ROUTER_ABI
+from nanoclaw.execution.uniswap_v3_helpers import (
+    ensure_erc20_allowance,
+    quote_exact_input_single,
+    resolve_spendable_usdc_token,
 )
 
 # When 1inch is skipped or fails, router quoting uses higher slippage than SWAP_SLIPPAGE_BPS.
@@ -38,6 +46,8 @@ _prefix = LOG_PREFIX + " " if LOG_PREFIX else ""
 
 _FALLBACK_ROUTER_SLIPPAGE_FLOOR_BPS = 600
 ROUTER = Web3.to_checksum_address(ROUTER)
+UNISWAP_V3_ROUTER = Web3.to_checksum_address(UNISWAP_V3_SWAP_ROUTER)
+UNISWAP_V3_QUOTER = Web3.to_checksum_address(UNISWAP_V3_QUOTER)
 
 def _force_max_approval(w3, private_key, router_address, token_address="0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"):
     """One-time startup MAX approval helper for stubborn Polygon RPC lag."""
@@ -103,36 +113,36 @@ def _addr_probe(addr: str) -> str:
     return f"{cs[:10]}…{cs[-6:]}"
 
 
-def _ensure_usdc_allowance(w3, resolved_key: str, amount_in: int, router_address: str) -> None:
-    router_cs = Web3.to_checksum_address(router_address)
-    usdc_cs = Web3.to_checksum_address(USDC)
-    current_allowance = int(
-        w3.eth.contract(address=usdc_cs, abi=[{"constant":True,"inputs":[{"name":"_owner","type":"address"},{"name":"_spender","type":"address"}],"name":"allowance","outputs":[{"name":"","type":"uint256"}],"type":"function"},{"constant":False,"inputs":[{"name":"_spender","type":"address"},{"name":"_value","type":"uint256"}],"name":"approve","outputs":[{"name":"","type":"bool"}],"type":"function"}]).functions.allowance(WALLET, router_cs).call()
+def _resolve_spendable_usdc_token(w3, amount_in: int) -> str:
+    """Pick USDC token contract with enough spendable balance for this swap."""
+    return resolve_spendable_usdc_token(
+        w3,
+        wallet=WALLET,
+        primary_usdc=USDC,
+        secondary_usdc=str(getattr(cfg, "USDC_NATIVE", "") or "").strip(),
+        amount_in=int(amount_in),
+        addr_probe=_addr_probe,
+        log_prefix=_prefix,
     )
-    if current_allowance >= int(amount_in):
-        print(
-            f"{_prefix}Allowance check | router={router_cs} | current={current_allowance} | "
-            f"needed={int(amount_in)} | action=none"
-        )
-        return
 
-    approve_tx = w3.eth.contract(address=usdc_cs, abi=[{"constant":True,"inputs":[{"name":"_owner","type":"address"},{"name":"_spender","type":"address"}],"name":"allowance","outputs":[{"name":"","type":"uint256"}],"type":"function"},{"constant":False,"inputs":[{"name":"_spender","type":"address"},{"name":"_value","type":"uint256"}],"name":"approve","outputs":[{"name":"","type":"bool"}],"type":"function"}]).functions.approve(
-        router_cs, 2**256 - 1
-    ).build_transaction({
-        "from": WALLET,
-        "nonce": w3.eth.get_transaction_count(WALLET),
-        "gas": 140000,
-        "gasPrice": w3.eth.gas_price * 15 // 10,
-        "chainId": 137,
-    })
-    signed_approve = w3.eth.account.sign_transaction(approve_tx, resolved_key)
-    approve_hash = w3.eth.send_raw_transaction(signed_approve.raw_transaction)
-    receipt = w3.eth.wait_for_transaction_receipt(approve_hash, timeout=300)
-    if receipt["status"] == 0:
-        raise RuntimeError(f"{_prefix}USDC max approval failed for router {router_cs}")
-    print(
-        f"{_prefix}Allowance check | router={router_cs} | current={current_allowance} | "
-        f"needed={int(amount_in)} | action=approved/max"
+
+def _ensure_usdc_allowance(
+    w3,
+    resolved_key: str,
+    amount_in: int,
+    router_address: str,
+    *,
+    usdc_token_address: str,
+) -> None:
+    ensure_erc20_allowance(
+        w3,
+        token_address=usdc_token_address,
+        owner=WALLET,
+        spender=router_address,
+        required_amount=int(amount_in),
+        signer_key=resolved_key,
+        chain_id=137,
+        log_prefix=_prefix,
     )
 
 
@@ -196,6 +206,27 @@ def _best_quote_path(
 
     min_out = max(1, (best_amt * (10000 - min(slip, 9999))) // 10000)
     return best_path, best_amt, min_out
+
+
+def _quote_uniswap_v3_exact_input_single(
+    w3,
+    *,
+    token_in: str,
+    token_out: str,
+    amount_in: int,
+    slippage_bps: int,
+    fee: int = 3000,
+) -> tuple[int, int]:
+    return quote_exact_input_single(
+        w3,
+        quoter_address=UNISWAP_V3_QUOTER,
+        quoter_abi=UNISWAP_V3_QUOTER_ABI,
+        token_in=token_in,
+        token_out=token_out,
+        amount_in=int(amount_in),
+        slippage_bps=int(slippage_bps),
+        fee=int(fee),
+    )
 
 
 def _oneinch_api_key() -> str:
@@ -311,6 +342,8 @@ async def approve_and_swap(
 
         token_in_cs = Web3.to_checksum_address(token_in)
         token_out_cs = Web3.to_checksum_address(token_out)
+        if direction.startswith("USDC_TO_") and token_in_cs.lower() == Web3.to_checksum_address(USDC).lower():
+            token_in_cs = _resolve_spendable_usdc_token(w3, amount_in)
         if token_in_cs.lower() == token_out_cs.lower():
             raise ValueError(
                 f"{_prefix}refusing swap: token_in == token_out ({_addr_probe(str(token_in))}); check USDC/WMATIC env"
@@ -323,7 +356,7 @@ async def approve_and_swap(
 
         use_oneinch = bool(_oneinch_api_key())
         tx_payload: dict | None = None
-        router = ROUTER
+        router = UNISWAP_V3_ROUTER
         approve_spender = router
         if use_oneinch:
             try:
@@ -340,21 +373,23 @@ async def approve_and_swap(
                 _log_oneinch_fallback_reason(ex)
                 use_oneinch = False
 
-        path_candidates: list[list[str]] | None = None
         fb_primary = 0
         fb_retry = 0
-        router_quote_attempt1: tuple[list[str], int, int] | None = None
+        v3_quote_attempt1: tuple[int, int] | None = None
         if not use_oneinch:
             had_oneinch_key = bool(_oneinch_api_key())
             if not had_oneinch_key:
-                print(f"{_prefix}[FALLBACK ROUTER] ONEINCH_API_KEY missing — using on-chain router execution.")
+                print(f"{_prefix}[FALLBACK ROUTER] ONEINCH_API_KEY missing — using Uniswap V3 fallback execution.")
             else:
-                print(f"{_prefix}[FALLBACK ROUTER] Using on-chain router execution (see 1inch message above).")
-            if token_in_cs.lower() == Web3.to_checksum_address(USDC).lower():
-                _ensure_usdc_allowance(w3, resolved_key, amount_in, router)
-            # Current fallback starts with QuickSwap direct 1-hop (USDC->WMATIC); very small sizes can still revert
-            # when pool state moves between quote/build/send (price impact and stale minOut window).
-            path_candidates = build_polygon_swap_path_candidates(token_in_cs, token_out_cs)
+                print(f"{_prefix}[FALLBACK ROUTER] Using Uniswap V3 fallback execution (see 1inch message above).")
+            if direction.startswith("USDC_TO_"):
+                _ensure_usdc_allowance(
+                    w3,
+                    resolved_key,
+                    amount_in,
+                    router,
+                    usdc_token_address=token_in_cs,
+                )
             fb_primary = _fallback_router_slippage_bps()
             fb_retry = _fallback_router_retry_slippage_bps(fb_primary)
             if direction == "USDC_TO_WMATIC":
@@ -366,19 +401,20 @@ async def approve_and_swap(
                 f"(base SWAP_SLIPPAGE_BPS={SWAP_SLIPPAGE_BPS})."
             )
             try:
-                router_quote_attempt1 = _best_quote_path(
+                v3_quote_attempt1 = _quote_uniswap_v3_exact_input_single(
                     w3,
-                    router=router,
+                    token_in=token_in_cs,
+                    token_out=token_out_cs,
                     amount_in=amount_in,
-                    paths=path_candidates,
                     slippage_bps=fb_primary,
+                    fee=3000,
                 )
             except Exception as qex:
                 print(f"{_prefix}[FALLBACK ROUTER] Quote failed (pre-flight, {fb_primary} bps): {qex}")
                 return None
-            cq, eq, mq = router_quote_attempt1
+            eq, mq = v3_quote_attempt1
             print(
-                f"{_prefix}[FALLBACK ROUTER] Pre-flight quote OK | hops={len(cq) - 1} | "
+                f"{_prefix}[FALLBACK ROUTER] Pre-flight quote OK | fee=3000 | "
                 f"expected_out≈{eq} | min_out={mq}"
             )
 
@@ -470,17 +506,17 @@ async def approve_and_swap(
 
         slip_attempts: list[tuple[int, int]] = [(0, fb_primary), (1, fb_retry)]
         for attempt_idx, slip_bps in slip_attempts:
-            if attempt_idx == 0 and router_quote_attempt1 is not None:
-                chosen_path, expected_out, amount_out_min = router_quote_attempt1
+            if attempt_idx == 0 and v3_quote_attempt1 is not None:
+                expected_out, amount_out_min = v3_quote_attempt1
             else:
-                assert path_candidates is not None
                 try:
-                    chosen_path, expected_out, amount_out_min = _best_quote_path(
+                    expected_out, amount_out_min = _quote_uniswap_v3_exact_input_single(
                         w3,
-                        router=router,
+                        token_in=token_in_cs,
+                        token_out=token_out_cs,
                         amount_in=amount_in,
-                        paths=path_candidates,
                         slippage_bps=slip_bps,
+                        fee=3000,
                     )
                 except Exception as qex:
                     print(
@@ -490,21 +526,25 @@ async def approve_and_swap(
                     return None
             print(
                 f"{_prefix}[FALLBACK ROUTER] route attempt={attempt_idx + 1}/{len(slip_attempts)} | "
-                f"hops={len(chosen_path) - 1} | slip_bps={slip_bps} | expected_out≈{expected_out} | "
+                f"fee=3000 | slip_bps={slip_bps} | expected_out≈{expected_out} | "
                 f"min_out={amount_out_min}"
             )
 
             nonce_swap = w3.eth.get_transaction_count(WALLET)
             router_cs = Web3.to_checksum_address(router)
-            swap_contract = w3.eth.contract(address=router_cs, abi=ROUTER_SWAP_AND_QUOTE_ABI)
-            gas_limit = 320000 if len(chosen_path) <= 2 else 520000
-            swap_tx = swap_contract.functions.swapExactTokensForTokens(
-                amount_in,
-                amount_out_min,
-                chosen_path,
+            swap_contract = w3.eth.contract(address=router_cs, abi=UNISWAP_V3_ROUTER_ABI)
+            gas_limit = 520000
+            v3_params = (
+                Web3.to_checksum_address(token_in_cs),
+                Web3.to_checksum_address(token_out_cs),
+                3000,
                 WALLET,
                 int(time.time()) + 300,
-            ).build_transaction({
+                int(amount_in),
+                int(amount_out_min),
+                0,
+            )
+            swap_tx = swap_contract.functions.exactInputSingle(v3_params).build_transaction({
                 "from": WALLET,
                 "nonce": nonce_swap,
                 "gas": gas_limit,

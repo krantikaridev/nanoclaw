@@ -225,13 +225,13 @@ def test_approve_and_swap_uses_router_fallback_when_oneinch_key_missing(monkeypa
     monkeypatch.delenv("ONEINCH_API_KEY", raising=False)
     monkeypatch.delenv("INCH_API_KEY", raising=False)
 
-    called = {"router_quote": False}
+    called = {"v3_quote": False}
 
-    def _fake_best_quote_path(*_args, **_kwargs):
-        called["router_quote"] = True
-        raise RuntimeError("router quote called")
+    def _fake_v3_quote(*_args, **_kwargs):
+        called["v3_quote"] = True
+        raise RuntimeError("v3 quote called")
 
-    monkeypatch.setattr(swap_executor, "_best_quote_path", _fake_best_quote_path)
+    monkeypatch.setattr(swap_executor, "_quote_uniswap_v3_exact_input_single", _fake_v3_quote)
     monkeypatch.setattr(
         swap_executor,
         "_oneinch_swap_payload",
@@ -248,4 +248,4 @@ def test_approve_and_swap_uses_router_fallback_when_oneinch_key_missing(monkeypa
     )
 
     assert out is None
-    assert called["router_quote"] is True
+    assert called["v3_quote"] is True
