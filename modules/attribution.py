@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
+from config import NANOCLAW_TRADE_ATTRIBUTION
 
 def normalize_tx_hex(tx_hash: Any) -> str:
     if tx_hash is None:
@@ -34,7 +34,7 @@ def log_trade_attribution(
     message: str,
 ) -> None:
     """Emit a deterministic single-line attribution record (operators may grep real_cron.log)."""
-    if os.getenv("NANOCLAW_TRADE_ATTRIBUTION", "true").lower() not in ("1", "true", "yes"):
+    if not NANOCLAW_TRADE_ATTRIBUTION:
         return
     path = direction or ""
     amt = trade_size if trade_size else float(amount_in)

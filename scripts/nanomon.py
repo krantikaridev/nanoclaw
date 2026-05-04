@@ -12,6 +12,7 @@ import sys
 from collections import deque
 from pathlib import Path
 
+from config import NO_COLOR
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parent.parent
@@ -109,9 +110,9 @@ def _parse_log_stats(lines: list[str]) -> dict:
 
     fail = 0
     for line in lines:
-        l = line.lower()
+        low_line = line.lower()
         if any(
-            x in l
+            x in low_line
             for x in (
                 "failed on-chain",
                 "swap failed —",
@@ -123,11 +124,11 @@ def _parse_log_stats(lines: list[str]) -> dict:
 
     last_ok_ts: str | None = None
     for line in reversed(lines):
-        l = line.lower()
+        low_line = line.lower()
         ok_line = (
             _attribution_success_line(line)
-            or "swap executed successfully!" in l
-            or "✅ swap confirmed" in l
+            or "swap executed successfully!" in low_line
+            or "✅ swap confirmed" in low_line
         )
         if not ok_line:
             continue
@@ -221,7 +222,7 @@ def main() -> int:
         cand = Path.cwd() / "real_cron.log"
         log_path = cand if cand.is_file() else root / "real_cron.log"
 
-    use_color = not args.no_color and sys.stdout.isatty() and os.getenv("NO_COLOR", "") == ""
+    use_color = not args.no_color and sys.stdout.isatty() and NO_COLOR == ""
     bold, gr, rd, yl, reset = _ansi(use_color)
 
     print(f"{bold}=== nanomon {log_path.name} ==={reset}")

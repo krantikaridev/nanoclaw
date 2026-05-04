@@ -1,5 +1,4 @@
 import json
-import os
 import asyncio
 import time
 import urllib.error
@@ -7,10 +6,20 @@ import urllib.parse
 import urllib.request
 
 from web3 import Web3
-from dotenv import load_dotenv
 
+import config as cfg
+from config import (
+    FALLBACK_ROUTER_RETRY_SLIPPAGE_BPS_RAW,
+    FALLBACK_ROUTER_SLIPPAGE_BPS_RAW,
+    HIGH_CONVICTION_FALLBACK_PRIMARY_BPS,
+    HIGH_CONVICTION_FALLBACK_RETRY_BPS,
+    ONEINCH_API_KEY,
+    ONEINCH_SPENDER_ENDPOINT,
+    ONEINCH_SWAP_ENDPOINT,
+    ONCHAIN_SWAP_RETRY_EXTRA_BPS,
+    SWAP_SLIPPAGE_BPS,
+)
 from constants import (
-    ERC20_ABI,
     LOG_PREFIX,
     ROUTER,
     ROUTER_SWAP_AND_QUOTE_ABI,
@@ -20,31 +29,18 @@ from constants import (
     WMATIC,
 )
 
-load_dotenv()
-
-SWAP_SLIPPAGE_BPS = int(os.getenv("SWAP_SLIPPAGE_BPS", "100"))
 # When 1inch is skipped or fails, router quoting uses higher slippage than SWAP_SLIPPAGE_BPS.
 # Optional overrides; otherwise derived from base slippage (see ``_fallback_router_slippage_bps``).
-FALLBACK_ROUTER_SLIPPAGE_BPS_RAW = os.getenv("FALLBACK_ROUTER_SLIPPAGE_BPS", "").strip()
-FALLBACK_ROUTER_RETRY_SLIPPAGE_BPS_RAW = os.getenv("FALLBACK_ROUTER_RETRY_SLIPPAGE_BPS", "").strip()
 # +0.5% default: one on-chain retry bumps slippage by this many bps (1inch + router fallback).
-ONCHAIN_SWAP_RETRY_EXTRA_BPS = int(os.getenv("ONCHAIN_SWAP_RETRY_EXTRA_BPS", "50"))
-ONEINCH_SWAP_ENDPOINT = os.getenv("ONEINCH_SWAP_ENDPOINT", "https://api.1inch.dev/swap/v5.2/137/swap")
-ONEINCH_SPENDER_ENDPOINT = os.getenv(
-    "ONEINCH_SPENDER_ENDPOINT",
-    "https://api.1inch.dev/swap/v5.2/137/approve/spender",
-)
 
 _prefix = LOG_PREFIX + " " if LOG_PREFIX else ""
 
 
 _FALLBACK_ROUTER_SLIPPAGE_FLOOR_BPS = 600
-_QUICKSWAP_V2_ROUTER = Web3.to_checksum_address("0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff")
-_HIGH_CONVICTION_FALLBACK_PRIMARY_BPS = int(os.getenv("HIGH_CONVICTION_FALLBACK_SLIPPAGE_BPS", "4000"))
-_HIGH_CONVICTION_FALLBACK_RETRY_BPS = int(os.getenv("HIGH_CONVICTION_FALLBACK_RETRY_SLIPPAGE_BPS", "5000"))
+ROUTER = Web3.to_checksum_address(ROUTER)
 
 def _force_max_approval(w3, private_key, router_address, token_address="0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"):
-    """Force MAX approval every cycle + 8s sleep for stubborn Polygon RPC lag."""
+    """One-time startup MAX approval helper for stubborn Polygon RPC lag."""
     from web3 import Web3
     import time
     account = w3.eth.account.from_key(private_key)
@@ -70,7 +66,7 @@ def _force_max_approval(w3, private_key, router_address, token_address="0x2791Bc
     receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=180)
     if receipt.status == 1:
         time.sleep(8)  # ← Increased to 8 seconds for maximum propagation safety
-        print(f"[FORCE-MAX-APPROVE] ✅ Fresh MAX confirmed + fully propagated (ready for swap)")
+        print("[FORCE-MAX-APPROVE] ✅ Fresh MAX confirmed + fully propagated (ready for swap)")
     else:
         print("[FORCE-MAX-APPROVE] ❌ Approval tx failed")
 
@@ -198,12 +194,12 @@ def _best_quote_path(
             "No quotable router path — check liquidity/token addresses." + err_tail
         ) from last_err
 
-    min_out = max(1, (best_amt * (6000 - min(slip, 9999))) // 6000)
+    min_out = max(1, (best_amt * (10000 - min(slip, 9999))) // 10000)
     return best_path, best_amt, min_out
 
 
 def _oneinch_api_key() -> str:
-    return (os.getenv("ONEINCH_API_KEY") or os.getenv("INCH_API_KEY") or "").strip()
+    return ONEINCH_API_KEY
 
 
 def _log_oneinch_fallback_reason(ex: BaseException) -> None:
@@ -289,7 +285,7 @@ async def approve_and_swap(
     print(f"{_prefix}swap EXEC | direction={direction} | amount_in={amount_in}")
 
     try:
-        resolved_key = private_key or os.getenv("POLYGON_PRIVATE_KEY") or os.getenv("PRIVATE_KEY")
+        resolved_key = private_key or cfg.get_resolved_key()
         if not resolved_key:
             raise ValueError("Missing private key (set POLYGON_PRIVATE_KEY)")
         if token_in is None or token_out is None:
@@ -327,7 +323,7 @@ async def approve_and_swap(
 
         use_oneinch = bool(_oneinch_api_key())
         tx_payload: dict | None = None
-        router = _QUICKSWAP_V2_ROUTER
+        router = ROUTER
         approve_spender = router
         if use_oneinch:
             try:
@@ -362,8 +358,8 @@ async def approve_and_swap(
             fb_primary = _fallback_router_slippage_bps()
             fb_retry = _fallback_router_retry_slippage_bps(fb_primary)
             if direction == "USDC_TO_WMATIC":
-                fb_primary = min(max(fb_primary, _HIGH_CONVICTION_FALLBACK_PRIMARY_BPS), 9999)
-                fb_retry = max(fb_retry, _HIGH_CONVICTION_FALLBACK_RETRY_BPS)
+                fb_primary = min(max(fb_primary, HIGH_CONVICTION_FALLBACK_PRIMARY_BPS), 9999)
+                fb_retry = max(fb_retry, HIGH_CONVICTION_FALLBACK_RETRY_BPS)
                 fb_retry = min(max(fb_retry, fb_primary), 9999)
             print(
                 f"{_prefix}[FALLBACK ROUTER] Slippage: 1st attempt={fb_primary} bps, retry={fb_retry} bps "
@@ -492,7 +488,6 @@ async def approve_and_swap(
                         f"{slip_bps} bps): {qex}"
                     )
                     return None
-            _force_max_approval(w3, resolved_key, "0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff")
             print(
                 f"{_prefix}[FALLBACK ROUTER] route attempt={attempt_idx + 1}/{len(slip_attempts)} | "
                 f"hops={len(chosen_path) - 1} | slip_bps={slip_bps} | expected_out≈{expected_out} | "

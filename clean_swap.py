@@ -12,8 +12,10 @@ import asyncio
 import logging
 import time
 
+from config import PRIVATE_KEY, QUICKSWAP_V2_ROUTER
 from copy_trading import get_target_wallets
 from nanoclaw.strategies.signal_equity_trader import EquityTradePlan, FollowedEquity
+from swap_executor import _force_max_approval
 
 from constants import ERC20_ABI, LOG_PREFIX, USDC, USDT, WALLET, WMATIC
 from modules import runtime
@@ -122,6 +124,12 @@ try_x_signal_equity_decision = signal.try_x_signal_equity_decision
 if __name__ == "__main__":
     if not logging.root.handlers:
         logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+    if PRIVATE_KEY:
+        print("🚀 Running one-time max approval at startup...")
+        _force_max_approval(w3, PRIVATE_KEY, QUICKSWAP_V2_ROUTER)
+        print("✅ Startup approval complete. Bot ready.")
+    else:
+        print("⚠️ Startup approval skipped: private key not configured.")
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--dry-run",

@@ -2,12 +2,31 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional, Sequence, Tuple
 
+import config as cfg
+from config import (
+    ENABLE_X_SIGNAL_EQUITY,
+    FOLLOWED_EQUITIES_PATH,
+    MIN_POL_FOR_GAS,
+    PER_ASSET_COOLDOWN_MINUTES,
+    X_SIGNAL_EQUITY_COOLDOWN_SECONDS,
+    X_SIGNAL_EQUITY_MAX_TRADE,
+    X_SIGNAL_EQUITY_MIN_STRENGTH,
+    X_SIGNAL_EQUITY_SELL_FRACTION,
+    X_SIGNAL_EQUITY_STRONG_TP_PCT,
+    X_SIGNAL_EQUITY_TRADE_PCT,
+    X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD,
+    X_SIGNAL_FORCE_HIGH_CONVICTION,
+    X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD,
+    X_SIGNAL_MAX_EARNINGS_DAYS,
+    X_SIGNAL_STRONG_THRESHOLD,
+    X_SIGNAL_USDC_MIN,
+    env_str,
+)
 from constants import LOG_PREFIX
 from nanoclaw.utils.gas_protector import GasProtector
 
@@ -114,32 +133,31 @@ class EquityBuildPlanParams:
 
 class SignalEquityTraderBuilder:
     def __init__(self) -> None:
-        self._enabled = os.getenv("ENABLE_X_SIGNAL_EQUITY", "false").lower() == "true"
-        self._followed_equities_path = os.getenv("FOLLOWED_EQUITIES_PATH", "followed_equities.json")
-        self._strong_signal_threshold = float(os.getenv("X_SIGNAL_STRONG_THRESHOLD", "0.80"))
-        self._max_earnings_days = float(os.getenv("X_SIGNAL_MAX_EARNINGS_DAYS", "5.0"))
-        self._min_signal_strength = float(os.getenv("X_SIGNAL_EQUITY_MIN_STRENGTH", "0.60"))
-        self._force_high_conviction = os.getenv("X_SIGNAL_FORCE_HIGH_CONVICTION", "true").lower() == "true"
-        self._high_conviction_threshold = float(os.getenv("X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD", "0.80"))
-        self._force_eligible_threshold = float(
-            os.getenv(
-                "X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD",
-                os.getenv("X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD", "0.80"),
-            )
+        self._enabled = cfg.env_bool("ENABLE_X_SIGNAL_EQUITY", ENABLE_X_SIGNAL_EQUITY)
+        self._followed_equities_path = cfg.env_str("FOLLOWED_EQUITIES_PATH", FOLLOWED_EQUITIES_PATH)
+        self._strong_signal_threshold = cfg.env_float("X_SIGNAL_STRONG_THRESHOLD", X_SIGNAL_STRONG_THRESHOLD)
+        self._max_earnings_days = cfg.env_float("X_SIGNAL_MAX_EARNINGS_DAYS", X_SIGNAL_MAX_EARNINGS_DAYS)
+        self._min_signal_strength = cfg.env_float("X_SIGNAL_EQUITY_MIN_STRENGTH", X_SIGNAL_EQUITY_MIN_STRENGTH)
+        self._force_high_conviction = cfg.env_bool("X_SIGNAL_FORCE_HIGH_CONVICTION", X_SIGNAL_FORCE_HIGH_CONVICTION)
+        self._high_conviction_threshold = cfg.env_float(
+            "X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD",
+            X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD,
         )
-        self._trade_pct_of_usdc = float(os.getenv("X_SIGNAL_EQUITY_TRADE_PCT", "0.18"))
+        self._force_eligible_threshold = cfg.env_float(
+            "X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD",
+            X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD,
+        )
+        self._trade_pct_of_usdc = cfg.env_float("X_SIGNAL_EQUITY_TRADE_PCT", X_SIGNAL_EQUITY_TRADE_PCT)
         self._min_trade_usdc: Optional[float] = None
-        self._max_trade_usdc = float(os.getenv("X_SIGNAL_EQUITY_MAX_TRADE", "28.0"))
-        self._per_asset_cooldown_seconds = int(
-            os.getenv(
-                "X_SIGNAL_EQUITY_COOLDOWN_SECONDS",
-                str(int(os.getenv("PER_ASSET_COOLDOWN_MINUTES", "30")) * 60),
-            )
+        self._max_trade_usdc = cfg.env_float("X_SIGNAL_EQUITY_MAX_TRADE", X_SIGNAL_EQUITY_MAX_TRADE)
+        self._per_asset_cooldown_seconds = cfg.env_int(
+            "X_SIGNAL_EQUITY_COOLDOWN_SECONDS",
+            X_SIGNAL_EQUITY_COOLDOWN_SECONDS or (PER_ASSET_COOLDOWN_MINUTES * 60),
         )
-        self._min_pol_for_gas = float(os.getenv("MIN_POL_FOR_GAS", "0.005"))
-        self._strong_take_profit_pct = float(os.getenv("X_SIGNAL_EQUITY_STRONG_TP_PCT", "12.0"))
+        self._min_pol_for_gas = cfg.env_float("MIN_POL_FOR_GAS", MIN_POL_FOR_GAS)
+        self._strong_take_profit_pct = cfg.env_float("X_SIGNAL_EQUITY_STRONG_TP_PCT", X_SIGNAL_EQUITY_STRONG_TP_PCT)
         self._gas_protector: Optional[GasProtector] = None
-        self._usdc_address: Optional[str] = os.getenv("USDC")
+        self._usdc_address: Optional[str] = cfg.env_str("USDC", "")
 
     @staticmethod
     def _is_valid_polygon_address(token_address: str) -> bool:
@@ -227,12 +245,7 @@ class SignalEquityTraderBuilder:
                 min_trade_usdc=(
                     self._min_trade_usdc
                     if self._min_trade_usdc is not None
-                    else float(
-                        os.getenv(
-                            "X_SIGNAL_EQUITY_MIN_TRADE",
-                            os.getenv("X_SIGNAL_USDC_MIN", os.getenv("AUTO_USDC_FOR_X_SIGNAL_MIN_USDC", "5.0")),
-                        )
-                    )
+                    else float(cfg.env_float("X_SIGNAL_EQUITY_MIN_TRADE", X_SIGNAL_USDC_MIN))
                 ),
                 max_trade_usdc=self._max_trade_usdc,
                 per_asset_cooldown_seconds=self._per_asset_cooldown_seconds,
@@ -274,7 +287,7 @@ class SignalEquityTrader:
             env_key = str(item.get("env_token_address", symbol)).strip() or symbol
             explicit_address = item.get("address")
             explicit = str(explicit_address).strip() if explicit_address is not None else ""
-            token_address = explicit or str(os.getenv(env_key, "")).strip()
+            token_address = explicit or env_str(env_key, "")
             if not symbol or not token_address:
                 if symbol:
                     print(f"[nanoclaw] TRADE SKIPPED: invalid asset config ({symbol}: missing token address)")
@@ -581,7 +594,7 @@ class SignalEquityTrader:
             logger.debug("build_plan block sym=%s reason=zero_equity_balance", sym)
             return None, "zero_equity_balance"
 
-        sell_fraction = float(os.getenv("X_SIGNAL_EQUITY_SELL_FRACTION", "0.55"))
+        sell_fraction = float(X_SIGNAL_EQUITY_SELL_FRACTION)
         sell_fraction = min(1.0, max(0.05, sell_fraction))
         amount_in_units = int(equity_balance * sell_fraction * (10**int(token_decimals)))
         if amount_in_units <= 0:

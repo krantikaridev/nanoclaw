@@ -5,9 +5,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 from typing import Optional, Sequence
 
+import config as cfg
+from config import CHAIN_HINT_WRONG_ETH_ADDRESSES, X_SIGNAL_STRONG_THRESHOLD
 from nanoclaw.strategies.signal_equity_trader import (
     EquityBuildPlanParams,
     EquityTradePlan,
@@ -42,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 def _wrong_chain_eth_like_addresses() -> frozenset[str]:
     """Optional env CHAIN_HINT_WRONG_ETH_ADDRESSES=comma-separated; else defaults (Ethereum-mainnet-style tokens)."""
-    raw = (os.getenv("CHAIN_HINT_WRONG_ETH_ADDRESSES") or "").strip()
+    raw = CHAIN_HINT_WRONG_ETH_ADDRESSES
     if raw:
         return frozenset(x.strip().lower() for x in raw.split(",") if x.strip())
     return frozenset(
@@ -244,7 +245,7 @@ def ensure_usdc_for_x_signal(min_usdc: float = 8.0, min_wmatic_value: float = 15
         print(f"{runtime._nanolog()}AUTO-USDC skipped — gas/POL guard")
         return False
 
-    key = os.getenv("POLYGON_PRIVATE_KEY") or os.getenv("PRIVATE_KEY")
+    key = cfg.get_resolved_key()
     if not key:
         print(f"{runtime._nanolog()}AUTO-USDC skipped — no private key")
         return False
@@ -333,7 +334,7 @@ def _project_balances_after_auto_usdc(
     if not gst.get("ok", False):
         return balances
 
-    key = os.getenv("POLYGON_PRIVATE_KEY") or os.getenv("PRIVATE_KEY")
+    key = cfg.get_resolved_key()
     if not key:
         return balances
 
@@ -392,21 +393,8 @@ def _tuned_signal_equity_trader(min_signal_strength: float) -> SignalEquityTrade
     base_cfg = getattr(root, "config", None)
     gp = getattr(root, "gas_protector", cs.GAS_PROTECTOR)
     usdc_a = getattr(root, "usdc_address", USDC)
-    strong_thr = float(
-        os.getenv(
-            "X_SIGNAL_STRONG_THRESHOLD",
-            str(getattr(base_cfg, "strong_signal_threshold", cs.X_SIGNAL_STRONG_THRESHOLD)),
-        )
-    )
-    fe_thr = float(
-        os.getenv(
-            "X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD",
-            os.getenv(
-                "X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD",
-                str(getattr(base_cfg, "force_eligible_threshold", cs.X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD)),
-            ),
-        )
-    )
+    strong_thr = float(getattr(base_cfg, "strong_signal_threshold", X_SIGNAL_STRONG_THRESHOLD))
+    fe_thr = float(getattr(base_cfg, "force_eligible_threshold", cs.X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD))
     if base_cfg is None:
         tuned_cfg = SignalEquityTraderConfig(
             enabled=True,
@@ -431,10 +419,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
     decision: Optional[TradeDecision] = None
     result: Optional[str] = None
     eligible_count = 0
-    # Python if/else blocks do not create a new local scope; assignments below mutate this function-local flag.
-    buy_paths_allowed = True
     fcb = _cs_mod()
-    buy_paths_block_reason = f"pol<{fcb.MIN_POL_FOR_GAS:.4f} and AUTO_TOPUP_POL=false"
 
     def _polygon_chain_hint(sym: str, token_address: str) -> Optional[str]:
         t = (token_address or "").strip().lower()
@@ -604,19 +589,12 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                     if fcb.ensure_pol_for_trade(min_pol=float(fcb.MIN_POL_FOR_GAS)):
                         balances = fcb.get_balances()
                         if float(balances.pol) >= float(fcb.MIN_POL_FOR_GAS):
-                            # Recover BUY paths if a prior top-up attempt failed but this one succeeds.
-                            buy_paths_allowed = True
-                            buy_paths_block_reason = (
-                                f"pol recovered to >= {fcb.MIN_POL_FOR_GAS:.4f} after AUTO_TOPUP_POL=true retry"
-                            )
+                            # POL recovered; BUY path remains eligible.
+                            pass
                         else:
                             print(
                                 f"{runtime._nanolog()}AUTO-POL reported success but POL still low "
                                 f"(pol≈{float(balances.pol):.4f} < {fcb.MIN_POL_FOR_GAS:.4f}) — BUY paths skipped"
-                            )
-                            buy_paths_allowed = False
-                            buy_paths_block_reason = (
-                                f"pol<{fcb.MIN_POL_FOR_GAS:.4f} after AUTO_TOPUP_POL=true success response"
                             )
                             fcb._log_trade_skipped(
                                 f"POL low for BUY path after top-up (pol={float(balances.pol):.4f}, min={fcb.MIN_POL_FOR_GAS:.4f})"
@@ -626,17 +604,11 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                             f"{runtime._nanolog()}AUTO-POL failed during X-SIGNAL prep "
                             f"(pol<{fcb.MIN_POL_FOR_GAS:.4f}) — BUY paths skipped"
                         )
-                        buy_paths_allowed = False
-                        buy_paths_block_reason = (
-                            f"pol<{fcb.MIN_POL_FOR_GAS:.4f} and AUTO_TOPUP_POL=true (auto-topup failed)"
-                        )
                 else:
                     print(
                         f"{runtime._nanolog()}POL low (pol≈{float(balances.pol):.4f} < {fcb.MIN_POL_FOR_GAS:.4f}) "
                         f"and AUTO_TOPUP_POL=false — BUY paths skipped"
                     )
-                    buy_paths_allowed = False  # noqa: F841
-                    buy_paths_block_reason = f"pol<{fcb.MIN_POL_FOR_GAS:.4f} and AUTO_TOPUP_POL=false"  # noqa: F841
                     fcb._log_trade_skipped(
                         f"POL low for BUY path (pol={float(balances.pol):.4f}, min={fcb.MIN_POL_FOR_GAS:.4f})"
                     )
@@ -648,7 +620,6 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
         for _a in eligible_ordered:
             _sym = str(_a.symbol).strip()
             _sig = float(_a.signal_strength)
-            _floor = _effective_floor_for_equity(_a, min_strength)
             _cd_ok = fcb.can_trade_asset(_sym, None, secs_order)
             _fe_thr_ord = float(
                 getattr(tuned_trader.config, "force_eligible_threshold", X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD)
@@ -659,7 +630,6 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
             )
         print(f"{runtime._nanolog()}=== END ORDERING ===\n")
 
-        reason_parts: list[str] = []  # noqa: F841
         chain_notes: list[str] = []
 
         for a in eligible:
@@ -791,8 +761,9 @@ def evaluate_x_signal_equity_trade(
             upside_pct=a.upside_pct,
         )
        
-        if plan:  # try all eligible assets
-            pass
+        if plan:
+            # Preserve current helper behavior (no execution decision return from this evaluator).
+            break
     return None
 
 

@@ -21,7 +21,7 @@ known-first-party = ["nanoclaw", "modules"]
 
 [tool.coverage.run]
 branch = true
-omit = ["archive/*", "tests/*", "_src_clean_swap.py", "_build_swap_modules.py", "_restore_*.py"]
+omit = ["archive/*", "tests/*"]
 
 [tool.mypy]
 python_version = "3.12"

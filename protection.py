@@ -9,22 +9,28 @@ from web3 import Web3
 import json
 import os
 from datetime import datetime
-from dotenv import load_dotenv
+from config import (
+    COPY_TRADE_PCT,
+    PROTECTION_FLUCTUATION_MIN_WMATIC,
+    PROTECTION_FLUCTUATION_SELL_FRACTION,
+    PROTECTION_FLUCTUATION_USDT_THRESHOLD,
+    PROTECTION_GAS_MULTIPLIER,
+    PROTECTION_MAX_DAILY_LOSS_PCT,
+    PROTECTION_MAX_TRADE_SIZE_USD,
+    PROTECTION_MIN_POL_BALANCE,
+    PROTECTION_PROFIT_LOCK_PERCENT,
+)
 from constants import WALLET, USDT, WMATIC, ROUTER, ROUTER_ABI, GET_AMOUNTS_OUT_ABI
 
 from nanoclaw.config import connect_web3
 
-load_dotenv()
-
 # ====================== CONFIG (override via .env; defaults preserve legacy behavior) ======================
-MAX_DAILY_LOSS_PCT = int(os.getenv("PROTECTION_MAX_DAILY_LOSS_PCT", "15"))
-MIN_POL_BALANCE = float(os.getenv("PROTECTION_MIN_POL_BALANCE", "2.0"))
-MAX_TRADE_SIZE_USD = float(os.getenv("PROTECTION_MAX_TRADE_SIZE_USD", "35"))
-GAS_MULTIPLIER = float(os.getenv("PROTECTION_GAS_MULTIPLIER", "1.25"))
-FLUCTUATION_USDT_THRESHOLD = float(os.getenv("PROTECTION_FLUCTUATION_USDT_THRESHOLD", "30"))
-PROTECTION_FLUCTUATION_MIN_WMATIC = float(os.getenv("PROTECTION_FLUCTUATION_MIN_WMATIC", "50"))
-PROTECTION_FLUCTUATION_SELL_FRACTION = float(os.getenv("PROTECTION_FLUCTUATION_SELL_FRACTION", "0.25"))
-PROFIT_LOCK_PERCENT = float(os.getenv("PROTECTION_PROFIT_LOCK_PERCENT", "8"))
+MAX_DAILY_LOSS_PCT = PROTECTION_MAX_DAILY_LOSS_PCT
+MIN_POL_BALANCE = PROTECTION_MIN_POL_BALANCE
+MAX_TRADE_SIZE_USD = PROTECTION_MAX_TRADE_SIZE_USD
+GAS_MULTIPLIER = PROTECTION_GAS_MULTIPLIER
+FLUCTUATION_USDT_THRESHOLD = PROTECTION_FLUCTUATION_USDT_THRESHOLD
+PROFIT_LOCK_PERCENT = PROTECTION_PROFIT_LOCK_PERCENT
 
 _prot_w3: Web3 | None = None
 
@@ -116,7 +122,6 @@ def has_enough_pol():
     return get_pol_balance() >= MIN_POL_BALANCE
 
 def get_safe_trade_size(usdt_balance):
-    pct = float(os.getenv("COPY_TRADE_PCT", "0.28"))
-    return min(MAX_TRADE_SIZE_USD, usdt_balance * pct)
+    return min(MAX_TRADE_SIZE_USD, usdt_balance * COPY_TRADE_PCT)
 
 print("✅ V2.5.1 Protection Module loaded successfully")

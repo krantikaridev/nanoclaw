@@ -1,17 +1,15 @@
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from dotenv import load_dotenv
 try:
     from web3 import Web3
 except ImportError:  # pragma: no cover - optional in lightweight test environments
     Web3 = object  # type: ignore[assignment]
 
-load_dotenv()
+import config as cfg
 
 
 def _load_json(path: str) -> object:
@@ -39,28 +37,21 @@ def _abi_fragment_to_entry_list(fragment: object) -> list:
     return []
 
 
-# Log prefix for actionable lines (set empty to omit).
-LOG_PREFIX = os.getenv("LOG_PREFIX", "[nanoclaw]").strip()
-
-# Native POL floor for gas (used by multiple modules; can be overridden via env MIN_POL_FOR_GAS).
-MIN_POL_FOR_GAS = float(os.getenv("MIN_POL_FOR_GAS", "0.005"))
 # X-signal per-asset cooldown should remain env-driven, never hardcoded.
-PER_ASSET_COOLDOWN_MINUTES = int(os.getenv("PER_ASSET_COOLDOWN_MINUTES", "30"))
+LOG_PREFIX = cfg.LOG_PREFIX
+MIN_POL_FOR_GAS = cfg.MIN_POL_FOR_GAS
+PER_ASSET_COOLDOWN_MINUTES = cfg.PER_ASSET_COOLDOWN_MINUTES
 PER_ASSET_COOLDOWN_SECONDS = PER_ASSET_COOLDOWN_MINUTES * 60
-
-# Deployment-specific addresses should be env-driven.
-WALLET = os.getenv("WALLET", "0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6")
-USDT = os.getenv("USDT", "0xc2132D05D31c914a87C6611C10748AEb04B58e8F")
-USDC = os.getenv("USDC", "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174")
-# Native Circle USDC on Polygon (distinct from bridged USDC.e). Set USDC_NATIVE= empty to sum only ``USDC``.
-_usdc_native_env = os.getenv("USDC_NATIVE")
-USDC_NATIVE = (
-    "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"
-    if _usdc_native_env is None
-    else str(_usdc_native_env).strip()
-)
-WMATIC = os.getenv("WMATIC", "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270")
-ROUTER = os.getenv("ROUTER", "0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff")
+WALLET = cfg.WALLET
+USDT = cfg.USDT
+USDC = cfg.USDC
+USDC_NATIVE = cfg.USDC_NATIVE
+WMATIC = cfg.WMATIC
+ROUTER = cfg.ROUTER
+GOOGLON = cfg.GOOGLON
+MSFTON = cfg.MSFTON
+APPLON = cfg.APPLON
+AMZNON = cfg.AMZNON
 
 
 @dataclass(frozen=True)
@@ -82,19 +73,13 @@ POLYGON = PolygonAddresses(
     router=ROUTER,
 )
 
-# Tokenized equities (placeholders; set real addresses in .env)
-GOOGLON = os.getenv("GOOGLON", "")
-MSFTON = os.getenv("MSFTON", "")
-APPLON = os.getenv("APPLON", "")
-AMZNON = os.getenv("AMZNON", "")
-
 # ABIs are versioned protocol definitions. Keep defaults in-repo, but allow env overrides.
-ERC20_ABI_PATH = os.getenv("ERC20_ABI_PATH", _default_abi_path("nanoclaw/abi/erc20.json"))
-ROUTER_ABI_PATH = os.getenv(
+ERC20_ABI_PATH = cfg.env_str("ERC20_ABI_PATH", _default_abi_path("nanoclaw/abi/erc20.json"))
+ROUTER_ABI_PATH = cfg.env_str(
     "ROUTER_ABI_PATH",
     _default_abi_path("nanoclaw/abi/router_swap_exact_tokens_for_tokens.json"),
 )
-GET_AMOUNTS_OUT_ABI_PATH = os.getenv(
+GET_AMOUNTS_OUT_ABI_PATH = cfg.env_str(
     "GET_AMOUNTS_OUT_ABI_PATH",
     _default_abi_path("nanoclaw/abi/router_get_amounts_out.json"),
 )

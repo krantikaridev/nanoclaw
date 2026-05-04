@@ -4,10 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import importlib
-import os
 import time
 from typing import Optional
 
+import config as cfg
+from config import (
+    COPY_TRADE_AGGRESSIVE_THRESHOLD,
+    MAIN_STRATEGY_CUT_LOSS_MIN_WMATIC_BALANCE,
+    MAIN_STRATEGY_CUT_LOSS_SELL_FRACTION,
+    MAIN_STRATEGY_CUT_LOSS_WMATIC_USD,
+    MAIN_STRATEGY_MIN_USDT_RESERVE,
+    MAIN_STRATEGY_RESERVE_SELL_FRACTION,
+    MAIN_STRATEGY_TP_TRIGGER_WMATIC_USD,
+)
 from nanoclaw.strategies.usdc_copy import USDCopyStrategy
 from swap_executor import approve_and_swap
 
@@ -22,16 +31,6 @@ from .runtime import (
     is_copy_trading_enabled,
     w3,
 )
-
-# WMATIC↔USDT main path tuning (was hardcoded; see .env.example).
-MAIN_STRATEGY_MIN_USDT_RESERVE = float(os.getenv("MAIN_STRATEGY_MIN_USDT_RESERVE", "25"))
-MAIN_STRATEGY_TP_TRIGGER_WMATIC_USD = float(os.getenv("MAIN_STRATEGY_TP_TRIGGER_WMATIC_USD", "52"))
-MAIN_STRATEGY_CUT_LOSS_WMATIC_USD = float(os.getenv("MAIN_STRATEGY_CUT_LOSS_WMATIC_USD", "40"))
-MAIN_STRATEGY_CUT_LOSS_MIN_WMATIC_BALANCE = float(os.getenv("MAIN_STRATEGY_CUT_LOSS_MIN_WMATIC_BALANCE", "50"))
-MAIN_STRATEGY_RESERVE_SELL_FRACTION = float(os.getenv("MAIN_STRATEGY_RESERVE_SELL_FRACTION", "0.45"))
-MAIN_STRATEGY_CUT_LOSS_SELL_FRACTION = float(os.getenv("MAIN_STRATEGY_CUT_LOSS_SELL_FRACTION", "0.28"))
-COPY_TRADE_AGGRESSIVE_THRESHOLD = float(os.getenv("COPY_TRADE_AGGRESSIVE_THRESHOLD", "0.20"))
-
 
 def _facade():
     """Tests monkeypatch attrs on ``clean_swap`` — always read knobs from that module."""
@@ -351,7 +350,7 @@ async def main(*, dry_run: bool = False) -> None:
 
         tx_hash = await approve_and_swap(
             w3,
-            os.getenv("POLYGON_PRIVATE_KEY") or os.getenv("PRIVATE_KEY"),
+            cfg.get_resolved_key(),
             decision.amount_in,
             direction=decision.direction,
             token_in=decision.token_in,

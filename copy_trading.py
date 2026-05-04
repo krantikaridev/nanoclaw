@@ -3,12 +3,11 @@ V2.5.2 Copy Trading Module - EXECUTING REAL TRADES (Test Mode)
 """
 import json
 import os
-from dotenv import load_dotenv
-load_dotenv()
+from config import DEFAULT_MAX_COPY_RATIO
 
 CONFIG_FILE = "followed_wallets.json"
 
-_DEFAULT_MAX_COPY_RATIO = float(os.getenv("DEFAULT_MAX_COPY_RATIO", "0.20"))
+_DEFAULT_MAX_COPY_RATIO = DEFAULT_MAX_COPY_RATIO
 
 
 def load_config():

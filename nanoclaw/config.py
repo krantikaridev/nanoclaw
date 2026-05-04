@@ -1,10 +1,18 @@
 """Central configuration - Single Source of Truth (SRP)"""
 
-import os
 import time
 from dataclasses import dataclass
 from typing import Any, List, Sequence
 
+from config import (
+    RPC,
+    RPC_URL,
+    WEB3_PROVIDER_URI,
+    X_SIGNAL_DYNAMIC_TIER_HIGH_MIN,
+    X_SIGNAL_DYNAMIC_USDC_BELOW_FORCE_ELIGIBLE,
+    X_SIGNAL_DYNAMIC_USDC_GTE_FORCE_ELIGIBLE,
+    X_SIGNAL_DYNAMIC_USDC_GTE_TIER_HIGH,
+)
 _DEFAULT_POLYGON_PUBLIC_RPCS: tuple[str, ...] = (
     "https://rpc.ankr.com/polygon",
     "https://polygon.llamarpc.com",
@@ -20,11 +28,7 @@ _RPC_CONNECT_DELAY_SEC = 1.0
 def default_json_rpc_url() -> List[str]:
     """Ordered Polygon JSON-RPC URLs: single env override first, then public fallbacks."""
     out: List[str] = []
-    primary = (
-        os.getenv("RPC")
-        or os.getenv("RPC_URL")
-        or os.getenv("WEB3_PROVIDER_URI")
-    )
+    primary = RPC or RPC_URL or WEB3_PROVIDER_URI
     if primary:
         p = primary.strip()
         if p:
@@ -85,14 +89,10 @@ def connect_web3(
 
 @dataclass
 class XSignalConfig:
-    TIER_HIGH_MIN: float = float(os.getenv("X_SIGNAL_DYNAMIC_TIER_HIGH_MIN", "0.90"))
-    USDC_GTE_TIER_HIGH: float = float(os.getenv("X_SIGNAL_DYNAMIC_USDC_GTE_TIER_HIGH", "20.0"))
-    USDC_GTE_FORCE_ELIGIBLE: float = float(
-        os.getenv("X_SIGNAL_DYNAMIC_USDC_GTE_FORCE_ELIGIBLE", "15.0")
-    )
-    USDC_BELOW_FORCE_ELIGIBLE: float = float(
-        os.getenv("X_SIGNAL_DYNAMIC_USDC_BELOW_FORCE_ELIGIBLE", "12.0")
-    )
+    TIER_HIGH_MIN: float = X_SIGNAL_DYNAMIC_TIER_HIGH_MIN
+    USDC_GTE_TIER_HIGH: float = X_SIGNAL_DYNAMIC_USDC_GTE_TIER_HIGH
+    USDC_GTE_FORCE_ELIGIBLE: float = X_SIGNAL_DYNAMIC_USDC_GTE_FORCE_ELIGIBLE
+    USDC_BELOW_FORCE_ELIGIBLE: float = X_SIGNAL_DYNAMIC_USDC_BELOW_FORCE_ELIGIBLE
     COOLDOWN_SECONDS: int = 1800
     TP_PERCENT: float = 0.12
 

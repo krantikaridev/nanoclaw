@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, List, Optional, Tuple, cast
 
+from config import RPC_FALLBACKS_RAW
 from nanoclaw.config import connect_web3, default_json_rpc_url
 
 try:
@@ -55,7 +55,7 @@ class GasProtectorConfig:
 
 class GasProtectorBuilder:
     def __init__(self) -> None:
-        fallback_env = os.getenv("RPC_FALLBACKS", "")
+        fallback_env = RPC_FALLBACKS_RAW
         self._max_gwei = 80.0
         self._urgent_gwei = 120.0
         self._min_pol_balance = 0.05

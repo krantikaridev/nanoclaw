@@ -14,8 +14,6 @@ from datetime import datetime, timezone
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
-from dotenv import load_dotenv
-
 try:
     from web3 import Web3
 except ImportError:  # pragma: no cover - exercised in lightweight test environments
@@ -28,10 +26,7 @@ except ImportError:  # pragma: no cover - exercised in lightweight test environm
             self.provider = provider
             self.eth = None
 
-load_dotenv()
-# Optional local override file (kept for VM/operator compatibility).
-load_dotenv(".env.local", override=True)
-
+import config as cfg
 
 from constants import ERC20_ABI, LOG_PREFIX, ROUTER, USDC, USDC_NATIVE, USDT, WALLET, WMATIC  # noqa: E402
 from nanoclaw.config import connect_web3  # noqa: E402
@@ -50,65 +45,43 @@ STATE_FILE = "bot_state.json"
 TRADE_LOG_FILE = "trade_exits.json"
 PORTFOLIO_HISTORY_FILE = "portfolio_history.csv"
 
-COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", 3))
-PER_ASSET_COOLDOWN_MINUTES = int(os.getenv("PER_ASSET_COOLDOWN_MINUTES", "30"))
-PER_ASSET_COOLDOWN_SECONDS = PER_ASSET_COOLDOWN_MINUTES * 60
-POL_USD_PRICE = float(os.getenv("POL_USD_PRICE", "0.10"))
-MIN_POL_FOR_GAS = float(os.getenv("MIN_POL_FOR_GAS", "0.005"))
-AUTO_TOPUP_POL = os.getenv("AUTO_TOPUP_POL", "true").lower() == "true"
-POL_TOPUP_AMOUNT = float(os.getenv("POL_TOPUP_AMOUNT", "0.03"))
-COPY_TRADE_PCT = float(os.getenv("COPY_TRADE_PCT", "0.28"))
-# Align with GasProtector builder (`MAX_GWEI`); used in logs / diagnostics.
-MAX_GWEI = float(os.getenv("MAX_GWEI", "80"))
-# Fixed USD band for copy + X-signal sizing (`fixed_copy_trade_usd`).
-FIXED_TRADE_USD_MIN = float(os.getenv("FIXED_TRADE_USD_MIN", "5"))
-FIXED_TRADE_USD_MAX = float(os.getenv("FIXED_TRADE_USD_MAX", "10"))
-PER_WALLET_COOLDOWN = int(os.getenv("PER_WALLET_COOLDOWN", "180"))
-TRAILING_STOP_PCT = float(os.getenv("TRAILING_STOP_PCT", "5.0"))
-TAKE_PROFIT_PCT = float(os.getenv("TAKE_PROFIT_PCT", "1.5"))
-STRONG_SIGNAL_TP = float(os.getenv("STRONG_SIGNAL_TP", "12.0"))
-TAKE_PROFIT_SELL_PCT = float(os.getenv("TAKE_PROFIT_SELL_PCT", "0.45"))
-STRONG_TP_SELL_PCT = float(os.getenv("STRONG_TP_SELL_PCT", "0.60"))
-ENABLE_USDC_COPY = os.getenv("ENABLE_USDC_COPY", "false").lower() == "true"
-ENABLE_X_SIGNAL_EQUITY = os.getenv("ENABLE_X_SIGNAL_EQUITY", "false").lower() == "true"
-X_SIGNAL_EQUITY_MIN_STRENGTH = float(os.getenv("X_SIGNAL_EQUITY_MIN_STRENGTH", "0.60"))
-X_SIGNAL_MAX_EARNINGS_DAYS = float(os.getenv("X_SIGNAL_MAX_EARNINGS_DAYS", "5.0"))
-X_SIGNAL_FORCE_HIGH_CONVICTION = os.getenv("X_SIGNAL_FORCE_HIGH_CONVICTION", "true").lower() == "true"
-X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD = float(os.getenv("X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD", "0.82"))
-X_SIGNAL_STRONG_THRESHOLD = float(os.getenv("X_SIGNAL_STRONG_THRESHOLD", "0.82"))
-X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD = float(
-    os.getenv(
-        "X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD",
-        os.getenv("X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD", "0.82"),
-    )
-)
-X_SIGNAL_HIGH_CONVICTION_PREP_MIN_USDC = float(os.getenv("X_SIGNAL_HIGH_CONVICTION_PREP_MIN_USDC", "8.0"))
-X_SIGNAL_HIGH_CONVICTION_PREP_MIN_WMATIC = float(os.getenv("X_SIGNAL_HIGH_CONVICTION_PREP_MIN_WMATIC", "12.0"))
-FOLLOWED_EQUITIES_PATH = os.getenv("FOLLOWED_EQUITIES_PATH", "followed_equities.json")
-# Iron-fenced USDC population to prevent zero-USDC blocker.
-# Keep env precedence aligned with SignalEquityTraderBuilder to avoid sizing mismatches.
-X_SIGNAL_USDC_MIN = float(
-    os.getenv(
-        "X_SIGNAL_EQUITY_MIN_TRADE",
-        os.getenv("X_SIGNAL_USDC_MIN", os.getenv("AUTO_USDC_FOR_X_SIGNAL_MIN_USDC", "5.0")),
-    )
-)
-X_SIGNAL_WMATIC_MIN_VALUE = float(
-    os.getenv("X_SIGNAL_WMATIC_MIN_VALUE", os.getenv("AUTO_USDC_FOR_X_SIGNAL_MIN_WMATIC_VALUE", "15.0"))
-)
-AUTO_POPULATE_USDC_AMOUNT = float(os.getenv("AUTO_POPULATE_USDC_AMOUNT", "20.0"))
-# Back-compat aliases (older env names referenced in docs/tests).
-AUTO_USDC_FOR_X_SIGNAL_MIN_USDC = float(os.getenv("AUTO_USDC_FOR_X_SIGNAL_MIN_USDC", str(X_SIGNAL_USDC_MIN)))
-AUTO_USDC_FOR_X_SIGNAL_MIN_WMATIC_VALUE = float(
-    os.getenv("AUTO_USDC_FOR_X_SIGNAL_MIN_WMATIC_VALUE", str(X_SIGNAL_WMATIC_MIN_VALUE))
-)
-# When true (default): try assets off per-asset cooldown before higher-signal assets still cooling down.
-X_SIGNAL_EQUITY_COOLDOWN_FIRST_SORT = (
-    os.getenv("X_SIGNAL_EQUITY_COOLDOWN_FIRST_SORT", "true").lower() == "true"
-)
-# Proactive USDC maintenance for X-Signal equity trading.
-X_SIGNAL_USDC_SAFE_FLOOR = float(os.getenv("X_SIGNAL_USDC_SAFE_FLOOR", "20.0"))
-X_SIGNAL_AUTO_USDC_TARGET = float(os.getenv("X_SIGNAL_AUTO_USDC_TARGET", "25.0"))
+# Runtime config aliases from central config.
+COOLDOWN_MINUTES = cfg.COOLDOWN_MINUTES
+PER_ASSET_COOLDOWN_MINUTES = cfg.PER_ASSET_COOLDOWN_MINUTES
+PER_ASSET_COOLDOWN_SECONDS = cfg.PER_ASSET_COOLDOWN_SECONDS
+POL_USD_PRICE = cfg.POL_USD_PRICE
+MIN_POL_FOR_GAS = cfg.MIN_POL_FOR_GAS
+AUTO_TOPUP_POL = cfg.AUTO_TOPUP_POL
+POL_TOPUP_AMOUNT = cfg.POL_TOPUP_AMOUNT
+COPY_TRADE_PCT = cfg.COPY_TRADE_PCT
+MAX_GWEI = cfg.MAX_GWEI
+FIXED_TRADE_USD_MIN = cfg.FIXED_TRADE_USD_MIN
+FIXED_TRADE_USD_MAX = cfg.FIXED_TRADE_USD_MAX
+PER_WALLET_COOLDOWN = cfg.PER_WALLET_COOLDOWN
+TRAILING_STOP_PCT = cfg.TRAILING_STOP_PCT
+TAKE_PROFIT_PCT = cfg.TAKE_PROFIT_PCT
+STRONG_SIGNAL_TP = cfg.STRONG_SIGNAL_TP
+TAKE_PROFIT_SELL_PCT = cfg.TAKE_PROFIT_SELL_PCT
+STRONG_TP_SELL_PCT = cfg.STRONG_TP_SELL_PCT
+ENABLE_USDC_COPY = cfg.ENABLE_USDC_COPY
+ENABLE_X_SIGNAL_EQUITY = cfg.ENABLE_X_SIGNAL_EQUITY
+X_SIGNAL_EQUITY_MIN_STRENGTH = cfg.X_SIGNAL_EQUITY_MIN_STRENGTH
+X_SIGNAL_MAX_EARNINGS_DAYS = cfg.X_SIGNAL_MAX_EARNINGS_DAYS
+X_SIGNAL_FORCE_HIGH_CONVICTION = cfg.X_SIGNAL_FORCE_HIGH_CONVICTION
+X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD = cfg.X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD
+X_SIGNAL_STRONG_THRESHOLD = cfg.X_SIGNAL_STRONG_THRESHOLD
+X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD = cfg.X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD
+X_SIGNAL_HIGH_CONVICTION_PREP_MIN_USDC = cfg.X_SIGNAL_HIGH_CONVICTION_PREP_MIN_USDC
+X_SIGNAL_HIGH_CONVICTION_PREP_MIN_WMATIC = cfg.X_SIGNAL_HIGH_CONVICTION_PREP_MIN_WMATIC
+FOLLOWED_EQUITIES_PATH = cfg.FOLLOWED_EQUITIES_PATH
+X_SIGNAL_USDC_MIN = cfg.X_SIGNAL_USDC_MIN
+X_SIGNAL_WMATIC_MIN_VALUE = cfg.X_SIGNAL_WMATIC_MIN_VALUE
+AUTO_POPULATE_USDC_AMOUNT = cfg.AUTO_POPULATE_USDC_AMOUNT
+AUTO_USDC_FOR_X_SIGNAL_MIN_USDC = cfg.AUTO_USDC_FOR_X_SIGNAL_MIN_USDC
+AUTO_USDC_FOR_X_SIGNAL_MIN_WMATIC_VALUE = cfg.AUTO_USDC_FOR_X_SIGNAL_MIN_WMATIC_VALUE
+X_SIGNAL_EQUITY_COOLDOWN_FIRST_SORT = cfg.X_SIGNAL_EQUITY_COOLDOWN_FIRST_SORT
+X_SIGNAL_USDC_SAFE_FLOOR = cfg.X_SIGNAL_USDC_SAFE_FLOOR
+X_SIGNAL_AUTO_USDC_TARGET = cfg.X_SIGNAL_AUTO_USDC_TARGET
 
 
 def _nanolog() -> str:
@@ -197,9 +170,9 @@ def build_gas_protector() -> GasProtector:
     return (
         GasProtector.builder()
         .with_max_gwei(MAX_GWEI)
-        .with_urgent_gwei(float(os.getenv("URGENT_GWEI", "120")))
+        .with_urgent_gwei(cfg.URGENT_GWEI)
         .with_min_pol_balance(MIN_POL_FOR_GAS)
-        .with_retry_attempts(int(os.getenv("GAS_RPC_RETRY_ATTEMPTS", "2")))
+        .with_retry_attempts(cfg.GAS_RPC_RETRY_ATTEMPTS)
         .build()
     )
 
@@ -224,8 +197,8 @@ X_SIGNAL_EQUITY_TRADER = (
     .with_enabled(ENABLE_X_SIGNAL_EQUITY)
     .with_followed_equities_path(FOLLOWED_EQUITIES_PATH)
     .with_strong_signal_threshold(X_SIGNAL_STRONG_THRESHOLD)
-    .with_max_earnings_days(float(os.getenv("X_SIGNAL_MAX_EARNINGS_DAYS", "5.0")))
-    .with_min_signal_strength(float(os.getenv("X_SIGNAL_EQUITY_MIN_STRENGTH", "0.60")))
+    .with_max_earnings_days(X_SIGNAL_MAX_EARNINGS_DAYS)
+    .with_min_signal_strength(X_SIGNAL_EQUITY_MIN_STRENGTH)
     .with_force_high_conviction(X_SIGNAL_FORCE_HIGH_CONVICTION)
     .with_high_conviction_threshold(X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD)
     .with_force_eligible_threshold(X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD)
@@ -237,7 +210,7 @@ X_SIGNAL_EQUITY_TRADER = (
 
 
 def is_copy_trading_enabled() -> bool:
-    return os.getenv("COPY_TRADING_ENABLED", "true").lower() == "true"
+    return cfg.COPY_TRADING_ENABLED
 
 
 def can_trade_wallet(
@@ -317,7 +290,7 @@ def ensure_pol_for_trade(min_pol: float = 0.025) -> bool:
     if current_pol >= float(min_pol):
         return True
 
-    key = os.getenv("POLYGON_PRIVATE_KEY") or os.getenv("PRIVATE_KEY")
+    key = cfg.get_resolved_key()
     if not key:
         print(f"{_nanolog()}AUTO-POL skipped — no private key")
         return False
