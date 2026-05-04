@@ -65,3 +65,9 @@ portfolio_history.csv
 real_cron.log
 __pycache__/
 *.pyc
+*.log
+
+# Bot runtime files (never commit)
+portfolio_history.csv
+real_cron.log
+*.log
