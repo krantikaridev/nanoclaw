@@ -2,6 +2,8 @@
 
 Use this so code review feedback and operator habits stay consistent across sessions.
 
+Role ownership and collaboration loop are defined in **`docs/OPERATING_MODEL.md`**.
+
 ## Before commit
 
 1. **`python -m ruff check .`**
