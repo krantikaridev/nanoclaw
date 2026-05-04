@@ -1,11 +1,11 @@
 #!/bin/bash
-# nanodaily — 5-second health dashboard (final v4 - 4 May 2026)
+# nanodaily — 5-second health dashboard (final self-contained v5 - 4 May 2026)
 
 echo "═══════════════════════════════════════════════"
 echo "           NANODAILY HEALTH — $(date '+%Y-%m-%d %H:%M')"
 echo "═══════════════════════════════════════════════"
-echo "💰 BALANCE:"
-bash -l -c 'nanopnl 2>/dev/null | grep -E "(USDC|WMATIC|USDT|TOTAL)" || echo "   (nanopnl not available)"'
+echo "💰 BALANCE (from BotLogger):"
+tail -n 20 real_cron.log | grep 'MANUAL CORRECT BALANCE' | tail -n 1 | sed 's/.*| //; s/ | Source.*//'
 echo ""
 echo "📊 TODAY STATS:"
 bypassed=$(grep -c 'HARD BYPASS' real_cron.log 2>/dev/null); bypassed=${bypassed:-0}
