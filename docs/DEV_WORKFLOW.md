@@ -46,6 +46,7 @@ Always review the diff: the script redacts known secret keys but does not reorga
 - **`scripts/nanoup.sh`**: kill bot → `git pull --ff-only` → `nohup python clean_swap.py`.  
   Bash helper: `nanoup() { bash "${NANOCLAW_ROOT:-$HOME/.nanobot/workspace/nanoclaw}/scripts/nanoup.sh"; }`
 - **`nanostatus`** / **`nanopnl`** / **`show_balances.py`**: portfolio uses on-chain totals + optional `PORTFOLIO_BASELINE_USD` / `portfolio_baseline.json`.
+- Full reusable deploy sequence (including one-time exceptional `.env.example` -> `.env` reset path): **`docs/readme-vm-update.md`**.
 
 ### VM quick runbook (ops-safe)
 
