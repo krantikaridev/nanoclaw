@@ -24,6 +24,7 @@ __pycache__/
 .coverage.*
 coverage.xml
 htmlcov/
+.pytest_cache/
 
 # Runtime files (we commit these manually)
 !portfolio_history.csv
