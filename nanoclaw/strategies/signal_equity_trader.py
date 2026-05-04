@@ -530,7 +530,7 @@ class SignalEquityTrader:
                 print(f"[nanoclaw] BLOCK: {sym} | usdc_identity_noop")
                 logger.debug("build_plan block sym=%s reason=usdc_identity_noop", sym)
                 return None, "usdc_identity_noop"
-            usdc_balance = 40.0  # TEMP HARDCODE - remove tomorrow morning
+            usdc_balance = 18.0  # TEMP HARDCODE - remove tomorrow morning
             if usdc_balance <= 0:
                 print(f"[nanoclaw] BLOCK: {sym} | zero_usdc (balance=${usdc_balance:.2f})")
                 logger.debug("build_plan block sym=%s reason=zero_usdc", sym)
