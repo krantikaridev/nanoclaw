@@ -26,10 +26,6 @@ coverage.xml
 htmlcov/
 .pytest_cache/
 
-# Runtime files (we commit these manually)
-!portfolio_history.csv
-!real_cron.log
-
 # OS & editor
 .DS_Store
 .vscode/
@@ -59,16 +55,13 @@ wheels/
 *.egg
 MANIFEST
 
-# Runtime files (never commit)
+# Runtime files
 bot_state.json
-portfolio_history.csv
-real_cron.log
 __pycache__/
 *.pyc
 *.log
 
-# Bot runtime files (never commit)
-portfolio_history.csv
-real_cron.log
-*.log
+# Runtime artifacts intentionally tracked (manual commits only)
+!portfolio_history.csv
+!real_cron.log
 

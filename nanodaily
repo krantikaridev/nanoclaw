@@ -3,7 +3,7 @@ echo "════════════════════════�
 echo "           NANODAILY HEALTH — $(date '+%Y-%m-%d %H:%M')"
 echo "═══════════════════════════════════════════════"
 echo "💰 BALANCE:"
-nanopnl | grep -E "(USDC|WMATIC|USDT|TOTAL)"
+PYTHONIOENCODING=utf-8 python scripts/pnl_report.py | grep -E "(USDC|WMATIC|USDT|TOTAL)"
 echo ""
 echo "📊 TODAY STATS:"
 echo "Small trades bypassed: $(grep -c 'HARD BYPASS' real_cron.log 2>/dev/null || echo 0)"

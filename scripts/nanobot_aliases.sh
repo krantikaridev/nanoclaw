@@ -49,6 +49,16 @@ nanorestart() {
   nanoup "$@" && nanostatus
 }
 
+nanodaily() {
+  _nanoclaw_enter_root || return 1
+  if [[ -x "${NANOCLAW_ROOT}/nanodaily" ]]; then
+    bash "${NANOCLAW_ROOT}/nanodaily"
+  else
+    echo "❌ nanodaily script missing or not executable: ${NANOCLAW_ROOT}/nanodaily"
+    return 1
+  fi
+}
+
 nanobot() {
   _nanoclaw_enter_root || return 1
   tail -f real_cron.log
@@ -105,7 +115,7 @@ _nanoclaw_install_aliases() {
     echo "✅ added alias bootstrap to ${bashrc}"
   fi
   echo "Run: source ~/.bashrc"
-  echo "Verify: type nanoup && type nanokill && type nanorestart && type nanostatus"
+  echo "Verify: type nanoup && type nanokill && type nanorestart && type nanostatus && type nanodaily"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

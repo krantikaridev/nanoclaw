@@ -26,6 +26,7 @@ For operators and agents, **`AI_CONTEXT.md`** on branch **`V2`** is the authorit
 | `nanorestart` | Safe restart flow: `nanoup && nanostatus` |
 | `nanokill` | Stop the bot |
 | `nanoattach` | Attach to live bot logs |
+| `nanodaily` | Daily health snapshot: balances, bypass/cooldown/protection counters, commit, TEST_MODE |
 | `nanoenvsync` | Sync `.env.example` from `.env` (secrets blanked) and verify drift/coverage |
 | `nanoenvcheck` | Verify `.env.example` key coverage and drift vs sanitized `.env` |
 | `nanoenvstage` | Run env sync/check and stage `.env.example` for commit |

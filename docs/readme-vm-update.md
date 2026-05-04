@@ -27,6 +27,7 @@ type nanoup
 type nanokill
 type nanorestart
 type nanostatus
+type nanodaily
 ```
 
 Fallback (no alias required):
