@@ -622,6 +622,58 @@ def test_main_skips_small_stable_in_trade_when_below_min_trade_usd(monkeypatch, 
     assert "TRADE SKIPPED | below minimum size" in out
 
 
+def test_main_skips_small_wmatic_exit_when_below_min_trade_usd(monkeypatch, capsys):
+    monkeypatch.setattr(clean_swap, "load_state", lambda: {"last_run": 0.0})
+    monkeypatch.setattr(
+        clean_swap,
+        "get_balances",
+        lambda: clean_swap.Balances(usdt=40.0, wmatic=20.0, pol=1.0, usdc=10.0),
+    )
+    monkeypatch.setattr(clean_swap, "has_active_lock", lambda: False)
+    monkeypatch.setattr(clean_swap, "create_lock", lambda: None)
+    monkeypatch.setattr(clean_swap, "release_lock", lambda: None)
+    monkeypatch.setattr(clean_swap, "get_live_wmatic_price", lambda: 2.0)
+    monkeypatch.setattr(clean_swap, "write_portfolio_history_snapshot", lambda _price: None)
+    monkeypatch.setattr(clean_swap, "is_global_cooldown_active", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(clean_swap, "save_state", lambda _state: None)
+    monkeypatch.setattr(clean_swap, "get_pol_balance", lambda: 1.0)
+    monkeypatch.setattr(
+        clean_swap,
+        "get_gas_status",
+        lambda: {
+            "ok": True,
+            "gas_gwei": 20.0,
+            "max_gwei": 80.0,
+            "pol_balance": 1.0,
+            "min_pol_balance": 0.005,
+        },
+    )
+    monkeypatch.setattr(clean_swap, "MIN_TRADE_USD", 22.0)
+
+    logs: list[str] = []
+    monkeypatch.setattr(clean_swap, "_log_trade_skipped", lambda reason: logs.append(reason))
+
+    async def _unexpected_swap(*_args, **_kwargs):
+        raise AssertionError("approve_and_swap should not be called for sub-minimum trade")
+
+    monkeypatch.setattr(
+        swap_exec,
+        "determine_trade_decision",
+        lambda *_args, **_kwargs: clean_swap.TradeDecision(
+            direction="WMATIC_TO_USDT",
+            amount_in=int(8 * 1_000_000_000_000_000_000),
+            message="tiny main strategy exit",
+        ),
+    )
+    monkeypatch.setattr(swap_exec, "approve_and_swap", _unexpected_swap)
+
+    asyncio.run(clean_swap.main(dry_run=False))
+
+    out = capsys.readouterr().out
+    assert any("min_trade_guard" in x for x in logs)
+    assert "TRADE SKIPPED | below minimum size" in out
+
+
 def test_try_x_signal_equity_decision_applies_dynamic_size_for_strong_buy(monkeypatch):
     class _Plan:
         direction = "USDC_TO_EQUITY"

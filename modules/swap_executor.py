@@ -172,7 +172,7 @@ def select_main_strategy_trade(
     )
 
 
-def _decision_notional_usd(decision: TradeDecision) -> Optional[float]:
+def _decision_notional_usd(decision: TradeDecision, *, current_price_usd: float = 0.0) -> Optional[float]:
     if float(decision.trade_size or 0.0) > 0:
         return float(decision.trade_size)
 
@@ -185,6 +185,19 @@ def _decision_notional_usd(decision: TradeDecision) -> Optional[float]:
     }
     if str(decision.direction or "").strip().upper() in stable_in_directions and int(decision.amount_in or 0) > 0:
         return float(decision.amount_in) / 1_000_000.0
+
+    # WMATIC input directions are denominated in 18-decimal wei.
+    # Convert token amount -> USD notional with the current WMATIC price.
+    wmatic_in_directions = {
+        "WMATIC_TO_USDT",
+        "WMATIC_TO_USDC",
+    }
+    if (
+        str(decision.direction or "").strip().upper() in wmatic_in_directions
+        and int(decision.amount_in or 0) > 0
+        and float(current_price_usd or 0.0) > 0.0
+    ):
+        return (float(decision.amount_in) / 1_000_000_000_000_000_000.0) * float(current_price_usd)
     return None
 
 
@@ -323,7 +336,7 @@ async def main(*, dry_run: bool = False) -> None:
             return
 
         min_trade_usd = float(getattr(cs, "MIN_TRADE_USD", 0.0) or 0.0)
-        decision_notional_usd = _decision_notional_usd(decision)
+        decision_notional_usd = _decision_notional_usd(decision, current_price_usd=current_price)
         if (
             min_trade_usd > 0
             and decision_notional_usd is not None

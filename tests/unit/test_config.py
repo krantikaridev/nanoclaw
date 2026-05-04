@@ -22,3 +22,15 @@ def test_env_int_uses_default_when_value_is_empty(monkeypatch):
 def test_env_bool_uses_default_when_value_is_empty(monkeypatch):
     monkeypatch.setenv("TEST_ENV_BOOL_EMPTY", "")
     assert config.env_bool("TEST_ENV_BOOL_EMPTY", True) is True
+
+
+def test_get_resolved_key_prefers_polygon_private_key(monkeypatch):
+    monkeypatch.setenv("POLYGON_PRIVATE_KEY", "polygon-key")
+    monkeypatch.setenv("PRIVATE_KEY", "legacy-key")
+    assert config.get_resolved_key() == "polygon-key"
+
+
+def test_get_resolved_key_falls_back_to_legacy_private_key(monkeypatch):
+    monkeypatch.delenv("POLYGON_PRIVATE_KEY", raising=False)
+    monkeypatch.setenv("PRIVATE_KEY", "legacy-key")
+    assert config.get_resolved_key() == "legacy-key"

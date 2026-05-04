@@ -182,6 +182,7 @@ Load order: `.env` then optional `.env.local` (`override=True`) when present.
 
 ## Urgent delta checklist (do not skip)
 
+- TODO (priority, platform-side hardening): enable protected branches + required CI checks + GitHub secret scanning/push protection as documented in `docs/REPO_HARDENING.md`.
 - Lock a branch matrix before editing:
   - Use generic state toggles and outcomes (for example: feature flag on/off, balance above/below threshold, retry success/fail, signal present/absent).
 - For each matrix branch, verify both:
