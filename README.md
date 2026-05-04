@@ -5,6 +5,7 @@ Nanoclaw is a risk-first trading bot for Polygon that executes real swaps and is
 For operators and agents, **`AI_CONTEXT.md`** on branch **`V2`** is the authoritative process and backlog; this README is the onboarding surface.
 
 **Development workflow** (commit gate, env sync, deploy helpers): **`docs/DEV_WORKFLOW.md`**.
+**Reusable VM deploy runbook** (including exceptional `.env.example` -> `.env` path): **`docs/readme-vm-update.md`**.
 
 ## Quick commands (`nano*` convention)
 

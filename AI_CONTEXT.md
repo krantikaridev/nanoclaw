@@ -26,7 +26,7 @@ When a Grok (or Cursor) thread hits the message limit—or you deliberately star
 
 - [ ] **`git status` / `git diff --name-only`** — scope matches intention; no surprise files.
 - [ ] **`python -m compileall -q .`** and **`python -m pytest -q`** after code changes (or **`scripts/pre_commit_gate.ps1`** / **`scripts/pre_commit_gate.sh`**).
-- [ ] **Dev workflow** — follow **`docs/DEV_WORKFLOW.md`** (commit gate, `.env` hygiene, `nanoenv_example.py`, `nanoup.sh`).
+- [ ] **Dev workflow** — follow **`docs/DEV_WORKFLOW.md`** (commit gate, `.env` hygiene, `nanoenv_example.py`, `nanoup.sh`) and **`docs/readme-vm-update.md`** for reusable VM deploy/release flow.
 - [ ] **Commit** with a factual message (what / why).
 - [ ] **Update `AI_CONTEXT.md`** — backlog, dates, incidents, roadmap (this file stays current).
 - [ ] **CSV sanity** — if anything looked like test-mode spikes, run **`scripts/clean_dummy_data.sh`** after backup approval; reconcile with Polygonscan.
@@ -179,6 +179,7 @@ Load order: `.env` then optional `.env.local` (`override=True`) when present.
   - `python scripts/nanoenv_example.py --write` (sync `.env.example` from `.env`, secrets blanked)
   - `python scripts/verify_env_example_keys.py` (check config coverage + `.env`/`.env.example` drift when `.env` exists)
   - Numeric/bool env parsing treats empty values as defaults (safe for optional blank aliases in `.env.example`)
+  - Canonical reusable sequence: `docs/readme-vm-update.md` (standard flow + exceptional `.env.example` -> `.env` path)
 
 ## Urgent delta checklist (do not skip)
 
