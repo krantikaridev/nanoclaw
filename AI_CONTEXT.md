@@ -175,6 +175,9 @@ Load order: `.env` then optional `.env.local` (`override=True`) when present.
 - Coverage tracking (in-repo, periodic):
   - `python scripts/update_coverage_history.py`
   - review `docs/COVERAGE_HISTORY.md` for critical-module trend (ROI-first focus)
+- Env parity workflow (VM -> repo template):
+  - `python scripts/nanoenv_example.py --write` (sync `.env.example` from `.env`, secrets blanked)
+  - `python scripts/verify_env_example_keys.py` (check config coverage + `.env`/`.env.example` drift when `.env` exists)
 
 ## Urgent delta checklist (do not skip)
 

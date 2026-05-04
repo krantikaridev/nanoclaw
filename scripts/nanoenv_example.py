@@ -15,55 +15,14 @@ still maintain `.env.example` by hand and use this script only to catch missing 
 from __future__ import annotations
 
 import argparse
-import re
 import sys
 from pathlib import Path
 
-# Keys that must never appear with values in committed examples.
-_SECRET_KEYS_EXACT = frozenset(
-    {
-        "POLYGON_PRIVATE_KEY",
-        "PRIVATE_KEY",
-        "TELEGRAM_BOT_TOKEN",
-        "TELEGRAM_CHAT_ID",
-        "GROK_API_KEY",
-        "XAI_API_KEY",
-        "ONEINCH_API_KEY",
-        "INCH_API_KEY",
-        "OPENAI_API_KEY",
-        "ANTHROPIC_API_KEY",
-    }
-)
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
-
-def _is_secret_key(key: str) -> bool:
-    """Prefer under-redacting public RPC/address keys over stripping legitimate config."""
-    k = key.strip()
-    if k in _SECRET_KEYS_EXACT:
-        return True
-    ku = k.upper()
-    if ku.endswith("_PRIVATE_KEY") or ku.endswith("_SECRET"):
-        return True
-    if ku.endswith("_API_KEY"):
-        return True
-    if "TELEGRAM" in ku and "TOKEN" in ku:
-        return True
-    if ku == "PRIVATE_KEY":
-        return True
-    return False
-
-
-def _sanitize_line(line: str) -> str:
-    raw = line.rstrip("\n")
-    if not raw.strip() or raw.lstrip().startswith("#"):
-        return raw
-    m = re.match(r"^([^\s=#]+)\s*=\s*(.*)$", raw)
-    if not m:
-        return raw
-    key, _val = m.group(1), m.group(2)
-    if _is_secret_key(key):
-        return f"{key}="
-    return raw
+from nanoclaw.env_sync import ENV_SYNC_EXCLUDED_KEYS, sanitize_env_content
 
 
 def main() -> None:
@@ -87,10 +46,14 @@ def main() -> None:
         print(f"error: {src} not found", file=sys.stderr)
         sys.exit(2)
     text = src.read_text(encoding="utf-8", errors="replace")
-    out = "\n".join(_sanitize_line(ln) for ln in text.splitlines()) + "\n"
+    out = sanitize_env_content(text)
     if args.write:
         args.output.write_text(out, encoding="utf-8")
-        print(f"wrote {args.output} — review: git diff {args.output}", file=sys.stderr)
+        print(
+            f"wrote {args.output} — review: git diff {args.output} "
+            f"(excluded keys: {', '.join(ENV_SYNC_EXCLUDED_KEYS)})",
+            file=sys.stderr,
+        )
     else:
         sys.stdout.write(out)
 

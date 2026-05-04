@@ -1,14 +1,21 @@
 #!/usr/bin/env python3
-"""Verify .env.example includes all env keys referenced in config.py."""
+"""Verify env/template consistency and config coverage."""
 
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from nanoclaw.env_sync import ENV_SYNC_EXCLUDED_KEYS, compute_env_sync_diff
+
 CONFIG_PATH = REPO_ROOT / "config.py"
 ENV_EXAMPLE_PATH = REPO_ROOT / ".env.example"
+ENV_PATH = REPO_ROOT / ".env"
 
 ENV_KEY_PATTERN = re.compile(r'^([A-Z][A-Z0-9_]*)=', re.MULTILINE)
 CONFIG_KEY_PATTERNS = (
@@ -43,6 +50,32 @@ def main() -> int:
         return 1
 
     print("OK: .env.example covers all config.py env keys.")
+
+    if not ENV_PATH.exists():
+        print("INFO: .env not found; skipping .env -> .env.example drift check.")
+        return 0
+
+    env_content = ENV_PATH.read_text(encoding="utf-8")
+    diff = compute_env_sync_diff(env_content, env_example_content)
+    if diff.missing_in_example:
+        print("ERROR: .env.example is missing keys that exist in .env:")
+        for key in diff.missing_in_example:
+            print(f"  - {key}")
+    if diff.extra_in_example:
+        print("ERROR: .env.example has extra keys not present in .env:")
+        for key in diff.extra_in_example:
+            print(f"  - {key}")
+    if diff.content_mismatch:
+        print(
+            "ERROR: .env.example content drift detected vs sanitized .env "
+            f"(excluded value keys: {', '.join(ENV_SYNC_EXCLUDED_KEYS)})."
+        )
+        print("Run: python scripts/nanoenv_example.py --write")
+
+    if diff.missing_in_example or diff.extra_in_example or diff.content_mismatch:
+        return 1
+
+    print("OK: .env.example is in sync with sanitized .env.")
     return 0
 
 
