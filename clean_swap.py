@@ -12,7 +12,7 @@ import asyncio
 import logging
 import time
 
-from config import PRIVATE_KEY, QUICKSWAP_V2_ROUTER
+from config import PRIVATE_KEY, UNISWAP_V3_SWAP_ROUTER
 from copy_trading import get_target_wallets
 from nanoclaw.strategies.signal_equity_trader import EquityTradePlan, FollowedEquity
 from swap_executor import _force_max_approval
@@ -126,7 +126,7 @@ if __name__ == "__main__":
         logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
     if PRIVATE_KEY:
         print("🚀 Running one-time max approval at startup...")
-        _force_max_approval(w3, PRIVATE_KEY, QUICKSWAP_V2_ROUTER)
+        _force_max_approval(w3, PRIVATE_KEY, UNISWAP_V3_SWAP_ROUTER)
         print("✅ Startup approval complete. Bot ready.")
     else:
         print("⚠️ Startup approval skipped: private key not configured.")
