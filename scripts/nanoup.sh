@@ -35,6 +35,10 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   exit 1
 fi
 
+# Enforce repo hook path so guarded pre-commit/pre-push checks run even
+# when operators use raw git commands on the VM.
+git config core.hooksPath .githooks >/dev/null 2>&1 || true
+
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
 if [[ -z "${CURRENT_BRANCH}" || "${CURRENT_BRANCH}" == "HEAD" ]]; then
   echo "❌ nanoup: detached HEAD detected; checkout a branch before running nanoup"

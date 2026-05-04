@@ -17,8 +17,10 @@ Windows shortcut: `powershell -ExecutionPolicy Bypass -File .\scripts\pre_commit
 
 - **`.env`** is gitignored; **`.env.example`** is the canonical template for safe keys and stage policy.
 - **Secrets first**, **new non-secret tuning at the bottom** of `.env` to avoid merge corruption when agents append lines.
-- **Wallet key**: set **`POLYGON_PRIVATE_KEY`** only.
-- **Hook enforcement (recommended on VM and local)**: run `git config core.hooksPath .githooks` once so pre-commit and pre-push secret guards are always enforced.
+- **Wallet key**: set **`POLYGON_PRIVATE_KEY`** (preferred); legacy **`PRIVATE_KEY`** is still read as fallback.
+- **Hook enforcement (required on VM, recommended local)**: run `git config core.hooksPath .githooks` so pre-commit and pre-push secret guards are always enforced; `nanoup` and `nanopush` now auto-apply this setting.
+- **Git side rejection**: keep CI required for protected branches; CI runs `scripts/check_committed_secrets.py --all-tracked` and rejects forbidden `.env` paths / secret-looking assignments on PRs to protected branches.
+- **Future hardening TODO**: apply platform settings checklist in `docs/REPO_HARDENING.md` (branch protection + required checks + push protection).
 - **RPC + fallbacks + gas-probe extras**: see **`docs/ENV_RPC.md`** (primary `RPC` / `RPC_URL` / `WEB3_PROVIDER_URI`, built-in public list, and optional `RPC_FALLBACKS`).
 - **ROI / PnL labels** (`nanostatus` / `nanopnl`): **`PORTFOLIO_BASELINE_USD`** — use **`0`** (template default) or leave unset for automatic baseline; set a positive number to pin starting capital (`modules/baseline.py`). See `.env.example` and `docs/ENV_RPC.md`.
 
