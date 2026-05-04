@@ -537,6 +537,13 @@ class SignalEquityTrader:
                 print(f"[nanoclaw] BLOCK: {sym} | invalid_trade_size (computed=${trade_size:.2f}, available=${usdc_balance:.2f})")
                 logger.debug("build_plan block sym=%s reason=invalid_trade_size", sym)
                 return None, "invalid_trade_size"
+            trade_amount_usd = trade_size
+            # ========== HARD BYPASS: KILL $4.5 MICRO-TRADES (4 May 2026) ==========
+            MIN_TRADE_USD = 15.0
+            if 'trade_amount_usd' in locals() and trade_amount_usd < MIN_TRADE_USD:
+                logger.warning(f"[HARD BYPASS] Small trade ${trade_amount_usd:.2f} < ${MIN_TRADE_USD} — SKIPPED permanently")
+                return False, "small_trade_bypass"
+            # ======================================================================
             min_sz = float(self.config.min_trade_usdc)
             if trade_size < min_sz:
                 print(
@@ -668,8 +675,9 @@ class SignalEquityTrader:
             allow_high_gas_override=allow_high_gas_override,
             upside_pct=upside_pct,
         )
-        if plan is None:
+        if not plan:
             logger.debug("build_plan exit None sym=%s reason=%s", symbol, reason)
+            return None
         else:
             logger.debug("build_plan exit OK sym=%s direction=%s", symbol, plan.direction)
         return plan

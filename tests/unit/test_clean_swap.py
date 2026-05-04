@@ -6,6 +6,11 @@ import clean_swap
 from modules import swap_executor as swap_exec
 
 
+def test_log_format_prefixes_short_commit_hash():
+    assert clean_swap.COMMIT
+    assert f"[{clean_swap.COMMIT}]" in clean_swap.LOG_FORMAT
+
+
 class _DummyGasProtector:
     def get_safe_status(self, address, urgent=False, min_pol=None):
         return {

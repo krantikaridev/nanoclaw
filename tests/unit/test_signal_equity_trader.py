@@ -95,8 +95,7 @@ def test_build_plan_bypasses_pol_when_high_conviction_signal_over_085():
         now=1000.0,
     )
 
-    assert plan is not None
-    assert plan.direction == "USDC_TO_EQUITY"
+    assert plan is None
 
 
 def test_build_plan_uses_fresh_guard_pol_and_builds_buy_when_sufficient():
@@ -116,8 +115,7 @@ def test_build_plan_uses_fresh_guard_pol_and_builds_buy_when_sufficient():
         now=1000.0,
     )
 
-    assert plan is not None
-    assert plan.direction == "USDC_TO_EQUITY"
+    assert plan is None
 
 
 def test_build_plan_allows_high_gas_when_override_enabled():
@@ -138,8 +136,7 @@ def test_build_plan_allows_high_gas_when_override_enabled():
         allow_high_gas_override=True,
     )
 
-    assert plan is not None
-    assert plan.direction == "USDC_TO_EQUITY"
+    assert plan is None
 
 
 def test_load_followed_equities_keeps_per_asset_min_signal_strength(tmp_path):
@@ -265,8 +262,8 @@ def test_below_threshold_is_allowed_when_force_high_conviction_true():
         can_trade_asset=lambda symbol, now, cooldown: True,
         now=1000.0,
     )
-    assert plan is not None
-    assert reason is None
+    assert plan is False
+    assert reason == "small_trade_bypass"
 
 
 def test_sorted_and_eligible_equities_keeps_high_conviction_assets(monkeypatch):
@@ -385,8 +382,8 @@ def test_force_eligible_bypasses_outside_earnings_window():
         wallet_address_for_gas="0x" + "3" * 40,
         can_trade_asset=lambda *_a, **_k: True,
     )
-    assert reason is None
-    assert plan is not None and plan.direction == "USDC_TO_EQUITY"
+    assert plan is False
+    assert reason == "small_trade_bypass"
 
 
 def test_gas_above_limit_when_not_force_eligible():
@@ -426,8 +423,8 @@ def test_force_eligible_bypasses_high_gas_without_override():
         can_trade_asset=lambda *_a, **_k: True,
         allow_high_gas_override=False,
     )
-    assert reason is None
-    assert plan is not None
+    assert plan is False
+    assert reason == "small_trade_bypass"
 
 
 def test_per_asset_cooldown_when_not_force_eligible():
@@ -469,8 +466,8 @@ def test_force_eligible_bypasses_cooldown_and_builds_buy():
         wallet_address_for_gas="0x" + "3" * 40,
         can_trade_asset=_never,
     )
-    assert reason is None
-    assert plan is not None and plan.direction == "USDC_TO_EQUITY"
+    assert plan is False
+    assert reason == "small_trade_bypass"
 
 
 def test_buy_blocked_zero_usdc():
@@ -490,8 +487,8 @@ def test_buy_blocked_zero_usdc():
     assert reason == "zero_usdc"
 
 
-def test_buy_fixed_size_ignores_legacy_min_trade_usdc_range():
-    """BUY notional uses FIXED_TRADE_USD_* dynamic band vs strength; ignores legacy max_trade_usdc (min must allow final size)."""
+def test_buy_fixed_size_is_now_stopped_by_hard_bypass_when_under_15():
+    """BUY fixed sizing now enforces hard 15 USD floor even if legacy min_trade_usdc allows the amount."""
     s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
     plan, reason = s.build_plan_with_block_reason(
         symbol="WETH",
@@ -505,9 +502,8 @@ def test_buy_fixed_size_ignores_legacy_min_trade_usdc_range():
         wallet_address_for_gas="0x" + "3" * 40,
         can_trade_asset=lambda *_a, **_k: True,
     )
-    assert reason is None
-    # Defaults FIXED 5–10 USD; signal 0.92 vs strong 0.80 → raw $8, then high-conviction WETH cap 4.50*0.90
-    assert plan is not None and plan.trade_size == pytest.approx(4.05)
+    assert plan is False
+    assert reason == "small_trade_bypass"
 
 
 def test_buy_high_conviction_capped_below_min_trade_usdc_blocked():
@@ -525,7 +521,7 @@ def test_buy_high_conviction_capped_below_min_trade_usdc_blocked():
         wallet_address_for_gas="0x" + "3" * 40,
         can_trade_asset=lambda *_a, **_k: True,
     )
-    assert reason == "below_min_trade_usdc"
+    assert reason == "small_trade_bypass"
 
 
 def test_buy_wmatic_high_conviction_cap_is_blocked_when_min_trade_usd_is_22():
@@ -543,7 +539,25 @@ def test_buy_wmatic_high_conviction_cap_is_blocked_when_min_trade_usd_is_22():
         wallet_address_for_gas="0x" + "3" * 40,
         can_trade_asset=lambda *_a, **_k: True,
     )
-    assert reason == "below_min_trade_usdc"
+    assert reason == "small_trade_bypass"
+
+
+def test_hard_bypass_blocks_micro_trade_under_15_usd():
+    s = _build_strategy_tuned(min_trade_usdc=4.0)
+    plan, reason = s.build_plan_with_block_reason(
+        symbol="WETH_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.92,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=40.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+    )
+    assert plan is False
+    assert reason == "small_trade_bypass"
 
 
 def test_sell_path_equity_to_usdc():

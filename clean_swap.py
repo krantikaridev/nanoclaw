@@ -13,6 +13,7 @@ import asyncio
 from datetime import datetime
 import logging
 from pathlib import Path
+import subprocess
 import threading
 import time
 
@@ -33,6 +34,13 @@ from modules.swap_executor import (
     select_main_strategy_trade,
 )
 from protection import check_exit_conditions, get_live_wmatic_price, record_buy
+
+try:
+    COMMIT = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).decode().strip()
+except:
+    COMMIT = "unknown"
+
+LOG_FORMAT = "%(asctime)s | %(levelname)s | [" + COMMIT + "] %(message)s"
 
 
 # --- Re-export infra + constants expected by cron/tests/docs ---
@@ -220,7 +228,7 @@ try_x_signal_equity_decision = signal.try_x_signal_equity_decision
 
 if __name__ == "__main__":
     if not logging.root.handlers:
-        logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+        logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
     _start_balance_logger()
     startup_key = cfg.get_resolved_key()
     if startup_key:

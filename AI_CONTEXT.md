@@ -308,6 +308,7 @@ Earnings Volatility Capture Engine v1, while preserving strict hard risk limits 
 | `nanoup` | Safe update + restart (recommended) |
 | `nanostatus` | Runs `python scripts/pnl_report.py`: current balances (USDT/USDC/WMATIC/TOTAL), today PnL, last `6x4h` and `4x6h` rolling windows from `real_cron.log` |
 | `nanopnl` | Alias of `nanostatus` for fast PnL checks |
+| `nanodaily` | Daily health snapshot: balances, bypass/cooldown/protection counters, commit, TEST_MODE |
 | `nanobot` | Live `real_cron.log` stream (`tail -f`) for runtime diagnostics |
 | `nanorestart` | Safe restart wrapper (`nanoup && nanostatus`) |
 | `nanokill` | Stop the bot |
