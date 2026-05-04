@@ -8,6 +8,7 @@ Use this so code review feedback and operator habits stay consistent across sess
 2. **`python -m compileall -q .`**
 3. **`python -m pytest tests/ --cov=. --cov-report=term-missing:skip-covered --cov-report=xml`**
 4. **`git diff --stat`** — scope matches intent.
+5. **Completion discipline** — for every behavior/config change, update tests + docs + `.env.example` in the same PR.
 
 Windows shortcut: `powershell -ExecutionPolicy Bypass -File .\scripts\pre_commit_gate.ps1`  
 (or `.\scripts\pre_commit_gate.cmd`)
@@ -18,7 +19,7 @@ Windows shortcut: `powershell -ExecutionPolicy Bypass -File .\scripts\pre_commit
 - **Secrets first**, **new non-secret tuning at the bottom** of `.env` to avoid merge corruption when agents append lines.
 - **Wallet key**: set either **`POLYGON_PRIVATE_KEY`** (preferred) or **`PRIVATE_KEY`** (alias); code uses the first that is set.
 - **RPC + fallbacks + gas-probe extras**: see **`docs/ENV_RPC.md`** (primary `RPC` / `RPC_URL` / `WEB3_PROVIDER_URI`, built-in public list, and optional `RPC_FALLBACKS`).
-- **ROI / PnL labels** (nanomon): **`PORTFOLIO_BASELINE_USD`** — use **`0`** (template default) or leave unset for automatic baseline; set a positive number to pin starting capital (`modules/baseline.py`). See `.env.example` and `docs/ENV_RPC.md`.
+- **ROI / PnL labels** (`nanostatus` / `nanopnl`): **`PORTFOLIO_BASELINE_USD`** — use **`0`** (template default) or leave unset for automatic baseline; set a positive number to pin starting capital (`modules/baseline.py`). See `.env.example` and `docs/ENV_RPC.md`.
 
 ### Refresh `.env.example` from a live `.env` (strip secrets)
 
@@ -41,19 +42,18 @@ Always review the diff: the script redacts known secret keys but does not reorga
 
 - **`scripts/nanoup.sh`**: kill bot → `git pull --ff-only` → `nohup python clean_swap.py`.  
   Bash helper: `nanoup() { bash "${NANOCLAW_ROOT:-$HOME/.nanobot/workspace/nanoclaw}/scripts/nanoup.sh"; }`
-- **`nanomon`** / **`show_balances.py`**: portfolio uses on-chain totals + optional `PORTFOLIO_BASELINE_USD` / `portfolio_baseline.json`.
+- **`nanostatus`** / **`nanopnl`** / **`show_balances.py`**: portfolio uses on-chain totals + optional `PORTFOLIO_BASELINE_USD` / `portfolio_baseline.json`.
 
 ### VM quick runbook (ops-safe)
 
 - Runtime files (`portfolio_history.csv`, `real_cron.log`) are expected to change while bot runs.
 - Before updating branch on VM:
-  - `git stash -a`
-  - `git pull --ff-only`
-  - `git stash pop`
+  - Preferred: `nanorestart`
+  - With local VM edits: `NANOUP_AUTOSTASH=1 nanorestart`
 - Restart loop:
   - `pkill -f clean_swap.py 2>/dev/null || true`
   - `nohup python clean_swap.py > real_cron.log 2>&1 &`
-  - `sleep 50 && nanomon`
+  - `sleep 50 && nanostatus`
 
 ### Fallback router policy (current)
 
