@@ -49,18 +49,12 @@ Always review the diff: the script redacts known secret keys but does not reorga
   Bash helper: `nanoup() { bash "${NANOCLAW_ROOT:-$HOME/.nanobot/workspace/nanoclaw}/scripts/nanoup.sh"; }`
 - **`nanostatus`** / **`nanopnl`** / **`show_balances.py`**: portfolio uses on-chain totals + optional `PORTFOLIO_BASELINE_USD` / `portfolio_baseline.json`.
 - Full reusable deploy sequence (including one-time exceptional `.env.example` -> `.env` reset path): **`docs/readme-vm-update.md`**.
-- If VM says `nanoup: command not found`, run `scripts/nanobot_aliases.sh --install`, then `source ~/.bashrc`, and verify with `type nanoup`, `type nanokill`, `type nanorestart`, `type nanostatus`.
+- Alias bootstrap and fallback commands are documented in **`docs/readme-vm-update.md`**.
 
 ### VM quick runbook (ops-safe)
 
 - Runtime files (`portfolio_history.csv`, `real_cron.log`) are expected to change while bot runs.
-- Before updating branch on VM:
-  - Preferred: `nanorestart`
-  - With local VM edits: `NANOUP_AUTOSTASH=1 nanorestart`
-- Restart loop:
-  - `pkill -f clean_swap.py 2>/dev/null || true`
-  - `nohup python clean_swap.py > real_cron.log 2>&1 &`
-  - `sleep 50 && nanostatus`
+- For the canonical VM update/restart flow, use **`docs/readme-vm-update.md`**.
 
 ### Fallback router policy (current)
 
