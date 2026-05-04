@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """
 Guardrail: fail if tracked/staged content looks like committed secrets.
 
@@ -17,21 +18,14 @@ import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from nanoclaw.env_sync import ENV_SYNC_EXCLUDED_KEYS
+
 # Env-style assignments for these keys must not carry real-looking values.
-_SECRET_ASSIGN_KEYS = frozenset(
-    {
-        "POLYGON_PRIVATE_KEY",
-        "PRIVATE_KEY",
-        "TELEGRAM_BOT_TOKEN",
-        "TELEGRAM_CHAT_ID",
-        "GROK_API_KEY",
-        "XAI_API_KEY",
-        "ONEINCH_API_KEY",
-        "INCH_API_KEY",
-        "OPENAI_API_KEY",
-        "ANTHROPIC_API_KEY",
-    }
-)
+_SECRET_ASSIGN_KEYS = frozenset(ENV_SYNC_EXCLUDED_KEYS)
 
 _PLACEHOLDER_FROZEN = frozenset(
     {
@@ -111,7 +105,7 @@ def _git_output(args: list[str]) -> str:
         capture_output=True,
         text=True,
         check=False,
-        cwd=Path(__file__).resolve().parent.parent,
+        cwd=REPO_ROOT,
     )
     if r.returncode != 0:
         return ""
@@ -146,7 +140,7 @@ def scan_staged_git_diff(errors: list[str]) -> None:
 
 def scan_all_tracked_files(errors: list[str]) -> None:
     """Inspect working tree content for tracked files (CI after checkout)."""
-    root = Path(__file__).resolve().parent.parent
+    root = REPO_ROOT
     listing = _git_output(["ls-files"])
     for raw in listing.splitlines():
         rel = raw.strip()

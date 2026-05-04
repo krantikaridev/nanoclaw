@@ -23,16 +23,24 @@ def env_str(name: str, default: str = "") -> str:
 
 
 def env_bool(name: str, default: bool = False) -> bool:
-    fallback = "true" if default else "false"
-    return env_str(name, fallback).lower() in ("1", "true", "yes", "on")
+    raw = env(name, None).strip()
+    if raw == "":
+        return bool(default)
+    return raw.lower() in ("1", "true", "yes", "on")
 
 
 def env_int(name: str, default: int) -> int:
-    return int(env_str(name, str(default)))
+    raw = env(name, None).strip()
+    if raw == "":
+        return int(default)
+    return int(raw)
 
 
 def env_float(name: str, default: float) -> float:
-    return float(env_str(name, str(default)))
+    raw = env(name, None).strip()
+    if raw == "":
+        return float(default)
+    return float(raw)
 
 
 def reconcile_fixed_trade_min(min_trade_usd: float, fixed_trade_usd_min_raw: float) -> float:

@@ -178,6 +178,7 @@ Load order: `.env` then optional `.env.local` (`override=True`) when present.
 - Env parity workflow (VM -> repo template):
   - `python scripts/nanoenv_example.py --write` (sync `.env.example` from `.env`, secrets blanked)
   - `python scripts/verify_env_example_keys.py` (check config coverage + `.env`/`.env.example` drift when `.env` exists)
+  - Numeric/bool env parsing treats empty values as defaults (safe for optional blank aliases in `.env.example`)
 
 ## Urgent delta checklist (do not skip)
 
@@ -310,6 +311,10 @@ Earnings Volatility Capture Engine v1, while preserving strict hard risk limits 
 | `nanorestart` | Safe restart wrapper (`nanoup && nanostatus`) |
 | `nanokill` | Stop the bot |
 | `nanoattach` | Attach to live bot logs |
+| `nanoenvsync` | Sync `.env.example` from `.env` (secrets blanked) and verify drift/coverage |
+| `nanoenvcheck` | Verify `.env.example` key coverage and drift vs sanitized `.env` |
+| `nanoenvstage` | Run env sync/check and stage `.env.example` for commit |
+| `nanopush` | Run env sync/check, stage `.env.example`, then `git push` |
 
 **`sprintmon`** was retired from this tree—use **`nanostatus`** / **`nanopnl`** + **`nanobot`** / **`nanoattach`** instead.
 

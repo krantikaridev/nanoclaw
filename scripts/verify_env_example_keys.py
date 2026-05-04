@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """Verify env/template consistency and config coverage."""
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ CONFIG_KEY_PATTERNS = (
     re.compile(r'\benv_(?:str|int|float|bool)\(\s*"([A-Z0-9_]+)"'),
     re.compile(r'\bos\.getenv\(\s*"([A-Z0-9_]+)"'),
 )
+REPO_CFG_KEY_PATTERN = re.compile(r'\bcfg\.env_(?:str|int|float|bool)\(\s*"([A-Z0-9_]+)"')
 
 
 def extract_env_example_keys(content: str) -> set[str]:
@@ -35,12 +37,27 @@ def extract_config_keys(content: str) -> set[str]:
     return keys
 
 
+def extract_repo_cfg_keys(repo_root: Path) -> set[str]:
+    keys: set[str] = set()
+    for path in repo_root.rglob("*.py"):
+        rel = path.relative_to(repo_root).as_posix()
+        if rel.startswith("tests/") or "/tests/" in rel:
+            continue
+        try:
+            content = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        keys.update(REPO_CFG_KEY_PATTERN.findall(content))
+    return keys
+
+
 def main() -> int:
     env_example_content = ENV_EXAMPLE_PATH.read_text(encoding="utf-8")
     config_content = CONFIG_PATH.read_text(encoding="utf-8")
 
     env_example_keys = extract_env_example_keys(env_example_content)
     config_keys = extract_config_keys(config_content)
+    repo_cfg_keys = extract_repo_cfg_keys(REPO_ROOT)
 
     missing = sorted(config_keys - env_example_keys)
     if missing:
@@ -50,6 +67,13 @@ def main() -> int:
         return 1
 
     print("OK: .env.example covers all config.py env keys.")
+    missing_repo_cfg = sorted(repo_cfg_keys - env_example_keys)
+    if missing_repo_cfg:
+        print("ERROR: .env.example is missing keys used by cfg.env_* calls outside config.py:")
+        for key in missing_repo_cfg:
+            print(f"  - {key}")
+        return 1
+    print("OK: .env.example covers repo cfg.env_* keys.")
 
     if not ENV_PATH.exists():
         print("INFO: .env not found; skipping .env -> .env.example drift check.")

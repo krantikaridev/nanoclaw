@@ -12,7 +12,11 @@ Write-Host "[3/6] pytest + coverage"
 python -m pytest tests/ --cov=. --cov-report=term-missing:skip-covered --cov-report=xml
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Write-Host "[4/6] env.example key coverage"
+Write-Host "[4/6] env.example sync + key coverage"
+if (Test-Path ".env") {
+    python scripts/nanoenv_example.py --write
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
 python scripts/verify_env_example_keys.py
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

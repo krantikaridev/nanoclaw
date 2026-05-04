@@ -8,12 +8,14 @@ def test_sanitize_env_content_blanks_excluded_keys_and_keeps_non_secret_values()
     env = (
         "POLYGON_PRIVATE_KEY=abc123\n"
         "PRIVATE_KEY=def456\n"
+        "TELEGRAM_CHAT_ID=123456789\n"
         "SWAP_SLIPPAGE_BPS=80\n"
         "MIN_TRADE_USD=22\n"
     )
     out = sanitize_env_content(env)
     assert "POLYGON_PRIVATE_KEY=\n" in out
     assert "PRIVATE_KEY=\n" in out
+    assert "TELEGRAM_CHAT_ID=123456789\n" in out
     assert "SWAP_SLIPPAGE_BPS=80\n" in out
     assert "MIN_TRADE_USD=22\n" in out
 
