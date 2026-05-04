@@ -35,6 +35,11 @@ def env_float(name: str, default: float) -> float:
     return float(env_str(name, str(default)))
 
 
+def reconcile_fixed_trade_min(min_trade_usd: float, fixed_trade_usd_min_raw: float) -> float:
+    """Ensure strategy minimum cannot sit below global execution minimum."""
+    return max(float(fixed_trade_usd_min_raw), float(min_trade_usd))
+
+
 RPC = env_str("RPC", "https://polygon-rpc.com")
 RPC_URL = env_str("RPC_URL", RPC or "https://polygon-rpc.com")
 WEB3_PROVIDER_URI = env_str("WEB3_PROVIDER_URI", RPC or "https://polygon-rpc.com")
@@ -81,7 +86,9 @@ URGENT_GWEI = env_float("URGENT_GWEI", 120.0)
 GAS_RPC_RETRY_ATTEMPTS = env_int("GAS_RPC_RETRY_ATTEMPTS", 2)
 
 MIN_TRADE_USD = env_float("MIN_TRADE_USD", env_float("MIN_TRADE_USDC", 5.0))
-FIXED_TRADE_USD_MIN = env_float("FIXED_TRADE_USD_MIN", MIN_TRADE_USD)
+_FIXED_TRADE_USD_MIN_RAW = env_float("FIXED_TRADE_USD_MIN", MIN_TRADE_USD)
+# Reconcile minima so strategy sizing cannot produce trades that the global execution guard will always reject.
+FIXED_TRADE_USD_MIN = reconcile_fixed_trade_min(MIN_TRADE_USD, _FIXED_TRADE_USD_MIN_RAW)
 FIXED_TRADE_USD_MAX = env_float("FIXED_TRADE_USD_MAX", 10.0)
 TRAILING_STOP_PCT = env_float("TRAILING_STOP_PCT", 5.0)
 TAKE_PROFIT_PCT = env_float("TAKE_PROFIT_PCT", 5.0)

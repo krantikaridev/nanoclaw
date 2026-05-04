@@ -146,7 +146,7 @@ Operational focus: correctness of this precedence, USDC liquidity for equity **b
 ## **Key `.env`** (defaults in `.env.example`; production overrides freely)
 
 Examples: `RPC`, `COOLDOWN_MINUTES`, `ENABLE_X_SIGNAL_EQUITY`, `X_SIGNAL_EQUITY_MIN_STRENGTH` **(default template 0.60; tighten in prod if desired)**,
-`SWAP_SLIPPAGE_BPS`, `LOG_PREFIX`, Polygon token addresses (`USDC`, `WMATIC`, `ROUTER`), and `MIN_TRADE_USD` (hard execution floor for stable-in BUY notional).
+`SWAP_SLIPPAGE_BPS`, `LOG_PREFIX`, Polygon token addresses (`USDC`, `WMATIC`, `ROUTER`), and `MIN_TRADE_USD` (hard execution floor for stable-in BUY notional; `FIXED_TRADE_USD_MIN` is reconciled to never sit below it).
 
 Load order: `.env` then optional `.env.local` (`override=True`) when present.
 
