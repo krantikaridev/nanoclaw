@@ -357,24 +357,40 @@ async def approve_and_swap(
                 f"expected_out≈{eq} | min_out={mq}"
             )
 
-        nonce = w3.eth.get_transaction_count(WALLET)
         approve_contract = w3.eth.contract(address=token_in_cs, abi=[{"constant":True,"inputs":[{"name":"_owner","type":"address"},{"name":"_spender","type":"address"}],"name":"allowance","outputs":[{"name":"","type":"uint256"}],"type":"function"},{"constant":False,"inputs":[{"name":"_spender","type":"address"},{"name":"_value","type":"uint256"}],"name":"approve","outputs":[{"name":"","type":"bool"}],"type":"function"}])
-        approve_tx = approve_contract.functions.approve(approve_spender, amount_in).build_transaction({
-            "from": WALLET,
-            "nonce": nonce,
-            "gas": 140000,
-            "gasPrice": w3.eth.gas_price * 15 // 10,
-            "chainId": 137,
-        })
-        signed_approve = w3.eth.account.sign_transaction(approve_tx, resolved_key)
-        approve_hash = w3.eth.send_raw_transaction(signed_approve.raw_transaction)
-        print(f"✅ Approve Tx: {approve_hash.hex()}")
-        receipt = w3.eth.wait_for_transaction_receipt(approve_hash, timeout=300)
-        if receipt["status"] == 0:
-            print("❌ Approve failed!")
-            return None
-        print("✅ Approve confirmed!")
-        await asyncio.sleep(5)
+        approve_spender_cs = Web3.to_checksum_address(approve_spender)
+        current_allowance = int(approve_contract.functions.allowance(WALLET, approve_spender_cs).call())
+        if current_allowance < int(amount_in):
+            nonce = w3.eth.get_transaction_count(WALLET)
+            approve_tx = approve_contract.functions.approve(approve_spender_cs, amount_in).build_transaction({
+                "from": WALLET,
+                "nonce": nonce,
+                "gas": 140000,
+                "gasPrice": w3.eth.gas_price * 15 // 10,
+                "chainId": 137,
+            })
+            signed_approve = w3.eth.account.sign_transaction(approve_tx, resolved_key)
+            approve_hash = w3.eth.send_raw_transaction(signed_approve.raw_transaction)
+            print(f"✅ Approve Tx: {approve_hash.hex()}")
+            receipt = w3.eth.wait_for_transaction_receipt(approve_hash, timeout=300)
+            if receipt["status"] == 0:
+                print("❌ Approve failed!")
+                return None
+            # Some ERC20s can report approve tx success while leaving allowance unchanged; verify before swap.
+            updated_allowance = int(approve_contract.functions.allowance(WALLET, approve_spender_cs).call())
+            if updated_allowance < int(amount_in):
+                print(
+                    f"{_prefix}❌ Allowance still insufficient after approve | "
+                    f"spender={approve_spender_cs} | current={updated_allowance} | needed={int(amount_in)}"
+                )
+                return None
+            print("✅ Approve confirmed!")
+            await asyncio.sleep(5)
+        else:
+            print(
+                f"{_prefix}Allowance sufficient before approve | spender={approve_spender_cs} | "
+                f"current={current_allowance} | needed={int(amount_in)} | action=skip_approve"
+            )
 
         if use_oneinch and tx_payload is not None:
             oneinch_slip_bps = SWAP_SLIPPAGE_BPS
