@@ -40,6 +40,8 @@ _prefix = LOG_PREFIX + " " if LOG_PREFIX else ""
 
 _FALLBACK_ROUTER_SLIPPAGE_FLOOR_BPS = 600
 _QUICKSWAP_V2_ROUTER = Web3.to_checksum_address("0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff")
+_HIGH_CONVICTION_FALLBACK_PRIMARY_BPS = int(os.getenv("HIGH_CONVICTION_FALLBACK_SLIPPAGE_BPS", "4000"))
+_HIGH_CONVICTION_FALLBACK_RETRY_BPS = int(os.getenv("HIGH_CONVICTION_FALLBACK_RETRY_SLIPPAGE_BPS", "5000"))
 
 
 def _fallback_router_slippage_bps() -> int:
@@ -54,6 +56,21 @@ def _fallback_router_retry_slippage_bps(primary_bps: int) -> int:
     if FALLBACK_ROUTER_RETRY_SLIPPAGE_BPS_RAW:
         return max(int(FALLBACK_ROUTER_RETRY_SLIPPAGE_BPS_RAW), _FALLBACK_ROUTER_SLIPPAGE_FLOOR_BPS)
     return min(max(primary_bps + ONCHAIN_SWAP_RETRY_EXTRA_BPS, _FALLBACK_ROUTER_SLIPPAGE_FLOOR_BPS), 9999)
+
+
+def _try_get_revert_reason(w3, *, tx_for_call: dict) -> str:
+    """Best-effort revert extraction from eth_call for logging."""
+    try:
+        call_payload = {
+            "from": tx_for_call.get("from"),
+            "to": tx_for_call.get("to"),
+            "data": tx_for_call.get("data"),
+            "value": int(tx_for_call.get("value") or 0),
+        }
+        w3.eth.call(call_payload, "latest")
+        return "unavailable (eth_call returned without revert)"
+    except Exception as ex:  # noqa: BLE001
+        return str(ex)
 
 
 def _addr_probe(addr: str) -> str:
@@ -310,9 +327,15 @@ async def approve_and_swap(
                 print(f"{_prefix}[FALLBACK ROUTER] Using on-chain router execution (see 1inch message above).")
             if token_in_cs.lower() == Web3.to_checksum_address(USDC).lower():
                 _ensure_usdc_allowance(w3, resolved_key, amount_in, router)
+            # Current fallback starts with QuickSwap direct 1-hop (USDC->WMATIC); very small sizes can still revert
+            # when pool state moves between quote/build/send (price impact and stale minOut window).
             path_candidates = build_polygon_swap_path_candidates(token_in_cs, token_out_cs)
             fb_primary = _fallback_router_slippage_bps()
             fb_retry = _fallback_router_retry_slippage_bps(fb_primary)
+            if direction == "USDC_TO_WMATIC":
+                fb_primary = min(max(fb_primary, _HIGH_CONVICTION_FALLBACK_PRIMARY_BPS), 9999)
+                fb_retry = max(fb_retry, _HIGH_CONVICTION_FALLBACK_RETRY_BPS)
+                fb_retry = min(max(fb_retry, fb_primary), 9999)
             print(
                 f"{_prefix}[FALLBACK ROUTER] Slippage: 1st attempt={fb_primary} bps, retry={fb_retry} bps "
                 f"(base SWAP_SLIPPAGE_BPS={SWAP_SLIPPAGE_BPS})."
@@ -432,7 +455,8 @@ async def approve_and_swap(
             )
 
             nonce_swap = w3.eth.get_transaction_count(WALLET)
-            swap_contract = w3.eth.contract(address=router, abi=ROUTER_SWAP_AND_QUOTE_ABI)
+            router_cs = Web3.to_checksum_address(router)
+            swap_contract = w3.eth.contract(address=router_cs, abi=ROUTER_SWAP_AND_QUOTE_ABI)
             gas_limit = 320000 if len(chosen_path) <= 2 else 520000
             swap_tx = swap_contract.functions.swapExactTokensForTokens(
                 amount_in,
@@ -448,19 +472,44 @@ async def approve_and_swap(
                 "chainId": 137,
             })
 
-            signed_swap = w3.eth.account.sign_transaction(swap_tx, resolved_key)
-            swap_hash = w3.eth.send_raw_transaction(signed_swap.raw_transaction)
-            print(f"✅ REAL TX HASH: {swap_hash.hex()}")
-            print(f"https://polygonscan.com/tx/{swap_hash.hex()}")
-
-            receipt = w3.eth.wait_for_transaction_receipt(swap_hash, timeout=300)
+            tx_for_call = {
+                "from": WALLET,
+                "to": router_cs,
+                "data": swap_tx.get("data"),
+                "value": swap_tx.get("value", 0),
+            }
+            receipt = None
+            try:
+                signed_swap = w3.eth.account.sign_transaction(swap_tx, resolved_key)
+                swap_hash = w3.eth.send_raw_transaction(signed_swap.raw_transaction)
+                print(f"✅ REAL TX HASH: {swap_hash.hex()}")
+                print(f"https://polygonscan.com/tx/{swap_hash.hex()}")
+                receipt = w3.eth.wait_for_transaction_receipt(swap_hash, timeout=300)
+            except Exception as tx_ex:  # noqa: BLE001
+                revert_reason = _try_get_revert_reason(w3, tx_for_call=tx_for_call)
+                print(
+                    f"{_prefix}[FALLBACK ROUTER] Swap submission/wait failed "
+                    f"(attempt {attempt_idx + 1}/{len(slip_attempts)}): {tx_ex} | revert={revert_reason}"
+                )
+                if attempt_idx == 0:
+                    print(
+                        f"{_prefix}RETRY ATTEMPT 1/1 | Increasing slippage to {fb_retry} bps "
+                        f"(router fallback; was {fb_primary} bps)"
+                    )
+                    continue
+                print(f"{_prefix}❌ Swap failed on-chain after fallback retry.")
+                return None
+            if receipt is None:
+                print(f"{_prefix}[FALLBACK ROUTER] Missing receipt after swap attempt; aborting.")
+                return None
             if receipt["status"] == 1:
                 print(f"{_prefix}✅ Swap confirmed ([FALLBACK ROUTER] attempt {attempt_idx + 1}).")
                 return swap_hash.hex()
 
+            revert_reason = _try_get_revert_reason(w3, tx_for_call=tx_for_call)
             print(
                 f"{_prefix}[FALLBACK ROUTER] On-chain swap reverted (attempt {attempt_idx + 1}). "
-                f"Tx: {swap_hash.hex()}"
+                f"Tx: {swap_hash.hex()} | receipt={dict(receipt)} | revert={revert_reason}"
             )
             if attempt_idx == 0:
                 print(
