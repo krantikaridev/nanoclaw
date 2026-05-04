@@ -1,0 +1,13 @@
+---
+description: Always finish with docs/env/test updates
+alwaysApply: true
+---
+
+# Task Completion Discipline
+
+- For every code change, add or update unit tests that cover new behavior and regressions.
+- Prefer improving coverage in the touched module; avoid shipping behavior-only changes without tests.
+- Run targeted tests for changed areas before marking work done.
+- When runtime behavior, commands, or config knobs change, update docs in the same task (`README.md`, `docs/*`, `AI_CONTEXT.md` as relevant).
+- When adding/changing env-driven behavior, update `.env.example` in the same task.
+- If docs or `.env.example` intentionally do not change, explicitly state why in the final update.
