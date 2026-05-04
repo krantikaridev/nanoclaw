@@ -72,5 +72,3 @@ portfolio_history.csv
 real_cron.log
 *.log
 
-# NanoClaw aliases
-scripts/nanobot_aliases.sh

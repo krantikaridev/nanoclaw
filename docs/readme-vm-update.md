@@ -113,6 +113,7 @@ This is not default stage behavior. Use only when you intentionally reset stage 
 ## Related Docs
 
 - `AI_CONTEXT.md`
+- `docs/OPERATING_MODEL.md`
 - `docs/DEV_WORKFLOW.md`
 - `scripts/nanoup.sh`
 - `scripts/nanoenv_example.py`

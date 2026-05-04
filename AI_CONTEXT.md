@@ -5,12 +5,7 @@
 ## **Operating Model (roles + loop)**
 
 - Canonical role split and collaboration loop live in `docs/OPERATING_MODEL.md`.
-- Working loop:
-  1) Grok + Human set vision/priorities/acceptance
-  2) Grok provides prompt -> Human runs in Cursor
-  3) Cursor implements major functionality locally (tests + docs + env-template alignment)
-  4) Human reviews/pushes and deploys to VM/stage
-  5) Grok + Human validate runtime and decide env/small follow-up deltas
+- Keep this file as canonical backlog/process memory; keep role mechanics in the operating-model doc to avoid drift.
 
 ## **Systematic Learning & History**
 
@@ -190,7 +185,6 @@ Load order: `.env` then optional `.env.local` (`override=True`) when present.
   - `python scripts/verify_env_example_keys.py` (check config coverage + `.env`/`.env.example` drift when `.env` exists)
   - Numeric/bool env parsing treats empty values as defaults (safe for optional blank aliases in `.env.example`)
   - Canonical reusable sequence: `docs/readme-vm-update.md` (standard flow + exceptional `.env.example` -> `.env` path)
-  - Alias bootstrap when VM shows `command not found`: `scripts/nanobot_aliases.sh --install` then `source ~/.bashrc`
 
 ## Urgent delta checklist (do not skip)
 

@@ -10,11 +10,10 @@ For operators and agents, **`AI_CONTEXT.md`** on branch **`V2`** is the authorit
 
 ## Who Does What
 
-- **Grok + Human** set vision/priorities and validate outcomes.
-- **Grok -> Human -> Cursor**: human passes prioritized implementation prompt to Cursor.
-- **Cursor** implements major functionality locally (code + tests + docs).
-- **Human** reviews/pushes local code and runs VM-stage deploy/validation.
-- **Grok + Human** analyze results and decide small env tweaks or next code delta.
+- Strategy/priority: **Grok + Human**.
+- Major implementation: **Cursor** (local code + tests + docs).
+- Push/deploy/runtime validation: **Human** (VM/stage), then **Grok + Human** decide next delta.
+- Full role contract: **`docs/OPERATING_MODEL.md`**.
 
 ## Quick commands (`nano*` convention)
 
@@ -27,6 +26,11 @@ For operators and agents, **`AI_CONTEXT.md`** on branch **`V2`** is the authorit
 | `nanorestart` | Safe restart flow: `nanoup && nanostatus` |
 | `nanokill` | Stop the bot |
 | `nanoattach` | Attach to live bot logs |
+| `nanoenvsync` | Sync `.env.example` from `.env` (secrets blanked) and verify drift/coverage |
+| `nanoenvcheck` | Verify `.env.example` key coverage and drift vs sanitized `.env` |
+| `nanoenvstage` | Run env sync/check and stage `.env.example` for commit |
+| `nanocommit` | Enforce repo hooks, then run `git commit` |
+| `nanopush` | Secret check + env sync/check + stage `.env.example`, then `git push` |
 | `python scripts/nanoenv_example.py --write` | Redact secrets from `.env` → refresh `.env.example` (review diff before commit) |
 
 **`sprintmon`** is not in this repo; use **`nanostatus`** / **`nanopnl`** for quick health + PnL and **`nanobot`** / **`nanoattach`** for live logs.
@@ -45,20 +49,9 @@ If the VM has intentional local edits, run with auto-stash restore:
 NANOUP_AUTOSTASH=1 nanorestart
 ```
 
-If aliases are missing on VM (`nanoup: command not found`), run:
-
-```bash
-NANOUP_AUTOSTASH=1 bash scripts/nanoup.sh
-```
-
-Then bootstrap aliases once:
-
-```bash
-scripts/nanobot_aliases.sh --install
-source ~/.bashrc
-```
-
-Documented in `docs/readme-vm-update.md`.
+If aliases are missing on VM (`nanoup: command not found`), use direct script fallback once:
+`NANOUP_AUTOSTASH=1 bash scripts/nanoup.sh`, then install aliases via
+`scripts/nanobot_aliases.sh --install && source ~/.bashrc` (details in `docs/readme-vm-update.md`).
 
 ### Stop / restart
 
