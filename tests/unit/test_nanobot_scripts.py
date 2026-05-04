@@ -93,6 +93,34 @@ def _sandbox_root(tmp_path: Path) -> Path:
     # Minimal pnl_report.py for nanostatus/nanorestart path.
     pnl_report = scripts / "pnl_report.py"
     pnl_report.write_text("print('USDC: $1.00')\n", encoding="utf-8")
+
+    # Runtime artifacts read by nanodaily script.
+    (root / ".env").write_text("TEST_MODE=true\n", encoding="utf-8")
+    (root / "real_cron.log").write_text(
+        "HARD BYPASS\nskip cycle\nTRADE SKIPPED\n",
+        encoding="utf-8",
+    )
+
+    # Copy nanodaily executable under test.
+    nanodaily_src = REPO_ROOT / "nanodaily"
+    nanodaily_dst = root / "nanodaily"
+    nanodaily_dst.write_text(nanodaily_src.read_text(encoding="utf-8"), encoding="utf-8")
+    nanodaily_dst.chmod(nanodaily_dst.stat().st_mode | stat.S_IXUSR)
+
+    # Stub git used by nanodaily ("git rev-parse --short HEAD").
+    bin_dir = root / "bin"
+    bin_dir.mkdir()
+    git_stub = bin_dir / "git"
+    git_stub.write_text(
+        "#!/usr/bin/env bash\n"
+        "if [[ \"${1:-}\" == \"rev-parse\" ]]; then\n"
+        "  echo deadbee\n"
+        "  exit 0\n"
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    git_stub.chmod(git_stub.stat().st_mode | stat.S_IXUSR)
     return root
 
 
@@ -137,3 +165,24 @@ def test_alias_functions_nanostatus_and_nanokill_are_callable(tmp_path: Path):
         check=False,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_nanodaily_runs_from_outside_repo_root(tmp_path: Path):
+    _require_bash()
+    root = _sandbox_root(tmp_path)
+    env = {
+        **os.environ,
+        "PATH": f"{root / 'bin'}{os.pathsep}{os.environ.get('PATH', '')}",
+    }
+
+    run_daily = subprocess.run(
+        ["bash", str(root / "nanodaily")],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert run_daily.returncode == 0, run_daily.stderr
+    assert "can't open file" not in run_daily.stdout
+    assert "USDC: $1.00" in run_daily.stdout
