@@ -9,6 +9,32 @@ Canonical stage VM deploy flow for branch `V2`. Use this whenever promoting loca
 - Runtime source of truth: `.env`
 - Template source of truth for git: `.env.example` (synced from `.env` via scripts)
 
+## One-time VM alias bootstrap
+
+If `nanoup`/`nanorestart` are missing (`command not found`), add aliases once:
+
+```bash
+scripts/nanobot_aliases.sh --install
+source ~/.bashrc
+```
+
+Verify aliases are loaded:
+
+```bash
+type nanoup
+type nanokill
+type nanorestart
+type nanostatus
+```
+
+Fallback (no alias required):
+
+```bash
+NANOUP_AUTOSTASH=1 bash scripts/nanoup.sh
+bash scripts/nanokill.sh
+bash scripts/nanorestart.sh
+```
+
 ## Standard Flow (recommended every time)
 
 1. Local machine (Cursor):

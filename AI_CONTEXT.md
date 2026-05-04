@@ -180,6 +180,7 @@ Load order: `.env` then optional `.env.local` (`override=True`) when present.
   - `python scripts/verify_env_example_keys.py` (check config coverage + `.env`/`.env.example` drift when `.env` exists)
   - Numeric/bool env parsing treats empty values as defaults (safe for optional blank aliases in `.env.example`)
   - Canonical reusable sequence: `docs/readme-vm-update.md` (standard flow + exceptional `.env.example` -> `.env` path)
+  - Alias bootstrap when VM shows `command not found`: `scripts/nanobot_aliases.sh --install` then `source ~/.bashrc`
 
 ## Urgent delta checklist (do not skip)
 

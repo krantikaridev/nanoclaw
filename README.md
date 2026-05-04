@@ -36,6 +36,21 @@ If the VM has intentional local edits, run with auto-stash restore:
 NANOUP_AUTOSTASH=1 nanorestart
 ```
 
+If aliases are missing on VM (`nanoup: command not found`), run:
+
+```bash
+NANOUP_AUTOSTASH=1 bash scripts/nanoup.sh
+```
+
+Then bootstrap aliases once:
+
+```bash
+scripts/nanobot_aliases.sh --install
+source ~/.bashrc
+```
+
+Documented in `docs/readme-vm-update.md`.
+
 ### Stop / restart
 
 ```bash
