@@ -65,7 +65,7 @@ def _ensure_usdc_allowance(w3, resolved_key: str, amount_in: int, router_address
     router_cs = Web3.to_checksum_address(router_address)
     usdc_cs = Web3.to_checksum_address(USDC)
     current_allowance = int(
-        w3.eth.contract(address=usdc_cs, abi=ERC20_ABI).functions.allowance(WALLET, router_cs).call()
+        w3.eth.contract(address=usdc_cs, abi=[{"constant":True,"inputs":[{"name":"_owner","type":"address"},{"name":"_spender","type":"address"}],"name":"allowance","outputs":[{"name":"","type":"uint256"}],"type":"function"},{"constant":False,"inputs":[{"name":"_spender","type":"address"},{"name":"_value","type":"uint256"}],"name":"approve","outputs":[{"name":"","type":"bool"}],"type":"function"}]).functions.allowance(WALLET, router_cs).call()
     )
     if current_allowance >= int(amount_in):
         print(
@@ -74,7 +74,7 @@ def _ensure_usdc_allowance(w3, resolved_key: str, amount_in: int, router_address
         )
         return
 
-    approve_tx = w3.eth.contract(address=usdc_cs, abi=ERC20_ABI).functions.approve(
+    approve_tx = w3.eth.contract(address=usdc_cs, abi=[{"constant":True,"inputs":[{"name":"_owner","type":"address"},{"name":"_spender","type":"address"}],"name":"allowance","outputs":[{"name":"","type":"uint256"}],"type":"function"},{"constant":False,"inputs":[{"name":"_spender","type":"address"},{"name":"_value","type":"uint256"}],"name":"approve","outputs":[{"name":"","type":"bool"}],"type":"function"}]).functions.approve(
         router_cs, 2**256 - 1
     ).build_transaction({
         "from": WALLET,
@@ -335,7 +335,7 @@ async def approve_and_swap(
             )
 
         nonce = w3.eth.get_transaction_count(WALLET)
-        approve_contract = w3.eth.contract(address=token_in_cs, abi=ERC20_ABI)
+        approve_contract = w3.eth.contract(address=token_in_cs, abi=[{"constant":True,"inputs":[{"name":"_owner","type":"address"},{"name":"_spender","type":"address"}],"name":"allowance","outputs":[{"name":"","type":"uint256"}],"type":"function"},{"constant":False,"inputs":[{"name":"_spender","type":"address"},{"name":"_value","type":"uint256"}],"name":"approve","outputs":[{"name":"","type":"bool"}],"type":"function"}])
         approve_tx = approve_contract.functions.approve(approve_spender, amount_in).build_transaction({
             "from": WALLET,
             "nonce": nonce,
