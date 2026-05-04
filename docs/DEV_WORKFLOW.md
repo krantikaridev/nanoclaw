@@ -43,6 +43,25 @@ Always review the diff: the script redacts known secret keys but does not reorga
   Bash helper: `nanoup() { bash "${NANOCLAW_ROOT:-$HOME/.nanobot/workspace/nanoclaw}/scripts/nanoup.sh"; }`
 - **`nanomon`** / **`show_balances.py`**: portfolio uses on-chain totals + optional `PORTFOLIO_BASELINE_USD` / `portfolio_baseline.json`.
 
+### VM quick runbook (ops-safe)
+
+- Runtime files (`portfolio_history.csv`, `real_cron.log`) are expected to change while bot runs.
+- Before updating branch on VM:
+  - `git stash -a`
+  - `git pull --ff-only`
+  - `git stash pop`
+- Restart loop:
+  - `pkill -f clean_swap.py 2>/dev/null || true`
+  - `nohup python clean_swap.py > real_cron.log 2>&1 &`
+  - `sleep 50 && nanomon`
+
+### Fallback router policy (current)
+
+- Primary executor remains 1inch (when API key works).
+- Fallback executor is **Uniswap V3 SwapRouter** (`exactInputSingle`, fee tier `3000`).
+- Fallback quoting is **also Uniswap V3 Quoter** (`quoteExactInputSingle`) to keep quote/execution protocol-consistent.
+- For `USDC_TO_*` fallback trades, code auto-selects spendable token source (`USDC` vs `USDC_NATIVE`) before approval/swap.
+
 ## Policy constants (stage, 2026-05)
 
 Enforced in code + `.env.example`: **`COPY_TRADE_PCT=0.28`**, **`TAKE_PROFIT_PCT=5.0`**, **`STRONG_SIGNAL_TP=12.0`**, signal thresholds **`0.80`**, fixed **$12–$20** per signal via `fixed_copy_trade_usd` (not separate `COPY_TRADE_SIZE_USD` env keys).
