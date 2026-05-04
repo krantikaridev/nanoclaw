@@ -363,3 +363,30 @@ Grok may never say “task complete / loop closed” until BOTH sides have:
 2. Confirmed the exact expected output
 3. Agreed the task is working as intended
 
+## Lessons from 4 May 2026 Session (PnL Loop + Small Trade Issue)
+
+### Key Challenges Faced
+- Spent excessive time on PnL report (multiple broken versions, parser fragility, stale data).
+- Small $4.5 trades continued despite `MIN_TRADE_USD=22` in .env — root cause was hardcoded `_HIGH_CONVICTION_WMATIC_MAX_USD = 4.50` bypass in `nanoclaw/strategies/signal_equity_trader.py`.
+- Many suggested .env keys (FLUCTUATION_THRESHOLD, PROTECTION_COOLDOWN_MIN, SLIPPAGE_TOLERANCE, MAX_TRADES_PER_HOUR) did **not** exist in code — only aliases or different keys were used.
+- Frequent Cursor pushes + VM behind by 10+ commits caused repeated sync issues.
+- Raw `git pull` failed multiple times due to unstaged log files.
+
+### Important Principles
+- **Always verify against actual code**, not just .env.example or suggested keys.
+- Hardcoded values in strategies are high-risk — they bypass .env settings.
+- PnL report should stay **simple and reliable** (one robust parser). Complex time-window logic breaks easily when log format changes.
+- Use aliases (`nanorestart`, `nanopnl`, `nanostatus`) consistently — never raw `git pull` without stashing noisy files first.
+- Cursor changes on local machine require proper `git stash + pull` on VM.
+
+### High-ROI Priorities Going Forward
+1. **Stop small trades permanently** (remove $4.50 WMATIC bypass + enforce MIN_TRADE_USD=22 in execution path).
+2. **Add commit hash to every log line** (easy "before vs after commit" performance analysis).
+3. **Create one simple daily health command** (shows in 5 seconds: current PnL, last 4h trend, any protection triggers, small trade count).
+4. **Avoid further PnL report complexity** until the above are done.
+
+### Todo (Captured)
+- [ ] Fix small trade enforcement (one targeted edit in signal_equity_trader.py)
+- [ ] Add commit hash prefix to all log lines in clean_swap.py
+- [ ] Create `nanodaily` alias for quick health check
+- [ ] Keep .env.example and actual code in sync (test already exists)
