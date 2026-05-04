@@ -1,18 +1,11 @@
 #!/bin/bash
-# nanodaily — 5-second health dashboard (final v3 - 4 May 2026)
-source ~/.bashrc 2>/dev/null || source ~/.profile 2>/dev/null || true
+# nanodaily — 5-second health dashboard (final v4 - 4 May 2026)
 
 echo "═══════════════════════════════════════════════"
 echo "           NANODAILY HEALTH — $(date '+%Y-%m-%d %H:%M')"
 echo "═══════════════════════════════════════════════"
 echo "💰 BALANCE:"
-if [ -f scripts/nanopnl.py ]; then
-    python scripts/nanopnl.py | grep -E "(USDC|WMATIC|USDT|TOTAL)"
-elif command -v nanopnl >/dev/null 2>&1; then
-    nanopnl | grep -E "(USDC|WMATIC|USDT|TOTAL)"
-else
-    echo "   (nanopnl not found — check scripts/ folder)"
-fi
+bash -l -c 'nanopnl 2>/dev/null | grep -E "(USDC|WMATIC|USDT|TOTAL)" || echo "   (nanopnl not available)"'
 echo ""
 echo "📊 TODAY STATS:"
 bypassed=$(grep -c 'HARD BYPASS' real_cron.log 2>/dev/null); bypassed=${bypassed:-0}
