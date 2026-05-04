@@ -55,9 +55,8 @@ RPC_FALLBACKS_RAW = env_str("RPC_FALLBACKS", "")
 RPC_FALLBACKS = [x.strip() for x in RPC_FALLBACKS_RAW.split(",") if x.strip()]
 
 WALLET = env_str("WALLET", "0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6")
-PRIVATE_KEY = env_str("PRIVATE_KEY", "")
 POLYGON_PRIVATE_KEY = env_str("POLYGON_PRIVATE_KEY", "")
-RESOLVED_KEY = POLYGON_PRIVATE_KEY or PRIVATE_KEY
+RESOLVED_KEY = POLYGON_PRIVATE_KEY
 
 USDT = env_str("USDT", "0xc2132D05D31c914a87C6611C10748AEb04B58e8F")
 USDC_ADDRESS = env_str("USDC", "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174")
@@ -223,4 +222,4 @@ def parse_float(raw: Any, default: float) -> float:
 
 
 def get_resolved_key() -> str:
-    return env_str("POLYGON_PRIVATE_KEY", "") or env_str("PRIVATE_KEY", "")
+    return env_str("POLYGON_PRIVATE_KEY", "")

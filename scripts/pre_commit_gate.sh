@@ -2,25 +2,28 @@
 set -euo pipefail
 
 echo "=== Nanoclaw pre-commit gate ==="
-echo "[1/6] ruff"
+echo "[0/7] secret pattern guard"
+python scripts/check_committed_secrets.py --all-tracked
+
+echo "[1/7] ruff"
 python -m ruff check .
 
-echo "[2/6] compileall"
+echo "[2/7] compileall"
 python -m compileall -q .
 
-echo "[3/6] pytest + coverage"
+echo "[3/7] pytest + coverage"
 python -m pytest tests/ --cov=. --cov-report=term-missing:skip-covered --cov-report=xml
 
-echo "[4/6] env.example sync + key coverage"
+echo "[4/7] env.example sync + key coverage"
 if [[ -f ".env" ]]; then
   python scripts/nanoenv_example.py --write
 fi
 python scripts/verify_env_example_keys.py
 
-echo "[5/6] changed files"
+echo "[5/7] changed files"
 git diff --name-only
 
-echo "[6/6] status"
+echo "[6/7] status"
 git status --short
 
 echo "✅ Pre-commit gate passed"

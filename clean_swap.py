@@ -16,7 +16,8 @@ from pathlib import Path
 import threading
 import time
 
-from config import PRIVATE_KEY, UNISWAP_V3_SWAP_ROUTER
+from config import UNISWAP_V3_SWAP_ROUTER
+import config as cfg
 from copy_trading import get_target_wallets
 from nanoclaw.strategies.signal_equity_trader import EquityTradePlan, FollowedEquity
 from swap_executor import _force_max_approval
@@ -221,12 +222,13 @@ if __name__ == "__main__":
     if not logging.root.handlers:
         logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
     _start_balance_logger()
-    if PRIVATE_KEY:
+    startup_key = cfg.get_resolved_key()
+    if startup_key:
         print("🚀 Running one-time max approval at startup...")
-        _force_max_approval(w3, PRIVATE_KEY, UNISWAP_V3_SWAP_ROUTER)
+        _force_max_approval(w3, startup_key, UNISWAP_V3_SWAP_ROUTER)
         print("✅ Startup approval complete. Bot ready.")
     else:
-        print("⚠️ Startup approval skipped: private key not configured.")
+        print("⚠️ Startup approval skipped: POLYGON_PRIVATE_KEY not configured.")
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--dry-run",

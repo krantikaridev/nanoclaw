@@ -314,7 +314,8 @@ Earnings Volatility Capture Engine v1, while preserving strict hard risk limits 
 | `nanoenvsync` | Sync `.env.example` from `.env` (secrets blanked) and verify drift/coverage |
 | `nanoenvcheck` | Verify `.env.example` key coverage and drift vs sanitized `.env` |
 | `nanoenvstage` | Run env sync/check and stage `.env.example` for commit |
-| `nanopush` | Run env sync/check, stage `.env.example`, then `git push` |
+| `nanocommit` | Enforce repo hooks + staged secret guard, then run `git commit` |
+| `nanopush` | Run secret scan + env sync/check, stage `.env.example`, then `git push` |
 
 **`sprintmon`** was retired from this tree—use **`nanostatus`** / **`nanopnl`** + **`nanobot`** / **`nanoattach`** instead.
 

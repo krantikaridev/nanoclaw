@@ -1449,7 +1449,7 @@ def test_project_balances_after_auto_usdc_unchanged_without_private_key(monkeypa
 def test_project_balances_after_auto_usdc_unchanged_when_price_unavailable(monkeypatch):
     monkeypatch.setattr(clean_swap, "_strong_x_signal_buy_present", lambda: True)
     monkeypatch.setattr(clean_swap, "GAS_PROTECTOR", _GasProtectorOk())
-    monkeypatch.setenv("PRIVATE_KEY", "0x" + "a" * 64)
+    monkeypatch.setenv("POLYGON_PRIVATE_KEY", "0x" + "a" * 64)
     def _bad_price() -> float:
         raise RuntimeError("rpc")
 
@@ -1462,7 +1462,7 @@ def test_project_balances_after_auto_usdc_unchanged_when_price_unavailable(monke
 def test_project_balances_after_auto_usdc_unchanged_when_wmatic_price_nonpositive(monkeypatch):
     monkeypatch.setattr(clean_swap, "_strong_x_signal_buy_present", lambda: True)
     monkeypatch.setattr(clean_swap, "GAS_PROTECTOR", _GasProtectorOk())
-    monkeypatch.setenv("PRIVATE_KEY", "0x" + "a" * 64)
+    monkeypatch.setenv("POLYGON_PRIVATE_KEY", "0x" + "a" * 64)
     monkeypatch.setattr(clean_swap, "get_live_wmatic_price", lambda: 0.0)
     b = clean_swap.Balances(usdt=0.0, wmatic=10.0, pol=1.0, usdc=5.0)
     out = clean_swap._project_balances_after_auto_usdc(b, min_usdc=50.0, min_wmatic_value=15.0)
@@ -1472,7 +1472,7 @@ def test_project_balances_after_auto_usdc_unchanged_when_wmatic_price_nonpositiv
 def test_project_balances_after_auto_usdc_projects_wmatic_to_usdc(monkeypatch):
     monkeypatch.setattr(clean_swap, "_strong_x_signal_buy_present", lambda: True)
     monkeypatch.setattr(clean_swap, "GAS_PROTECTOR", _GasProtectorOk())
-    monkeypatch.setenv("PRIVATE_KEY", "0x" + "a" * 64)
+    monkeypatch.setenv("POLYGON_PRIVATE_KEY", "0x" + "a" * 64)
     monkeypatch.setattr(clean_swap, "get_live_wmatic_price", lambda: 2.0)
     # USDC 10 + ~42 projected from WMATIC reaches min_usdc 50
     b = clean_swap.Balances(usdt=0.0, wmatic=25.0, pol=1.0, usdc=10.0)
@@ -1484,7 +1484,7 @@ def test_project_balances_after_auto_usdc_projects_wmatic_to_usdc(monkeypatch):
 def test_project_balances_after_auto_usdc_usdt_fallback_path(monkeypatch):
     monkeypatch.setattr(clean_swap, "_strong_x_signal_buy_present", lambda: True)
     monkeypatch.setattr(clean_swap, "GAS_PROTECTOR", _GasProtectorOk())
-    monkeypatch.setenv("PRIVATE_KEY", "0x" + "a" * 64)
+    monkeypatch.setenv("POLYGON_PRIVATE_KEY", "0x" + "a" * 64)
     monkeypatch.setattr(clean_swap, "get_live_wmatic_price", lambda: 2.0)
     # Low WMATIC USD but enough USDT to project USDC (non-WMATIC-first branch)
     b = clean_swap.Balances(usdt=80.0, wmatic=1.0, pol=1.0, usdc=5.0)
@@ -1497,7 +1497,7 @@ def test_project_balances_after_auto_usdc_wmatic_partial_then_usdt(monkeypatch):
     """WMATIC leg alone does not hit ``min_usdc``; USDT branch completes projection."""
     monkeypatch.setattr(clean_swap, "_strong_x_signal_buy_present", lambda: True)
     monkeypatch.setattr(clean_swap, "GAS_PROTECTOR", _GasProtectorOk())
-    monkeypatch.setenv("PRIVATE_KEY", "0x" + "a" * 64)
+    monkeypatch.setenv("POLYGON_PRIVATE_KEY", "0x" + "a" * 64)
     monkeypatch.setattr(clean_swap, "get_live_wmatic_price", lambda: 2.0)
     # Force-eligible strong-buy projection: WMATIC swap closes most but not all of the gap to min_usdc.
     b = clean_swap.Balances(usdt=120.0, wmatic=20.0, pol=1.0, usdc=40.0)
@@ -1509,7 +1509,7 @@ def test_project_balances_after_auto_usdc_wmatic_partial_then_usdt(monkeypatch):
 def test_project_balances_after_auto_usdc_unable_to_reach_target_returns_input(monkeypatch):
     monkeypatch.setattr(clean_swap, "_strong_x_signal_buy_present", lambda: True)
     monkeypatch.setattr(clean_swap, "GAS_PROTECTOR", _GasProtectorOk())
-    monkeypatch.setenv("PRIVATE_KEY", "0x" + "a" * 64)
+    monkeypatch.setenv("POLYGON_PRIVATE_KEY", "0x" + "a" * 64)
     monkeypatch.setattr(clean_swap, "get_live_wmatic_price", lambda: 2.0)
     b = clean_swap.Balances(usdt=0.01, wmatic=0.001, pol=1.0, usdc=5.0)
     out = clean_swap._project_balances_after_auto_usdc(b, min_usdc=500.0, min_wmatic_value=15.0)
@@ -1520,7 +1520,7 @@ def test_project_balances_after_auto_usdc_wmatic_block_then_insufficient_usdt_re
     """WMATIC projection undershoots ``min_usdc`` and USDT reserve too small to close the gap."""
     monkeypatch.setattr(clean_swap, "_strong_x_signal_buy_present", lambda: True)
     monkeypatch.setattr(clean_swap, "GAS_PROTECTOR", _GasProtectorOk())
-    monkeypatch.setenv("PRIVATE_KEY", "0x" + "a" * 64)
+    monkeypatch.setenv("POLYGON_PRIVATE_KEY", "0x" + "a" * 64)
     monkeypatch.setattr(clean_swap, "get_live_wmatic_price", lambda: 2.0)
     b = clean_swap.Balances(usdt=0.3, wmatic=20.0, pol=1.0, usdc=40.0)
     out = clean_swap._project_balances_after_auto_usdc(b, min_usdc=100.0, min_wmatic_value=15.0)
@@ -1575,7 +1575,7 @@ def test_ensure_usdc_for_x_signal_skipped_when_wmatic_price_zero(monkeypatch):
         lambda: clean_swap.Balances(usdt=0.0, wmatic=10.0, pol=1.0, usdc=5.0),
     )
     monkeypatch.setattr(clean_swap, "GAS_PROTECTOR", _GasProtectorOk())
-    monkeypatch.setenv("PRIVATE_KEY", "0x" + "a" * 64)
+    monkeypatch.setenv("POLYGON_PRIVATE_KEY", "0x" + "a" * 64)
     monkeypatch.setattr(clean_swap, "get_live_wmatic_price", lambda: 0.0)
     assert clean_swap.ensure_usdc_for_x_signal(min_usdc=50.0, force=True) is False
 

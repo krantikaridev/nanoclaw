@@ -17,7 +17,8 @@ Windows shortcut: `powershell -ExecutionPolicy Bypass -File .\scripts\pre_commit
 
 - **`.env`** is gitignored; **`.env.example`** is the canonical template for safe keys and stage policy.
 - **Secrets first**, **new non-secret tuning at the bottom** of `.env` to avoid merge corruption when agents append lines.
-- **Wallet key**: set either **`POLYGON_PRIVATE_KEY`** (preferred) or **`PRIVATE_KEY`** (alias); code uses the first that is set.
+- **Wallet key**: set **`POLYGON_PRIVATE_KEY`** only.
+- **Hook enforcement (recommended on VM and local)**: run `git config core.hooksPath .githooks` once so pre-commit and pre-push secret guards are always enforced.
 - **RPC + fallbacks + gas-probe extras**: see **`docs/ENV_RPC.md`** (primary `RPC` / `RPC_URL` / `WEB3_PROVIDER_URI`, built-in public list, and optional `RPC_FALLBACKS`).
 - **ROI / PnL labels** (`nanostatus` / `nanopnl`): **`PORTFOLIO_BASELINE_USD`** — use **`0`** (template default) or leave unset for automatic baseline; set a positive number to pin starting capital (`modules/baseline.py`). See `.env.example` and `docs/ENV_RPC.md`.
 
