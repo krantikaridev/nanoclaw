@@ -4,7 +4,7 @@
 import asyncio
 from datetime import datetime
 
-WALLET = "0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA"
+WALLET = "0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6"
 MAX_TRADE = 2.0
 RESERVE = 0.88
 

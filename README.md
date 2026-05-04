@@ -11,23 +11,29 @@ For operators and agents, **`AI_CONTEXT.md`** on branch **`V2`** is the authorit
 | Command | What it does |
 |---------|----------------|
 | `nanoup` | Safe update + restart (recommended); repo script: **`scripts/nanoup.sh`** |
-| `nanomon` | Status, balances, CSV portfolio summary, recent activity from `real_cron.log` |
+| `nanostatus` | PnL/status report from `real_cron.log` via `scripts/pnl_report.py` |
+| `nanopnl` | Alias of `nanostatus` for quick PnL view |
+| `nanobot` | Live log stream (`tail -f real_cron.log`) |
+| `nanorestart` | Safe restart flow: `nanoup && nanostatus` |
 | `nanokill` | Stop the bot |
 | `nanoattach` | Attach to live bot logs |
 | `python scripts/nanoenv_example.py --write` | Redact secrets from `.env` → refresh `.env.example` (review diff before commit) |
 
-**`sprintmon`** is not in this repo; use **`nanomon`** for a quick snapshot and **`nanoattach`** when you need the live stream.
+**`sprintmon`** is not in this repo; use **`nanostatus`** / **`nanopnl`** for quick health + PnL and **`nanobot`** / **`nanoattach`** for live logs.
 
 **USDC top-up for X-Signal equity** is handled inside the bot (`try_x_signal_equity_decision`), not as a separate shell alias. Configure `X_SIGNAL_USDC_SAFE_FLOOR` and `X_SIGNAL_AUTO_USDC_TARGET` in `.env` (see `.env.example`).
 
 ### Safe Update Flow (use this every time)
 
 ```bash
-nanoup
-nanomon
+nanorestart
 ```
 
-Important: Never `git stash` while the bot is running. Always kill first (`nanokill`), then pull, then restart.
+If the VM has intentional local edits, run with auto-stash restore:
+
+```bash
+NANOUP_AUTOSTASH=1 nanorestart
+```
 
 ### Stop / restart
 

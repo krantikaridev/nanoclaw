@@ -9,7 +9,7 @@ Trading bots produce **dense state**: env flags, CSV history, staged vs producti
 ## Before you archive the old thread
 
 1. Note **branch** (`V2`), **environment** (VM path, systemd vs cron, `.env.local` quirks).
-2. Note **whether the bot is running** (`nanomon` sanity, last deploy command).
+2. Note **whether the bot is running** (`nanostatus` sanity, last deploy command).
 3. Copy any **URLs** still needed (Polygonscan txs, gist of errors)—do not paste secrets.
 
 ## Opening the new thread (first message template)

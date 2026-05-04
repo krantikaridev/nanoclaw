@@ -12,7 +12,7 @@ async def enable_micro_real(update, context):
 ✅ Daily loss cap: 1 USDC
 ✅ Using only 10 USDC seed
 ✅ 0.88 USDC reserve untouched
-✅ Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA (Polygon)
+✅ Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 (Polygon)
 
 All activity will be logged for tax audit.
 Send 'run micro safe cycle' to start a tiny real trade.""", parse_mode='HTML')

@@ -1,12 +1,13 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+
 source ~/.bashrc 2>/dev/null || true
-cd ~/.nanobot/workspace/nanoclaw && source .venv/bin/activate
-git add nanoclaw.log portfolio_history.csv 2>/dev/null || true
-git commit -m "chore: auto logs" 2>/dev/null || true
-git stash
-git pull --rebase origin V2
-git stash pop 2>/dev/null || true
-find . -name "*.pyc" -delete 2>/dev/null || true
-find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
-nanoup
-nanomon
+ROOT="${NANOCLAW_ROOT:-$HOME/.nanobot/workspace/nanoclaw}"
+cd "${ROOT}"
+
+if [[ -f ".venv/bin/activate" ]]; then
+  # shellcheck source=/dev/null
+  source ".venv/bin/activate"
+fi
+
+bash "${ROOT}/scripts/nanoup.sh" && python "${ROOT}/scripts/pnl_report.py"

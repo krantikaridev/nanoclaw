@@ -30,7 +30,7 @@ When a Grok (or Cursor) thread hits the message limit—or you deliberately star
 - [ ] **Commit** with a factual message (what / why).
 - [ ] **Update `AI_CONTEXT.md`** — backlog, dates, incidents, roadmap (this file stays current).
 - [ ] **CSV sanity** — if anything looked like test-mode spikes, run **`scripts/clean_dummy_data.sh`** after backup approval; reconcile with Polygonscan.
-- [ ] **`nanomon`** — spot-check totals vs on-chain intuition after deploy.
+- [ ] **`nanostatus`** / **`nanopnl`** — spot-check totals vs on-chain intuition after deploy.
 - [ ] **Optional artifact bundle** — `./scripts/package_runtime_artifacts.sh` before sharing externally.
 - [ ] **Reminder**: no two write-enabled bots on one wallet key.
 
@@ -74,7 +74,7 @@ A prior thread noted **`portfolio_history.csv` as a transitional store** — acc
 **Repo**: https://github.com/krantikaridev/nanoclaw  
 **Active Branch**: V2  
 **Date**: 29 April 2026  
-**Wallet**: 0x6e291a7180bd198d67eeb792bb3262324d3e64aa
+**Wallet**: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6
 
 **Current Status**:
 - V2.5.3 - Max Aggression + Bug Fixes in progress.
@@ -201,6 +201,8 @@ Load order: `.env` then optional `.env.local` (`override=True`) when present.
   - diagnostics/log strings
   - env defaults/template
   - tests
+- Update operator-facing docs in the same task when commands/workflows/config behavior changed (`README.md`, `docs/*`, and this file when relevant).
+- Keep `.env.example` aligned with any new/changed env-driven behavior in code/scripts.
 - Add at least one regression test for each non-happy-path branch touched (especially guard-failure and retry-recovery branches).
 - Do not close a request until all checklist items are green and logs match the intended branch reason text.
 
@@ -296,11 +298,14 @@ Earnings Volatility Capture Engine v1, while preserving strict hard risk limits 
 | Command | What it does |
 |---------|----------------|
 | `nanoup` | Safe update + restart (recommended) |
-| `nanomon` | Runs `scripts/nanomon.py`: **LAST TRADE SUMMARY** (attempts / successes / fails / last OK / USDC), **tail** of `real_cron.log` (default **18** lines; `--tail N`) with **green/red/yellow** highlights; streams large logs; USDC via subprocess RPC with **log-line fallback**; **`--no-chain`** skips RPC |
+| `nanostatus` | Runs `python scripts/pnl_report.py`: current balances (USDT/USDC/WMATIC/TOTAL), today PnL, last `6x4h` and `4x6h` rolling windows from `real_cron.log` |
+| `nanopnl` | Alias of `nanostatus` for fast PnL checks |
+| `nanobot` | Live `real_cron.log` stream (`tail -f`) for runtime diagnostics |
+| `nanorestart` | Safe restart wrapper (`nanoup && nanostatus`) |
 | `nanokill` | Stop the bot |
 | `nanoattach` | Attach to live bot logs |
 
-**`sprintmon`** was retired from this tree—use **`nanomon`** + **`nanoattach`** instead.
+**`sprintmon`** was retired from this tree—use **`nanostatus`** / **`nanopnl`** + **`nanobot`** / **`nanoattach`** instead.
 
 > X-Signal integrates proactive USDC maintenance in `try_x_signal_equity_decision` when USDC drops below `X_SIGNAL_USDC_SAFE_FLOOR`, targeting `X_SIGNAL_AUTO_USDC_TARGET` before BUY decisions (not a separate shell command).
 

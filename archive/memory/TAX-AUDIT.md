@@ -1,46 +1,46 @@
-[ 2026-03-29T11:19:12.694226 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Limits: max 2.0 / daily cap 1 USDC
-[ 2026-03-29T11:19:41.777056 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Limits: max 2.0 / daily cap 1 USDC
-[ 2026-03-29T11:20:27.588020 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $10.88
-[ 2026-03-29T11:21:01.581676 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $10.88
-[ 2026-03-29T12:12:18.634604 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $10.88
-[ 2026-03-29T12:23:39.391163 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $10.88
-[ 2026-03-29T12:25:41.372053 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $10.88
-[ 2026-03-29T12:29:53.638795 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $10.88
-[ 2026-03-29T12:30:55.082537 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $4005.88
-[ 2026-03-29T12:32:46.866247 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $4005.88
-[ 2026-03-29T12:34:37.878202 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $4005.88
-[ 2026-03-29T12:34:44.672176 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $4005.88
-[ 2026-03-29T12:38:23.677755 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed
-[ 2026-03-29T12:38:36.865795 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed
-[ 2026-03-29T12:38:43.853582 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed
-[ 2026-03-29T12:42:59.169331 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed
-[ 2026-03-29T12:44:48.538601 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $4005.88
-[ 2026-03-29T12:44:51.274574 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $4005.88
-[ 2026-03-29T12:46:39.572857 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $4005.88
-[ 2026-03-29T12:48:28.069613 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $4005.88
-[ 2026-03-29T12:48:39.775077 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $4005.88
-[ 2026-03-29T13:25:05.364597 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $12921.88
-[ 2026-03-29T13:25:06.981589 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $12921.88
-[ 2026-03-29T13:26:57.731409 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $12921.88
-[ 2026-03-29T13:27:48.840511 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $12921.88
-[ 2026-03-29T13:29:41.577111 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $12921.88
-[ 2026-03-29T13:29:43.874937 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $12921.88
-[ 2026-03-29T13:30:59.272297 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $12921.88
-[ 2026-03-29T13:32:24.575499 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Utilization: 80% | Paper capital: $12921.88
-[ 2026-03-29T13:32:27.173507 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Utilization: 80% | Paper capital: $12921.88
-[ 2026-03-29T13:32:39.556595 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Utilization: 80% | Paper capital: $12921.88
-[ 2026-03-29T13:32:42.374511 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Utilization: 80% | Paper capital: $12921.88
-[ 2026-03-29T13:33:22.271672 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Utilization: 80% | Paper capital: $12921.88
-[ 2026-03-29T13:34:11.446673 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Utilization: 80% | Paper capital: $12921.88
-[ 2026-03-29T13:37:23.247247 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Utilization: 80% | Paper capital: $12921.88
-[ 2026-03-29T13:37:37.883306 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Utilization: 80% | Paper capital: $12921.88
-[ 2026-03-29T13:38:16.172463 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Utilization: 80% | Paper capital: $12921.88
-[ 2026-03-29T13:38:21.136733 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Utilization: 80% | Paper capital: $12921.88
-[ 2026-03-29T13:41:10.660745 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Utilization: 80% | Paper capital: $12921.88
-[ 2026-03-29T18:10:35.451055 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Utilization: 80% | Paper capital: $17351.88
-[ 2026-03-29T18:10:43.348506 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Utilization: 80% | Paper capital: $17351.88
-[ 2026-03-29T18:13:45.852356 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Utilization: 80% | Paper capital: $17351.88
-[ 2026-03-29T18:14:05.205200 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x6e291a7180bD198d67Eeb792Bb3262324D3e64AA | Status: Executed | Utilization: 80% | Paper capital: $17351.88
+[ 2026-03-29T11:19:12.694226 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Limits: max 2.0 / daily cap 1 USDC
+[ 2026-03-29T11:19:41.777056 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Limits: max 2.0 / daily cap 1 USDC
+[ 2026-03-29T11:20:27.588020 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $10.88
+[ 2026-03-29T11:21:01.581676 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $10.88
+[ 2026-03-29T12:12:18.634604 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $10.88
+[ 2026-03-29T12:23:39.391163 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $10.88
+[ 2026-03-29T12:25:41.372053 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $10.88
+[ 2026-03-29T12:29:53.638795 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $10.88
+[ 2026-03-29T12:30:55.082537 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $4005.88
+[ 2026-03-29T12:32:46.866247 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $4005.88
+[ 2026-03-29T12:34:37.878202 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $4005.88
+[ 2026-03-29T12:34:44.672176 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $4005.88
+[ 2026-03-29T12:38:23.677755 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed
+[ 2026-03-29T12:38:36.865795 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed
+[ 2026-03-29T12:38:43.853582 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed
+[ 2026-03-29T12:42:59.169331 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed
+[ 2026-03-29T12:44:48.538601 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $4005.88
+[ 2026-03-29T12:44:51.274574 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $4005.88
+[ 2026-03-29T12:46:39.572857 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $4005.88
+[ 2026-03-29T12:48:28.069613 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $4005.88
+[ 2026-03-29T12:48:39.775077 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $4005.88
+[ 2026-03-29T13:25:05.364597 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $12921.88
+[ 2026-03-29T13:25:06.981589 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $12921.88
+[ 2026-03-29T13:26:57.731409 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $12921.88
+[ 2026-03-29T13:27:48.840511 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $12921.88
+[ 2026-03-29T13:29:41.577111 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $12921.88
+[ 2026-03-29T13:29:43.874937 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $12921.88
+[ 2026-03-29T13:30:59.272297 ] REAL MICRO TRADE | Size: 1.0 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Limits: max 2.0 / daily cap 1 USDC | Paper capital: $12921.88
+[ 2026-03-29T13:32:24.575499 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Utilization: 80% | Paper capital: $12921.88
+[ 2026-03-29T13:32:27.173507 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Utilization: 80% | Paper capital: $12921.88
+[ 2026-03-29T13:32:39.556595 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Utilization: 80% | Paper capital: $12921.88
+[ 2026-03-29T13:32:42.374511 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Utilization: 80% | Paper capital: $12921.88
+[ 2026-03-29T13:33:22.271672 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Utilization: 80% | Paper capital: $12921.88
+[ 2026-03-29T13:34:11.446673 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Utilization: 80% | Paper capital: $12921.88
+[ 2026-03-29T13:37:23.247247 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Utilization: 80% | Paper capital: $12921.88
+[ 2026-03-29T13:37:37.883306 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Utilization: 80% | Paper capital: $12921.88
+[ 2026-03-29T13:38:16.172463 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Utilization: 80% | Paper capital: $12921.88
+[ 2026-03-29T13:38:21.136733 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Utilization: 80% | Paper capital: $12921.88
+[ 2026-03-29T13:41:10.660745 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Utilization: 80% | Paper capital: $12921.88
+[ 2026-03-29T18:10:35.451055 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Utilization: 80% | Paper capital: $17351.88
+[ 2026-03-29T18:10:43.348506 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Utilization: 80% | Paper capital: $17351.88
+[ 2026-03-29T18:13:45.852356 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Utilization: 80% | Paper capital: $17351.88
+[ 2026-03-29T18:14:05.205200 ] REAL MICRO TRADE | Size: 2.00 USDC | Wallet: 0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6 | Status: Executed | Utilization: 80% | Paper capital: $17351.88
 [ 2026-03-29T18:17:24.473055 ] REAL | Size 2.00 USDC | Paper $17351.88 | Status Executed
 [ 2026-03-29T18:19:40.982710 ] REAL | Size 2.00 USDC | Paper $17351.88 | Status Executed
 [ 2026-03-29T18:19:47.667649 ] REAL | Size 2.00 USDC | Paper $17351.88 | Status Executed
