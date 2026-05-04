@@ -539,22 +539,12 @@ class SignalEquityTrader:
                 return None, "invalid_trade_size"
             min_sz = float(self.config.min_trade_usdc)
             if trade_size < min_sz:
-                hc_cap = self._high_conviction_cap_usd(sym, strength)
-                wmatic_ref = "WMATIC" in sym.upper()
-                # Reference tier may trade at the $4.50 cap even when that is below global min_trade_usdc.
-                allow_at_sub_min_cap = (
-                    hc_cap is not None
-                    and hc_cap < min_sz
-                    and wmatic_ref
-                    and trade_size >= hc_cap - 1e-6
+                print(
+                    f"[nanoclaw] BLOCK: {sym} | below_min_trade_usdc "
+                    f"(computed=${trade_size:.2f} < min=${min_sz:.2f})"
                 )
-                if not allow_at_sub_min_cap:
-                    print(
-                        f"[nanoclaw] BLOCK: {sym} | below_min_trade_usdc "
-                        f"(computed=${trade_size:.2f} < min=${min_sz:.2f})"
-                    )
-                    logger.debug("build_plan block sym=%s reason=below_min_trade_usdc", sym)
-                    return None, "below_min_trade_usdc"
+                logger.debug("build_plan block sym=%s reason=below_min_trade_usdc", sym)
+                return None, "below_min_trade_usdc"
             tp = float(self.config.strong_take_profit_pct)
             price_note = f" @ ${current_price_usd:.2f}" if isinstance(current_price_usd, (int, float)) else ""
             earn_note = (

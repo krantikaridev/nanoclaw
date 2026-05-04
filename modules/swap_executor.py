@@ -172,6 +172,22 @@ def select_main_strategy_trade(
     )
 
 
+def _decision_notional_usd(decision: TradeDecision) -> Optional[float]:
+    if float(decision.trade_size or 0.0) > 0:
+        return float(decision.trade_size)
+
+    # Stable-coin input directions are denominated in 6-decimal USD units.
+    stable_in_directions = {
+        "USDT_TO_WMATIC",
+        "USDT_TO_USDC",
+        "USDC_TO_WMATIC",
+        "USDC_TO_EQUITY",
+    }
+    if str(decision.direction or "").strip().upper() in stable_in_directions and int(decision.amount_in or 0) > 0:
+        return float(decision.amount_in) / 1_000_000.0
+    return None
+
+
 def determine_trade_decision(
     state: dict,
     balances: Balances,
@@ -304,6 +320,24 @@ async def main(*, dry_run: bool = False) -> None:
         if not decision.should_execute:
             cs._log_trade_skipped("protection/strategy returned no actionable trade")
             print("ℹ️ No actionable trade this cycle")
+            return
+
+        min_trade_usd = float(getattr(cs, "MIN_TRADE_USD", 0.0) or 0.0)
+        decision_notional_usd = _decision_notional_usd(decision)
+        if (
+            min_trade_usd > 0
+            and decision_notional_usd is not None
+            and decision_notional_usd + 1e-9 < min_trade_usd
+        ):
+            reason = (
+                f"min_trade_guard ({decision.direction}: ${decision_notional_usd:.2f} "
+                f"< MIN_TRADE_USD ${min_trade_usd:.2f})"
+            )
+            cs._log_trade_skipped(reason)
+            print(
+                f"{runtime._nanolog()}TRADE SKIPPED | below minimum size | "
+                f"direction={decision.direction} | size=${decision_notional_usd:.2f} | min=${min_trade_usd:.2f}"
+            )
             return
 
         if dry_run:

@@ -26,6 +26,7 @@ def _build_strategy(*, gas_ok: bool, pol_balance: float) -> SignalEquityTrader:
     return (
         SignalEquityTrader.builder()
         .with_enabled(True)
+        .with_min_trade_usdc(4.0)
         .with_gas_protector(DummyProtector(gas_ok=gas_ok, pol_balance=pol_balance))
         .with_usdc_address("0x" + "2" * 40)
         .build()
@@ -516,6 +517,24 @@ def test_buy_high_conviction_capped_below_min_trade_usdc_blocked():
         symbol="WBTC_ALPHA",
         token_address="0x" + "1" * 40,
         token_decimals=8,
+        signal_strength=0.92,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=40.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+    )
+    assert reason == "below_min_trade_usdc"
+
+
+def test_buy_wmatic_high_conviction_cap_is_blocked_when_min_trade_usd_is_22():
+    """Regression: WMATIC high-conviction cap (~$4.50) must not bypass the configured minimum."""
+    s = _build_strategy_tuned(min_trade_usdc=22.0)
+    _, reason = s.build_plan_with_block_reason(
+        symbol="WMATIC_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
         signal_strength=0.92,
         earnings_proximity_days=None,
         current_price_usd=1.0,

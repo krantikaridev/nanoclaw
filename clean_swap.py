@@ -43,6 +43,7 @@ ASSET_LAST_TRADE = runtime.ASSET_LAST_TRADE
 Balances = runtime.Balances
 COPY_TRADE_PCT = runtime.COPY_TRADE_PCT
 MAX_GWEI = runtime.MAX_GWEI
+MIN_TRADE_USD = runtime.MIN_TRADE_USD
 FIXED_TRADE_USD_MIN = runtime.FIXED_TRADE_USD_MIN
 FIXED_TRADE_USD_MAX = runtime.FIXED_TRADE_USD_MAX
 # Copy/main: runtime.fixed_copy_trade_usd (FIXED_TRADE_USD_*); X-signal: dynamic band + signal in signal_equity_trader._compute_trade_size
