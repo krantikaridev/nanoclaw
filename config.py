@@ -48,11 +48,33 @@ def reconcile_fixed_trade_min(min_trade_usd: float, fixed_trade_usd_min_raw: flo
     return max(float(fixed_trade_usd_min_raw), float(min_trade_usd))
 
 
+def parse_csv_urls(raw: str) -> list[str]:
+    """Parse comma-separated URLs and drop empties while preserving order."""
+    return [part.strip() for part in str(raw).split(",") if str(part).strip()]
+
+
+def merge_unique_urls(*sources: list[str]) -> list[str]:
+    """Merge URL lists preserving first-seen order and dropping duplicates."""
+    merged: list[str] = []
+    for urls in sources:
+        for url in urls:
+            normalized = str(url).strip()
+            if not normalized or normalized in merged:
+                continue
+            merged.append(normalized)
+    return merged
+
+
 RPC = env_str("RPC", "https://polygon-rpc.com")
 RPC_URL = env_str("RPC_URL", RPC or "https://polygon-rpc.com")
 WEB3_PROVIDER_URI = env_str("WEB3_PROVIDER_URI", RPC or "https://polygon-rpc.com")
+RPC_ENDPOINTS_RAW = env_str("RPC_ENDPOINTS", "")
+RPC_ENDPOINTS = merge_unique_urls(
+    parse_csv_urls(RPC_ENDPOINTS_RAW),
+    [RPC, RPC_URL, WEB3_PROVIDER_URI],
+)
 RPC_FALLBACKS_RAW = env_str("RPC_FALLBACKS", "")
-RPC_FALLBACKS = [x.strip() for x in RPC_FALLBACKS_RAW.split(",") if x.strip()]
+RPC_FALLBACKS = parse_csv_urls(RPC_FALLBACKS_RAW)
 
 WALLET = env_str("WALLET", "0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6")
 POLYGON_PRIVATE_KEY = env_str("POLYGON_PRIVATE_KEY", "")

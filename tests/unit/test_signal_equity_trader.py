@@ -575,7 +575,9 @@ def test_query_onchain_usdc_balance_retries_and_succeeds(monkeypatch):
     s = _build_strategy_tuned()
     monkeypatch.setenv("WALLET", "0x" + "3" * 40)
     monkeypatch.setenv("USDC", "0x" + "2" * 40)
+    monkeypatch.setenv("RPC_ENDPOINTS", "https://rpc-one")
     monkeypatch.setenv("X_SIGNAL_ONCHAIN_USDC_RETRY_ATTEMPTS", "2")
+    monkeypatch.setattr(s, "_rpc_endpoints_for_usdc_query", lambda: ["https://rpc-one"])
 
     calls = {"count": 0}
 
@@ -615,7 +617,9 @@ def test_query_onchain_usdc_balance_uses_fallback_only_after_retries(monkeypatch
     s = _build_strategy_tuned()
     monkeypatch.setenv("WALLET", "0x" + "3" * 40)
     monkeypatch.setenv("USDC", "0x" + "2" * 40)
-    monkeypatch.setenv("X_SIGNAL_ONCHAIN_USDC_RETRY_ATTEMPTS", "3")
+    monkeypatch.setenv("RPC_ENDPOINTS", "https://rpc-one")
+    monkeypatch.setenv("X_SIGNAL_ONCHAIN_USDC_RETRY_ATTEMPTS", "2")
+    monkeypatch.setattr(s, "_rpc_endpoints_for_usdc_query", lambda: ["https://rpc-one"])
 
     calls = {"count": 0}
 
@@ -644,8 +648,107 @@ def test_query_onchain_usdc_balance_uses_fallback_only_after_retries(monkeypatch
     fallback = 41.5
     out = s._query_onchain_usdc_balance(fallback)
     assert out == pytest.approx(fallback)
-    assert calls["count"] == 3
-    assert s.last_usdc_balance_source == "fallback_after_retries"
+    assert calls["count"] == 2
+    assert s.last_usdc_balance_source == "fallback_after_all_rpcs_failed"
+
+
+def test_query_onchain_usdc_balance_tries_next_rpc_when_previous_fails(monkeypatch):
+    import nanoclaw.config as nc_cfg
+
+    s = _build_strategy_tuned()
+    monkeypatch.setenv("WALLET", "0x" + "3" * 40)
+    monkeypatch.setenv("USDC", "0x" + "2" * 40)
+    monkeypatch.setenv("RPC_ENDPOINTS", "https://rpc-one,https://rpc-two")
+    monkeypatch.setenv("X_SIGNAL_ONCHAIN_USDC_RETRY_ATTEMPTS", "2")
+    monkeypatch.setattr(s, "_rpc_endpoints_for_usdc_query", lambda: ["https://rpc-one", "https://rpc-two"])
+
+    endpoints_seen: list[str] = []
+    per_endpoint_calls = {"https://rpc-one": 0, "https://rpc-two": 0}
+
+    class _FakeContract:
+        def __init__(self, endpoint: str) -> None:
+            self._endpoint = endpoint
+
+        @property
+        def functions(self):
+            return self
+
+        def balanceOf(self, _wallet):
+            return self
+
+        def call(self):
+            per_endpoint_calls[self._endpoint] += 1
+            if self._endpoint == "https://rpc-one":
+                raise RuntimeError("rpc-one down")
+            return 42_500_000
+
+    class _FakeEth:
+        def __init__(self, endpoint: str) -> None:
+            self._endpoint = endpoint
+
+        def contract(self, address, abi):
+            _ = (address, abi)
+            return _FakeContract(self._endpoint)
+
+    class _FakeWeb3Client:
+        def __init__(self, endpoint: str) -> None:
+            self.eth = _FakeEth(endpoint)
+
+    def _connect_web3(*, urls=None, **kwargs):
+        _ = kwargs
+        endpoint = str((urls or [None])[0])
+        endpoints_seen.append(endpoint)
+        return _FakeWeb3Client(endpoint)
+
+    monkeypatch.setattr(nc_cfg, "connect_web3", _connect_web3)
+
+    out = s._query_onchain_usdc_balance(10.0)
+    assert out == pytest.approx(42.5)
+    assert endpoints_seen == [
+        "https://rpc-one",
+        "https://rpc-one",
+        "https://rpc-two",
+    ]
+    assert per_endpoint_calls["https://rpc-one"] == 2
+    assert per_endpoint_calls["https://rpc-two"] == 1
+    assert s.last_usdc_balance_source == "onchain"
+
+
+def test_query_onchain_usdc_balance_uses_last_known_good_when_all_rpcs_fail(monkeypatch):
+    import nanoclaw.config as nc_cfg
+
+    s = _build_strategy_tuned()
+    monkeypatch.setenv("WALLET", "0x" + "3" * 40)
+    monkeypatch.setenv("USDC", "0x" + "2" * 40)
+    monkeypatch.setenv("RPC_ENDPOINTS", "https://rpc-one,https://rpc-two")
+    monkeypatch.setenv("X_SIGNAL_ONCHAIN_USDC_RETRY_ATTEMPTS", "2")
+    monkeypatch.setattr(s, "_rpc_endpoints_for_usdc_query", lambda: ["https://rpc-one", "https://rpc-two"])
+
+    class _AlwaysFailContract:
+        @property
+        def functions(self):
+            return self
+
+        def balanceOf(self, _wallet):
+            return self
+
+        def call(self):
+            raise RuntimeError("RPC down")
+
+    class _AlwaysFailEth:
+        def contract(self, address, abi):
+            _ = (address, abi)
+            return _AlwaysFailContract()
+
+    class _AlwaysFailWeb3Client:
+        eth = _AlwaysFailEth()
+
+    monkeypatch.setattr(nc_cfg, "connect_web3", lambda *args, **kwargs: _AlwaysFailWeb3Client())
+
+    s._last_known_good_usdc_balance = 77.25
+    out = s._query_onchain_usdc_balance(10.0)
+    assert out == pytest.approx(77.25)
+    assert s.last_usdc_balance_source == "fallback_last_known_good"
 
 
 def test_buy_uses_onchain_balance_override_for_execution(monkeypatch):

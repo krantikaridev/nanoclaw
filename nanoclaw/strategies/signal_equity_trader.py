@@ -281,6 +281,7 @@ class SignalEquityTrader:
         self.gas_protector = gas_protector
         self.usdc_address = usdc_address
         self.last_usdc_balance_source = "not_queried"
+        self._last_known_good_usdc_balance: Optional[float] = None
 
     @classmethod
     def builder(cls) -> SignalEquityTraderBuilder:
@@ -359,12 +360,31 @@ class SignalEquityTrader:
         except Exception:
             return float(default)
 
+    @staticmethod
+    def _dedupe_endpoints(endpoints: Sequence[str]) -> list[str]:
+        out: list[str] = []
+        for endpoint in endpoints:
+            normalized = str(endpoint).strip()
+            if normalized and normalized not in out:
+                out.append(normalized)
+        return out
+
+    def _rpc_endpoints_for_usdc_query(self) -> list[str]:
+        configured_raw = cfg.env_str("RPC_ENDPOINTS", "")
+        configured = [part.strip() for part in configured_raw.split(",") if part.strip()]
+        singles = [
+            cfg.env_str("RPC", ""),
+            cfg.env_str("RPC_URL", ""),
+            cfg.env_str("WEB3_PROVIDER_URI", ""),
+        ]
+        static_cfg_endpoints = [str(url).strip() for url in getattr(cfg, "RPC_ENDPOINTS", [])]
+        return self._dedupe_endpoints([*configured, *singles, *static_cfg_endpoints])
+
     def _query_onchain_usdc_balance(self, fallback_balance: float) -> float:
-        """Read wallet USDC balance directly from chain; fallback only if all retries fail."""
+        """Read wallet USDC balance directly from chain with endpoint fallback and retries."""
         wallet = cfg.env_str("WALLET", "")
         token = cfg.env_str("USDC", self.usdc_address)
-        rpc_url = cfg.env_str("RPC", "")
-        attempts = max(2, int(cfg.env_int("X_SIGNAL_ONCHAIN_USDC_RETRY_ATTEMPTS", 2)))
+        per_rpc_attempts = max(2, int(cfg.env_int("X_SIGNAL_ONCHAIN_USDC_RETRY_ATTEMPTS", 2)))
         if not wallet or not token:
             self.last_usdc_balance_source = "fallback_missing_wallet_or_token"
             logger.warning(
@@ -373,44 +393,73 @@ class SignalEquityTrader:
             )
             return float(fallback_balance)
 
+        rpc_endpoints = self._rpc_endpoints_for_usdc_query()
+        if not rpc_endpoints:
+            from nanoclaw.config import default_json_rpc_url
+
+            rpc_endpoints = self._dedupe_endpoints(default_json_rpc_url())
+
+        if not rpc_endpoints:
+            self.last_usdc_balance_source = "fallback_missing_rpc_endpoints"
+            logger.warning(
+                "on-chain USDC balance query skipped (no RPC endpoints configured); using fallback balance: $%.2f",
+                float(fallback_balance),
+            )
+            return float(fallback_balance)
+
         last_error: Optional[Exception] = None
-        for attempt in range(1, attempts + 1):
-            try:
-                from nanoclaw.config import connect_web3
-                from web3 import Web3
+        for endpoint in rpc_endpoints:
+            logger.info("Trying RPC endpoint: %s", endpoint)
+            for attempt in range(1, per_rpc_attempts + 1):
+                try:
+                    from nanoclaw.config import connect_web3
+                    from web3 import Web3
 
-                if rpc_url:
-                    web3_client = connect_web3(urls=[rpc_url])
-                else:
-                    web3_client = connect_web3()
-                checksum_wallet = Web3.to_checksum_address(wallet)
-                checksum_token = Web3.to_checksum_address(token)
-                contract = web3_client.eth.contract(address=checksum_token, abi=self._ERC20_BALANCE_OF_ABI)
-                raw_balance = contract.functions.balanceOf(checksum_wallet).call()
-                onchain_balance = float(raw_balance) / 1_000_000.0
-                if not math.isfinite(onchain_balance) or onchain_balance < 0.0:
-                    raise ValueError(f"invalid on-chain USDC balance {onchain_balance!r}")
-                self.last_usdc_balance_source = "onchain"
-                logger.info(
-                    "on-chain USDC balance query succeeded on attempt %d/%d: $%.2f",
-                    attempt,
-                    attempts,
-                    onchain_balance,
-                )
-                return onchain_balance
-            except Exception as exc:
-                last_error = exc
-                logger.warning(
-                    "on-chain USDC balance query attempt %d/%d failed: %s",
-                    attempt,
-                    attempts,
-                    exc,
-                )
+                    web3_client = connect_web3(urls=[endpoint])
+                    checksum_wallet = Web3.to_checksum_address(wallet)
+                    checksum_token = Web3.to_checksum_address(token)
+                    contract = web3_client.eth.contract(address=checksum_token, abi=self._ERC20_BALANCE_OF_ABI)
+                    raw_balance = contract.functions.balanceOf(checksum_wallet).call()
+                    onchain_balance = float(raw_balance) / 1_000_000.0
+                    if not math.isfinite(onchain_balance) or onchain_balance < 0.0:
+                        raise ValueError(f"invalid on-chain USDC balance {onchain_balance!r}")
+                    self._last_known_good_usdc_balance = onchain_balance
+                    self.last_usdc_balance_source = "onchain"
+                    logger.info(
+                        "Successfully fetched on-chain USDC balance via %s (attempt %d/%d): $%.2f",
+                        endpoint,
+                        attempt,
+                        per_rpc_attempts,
+                        onchain_balance,
+                    )
+                    return onchain_balance
+                except Exception as exc:
+                    last_error = exc
+                    logger.warning(
+                        "RPC %s failed (attempt %d/%d): %s",
+                        endpoint,
+                        attempt,
+                        per_rpc_attempts,
+                        exc,
+                    )
+            logger.warning("Falling back to next RPC after failures on %s", endpoint)
 
-        self.last_usdc_balance_source = "fallback_after_retries"
+        if (
+            isinstance(self._last_known_good_usdc_balance, (int, float))
+            and math.isfinite(float(self._last_known_good_usdc_balance))
+            and float(self._last_known_good_usdc_balance) >= 0.0
+        ):
+            self.last_usdc_balance_source = "fallback_last_known_good"
+            logger.warning(
+                "All RPC endpoints failed; using last known good on-chain USDC balance: $%.2f | last_error=%s",
+                float(self._last_known_good_usdc_balance),
+                last_error,
+            )
+            return float(self._last_known_good_usdc_balance)
+
+        self.last_usdc_balance_source = "fallback_after_all_rpcs_failed"
         logger.warning(
-            "on-chain USDC balance query failed after %d attempts; using fallback balance: $%.2f | last_error=%s",
-            attempts,
+            "All RPC endpoints failed; using snapshot fallback balance: $%.2f | last_error=%s",
             float(fallback_balance),
             last_error,
         )

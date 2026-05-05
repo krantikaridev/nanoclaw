@@ -6,6 +6,8 @@ from typing import Any, List, Sequence
 
 from config import (
     RPC,
+    RPC_ENDPOINTS,
+    RPC_FALLBACKS,
     RPC_URL,
     WEB3_PROVIDER_URI,
     X_SIGNAL_DYNAMIC_TIER_HIGH_MIN,
@@ -26,13 +28,20 @@ _RPC_CONNECT_DELAY_SEC = 1.0
 
 
 def default_json_rpc_url() -> List[str]:
-    """Ordered Polygon JSON-RPC URLs: single env override first, then public fallbacks."""
+    """Ordered Polygon JSON-RPC URLs: env-configured endpoints first, then public fallbacks."""
     out: List[str] = []
+    for endpoint in RPC_ENDPOINTS:
+        e = str(endpoint).strip()
+        if e and e not in out:
+            out.append(e)
+    for endpoint in RPC_FALLBACKS:
+        e = str(endpoint).strip()
+        if e and e not in out:
+            out.append(e)
     primary = RPC or RPC_URL or WEB3_PROVIDER_URI
-    if primary:
-        p = primary.strip()
-        if p:
-            out.append(p)
+    p = str(primary).strip()
+    if p and p not in out:
+        out.append(p)
     for url in _DEFAULT_POLYGON_PUBLIC_RPCS:
         if url not in out:
             out.append(url)

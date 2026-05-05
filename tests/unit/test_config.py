@@ -24,6 +24,20 @@ def test_env_bool_uses_default_when_value_is_empty(monkeypatch):
     assert config.env_bool("TEST_ENV_BOOL_EMPTY", True) is True
 
 
+def test_parse_csv_urls_trims_and_drops_empty_entries():
+    out = config.parse_csv_urls(" https://a , ,https://b,, ")
+    assert out == ["https://a", "https://b"]
+
+
+def test_merge_unique_urls_preserves_first_seen_order():
+    merged = config.merge_unique_urls(
+        ["https://a", "https://b"],
+        ["https://b", "https://c"],
+        ["", "   ", "https://a", "https://d"],
+    )
+    assert merged == ["https://a", "https://b", "https://c", "https://d"]
+
+
 def test_get_resolved_key_prefers_polygon_private_key(monkeypatch):
     monkeypatch.setenv("POLYGON_PRIVATE_KEY", "polygon-key")
     monkeypatch.setenv("PRIVATE_KEY", "legacy-key")

@@ -6,14 +6,20 @@ This is the **intended** behavior in the repo today; adjust in `nanoclaw.config`
 
 `nanoclaw.config.default_json_rpc_url()` builds an **ordered list**:
 
-1. **First non-empty** among, in order: `RPC` → `RPC_URL` → `WEB3_PROVIDER_URI` (each trimmed). That value is the **primary** endpoint.
-2. After the primary, the list appends the built-in public Polygon URLs **in fixed order** (`_DEFAULT_POLYGON_PUBLIC_RPCS` in `nanoclaw/config.py`), **skipping duplicates** already in the list.
+1. `RPC_ENDPOINTS` entries first (comma-separated, trimmed, in order).
+2. Then `RPC_FALLBACKS` entries (if any), preserving order.
+3. Then the first non-empty among `RPC` → `RPC_URL` → `WEB3_PROVIDER_URI` if not already included.
+4. After env entries, built-in public Polygon URLs in fixed order (`_DEFAULT_POLYGON_PUBLIC_RPCS` in `nanoclaw/config.py`), skipping duplicates.
 
 `connect_web3()` without arguments walks that list: for each URL it builds `Web3.HTTPProvider`, calls `eth.block_number`, and returns the first client that succeeds (with a few transient retries per URL). If all fail, it raises.
 
-**Operator guidance:** Set **`RPC` and `RPC_URL` to the same URL** (your paid or preferred node). Use `WEB3_PROVIDER_URI` only as a **legacy alias** for tools that do not know `RPC`; if you set `RPC` / `RPC_URL`, `WEB3_PROVIDER_URI` is **not** used as primary. Avoid pointing `RPC` at host A and `WEB3_PROVIDER_URI` at host B unless you are debugging—mixed primaries have caused confusing behavior in the field.
+**Operator guidance:** Prefer setting **`RPC_ENDPOINTS`** with 2-3 providers in priority order, and keep `RPC`/`RPC_URL` aligned to your preferred primary for compatibility. Use `WEB3_PROVIDER_URI` as a legacy alias only.
 
-## `RPC_FALLBACKS` (gas / POL checks only)
+Example:
+
+`RPC_ENDPOINTS=https://polygon-rpc.com,https://rpc.ankr.com/polygon,https://polygon.llamarpc.com`
+
+## `RPC_FALLBACKS` (optional extras)
 
 `GasProtectorBuilder` in `nanoclaw/utils/gas_protector.py` does **not** replace the list above. It:
 
