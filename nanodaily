@@ -6,7 +6,21 @@ echo "════════════════════════�
 echo "           NANODAILY HEALTH — $(date '+%Y-%m-%d %H:%M')"
 echo "═══════════════════════════════════════════════"
 echo "💰 BALANCE:"
-PYTHONIOENCODING=utf-8 python scripts/pnl_report.py | grep -E "(USDC|WMATIC|USDT|TOTAL)"
+REPORT_OUTPUT="$(PYTHONIOENCODING=utf-8 python scripts/pnl_report.py 2>/dev/null || true)"
+DAILY_BALANCE_VIEW="$(
+  printf '%s\n' "$REPORT_OUTPUT" | awk '
+    /^💰 CURRENT BALANCE/ {print; balance_left=4; next}
+    balance_left > 0 {print; balance_left--; next}
+    /^📊 PNL SNAPSHOT/ {print; pnl_left=4; next}
+    pnl_left > 0 {print; pnl_left--; next}
+  '
+)"
+if [ -n "${DAILY_BALANCE_VIEW//[[:space:]]/}" ]; then
+  printf '%s\n' "$DAILY_BALANCE_VIEW"
+else
+  # Backward-compatible fallback for minimal/stub pnl_report output.
+  printf '%s\n' "$REPORT_OUTPUT" | grep -E "(CURRENT BALANCE|source:|USDC|WMATIC|USDT|TOTAL|Since baseline|Session PnL|24h PnL)"
+fi
 echo ""
 echo "📊 TODAY STATS:"
 echo "Small trades bypassed: $(grep -c 'HARD BYPASS' real_cron.log 2>/dev/null || echo 0)"

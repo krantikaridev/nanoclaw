@@ -80,7 +80,7 @@ def test_extract_snapshots_discards_orphan_wallet_balance_at_eof(tmp_path: Path)
     assert snapshots == []
 
 
-def test_get_current_balance_prefers_botlogger_or_autologger(tmp_path: Path, monkeypatch) -> None:
+def test_get_current_balance_prefers_live_onchain_snapshot_over_manual(tmp_path: Path, monkeypatch) -> None:
     log_file = _write_log(
         tmp_path,
         "\n".join(
@@ -96,8 +96,8 @@ def test_get_current_balance_prefers_botlogger_or_autologger(tmp_path: Path, mon
     current = pnl_report.get_current_balance()
 
     assert current is not None
-    assert current["source"] == "MANUAL (AutoLogger)"
-    assert current["total"] == 102.0
+    assert current["source"] == "ON-CHAIN LIVE (Real USDT line)"
+    assert current["total"] == 95.0
 
 
 def test_resolve_session_baseline_creates_and_resets(tmp_path: Path, monkeypatch) -> None:

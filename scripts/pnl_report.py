@@ -102,23 +102,32 @@ def extract_snapshots(log_file: Path) -> list[BalanceSnapshot]:
 
 
 def _source_rank(snapshot: BalanceSnapshot) -> int:
-    if snapshot.source == "manual" and snapshot.logger_source in {"BotLogger", "AutoLogger"}:
-        return 0
-    if snapshot.source == "manual":
-        return 1
     if snapshot.source == "paired":
+        return 0
+    if snapshot.source == "real":
+        return 1
+    if snapshot.source == "manual" and snapshot.logger_source in {"BotLogger", "AutoLogger"}:
         return 2
     return 3
 
 
 def _source_label(snapshot: BalanceSnapshot) -> str:
+    if snapshot.source == "paired":
+        return "ON-CHAIN LIVE (WALLET+REAL paired)"
+    if snapshot.source == "real":
+        return "ON-CHAIN LIVE (Real USDT line)"
     if snapshot.source == "manual" and snapshot.logger_source:
         return f"MANUAL ({snapshot.logger_source})"
-    if snapshot.source == "paired":
-        return "WALLET+REAL (paired)"
-    if snapshot.source == "real":
-        return "Real USDT line"
     return "MANUAL"
+
+
+def _is_usable_snapshot(snapshot: BalanceSnapshot) -> bool:
+    if snapshot.total <= 5:
+        return False
+    # Filter obviously broken WMATIC values from stale parse noise.
+    if snapshot.source in {"paired", "real"} and snapshot.wmatic >= 15:
+        return False
+    return True
 
 
 def get_current_balance():
@@ -126,23 +135,20 @@ def get_current_balance():
     if not snapshots:
         return None
 
-    for rank in (0, 1, 2, 3):
-        for snapshot in reversed(snapshots):
-            if _source_rank(snapshot) != rank:
-                continue
-            if snapshot.total <= 5:
-                continue
-            if snapshot.source in {"paired", "real"} and snapshot.wmatic >= 15:
-                continue
-            return {
-                "usdt": snapshot.usdt,
-                "usdc": snapshot.usdc,
-                "wmatic": snapshot.wmatic,
-                "total": snapshot.total,
-                "source": _source_label(snapshot),
-            }
+    usable = [snapshot for snapshot in snapshots if _is_usable_snapshot(snapshot)]
+    if not usable:
+        return None
 
-    return None
+    # Prefer live on-chain snapshots whenever available; fall back to manual correction logs.
+    chosen = min(reversed(usable), key=_source_rank)
+    return {
+        "usdt": chosen.usdt,
+        "usdc": chosen.usdc,
+        "wmatic": chosen.wmatic,
+        "total": chosen.total,
+        "source": _source_label(chosen),
+    }
+
 
 def get_recent_trades(n=8):
     try:
