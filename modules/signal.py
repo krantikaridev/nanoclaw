@@ -245,18 +245,30 @@ def ensure_usdc_for_x_signal(min_usdc: float = 8.0, min_wmatic_value: float = 15
     """If USDC is below ``min_usdc`` and (a strong X-Signal BUY is active or force=True), swap USDT→USDC first, then WMATIC→USDC."""
     fac = _cs_mod()
     if not bool(getattr(fac, "X_SIGNAL_AUTO_USDC_TOPUP_ENABLED", X_SIGNAL_AUTO_USDC_TOPUP_ENABLED)):
+        print(f"{runtime._nanolog()}AUTO-USDC skipped — disabled by X_SIGNAL_AUTO_USDC_TOPUP_ENABLED")
         return False
     balances = fac.get_balances()
     if balances.usdc >= min_usdc:
+        print(
+            f"{runtime._nanolog()}AUTO-USDC skipped — already funded "
+            f"(usdc=${balances.usdc:.2f} >= min_usdc=${float(min_usdc):.2f})"
+        )
         return True
     if not force and not _facade_strong_buy_present():
+        print(
+            f"{runtime._nanolog()}AUTO-USDC skipped — no strong BUY signal "
+            "(force=False and strong-buy detector is false)"
+        )
         return False
 
     gst = fac.GAS_PROTECTOR.get_safe_status(
         address=fac.WALLET, urgent=False, min_pol=fac.MIN_POL_FOR_GAS
     )
     if not gst.get("ok", False):
-        print(f"{runtime._nanolog()}AUTO-USDC skipped — gas/POL guard")
+        print(
+            f"{runtime._nanolog()}AUTO-USDC skipped — gas/POL guard "
+            f"(gas_ok={gst.get('gas_ok')}, pol={gst.get('pol_balance')}, min_pol={fac.MIN_POL_FOR_GAS})"
+        )
         return False
 
     key, _key_source = cfg.resolve_private_key(log_success=True)
@@ -294,15 +306,30 @@ def ensure_usdc_for_x_signal(min_usdc: float = 8.0, min_wmatic_value: float = 15
         return h is not None
 
     def _run(coro):
-        return asyncio.run(coro)
+        try:
+            return asyncio.run(coro)
+        except Exception as exc:
+            print(f"{runtime._nanolog()}AUTO-USDC swap call failed before submission — {exc}")
+            return False
 
     # Preferred source: USDT first.
     current = fac.get_balances()
+    print(
+        f"{runtime._nanolog()}AUTO-USDC consider | source=USDT-first | "
+        f"usdc=${current.usdc:.2f} usdt=${current.usdt:.2f} wmatic={current.wmatic:.6f} "
+        f"target=${target_usdc:.2f} min_swap=${min_swap_usd:.2f}"
+    )
     if current.usdt >= min_swap_usd:
         usdt_amt = min(current.usdt * 0.95, _target_swap_usd(current.usdc))
         if usdt_amt >= min_swap_usd:
             print(f"{runtime._nanolog()}Auto top-up triggered: swapping ${usdt_amt:.2f} from USDT → USDC")
-            if _run(_swap_usdt(int(usdt_amt * 1_000_000))) and fac.get_balances().usdc >= min_usdc:
+            usdt_ok = _run(_swap_usdt(int(usdt_amt * 1_000_000)))
+            post_usdt = fac.get_balances()
+            print(
+                f"{runtime._nanolog()}AUTO-USDC result | leg=USDT_TO_USDC | ok={usdt_ok} "
+                f"| usdc_after=${post_usdt.usdc:.2f}"
+            )
+            if usdt_ok and post_usdt.usdc >= min_usdc:
                 return True
 
     # Fallback source: WMATIC when USDT is insufficient or first leg didn't reach floor.
@@ -326,7 +353,12 @@ def ensure_usdc_for_x_signal(min_usdc: float = 8.0, min_wmatic_value: float = 15
         return after_usdt.usdc >= min_usdc
     print(f"{runtime._nanolog()}Auto top-up triggered: swapping ${wmatic_swap_usd:.2f} from WMATIC → USDC")
     ok = _run(_swap_wmatic(amount_wei))
-    return ok and fac.get_balances().usdc >= min_usdc
+    post_wmatic = fac.get_balances()
+    print(
+        f"{runtime._nanolog()}AUTO-USDC result | leg=WMATIC_TO_USDC | ok={ok} "
+        f"| usdc_after=${post_wmatic.usdc:.2f}"
+    )
+    return ok and post_wmatic.usdc >= min_usdc
 
 
 def _project_balances_after_auto_usdc(
@@ -347,8 +379,13 @@ def _project_balances_after_auto_usdc(
         )
 
     if balances.usdc >= min_usdc:
+        print(
+            f"{runtime._nanolog()}AUTO-USDC project_balances skipped — already funded "
+            f"(usdc=${balances.usdc:.2f} >= min_usdc=${float(min_usdc):.2f})"
+        )
         return balances
     if not _facade_strong_buy_present():
+        print(f"{runtime._nanolog()}AUTO-USDC project_balances skipped — no strong BUY signal")
         return balances
 
     fac = _cs_mod()
@@ -356,17 +393,21 @@ def _project_balances_after_auto_usdc(
         address=fac.WALLET, urgent=False, min_pol=fac.MIN_POL_FOR_GAS
     )
     if not gst.get("ok", False):
+        print(f"{runtime._nanolog()}AUTO-USDC project_balances skipped — gas/POL guard")
         return balances
 
     key, _key_source = cfg.resolve_private_key(log_success=True)
     if not key:
+        print(f"{runtime._nanolog()}AUTO-USDC project_balances skipped — no private key")
         return balances
 
     try:
         wmatic_price = float(fac.get_live_wmatic_price())
     except Exception:
+        print(f"{runtime._nanolog()}AUTO-USDC project_balances skipped — WMATIC price unavailable")
         return balances
     if wmatic_price <= 0:
+        print(f"{runtime._nanolog()}AUTO-USDC project_balances skipped — WMATIC price non-positive")
         return balances
 
     shortfall = max(0.0, float(min_usdc) - float(balances.usdc))
@@ -377,6 +418,10 @@ def _project_balances_after_auto_usdc(
     if balances.usdt >= min_swap_usd:
         usdt_amt = min(balances.usdt * 0.95, target_usd)
         if usdt_amt >= min_swap_usd and balances.usdc + usdt_amt >= min_usdc:
+            print(
+                f"{runtime._nanolog()}AUTO-USDC project_balances | path=USDT_TO_USDC "
+                f"| projected_usdc=${balances.usdc + usdt_amt:.2f}"
+            )
             return _projected_balances(
                 usdt=balances.usdt - usdt_amt,
                 wmatic=balances.wmatic,
@@ -391,6 +436,10 @@ def _project_balances_after_auto_usdc(
             if wmatic_to_swap > 0:
                 est_usdc_out = min(wmatic_to_swap * wmatic_price, swap_usd)
                 if balances.usdc + est_usdc_out >= min_usdc:
+                    print(
+                        f"{runtime._nanolog()}AUTO-USDC project_balances | path=WMATIC_TO_USDC "
+                        f"| projected_usdc=${balances.usdc + est_usdc_out:.2f}"
+                    )
                     return _projected_balances(
                         usdt=balances.usdt,
                         wmatic=balances.wmatic - wmatic_to_swap,
@@ -524,11 +573,18 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
     )
     auto_topup_target = max(float(X_SIGNAL_AUTO_USDC_TARGET), float(X_SIGNAL_USDC_SAFE_FLOOR))
     auto_topup_enabled = bool(getattr(fcb, "X_SIGNAL_AUTO_USDC_TOPUP_ENABLED", X_SIGNAL_AUTO_USDC_TOPUP_ENABLED))
-    if (
+    should_consider_auto_topup = (
         auto_topup_enabled
         and has_buy_signal
-        and has_buy_ready_on_cooldown
         and float(balances.usdc) < float(X_SIGNAL_USDC_SAFE_FLOOR)
+    )
+    print(
+        f"{runtime._nanolog()}AUTO-USDC consider | enabled={auto_topup_enabled} "
+        f"| has_buy_signal={has_buy_signal} | cooldown_ready={has_buy_ready_on_cooldown} "
+        f"| usdc=${float(balances.usdc):.2f} | safe_floor=${float(X_SIGNAL_USDC_SAFE_FLOOR):.2f}"
+    )
+    if (
+        should_consider_auto_topup
     ):
         if dry_run:
             balances = _project_balances_after_auto_usdc(
@@ -537,6 +593,10 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                 min_wmatic_value=float(X_SIGNAL_WMATIC_MIN_VALUE),
             )
         else:
+            print(
+                f"{runtime._nanolog()}AUTO-USDC execution start | "
+                f"current_usdc=${balances.usdc:.2f} target=${auto_topup_target:.2f}"
+            )
             topup_ok = fcb.ensure_usdc_for_x_signal(
                 min_usdc=auto_topup_target,
                 min_wmatic_value=float(X_SIGNAL_WMATIC_MIN_VALUE),
@@ -546,6 +606,11 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
             if not topup_ok:
                 print(
                     f"{runtime._nanolog()}AUTO-USDC top-up attempted but floor not reached "
+                    f"(have ${balances.usdc:.2f}, target ${auto_topup_target:.2f})"
+                )
+            else:
+                print(
+                    f"{runtime._nanolog()}AUTO-USDC top-up successful "
                     f"(have ${balances.usdc:.2f}, target ${auto_topup_target:.2f})"
                 )
 
