@@ -44,7 +44,7 @@ nanokill() {
 nanostatus() {
   _nanoclaw_enter_root || return 1
   _nanoclaw_activate_venv
-  python scripts/pnl_report.py
+  python scripts/pnl_report.py "$@"
 }
 
 nanopnl() {

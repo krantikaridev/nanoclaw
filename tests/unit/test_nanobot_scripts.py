@@ -168,6 +168,28 @@ def test_alias_functions_nanostatus_and_nanokill_are_callable(tmp_path: Path):
     assert result.returncode == 0, result.stderr
 
 
+def test_nanostatus_forwards_cli_args_to_pnl_report(tmp_path: Path):
+    _require_bash()
+    root = _sandbox_root(tmp_path)
+    env = {**os.environ, "NANOCLAW_ROOT": str(root)}
+    (root / "scripts" / "pnl_report.py").write_text(
+        "import sys\nprint('ARGS:' + ' '.join(sys.argv[1:]))\n",
+        encoding="utf-8",
+    )
+
+    cmd = "source scripts/nanobot_aliases.sh && nanostatus --reset-session"
+    result = subprocess.run(
+        ["bash", "-lc", cmd],
+        cwd=root,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "ARGS:--reset-session" in result.stdout
+
+
 def test_sourcing_aliases_preserves_caller_shell_options(tmp_path: Path):
     _require_bash()
     root = _sandbox_root(tmp_path)
