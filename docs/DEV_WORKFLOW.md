@@ -1,77 +1,99 @@
-# Nanoclaw development workflow
+# Nanoclaw Development Workflow Constitution
 
-Use this so code review feedback and operator habits stay consistent across sessions.
+This file is the operational source of truth for day-to-day work.
 
-Role ownership and collaboration loop are defined in **`docs/OPERATING_MODEL.md`**.
+Role boundaries and collaboration are defined in `docs/OPERATING_MODEL.md`.
 
-## Before commit
+## Core Principles
 
-1. **`python -m ruff check .`**
-2. **`python -m compileall -q .`**
-3. **`python -m pytest tests/ --cov=. --cov-report=term-missing:skip-covered --cov-report=xml`**
-4. **`git diff --stat`** — scope matches intent.
-5. **Completion discipline** — for every behavior/config change, update tests + docs + `.env.example` in the same PR.
+- Prefer one-shot flows over multi-step manual sequences.
+- If a task needs more than 2-3 manual steps repeatedly, script it.
+- Use Cursor for all logic/code changes. Do not use `sed`/`nano`/one-liner hacks for logic edits.
+- Use terminal for run/restart/log checks and quick environment fixes only.
+- Keep git clean. Runtime artifacts must never be committed.
 
-Windows shortcut: `powershell -ExecutionPolicy Bypass -File .\scripts\pre_commit_gate.ps1`  
-(or `.\scripts\pre_commit_gate.cmd`)
+## Single Source Of Truth
 
-## Environment files
+- Workflow and guardrails: `docs/DEV_WORKFLOW.md` (this file).
+- Active execution backlog: `TODO.md`.
+- Session context and continuity notes: `AI_CONTEXT.md`.
+- Every session starts by reading these before touching code.
 
-- **`.env`** is gitignored; **`.env.example`** is the canonical template for safe keys and stage policy.
-- **Secrets first**, **new non-secret tuning at the bottom** of `.env` to avoid merge corruption when agents append lines.
-- **Wallet key**: set **`POLYGON_PRIVATE_KEY`** (preferred); legacy **`PRIVATE_KEY`** is still read as fallback.
-- **Hook enforcement (required on VM, recommended local)**: run `git config core.hooksPath .githooks` so pre-commit and pre-push secret guards are always enforced; `nanoup` and `nanopush` now auto-apply this setting.
-- **Git side rejection**: keep CI required for protected branches; CI runs `scripts/check_committed_secrets.py --all-tracked` and rejects forbidden `.env` paths / secret-looking assignments on PRs to protected branches.
-- **Future hardening TODO**: apply platform settings checklist in `docs/REPO_HARDENING.md` (branch protection + required checks + push protection).
-- **RPC + fallbacks + gas-probe extras**: see **`docs/ENV_RPC.md`** (primary `RPC` / `RPC_URL` / `WEB3_PROVIDER_URI`, built-in public list, and optional `RPC_FALLBACKS`).
-- **ROI / PnL labels** (`nanostatus` / `nanopnl`): **`PORTFOLIO_BASELINE_USD`** — use **`0`** (template default) or leave unset for automatic baseline; set a positive number to pin starting capital (`modules/baseline.py`). See `.env.example` and `docs/ENV_RPC.md`.
+## Session Start Checklist (first 2 minutes)
 
-### Refresh `.env.example` from a live `.env` (strip secrets)
+1. Read `docs/DEV_WORKFLOW.md`, `TODO.md`, and `AI_CONTEXT.md`.
+2. Confirm branch and working tree:
+   - `git branch --show-current`
+   - `git status --short`
+3. Verify no surprise runtime file staging (`portfolio_history.csv`, `real_cron.log`).
+4. Confirm current task acceptance criteria in one short checklist.
 
-From repo root (`.venv` active):
+## Cursor vs Terminal Rule
 
-```bash
-python scripts/nanoenv_example.py --write
-git diff .env.example
-```
+- **Cursor only**:
+  - strategy logic
+  - refactors
+  - tests
+  - docs updates tied to behavior changes
+- **Terminal only**:
+  - run/test commands
+  - restart/stop bot (`nanoup`, `nanokill`, `nanorestart`)
+  - health/log checks (`nanostatus`, `nanopnl`, `nanobot`, `nanodaily`)
+  - emergency env/runtime fixes
+- Never patch Python business logic through terminal editors.
 
-Optional shell alias:
+## Git Rules (strict)
 
-```bash
-nanoenv () { python3 "${NANOCLAW_ROOT:-.}/scripts/nanoenv_example.py" "$@"; }
-```
+- Do not use rebase/pull conflict gymnastics for normal deploy flow.
+- Never stage runtime artifacts (`portfolio_history.csv`, `real_cron.log`).
+- Keep hooks enabled: `git config core.hooksPath .githooks`.
+- Before commit:
+  1. `python -m ruff check .`
+  2. `python -m compileall -q .`
+  3. `python -m pytest tests/ --cov=. --cov-report=term-missing:skip-covered --cov-report=xml`
+  4. `git diff --stat` and verify only intended files.
+- Any behavior/config change must include tests + docs + `.env.example` updates in same PR.
 
-Always review the diff: the script redacts known secret keys but does not reorganize sections—hand-edit for cohesion if needed.
+Windows gate shortcut:
+- `powershell -ExecutionPolicy Bypass -File .\scripts\pre_commit_gate.ps1`
+- or `.\scripts\pre_commit_gate.cmd`
 
-## Deploy / VM
+## VM + Cursor Sync Rules
 
-- **`scripts/nanoup.sh`**: kill bot → `git pull --ff-only` → `nohup python clean_swap.py`.  
-  Bash helper: `nanoup() { bash "${NANOCLAW_ROOT:-$HOME/.nanobot/workspace/nanoclaw}/scripts/nanoup.sh"; }`
-- **`nanostatus`** / **`nanopnl`** / **`show_balances.py`**: portfolio uses on-chain totals + optional `PORTFOLIO_BASELINE_USD` / `portfolio_baseline.json`.
-- Full reusable deploy sequence (including one-time exceptional `.env.example` -> `.env` reset path): **`docs/readme-vm-update.md`**.
-- Alias bootstrap and fallback commands are documented in **`docs/readme-vm-update.md`**.
+- Develop logic locally in Cursor, then push to branch.
+- On VM, use script-driven flow (`nanoup` / `nanorestart`), not ad-hoc pull/restart chains.
+- For dirty VM runtime state, use `NANOUP_AUTOSTASH=1 nanoup` instead of manual stash gymnastics.
+- Keep VM runtime and repo template aligned:
+  - `python scripts/nanoenv_example.py --write`
+  - `python scripts/verify_env_example_keys.py`
 
-### VM quick runbook (ops-safe)
+## Context Preservation and Handoff
 
-- Runtime files (`portfolio_history.csv`, `real_cron.log`) are expected to change while bot runs.
-- For the canonical VM update/restart flow, use **`docs/readme-vm-update.md`**.
+- Every stop (especially late night) must leave:
+  - what was changed
+  - what is running
+  - next exact action
+  - blockers/risks
+- Record these in `AI_CONTEXT.md` and `TODO.md`.
+- Never end a session with unstated assumptions.
 
-### Fallback router policy (current)
+## Session End Checklist
 
-- Primary executor remains 1inch (when API key works).
-- Fallback executor is **Uniswap V3 SwapRouter** (`exactInputSingle`, fee tier `3000`).
-- Fallback quoting is **also Uniswap V3 Quoter** (`quoteExactInputSingle`) to keep quote/execution protocol-consistent.
-- For `USDC_TO_*` fallback trades, code auto-selects spendable token source (`USDC` vs `USDC_NATIVE`) before approval/swap.
+1. Confirm bot/runtime state (`nanostatus`, `nanopnl`, `tail -n 120 real_cron.log` if needed).
+2. Run commit gate for code changes.
+3. Ensure runtime artifacts are unstaged.
+4. Update `TODO.md` and `AI_CONTEXT.md` with clear next step.
+5. Leave working tree intentional (clean, or explicit WIP with reason).
 
-## Policy constants (stage, 2026-05)
+## Automation Rule
 
-Enforced in code + `.env.example`: **`COPY_TRADE_PCT=0.28`**, **`TAKE_PROFIT_PCT=5.0`**, **`STRONG_SIGNAL_TP=12.0`**, signal thresholds **`0.80`**, fixed **$12–$20** per signal via `fixed_copy_trade_usd` (not separate `COPY_TRADE_SIZE_USD` env keys).
+- Repeated sequence (more than 2-3 steps) must be converted into:
+  - repo script in `scripts/`, or
+  - `nano*` command alias/shim.
+- Prefer automating safe defaults over relying on memory.
 
-## Where logic lives
+## References
 
-- Thin entry: `clean_swap.py`
-- Runtime / balances / baseline: `modules/runtime.py`, `modules/baseline.py`
-- X-Signal orchestration: `modules/signal.py`, `nanoclaw/strategies/signal_equity_trader.py`
-- Optional Grok/Telegram: `modules/agent_layer.py` (`NANOCLAW_GROK_ENABLED`, `GROK_API_KEY` / `XAI_API_KEY`, `TELEGRAM_*`)
-
-See **`AI_CONTEXT.md`** on branch **`V2`** for backlog and incidents.
+- VM runbook: `docs/readme-vm-update.md`
+- RPC/env policy: `docs/ENV_RPC.md`
+- Repo hardening checklist: `docs/REPO_HARDENING.md`
