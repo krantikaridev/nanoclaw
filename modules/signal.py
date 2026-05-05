@@ -576,6 +576,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
     should_consider_auto_topup = (
         auto_topup_enabled
         and has_buy_signal
+        and has_buy_ready_on_cooldown
         and float(balances.usdc) < float(X_SIGNAL_USDC_SAFE_FLOOR)
     )
     print(

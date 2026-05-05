@@ -139,8 +139,11 @@ def get_current_balance():
     if not usable:
         return None
 
-    # Prefer live on-chain snapshots whenever available; fall back to manual correction logs.
-    chosen = min(reversed(usable), key=_source_rank)
+    # Prefer live on-chain snapshots whenever available; within a rank, keep the most recent snapshot.
+    best_rank = min(_source_rank(snapshot) for snapshot in usable)
+    chosen = next(
+        snapshot for snapshot in reversed(usable) if _source_rank(snapshot) == best_rank
+    )
     return {
         "usdt": chosen.usdt,
         "usdc": chosen.usdc,

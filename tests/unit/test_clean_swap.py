@@ -1481,7 +1481,7 @@ def test_try_x_signal_skips_auto_topup_when_flag_disabled(monkeypatch):
     assert calls["count"] == 0
 
 
-def test_try_x_signal_auto_topup_runs_even_when_buy_asset_on_cooldown(monkeypatch):
+def test_try_x_signal_auto_topup_skips_when_buy_asset_on_cooldown(monkeypatch):
     class _TunedConfig:
         min_trade_usdc = 5.0
         per_asset_cooldown_seconds = 1800
@@ -1536,7 +1536,7 @@ def test_try_x_signal_auto_topup_runs_even_when_buy_asset_on_cooldown(monkeypatc
         dry_run=False,
     )
 
-    assert calls["count"] == 1
+    assert calls["count"] == 0
 
 
 def test_try_x_signal_logs_auto_topup_consideration(monkeypatch, capsys):
