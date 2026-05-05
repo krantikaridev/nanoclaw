@@ -7,7 +7,15 @@ _NANOCLAW_ALIASES_SOURCED=0
 if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
   _NANOCLAW_ALIASES_SOURCED=1
   # Keep strict checks active while loading definitions, then restore caller shell flags.
-  _NANOCLAW_ALIASES_SAVED_SET_OPTS="$(set +o)"
+  # Save only the strict-mode options this script mutates; restore explicitly (no eval).
+  _NANOCLAW_ALIASES_SAVED_ERREXIT=0
+  _NANOCLAW_ALIASES_SAVED_NOUNSET=0
+  _NANOCLAW_ALIASES_SAVED_PIPEFAIL=0
+  [[ $- == *e* ]] && _NANOCLAW_ALIASES_SAVED_ERREXIT=1
+  [[ $- == *u* ]] && _NANOCLAW_ALIASES_SAVED_NOUNSET=1
+  if set -o | grep -E '^pipefail[[:space:]]+on$' >/dev/null 2>&1; then
+    _NANOCLAW_ALIASES_SAVED_PIPEFAIL=1
+  fi
 fi
 set -euo pipefail
 
@@ -214,7 +222,15 @@ fi
 
 if [[ "${_NANOCLAW_ALIASES_SOURCED}" -eq 1 ]]; then
   # Restore caller shell options to avoid mutating interactive behavior after `source`.
-  eval "${_NANOCLAW_ALIASES_SAVED_SET_OPTS}"
-  unset _NANOCLAW_ALIASES_SAVED_SET_OPTS
+  if [[ "${_NANOCLAW_ALIASES_SAVED_ERREXIT}" -eq 1 ]]; then set -e; else set +e; fi
+  if [[ "${_NANOCLAW_ALIASES_SAVED_NOUNSET}" -eq 1 ]]; then set -u; else set +u; fi
+  if [[ "${_NANOCLAW_ALIASES_SAVED_PIPEFAIL}" -eq 1 ]]; then
+    set -o pipefail
+  else
+    set +o pipefail
+  fi
+  unset _NANOCLAW_ALIASES_SAVED_ERREXIT
+  unset _NANOCLAW_ALIASES_SAVED_NOUNSET
+  unset _NANOCLAW_ALIASES_SAVED_PIPEFAIL
 fi
 unset _NANOCLAW_ALIASES_SOURCED

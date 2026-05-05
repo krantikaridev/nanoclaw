@@ -241,6 +241,30 @@ def test_sourcing_aliases_preserves_caller_shell_options(tmp_path: Path):
     assert "pipefail=off" in result.stdout
 
 
+def test_sourcing_aliases_preserves_enabled_strict_shell_options(tmp_path: Path):
+    _require_bash()
+    root = _sandbox_root(tmp_path)
+    env = {**os.environ, "NANOCLAW_ROOT": str(root)}
+
+    cmd = (
+        "set -e -u -o pipefail; "
+        "source scripts/nanobot_aliases.sh; "
+        "set -o | awk '/errexit|nounset|pipefail/ {print $1 \"=\" $2}'"
+    )
+    result = subprocess.run(
+        ["bash", "-lc", cmd],
+        cwd=root,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "errexit=on" in result.stdout
+    assert "nounset=on" in result.stdout
+    assert "pipefail=on" in result.stdout
+
+
 def test_install_mode_creates_standalone_command_shims(tmp_path: Path):
     _require_bash()
     root = _sandbox_root(tmp_path)
