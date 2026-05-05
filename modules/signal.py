@@ -322,6 +322,16 @@ def _project_balances_after_auto_usdc(
     min_wmatic_value: float,
 ) -> Balances:
     """Mirror ``ensure_usdc_for_x_signal`` guards and sizing without swaps (dry-run fair USDC for equity plans)."""
+    def _projected_balances(*, usdt: float, wmatic: float, pol: float, usdc: float) -> Balances:
+        return Balances(
+            usdt=usdt,
+            wmatic=wmatic,
+            pol=pol,
+            usdc=usdc,
+            followed_equity_usd=balances.followed_equity_usd,
+            total_portfolio_usd=balances.total_portfolio_usd,
+        )
+
     if balances.usdc >= min_usdc:
         return balances
     if not _facade_strong_buy_present():
@@ -356,7 +366,7 @@ def _project_balances_after_auto_usdc(
         if wmatic_to_swap > 0:
             est_usdc_out = min(wmatic_to_swap * wmatic_price, swap_usd)
             if balances.usdc + est_usdc_out >= min_usdc:
-                return Balances(
+                return _projected_balances(
                     usdt=balances.usdt,
                     wmatic=balances.wmatic - wmatic_to_swap,
                     pol=balances.pol,
@@ -365,7 +375,7 @@ def _project_balances_after_auto_usdc(
         if balances.usdt >= 0.5:
             usdt_amt = min(balances.usdt * 0.95, target_usd)
             if usdt_amt > 0 and balances.usdc + usdt_amt >= min_usdc:
-                return Balances(
+                return _projected_balances(
                     usdt=balances.usdt - usdt_amt,
                     wmatic=balances.wmatic,
                     pol=balances.pol,
@@ -376,7 +386,7 @@ def _project_balances_after_auto_usdc(
     if balances.usdt >= 0.5:
         usdt_amt = min(balances.usdt * 0.95, target_usd)
         if usdt_amt > 0 and balances.usdc + usdt_amt >= min_usdc:
-            return Balances(
+            return _projected_balances(
                 usdt=balances.usdt - usdt_amt,
                 wmatic=balances.wmatic,
                 pol=balances.pol,

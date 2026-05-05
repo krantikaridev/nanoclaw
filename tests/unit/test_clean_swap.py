@@ -1616,6 +1616,27 @@ def test_project_balances_after_auto_usdc_usdt_fallback_path(monkeypatch):
     assert out.usdt < b.usdt
 
 
+def test_project_balances_after_auto_usdc_preserves_portfolio_fields(monkeypatch):
+    monkeypatch.setattr(clean_swap, "_strong_x_signal_buy_present", lambda: True)
+    monkeypatch.setattr(clean_swap, "GAS_PROTECTOR", _GasProtectorOk())
+    monkeypatch.setenv("POLYGON_PRIVATE_KEY", "0x" + "a" * 64)
+    monkeypatch.setattr(clean_swap, "get_live_wmatic_price", lambda: 2.0)
+
+    b = clean_swap.Balances(
+        usdt=80.0,
+        wmatic=1.0,
+        pol=1.0,
+        usdc=5.0,
+        followed_equity_usd=17.5,
+        total_portfolio_usd=123.45,
+    )
+    out = clean_swap._project_balances_after_auto_usdc(b, min_usdc=50.0, min_wmatic_value=15.0)
+
+    assert out.usdc >= 50.0
+    assert out.followed_equity_usd == b.followed_equity_usd
+    assert out.total_portfolio_usd == b.total_portfolio_usd
+
+
 def test_project_balances_after_auto_usdc_wmatic_partial_then_usdt(monkeypatch):
     """WMATIC leg alone does not hit ``min_usdc``; USDT branch completes projection."""
     monkeypatch.setattr(clean_swap, "_strong_x_signal_buy_present", lambda: True)
