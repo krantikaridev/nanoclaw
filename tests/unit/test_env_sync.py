@@ -77,6 +77,21 @@ def test_merge_env_from_example_preserves_selected_secret_keys():
     assert "X_SIGNAL_ONCHAIN_USDC_RETRY_ATTEMPTS=2\n" in out
 
 
+def test_merge_env_from_example_preserves_wallet_from_existing_env():
+    current = "WALLET=0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n" "SWAP_SLIPPAGE_BPS=80\n"
+    template = "WALLET=0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n" "SWAP_SLIPPAGE_BPS=99\n"
+
+    out = merge_env_from_example(
+        current,
+        template,
+        preserve_keys=("WALLET",),
+        keep_extra_keys=False,
+    )
+
+    assert "WALLET=0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n" in out
+    assert "SWAP_SLIPPAGE_BPS=99\n" in out
+
+
 def test_merge_env_from_example_appends_extra_keys_when_requested():
     current = "A=old\nEXTRA_KEY=123\n"
     template = "A=new\nB=2\n"
@@ -96,6 +111,7 @@ def test_merge_env_from_example_appends_extra_keys_when_requested():
 
 def test_env_apply_preserve_keys_include_rpc_runtime_keys():
     keys = set(ENV_APPLY_PRESERVE_KEYS)
+    assert "WALLET" in keys
     assert "ANKR_RPC_KEY" in keys
     assert "RPC_ENDPOINTS" in keys
     assert "RPC" in keys

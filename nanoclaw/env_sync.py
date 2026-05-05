@@ -23,6 +23,8 @@ _EXCLUDED_KEYS_SET = frozenset(ENV_SYNC_EXCLUDED_KEYS)
 ENV_APPLY_PRESERVE_KEYS = (
     *ENV_SYNC_EXCLUDED_KEYS,
     "TELEGRAM_CHAT_ID",
+    # Never clobber custody / trading identity when applying the template (template may hold a placeholder).
+    "WALLET",
     # Preserve stage-specific RPC runtime selection when applying template.
     "RPC_ENDPOINTS",
     "RPC",
