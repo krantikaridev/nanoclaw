@@ -60,7 +60,7 @@ nanopnl() {
 }
 
 nanorestart() {
-  nanoup "$@" && nanostatus "$@"
+  bash "${NANOCLAW_ROOT}/scripts/nanorestart.sh" "$@"
 }
 
 nanodaily() {
@@ -71,6 +71,12 @@ nanodaily() {
     echo "❌ nanodaily script missing or not executable: ${NANOCLAW_ROOT}/nanodaily"
     return 1
   fi
+}
+
+nanohealth() {
+  _nanoclaw_enter_root || return 1
+  _nanoclaw_activate_venv
+  python scripts/nanohealth.py "$@"
 }
 
 nanobot() {
@@ -181,6 +187,16 @@ EOF
 set -euo pipefail
 bash "${NANOCLAW_ROOT}/nanodaily" "\$@"
 EOF
+  cat >"${bindir}/nanohealth" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+cd "${NANOCLAW_ROOT}"
+if [[ -f ".venv/bin/activate" ]]; then
+  # shellcheck source=/dev/null
+  source ".venv/bin/activate"
+fi
+python scripts/nanohealth.py "\$@"
+EOF
   chmod +x \
     "${bindir}/nanoup" \
     "${bindir}/nanokill" \
@@ -189,21 +205,22 @@ EOF
     "${bindir}/nanopnl" \
     "${bindir}/nanobot" \
     "${bindir}/nanoattach" \
-    "${bindir}/nanodaily"
+    "${bindir}/nanodaily" \
+    "${bindir}/nanohealth"
 
   if [[ -f "${HOME}/.bashrc" ]] && ! grep -F 'export PATH="$HOME/.local/bin:$PATH"' "${HOME}/.bashrc" >/dev/null 2>&1; then
     printf '\n# local user bin for nanoclaw command shims\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "${HOME}/.bashrc"
     echo "✅ added ~/.local/bin PATH bootstrap to ${HOME}/.bashrc"
   fi
   echo "✅ installed standalone nano* command shims in ${bindir}"
-  echo "Verify: command -v nanoup nanostatus nanopnl nanodaily"
+  echo "Verify: command -v nanoup nanostatus nanopnl nanodaily nanohealth"
 }
 
 _nanoclaw_install_everything() {
   _nanoclaw_install_aliases
   _nanoclaw_install_cmd_shims
   echo "Run: source ~/.bashrc"
-  echo "Verify: type nanoup && type nanokill && type nanorestart && type nanostatus && type nanodaily"
+  echo "Verify: type nanoup && type nanokill && type nanorestart && type nanostatus && type nanodaily && type nanohealth"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

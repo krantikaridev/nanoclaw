@@ -19,11 +19,12 @@ For operators and agents, **`AI_CONTEXT.md`** on branch **`V2`** is the authorit
 
 | Command | What it does |
 |---------|----------------|
-| `nanoup` | Safe update + restart (recommended), including `.env` apply from `.env.example` with secret/runtime-key preserve; repo script: **`scripts/nanoup.sh`** |
+| `nanoup` | Safe update + restart (recommended), including `.env` apply from `.env.example` with secret/runtime-key preserve; ends with **`nanohealth`** (Polygon RPC + chain `137`); repo script: **`scripts/nanoup.sh`** |
+| `nanohealth` | **`python scripts/nanohealth.py`**: RPC gate via **`connect_web3()`**; exit `1` if unhealthy |
 | `nanostatus` | PnL/status report from `real_cron.log` via `scripts/pnl_report.py` (forwards CLI flags, e.g. `--reset-session`) |
 | `nanopnl` | PnL view with current balance, baseline/session %, and 24h delta (best-effort from `portfolio_history.csv`) |
 | `nanobot` | Live log stream (`tail -f real_cron.log`) |
-| `nanorestart` | Safe restart flow: `nanoup && nanostatus` (forwards CLI flags to both commands) |
+| `nanorestart` | **`nanoup`** then **`nanohealth`** then **`pnl_report`** (forwards flags where applicable) |
 | `nanokill` | Stop the bot |
 | `nanoattach` | Attach to live bot logs |
 | `nanodaily` | Daily health snapshot: balances, bypass/cooldown/protection counters, commit, TEST_MODE |
@@ -35,7 +36,7 @@ For operators and agents, **`AI_CONTEXT.md`** on branch **`V2`** is the authorit
 | `python scripts/nanoenv_example.py --write` | Redact secrets from `.env` → refresh `.env.example` (review diff before commit) |
 | `python scripts/nanoenv_apply.py --write` | Apply latest `.env.example` keys into `.env` while preserving secret/runtime keys |
 
-**`sprintmon`** is not in this repo; use **`nanostatus`** / **`nanopnl`** for quick health + PnL and **`nanobot`** / **`nanoattach`** for live logs.
+**`sprintmon`** is not in this repo; use **`nanohealth`** before trusting PnL, then **`nanostatus`** / **`nanopnl`** and **`nanobot`** / **`nanoattach`** for live logs.
 Session baseline can be reset manually with `nanopnl --reset-session` (or `nanostatus --reset-session` / `nanorestart --reset-session`).
 `scripts/pnl_report.py` now prefers the runtime line **`WALLET TOTAL USD`** (`STABLE_USD` = USDT+USDC when present, **WMATIC** = token qty — not USD) for `nanostatus`/`nanopnl`/`nanodaily`; then legacy live snapshots, then `MANUAL CORRECT BALANCE`. If authoritative stables are ~0 but TOTAL is large, the report flags **RPC read suspect** (compare wallet UI / Polygonscan).
 
@@ -57,7 +58,7 @@ NANOUP_AUTOSTASH=1 nanorestart
 If aliases are missing on VM (`nanoup: command not found`), use direct script fallback once:
 `NANOUP_AUTOSTASH=1 bash scripts/nanoup.sh`, then install aliases via
 `scripts/nanobot_aliases.sh --install && source ~/.bashrc` (details in `docs/readme-vm-update.md`).
-`--install` also installs standalone command shims into `~/.local/bin` (`nanostatus`, `nanopnl`, etc.) so commands work in fresh shells without manual re-source.
+`--install` also installs standalone command shims into `~/.local/bin` (`nanohealth`, `nanostatus`, `nanopnl`, etc.) so commands work in fresh shells without manual re-source.
 
 ### Stop / restart
 

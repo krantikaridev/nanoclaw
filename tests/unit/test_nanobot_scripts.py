@@ -21,7 +21,7 @@ def test_nanobot_aliases_script_defines_core_functions():
     assert "nanorestart()" in content
     assert "nanodaily()" in content
     assert "nanobot()" in content
-    assert "nanoattach()" in content
+    assert "nanohealth()" in content
 
 
 def test_nanobot_aliases_script_supports_install_mode():
@@ -94,6 +94,16 @@ def _sandbox_root(tmp_path: Path) -> Path:
     # Minimal pnl_report.py for nanostatus/nanorestart path.
     pnl_report = scripts / "pnl_report.py"
     pnl_report.write_text("print('USDC: $1.00')\n", encoding="utf-8")
+
+    # Stub nanohealth.py (nanorestart / nanoup invoke it).
+    (scripts / "nanohealth.py").write_text(
+        "#!/usr/bin/env python3\n"
+        "import sys\n"
+        "if __name__ == '__main__':\n"
+        "    print('nanohealth: ok (stub)')\n"
+        "    sys.exit(0)\n",
+        encoding="utf-8",
+    )
 
     # Runtime artifacts read by nanodaily script.
     (root / ".env").write_text("TEST_MODE=true\n", encoding="utf-8")

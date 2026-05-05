@@ -9,6 +9,7 @@ from typing import Iterable
 ENV_SYNC_EXCLUDED_KEYS = (
     "POLYGON_PRIVATE_KEY",
     "PRIVATE_KEY",
+    "ANKR_RPC_KEY",
     "TELEGRAM_BOT_TOKEN",
     "GROK_API_KEY",
     "XAI_API_KEY",

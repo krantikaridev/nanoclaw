@@ -8,10 +8,12 @@ cd "${ROOT}" || {
 }
 
 bash "${ROOT}/scripts/nanoup.sh" "$@"
-
 if [[ -f ".venv/bin/activate" ]]; then
   # shellcheck source=/dev/null
   source ".venv/bin/activate"
 fi
 
-python scripts/pnl_report.py
+echo "🩺 nanohealth: Polygon RPC check"
+python scripts/nanohealth.py || echo "⚠️ nanorestart: nanohealth failed — PnL below may be misleading until RPC is fixed"
+
+python scripts/pnl_report.py "$@"

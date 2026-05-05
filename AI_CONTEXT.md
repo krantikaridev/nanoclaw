@@ -21,7 +21,7 @@
 When a Grok (or Cursor) thread hits the message limit—or you deliberately start fresh—avoid losing operational truth.
 
 1. **Open the canonical snapshot**: Fetch raw `AI_CONTEXT.md` from branch `V2`: `https://raw.githubusercontent.com/krantikaridev/nanoclaw/V2/AI_CONTEXT.md`
-2. **Paste the operative sections** into the new thread **or** the first message: minimum = **Systematic Learning & History**, **Current Situation**, **TODO & Backlog**, **House-Cleaning Checklist**, and **V2.5.11+ Roadmap**, plus wallet (public) context if rotating.
+2. **Paste the operative sections** into the new thread **or** the first message: minimum = **Systematic Learning & History**, **Strategic release train (big picture)**, **Current Situation**, **TODO & Backlog**, **House-Cleaning Checklist**, and **V2.5.11+ Roadmap**, plus wallet (public) context if rotating.
 3. **Follow the detailed checklist**: Step-by-step copy/paste order and pitfalls live in **`docs/NEW_THREAD_PROTOCOL.md`**.
 4. **Declare branch + scope** in thread #1 (`V2`, stage vs prod, VM vs local).
 5. **Secrets**: Never paste `.env`; refer only to **`.env.example` keys by name.**
@@ -35,7 +35,7 @@ When a Grok (or Cursor) thread hits the message limit—or you deliberately star
 - [ ] **Commit** with a factual message (what / why).
 - [ ] **Update `AI_CONTEXT.md`** — backlog, dates, incidents, roadmap (this file stays current).
 - [ ] **CSV sanity** — if anything looked like test-mode spikes, run **`scripts/clean_dummy_data.sh`** after backup approval; reconcile with Polygonscan.
-- [ ] **`nanostatus`** / **`nanopnl`** — spot-check totals vs on-chain intuition after deploy.
+- [ ] **`nanohealth`**, then **`nanostatus` / `nanopnl`** — RPC gate first; then spot-check totals vs on-chain intuition after deploy.
 - [ ] **Optional artifact bundle** — `./scripts/package_runtime_artifacts.sh` before sharing externally.
 - [ ] **Reminder**: no two write-enabled bots on one wallet key.
 
@@ -164,12 +164,34 @@ Load order: **`python-dotenv` loads `.env` only** (repo root). Runtime tuning li
 ## v2.8.x PnL / ops stabilization (reporting + template)
 
 - **`WALLET TOTAL USD` log** includes **`STABLE_USD`** (USDT+USDC) from the same `get_balances()` call as other fields.
-- **`scripts/pnl_report.py`**: prints **Stables USD (USDT+USDC)** first, labels **WMATIC** as **token qty (not USD)**, optional **RPC read suspect** when stables ≈ 0 but TOTAL is material; parses both new and legacy `WALLET TOTAL USD` lines.
+- **`scripts/pnl_report.py`**: prints **Stables USD (USDT+USDC)** first, labels **WMATIC** as **token qty (not USD)**, optional **RPC read suspect** when stables ≈ 0 but TOTAL is material; parses both new and legacy `WALLET TOTAL USD` lines. Template sets **`USDC_NATIVE`** (native Polygon USDC) alongside **`USDC`** (USDC.e) so stable totals match wallets that hold both.
+- **`scripts/nanohealth.py`** + **`nanoclaw/rpc_health.py`**: operator one-liner + library check that **`connect_web3()`** succeeds and **`chain_id == 137`**; **`nanoup` / `nanorestart`** run it automatically; same **`nanohealth`** alias/shim as other `nano*` commands.
 - **`.env.example`**: **`MAX_GWEI=150`** so `nanoup` on VM stops defaulting swaps/AUTO-USDC to `gas_ok=False` during typical Polygon congestion (adjust per ops).
 - Full **seed-numeraire PnL** and public reconciliation are still **v2.9+** (see backlog below).
 
+## Strategic release train (big picture)
+
+Directional milestones only—**capital scales when gates pass**, not on calendar vanity: **`nanohealth` green**, reconciled **stables vs explorer**, **bleed rate** and **drawdown** within policy. Dates below are **targets**, not commitments.
+
+| Train | Intent |
+|--------|--------|
+| **v2.8.0** | First **credible PnL benchmark**: `WALLET TOTAL USD` / **`STABLE_USD`**, dual USDC (`USDC` + `USDC_NATIVE`), `pnl_report` + **RPC read suspect**, **`nanohealth`**, VM runbook + template hygiene (`ANKR_RPC_KEY` excluded, no keyed URLs in git). **Tag** when stage consistently matches wallet truth under healthy RPC. |
+| **v2.9.x** | **Operator-grade PnL** (single seed numéraire, compact public reconcile), green-env hardening (e.g. scheduled **`nanohealth`**, alerts), align remaining **on-chain USDC** reads with both USDC contracts where still singleton. |
+| **v3.0.0** | **Positive PnL razor focus** → **production ramp**: staged capital (e.g. **~\$1k** start, **+\$5k** first week, **\$10k+** second week)—**every step performance- and risk-gated**. No material scale until v2.8 benchmark + v2.9 trust model prove out. |
+| **v3.0.1** | **Code cleanup & debt** (**after** v3.0.0 validates edge): see **v3.0.1 — code cleanup backlog** below—do **not** starve PnL milestones for refactors. |
+| **v4.0.0** | **Scale trajectory** toward **~\$100k** notionally at risk (stretch **end-May → mid-Jun 2026** at worst **if** risk + data quality hold). Likely **requires** verified persistence / audit path (see **DB Migration Discussion**). |
+
+### v3.0.1 — code cleanup backlog (scheduled post–v3.0.0 edge proof)
+
+- **Network identity**: one **`CHAIN_ID` (or equivalent)** story; reduce scattered literal **`137`** in swap / 1inch payload builders where safe.
+- **Exceptions**: narrow **`except Exception`** in execution + reporting hotspots; carry **explicit reason** to logs (aligns with **Urgent delta checklist**).
+- **Façade vs modules**: trim duplication and dead imports between **`clean_swap.py`** and **`modules/*`** without behavior churn.
+- **Coverage**: raise **`swap_executor.py`** / **`clean_swap.py`** toward repo baseline **before** aggressive prod sizing (see **Release safety gates** coverage notes).
+- **Archive (`archive/`)**: ensure deploy / packaging paths never ship it; periodic pruning.
+
 ## Planned — v2.9 backlog
 - **Operator docs shipped (v2.8.x)**: **`docs/readme-vm-update.md`** explicit RPC + **`MAX_GWEI`** checklist; **`docs/OPERATOR_SEND_USDC_POLYGON.md`** for funding **`WALLET=`** on Polygon. (VM may stay the deploy source of truth for a tagged **v2.8**; fold doc-only deltas into the **v2.9** branch when you open it—no requirement to push from every local Cursor sandbox.)
+- **Green environment (v2.9)**: Treat **RPC + chain truth** as a **hard gate**. **`nanohealth`** (and the same check at the end of **`nanoup`**) answers: can we reach Polygon PoS (**137**) with the configured endpoint chain? **If unhealthy:** fix `.env` / egress / provider first — `nanostatus` / `nanopnl` / swap logs are not trustworthy until then. **Secrets hygiene:** provider tokens (**`ANKR_RPC_KEY`**, keyed RPC paths) must **never** appear in **`.env.example` / git**; if one ever hit **`origin`**, **rotate at the vendor** and update **VM `.env` only**. Extend automation later (e.g. cron **`nanohealth`**, alerts) without duplicating probe logic.
 - **Trustworthy PnL (v2.9 — must fix, not polish)**: Today’s `nanostatus` / `nanopnl` / session % are **not operator-grade** when RPC fails, price feeds drift, or totals mix **stables vs mark-to-market**. **v2.9 goal:** define **one seed accounting line** (pick **USDC xor USDT** as the numeraire, not both interchangeably) with an **explicit snapshot time** and **`delta = current_same_basis − seed` in USD** as the **headline PnL** for “did we make money in stables.” **Do not** pretend that single number explains **WMATIC/WETH/POSI** price moves—that is **inventory MTM**, a **separate** series (defer full split to **v3.0** if needed, but v2.9 must stop shipping misleading % labels off wrong totals).
 - **Internal vs public reconcile (v2.9)**: Bot logs and **public** sources (wallet UI, block explorer token balances) must be **reconcilable**; emit **compact deltas** (e.g. stablecoin bucket, total wallet-truth, discrepancy flag) on a schedule—not every line every cycle unless debugging.
 - **Event store + verified flag (v3.0 direction)**: Move toward an **append-only event DB** (swaps, snapshots, reconciliations). A **separate process** may mark rows **verified** against **public** on-chain reads (or indexer); after that, dashboards can trust DB as read model. **v2.9** can stay file/log/CSV-based if the **math and seed definition** are fixed first.
@@ -339,11 +361,12 @@ Earnings Volatility Capture Engine v1, while preserving strict hard risk limits 
 | Command | What it does |
 |---------|----------------|
 | `nanoup` | Safe update + restart (recommended) |
+| `nanohealth` | **`python scripts/nanohealth.py`**: Polygon RPC via **`connect_web3()`**, **`chain_id` 137**, live block; exit non-zero if unhealthy. Runs at end of **`nanoup`** and before **`pnl_report`** in **`nanorestart`**. |
 | `nanostatus` | Runs `python scripts/pnl_report.py`: current balances (USDT/USDC/WMATIC/TOTAL), baseline/session/24h PnL, and recent trade hints from `real_cron.log`. Balance source preference is `WALLET TOTAL USD` runtime truth first, then legacy live parser snapshots (`WALLET BALANCE` + `Real USDT`, direct `Real USDT`), then manual correction fallback. Snapshot sanity guard rejects non-finite/negative/unreasonable values before selection. |
 | `nanopnl` | Alias of `nanostatus` for fast PnL checks (same runtime-truth-first balance sourcing rules) |
 | `nanodaily` | Daily health snapshot: balances, bypass/cooldown/protection counters, commit, TEST_MODE |
 | `nanobot` | Live `real_cron.log` stream (`tail -f`) for runtime diagnostics |
-| `nanorestart` | Safe restart wrapper (`nanoup && nanostatus`) |
+| `nanorestart` | **`nanoup`** then **`nanohealth`** then **`pnl_report`** (not merely `nanoup && nanostatus`) |
 | `nanokill` | Stop the bot |
 | `nanoattach` | Attach to live bot logs |
 | `nanoenvsync` | Sync `.env.example` from `.env` (secrets blanked) and verify drift/coverage |

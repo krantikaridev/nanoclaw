@@ -18,6 +18,14 @@ Role split and decision loop: `docs/OPERATING_MODEL.md`.
 - Runtime source of truth: `.env`
 - Sanitized template in git: `.env.example`
 
+## `nanohealth` (RPC gate)
+
+**`nanohealth`** runs `connect_web3()` (same path as the bot), then verifies **`chain_id == 137`** and a live **`eth.blockNumber`**. Use it **before** trusting `nanostatus` / `nanopnl` / logs when anything looks off.
+
+- **Standalone:** `nanohealth` (alias) or `python scripts/nanohealth.py` from repo root with venv active.
+- **After deploy:** `scripts/nanoup.sh` runs it automatically at the end; **`nanorestart`** runs it before `pnl_report`.
+- **Unhealthy:** fix **§3 RPC** first (keys, egress, provider); rotate leaked provider tokens per **`AI_CONTEXT.md`** v2.9 “green environment” notes.
+
 ## Explicit checklist: RPC and `MAX_GWEI` on the VM
 
 Follow when logs show placeholder hosts (`YOUR_ACTUAL`, `PASTE_*`), `All RPC endpoints failed`, `fallback_after_all_rpcs_failed`, or `AUTO-USDC skipped — gas/POL guard (gas_ok=False)` while live gas is obviously above `MAX_GWEI`.
@@ -45,11 +53,14 @@ Put **comma-separated HTTPS URLs** in **`RPC_ENDPOINTS`** (no quotes). Order mat
 
 | Variable | Use |
 |---------|-----|
-| `RPC_ENDPOINTS` | Main ordered list for Polygon JSON-RPC HTTPS endpoints. Include your best URL first, then public fallbacks (e.g. polygon-rpc.com, llamarpc, ankr `/polygon`). |
-| `RPC` | Single legacy endpoint. Either match your preferred first URL or leave empty—do **not** leave an invalid URL here. |
-| `RPC_URL`, `WEB3_PROVIDER_URI` | Optional aliases other code uses; safest is to align them with the same HTTPS URL as `RPC` or first `RPC_ENDPOINTS` entry. |
+| `RPC_ENDPOINTS` | Main ordered list for Polygon JSON-RPC HTTPS endpoints. Include your best URL first, then public fallbacks (e.g. public Ankr `/polygon`, polygon-rpc.com). |
+| `RPC` | **Prefer empty.** Legacy single URL; do **not** duplicate the same provider URL you already put in `RPC_ENDPOINTS` (avoids confusion). |
+| `RPC_URL`, `WEB3_PROVIDER_URI` | Optional aliases; align with your primary or leave empty. |
+| `ANKR_RPC_KEY` | Optional **VM-only** Ankr project token. Template uses `https://rpc.ankr.com/polygon/${ANKR_RPC_KEY}` in `RPC_ENDPOINTS`; `python-dotenv` expands it when this key is set **above** `RPC_ENDPOINTS` in `.env`. **Never commit** a real value (see `ENV_SYNC_EXCLUDED_KEYS`); `nanoup` preserves it from the existing `.env`. If the key is empty, the next fallback URL (public Ankr) still works. |
 
-**If `RPC=` contains `rpc.ankr.com/multichain/<long-hex>`:** that path usually embeds provider credentials. Keep it **only in VM `.env`**. **Do not copy it into `.env.example`** or run `nanoenv_example.py --write` until sanitized; rotate at Ankr if it leaked.
+**Do not** paste the same **Ankr project path** into both `RPC_ENDPOINTS` and `RPC=` (or legacy `multichain/...` vs `polygon/...` duplicates). One ordered list in **`RPC_ENDPOINTS`** is enough. **If a provider token ever reached `git`:** rotate at the vendor and update **VM `.env` only**.
+
+**Polygon: USDC.e vs native USDC (balance totals):** Many wallets list both **USDC.e** (`0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174`, bridged) and **native USDC** (`0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359`). Keep **`USDC=`** as USDC.e for swap/router paths; set **`USDC_NATIVE=`** to the native contract so **`STABLE_USD`** and portfolio math include both buckets (see `.env.example`).
 
 ### 4) Raise `MAX_GWEI` when gas blocks swaps / AUTO‑USDC
 
@@ -79,6 +90,18 @@ PY
 
 Expect **`connected: True`** and **`chain_id: 137`** (Polygon PoS).
 
+If **`connected: False`**: egress or provider policy is blocking JSON-RPC from the VM. Sanity-check with HTTP:
+
+```bash
+URL="$(python -c 'import config as c; print((c.RPC_ENDPOINTS or [""])[0] or c.RPC or "")')"
+curl -sS -m 20 -X POST "$URL" -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
+```
+
+Retry the probe with **`eps[1]`** (second URL) if the list has more than one entry. Public RPCs often rate-limit or block datacenter IPs—put a **reliable provider URL** (with API key if required) **first** in **`RPC_ENDPOINTS`**.
+
+Same check in one command: **`nanohealth`** (alias) or **`python scripts/nanohealth.py`** — uses the bot’s **`connect_web3()`** path and **must** report **`chain_id=137`**.
+
 ### 6) Restart and spot-check RPC lines in the log
 
 ```bash
@@ -99,7 +122,7 @@ grep -A400 "$MARK" real_cron.log | tail -n 120
 
 ## `nanoenv_example.py` — credential warning before `git push`
 
-`python scripts/nanoenv_example.py --write` copies **sanitized** values from `.env` into `.env.example` for parity. That is **never** permission to leak **paid RPC URLs** (Ankr `/multichain/…`), private keys, or API secrets.
+`python scripts/nanoenv_example.py --write` copies **sanitized** values from `.env` into `.env.example` for parity. That is **never** permission to leak **paid RPC URLs** (Ankr project paths, `multichain/…`, etc.), private keys, or API secrets.
 
 Before commit:
 
@@ -132,15 +155,16 @@ type nanokill
 type nanorestart
 type nanostatus
 type nanodaily
+type nanohealth
 ```
 
-`nanostatus`, `nanopnl`, and `nanorestart` now forward CLI flags to `scripts/pnl_report.py` (example: `--reset-session`).
+`nanostatus`, `nanopnl`, and `nanorestart` forward CLI flags to `scripts/pnl_report.py` (example: `--reset-session`). Run **`nanohealth`** before trusting PnL when RPC has been flaky.
 `scripts/pnl_report.py` prefers live balance snapshots (paired `WALLET BALANCE` + `Real USDT` and direct `Real USDT`), chooses the most recent usable live snapshot, and only falls back to `MANUAL CORRECT BALANCE` when live data is not usable. Live/manual snapshots are filtered by sanity checks (finite, non-negative, and reasonable component bounds) before source preference is applied.
 
 Verify standalone shims are discoverable on `PATH`:
 
 ```bash
-command -v nanoup nanostatus nanopnl nanodaily
+command -v nanoup nanostatus nanopnl nanodaily nanohealth
 ```
 
 Fallback (no alias required):
@@ -169,18 +193,20 @@ bash scripts/nanorestart.sh
      - `git pull --ff-only`
      - dirty runtime files (`portfolio_history.csv`, `real_cron.log`) via autostash
      - `.env` sync from `.env.example` via `scripts/nanoenv_apply.py --write` (preserves secrets + runtime RPC keys)
+     - **`nanohealth`** at the end (Polygon RPC + chain `137`); if it warns, fix RPC before trusting PnL
 
 3. VM env parity sync (required before push/tag from VM):
-   - **`python scripts/nanoenv_example.py --write`** — then **`git diff .env.example`** and confirm **no keyed RPC URLs** (e.g. Ankr `/multichain/…`), no real API keys, match public template policy. If in doubt: **`git checkout -- .env.example`** and hand-edit public defaults only.
+   - **`python scripts/nanoenv_example.py --write`** — then **`git diff .env.example`** and confirm **no keyed RPC URLs** (e.g. Ankr `.../multichain/<token>` or `.../polygon/<token>`), no real API keys, match public template policy. If in doubt: **`git checkout -- .env.example`** and hand-edit public defaults only.
    - `python scripts/verify_env_example_keys.py`
    - `git push` also enforces parity via pre-push hook; one-time override:
      - `NANOCLAW_CONFIRM_ENV_SYNC_SKIP=1 git push`
 
 4. Verify deployed code/runtime:
    - `git log --oneline -5`
-   - `nanostatus`
-   - `nanopnl`
-   - `nanopnl --reset-session` (optional: reset session baseline to current total)
+   - `nanohealth` (if you did not just run `nanoup`, or to re-check)
+   - Optional log spot-check (see §6): `grep -E "All RPC endpoints failed|WALLET TOTAL USD|STABLE_USD=" real_cron.log | tail -n 40`
+   - `nanostatus` then `nanopnl` (read **Stables** / **TOTAL** vs MetaMask or Polygonscan)
+   - **After** totals look correct: `nanopnl --reset-session` once (re-baseline session %; skip this if you reset before trusting balances)
    - `./nanodaily`
    - `tail -n 120 real_cron.log`
 
@@ -234,7 +260,7 @@ This is not default stage behavior. Use only when you intentionally reset stage 
 
 5. Restart and verify:
    - `nanokill && nanoup`
-   - `nanostatus && nanopnl && ./nanodaily`
+   - `nanohealth && nanostatus && nanopnl && ./nanodaily`
 
 ## Guardrails
 
@@ -252,6 +278,7 @@ This is not default stage behavior. Use only when you intentionally reset stage 
 - `AI_CONTEXT.md`
 - `docs/OPERATING_MODEL.md`
 - `docs/DEV_WORKFLOW.md`
+- `scripts/nanohealth.py`
 - `scripts/nanoup.sh`
 - `scripts/nanoenv_example.py`
 - `scripts/verify_env_example_keys.py`

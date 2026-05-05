@@ -94,3 +94,5 @@ nohup python clean_swap.py >>real_cron.log 2>&1 &
 echo "✅ nanoup: bot started (tail -f real_cron.log)"
 sleep 1
 tail -n 15 real_cron.log 2>/dev/null || true
+echo "🩺 nanohealth: Polygon RPC check"
+python scripts/nanohealth.py || echo "⚠️ nanoup: nanohealth failed — fix RPC before trusting balances/PnL (docs/readme-vm-update.md)"

@@ -38,7 +38,7 @@ Role boundaries and collaboration are defined in `docs/OPERATING_MODEL.md`.
 - **Terminal only**:
   - run/test commands
   - restart/stop bot (`nanoup`, `nanokill`, `nanorestart`)
-  - health/log checks (`nanostatus`, `nanopnl`, `nanobot`, `nanodaily`)
+  - health/log checks (`nanohealth`, `nanostatus`, `nanopnl`, `nanobot`, `nanodaily`)
   - emergency env/runtime fixes
 - Never patch Python business logic through terminal editors.
 
@@ -125,7 +125,7 @@ Windows gate shortcut:
 
 ## Session End Checklist
 
-1. Confirm bot/runtime state (`nanostatus`, `nanopnl`, `tail -n 120 real_cron.log` if needed).
+1. Confirm bot/runtime state (`nanohealth`, `nanostatus`, `nanopnl`, `tail -n 120 real_cron.log` if needed).
 2. Run commit gate for code changes.
 3. Ensure runtime artifacts are unstaged.
 4. Update `TODO.md` and `AI_CONTEXT.md` with clear next step.
