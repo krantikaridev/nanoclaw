@@ -20,6 +20,7 @@
 
 - **Canonical custody**: **One Polygon `WALLET=`** is the stage/production trading wallet unless you explicitly rotate keys and update **`.env`** everywhere.
 - **v2.8 benchmark (today’s bar)**: **Headline success** = **RPC green (`nanohealth`)**, **stablecoin bucket** (`STABLE_USD` / both USDC variants + USDT) reconciles to **Polygonscan** for that wallet, **`nanopnl --reset-session`** anchored once—session % is meaningful **relative to that baseline**, even if MetaMask **all-network** headline ≠ bot **`TOTAL`**.
+- **v2.8.0 release scope — Polygon-only accounting**: Tag **v2.8.0** when the **Polygon** picture is credible (stables + **`WALLET TOTAL USD`** vs **Polygonscan** for **`WALLET=`** on chain **137**). **`FE_USD` / followed-equities** apply to **Polygon** tokens only (e.g. Polygon WETH `0x7ceB…`). **Ethereum or other networks** (e.g. mainnet WETH `0xC02a…`) are **explicitly out of scope** for v2.8 PnL—do **not** pause Polygon trading solely because off-Polygon assets exist; they simply do not enter **`TOTAL`** until multi-chain support. Operators who need one “whole wallet” number must **reconcile the Polygon tab only** to the bot, **bridge** material balances to Polygon so they count in-bot, and/or **book off-Polygon manually** until the multi-chain backlog ships.
 - **v2.9+ (full picture, MetaMask-parity direction)**: **Operator intent** is to model **as much of the wallet as practical**—extend **`followed_equities` / quoting**, add an **inventory / MTM series**, or an explicit **`unmodeled USD`** bucket so reports do not silently ignore **WETH / POSI / dust**. Until then, **`TOTAL`** is **not** promised to match MetaMask’s headline.
 
 ## **What the bot reports vs MetaMask / Polygonscan**
@@ -259,6 +260,7 @@ Directional milestones only—**capital scales when gates pass**, not on calenda
 - **Gas vs AUTO-USDC**: Dedicated max-gwei ceiling for AUTO-USDC top-up (decouple from global swap gas cap) plus tests/docs.
 - **WMATIC USD price sanity**: Fallback / bounds when oracle-style feed drifts vs spot (reduces bogus dust sizing).
 - **PnL/reporting polish (mechanical)**: Clarify `nanostatus` / `nanopnl` labels for **WMATIC quantity vs USD** so totals and components cannot be misread side-by-side (**not** a substitute for the trust model above).
+- **Multi-chain custody & consolidated PnL (@aniki, v3.0 or post–v2.9)**: Same EOA on **Ethereum + Polygon** (and others) breaks “one `TOTAL`” until we **read and mark** non-Polygon holdings (RPC/indexer per chain), add an explicit **operator snapshot** (e.g. periodic **off-Polygon book USD** in config/JSON), or split reports into **per-chain series**. **v2.8** stays **Polygon-truth**; a unified MetaMask all-network headline is **this** item—not a reason to halt Polygon strategy while mainnet treasury sits idle.
 
 ### Cross-check vs wallet UI (May 2026)
 
