@@ -397,3 +397,47 @@ Grok may never say “task complete / loop closed” until BOTH sides have:
 - [ ] Add commit hash prefix to all log lines in clean_swap.py
 - [ ] Create `nanodaily` alias for quick health check
 - [ ] Keep .env.example and actual code in sync (test already exists)
+
+## Task Log: v2.7 Stage Liveness Recovery (2026-05-05)
+
+### What worked
+- Confirmed live swap execution resumed on stage after guard-path fixes and runtime tuning:
+  - `0x74a05b137a746b6a6d79097f7a3fc6429bd7ad7020e82a11725473642007d587`
+  - `0x168ffde271afd3bab7f8d1733b29dc23ab7cc18c3af2de909f7a2c5938dfb647`
+  - `0x2b686cc7e2e73d5d08f88dc8543e1b33bbbb414f4fc11654e5105fbf2b205b60`
+- Protection dust defer and downstream fallthrough now observed in runtime logs (`PROTECTION DUST DEFER ... continuing to next strategy`).
+- Single-process condition restored (`pgrep -af clean_swap.py` showing one bot process in latest checks).
+- Per-trade precedence monopoly reduced by protection latest-open-trade evaluation fix (code + tests merged on `V2`).
+
+### What did not work
+- AUTO-USDC still frequently starts but fails to reach floor in some windows (`AUTO-USDC top-up attempted but floor not reached`).
+- X-signal BUY paths still show `zero_usdc` blocks during low-USDC phases.
+- Fluctuation protection still triggers under low-USDT/high-WMATIC states; when sell notional is below `MIN_TRADE_USD`, it can still defer unless runtime sell fraction is tuned.
+- Runtime reporting inconsistency observed: `nanodaily` / `nanopnl` reported `USDC=$0.00` and very high PnL while wallet UI snapshots showed non-zero USDC and materially different total value; reported PnL must be treated as provisional until parser/source reconciliation is completed.
+
+### Bleeding / PnL / risk impact
+- Positive operational milestone: bot is no longer fully stuck in non-executing loops; real swaps resumed.
+- Risk remains that repeated protection-trigger/defer cycles can dominate decision bandwidth during stressed balance mixes.
+- Immediate 2.8 baseline should measure:
+  - executed swap count per hour
+  - protection-trigger rate
+  - deferred-vs-executed protection exits
+  - net session delta from start/end `nanodaily`.
+
+### Baseline snapshot for 2.8 kickoff
+- Benchmark evidence window (short fast windows on 2026-05-05 UTC) captured:
+  - multiple successful swaps with tx receipts
+  - protection-trigger + dust-defer events still present
+  - no sustained lock-thrash pattern in latest checks.
+- Latest observed health snapshot example: `nanodaily` at `2026-05-05 08:49` (stage, `TEST_MODE=true`, total around `$198.10`; use as a provisional anchor only).
+- Additional operator check on 2026-05-05 showed divergence between bot-reported balance/PnL and wallet UI totals (including USDC visibility), so 2.8 baseline must be anchored on reconciled live balances first.
+
+### Proposed improvements for next iteration
+1. Stabilize AUTO-USDC conversion reliability (path health, min swap sizing, fallback diagnostics).
+2. Tune fluctuation branch to reduce dust-defer no-op loops while preserving risk guardrails.
+3. Reconcile `nanodaily`/`nanopnl` live balance source selection against wallet truth (USDC visibility + total value) before using PnL percentages as decision gates.
+4. Add one-command benchmark capture (`start marker + early-exit success detection + summary grep`) for faster 2.8 loops.
+
+### Dual verification confirmation
+- User-side runtime checks: completed (commands and VM logs shared in-thread).
+- Assistant-side verification: completed for local code/tests/docs and interpreted VM runtime evidence.

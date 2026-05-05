@@ -81,6 +81,20 @@ Run this checklist before creating a release tag (for `v2.7` and later):
    - `python -m ruff check .`
    - `python -m compileall -q .`
    - `python -m pytest tests/ --cov=. --cov-report=term-missing:skip-covered --cov-report=xml`
+6. Data-quality cross-check (required before interpreting PnL):
+   - Compare `nanodaily`/`nanostatus` balances against wallet UI/on-chain view for USDT/USDC/WMATIC totals.
+   - If totals diverge, treat reported PnL as provisional and log a parser/source reconciliation task before tagging.
+
+Fast iteration mode (for stage diagnosis loops, not final sign-off):
+- Add marker: `echo "=== FAST_WINDOW_START $(date -u +%Y-%m-%dT%H:%M:%SZ) ===" >> real_cron.log`
+- Poll up to ~6 minutes (30s slices) and break on first success signal (`REAL TX HASH` / `Swap executed successfully`).
+- Summarize with:
+  - `grep -A9999 "FAST_WINDOW_START" real_cron.log | grep -E "Swap executed successfully|REAL TX HASH|DECISION PATH|DUST DEFER|min_trade_guard|Lock active" | tail -n 200`
+- Keep final pre-tag decision on a longer window (30-60 minutes) even when fast mode is green.
+
+Runtime/template note:
+- Stage runtime tuning may be kept in VM-local `.env.local` for rapid iteration.
+- `.env.example` must remain sanitized and document knobs/semantics (not secret values or machine-specific endpoints).
 
 Windows gate shortcut:
 - `powershell -ExecutionPolicy Bypass -File .\scripts\pre_commit_gate.ps1`
