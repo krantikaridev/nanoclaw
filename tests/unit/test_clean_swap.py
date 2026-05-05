@@ -1975,7 +1975,7 @@ def test_ensure_usdc_for_x_signal_skipped_when_wmatic_price_zero(monkeypatch):
     assert clean_swap.ensure_usdc_for_x_signal(min_usdc=50.0, force=True) is False
 
 
-def test_ensure_usdc_for_x_signal_returns_early_when_topup_flag_disabled(monkeypatch):
+def test_ensure_usdc_for_x_signal_returns_early_when_topup_flag_disabled(monkeypatch, capsys):
     from modules import signal as signal_module
 
     monkeypatch.setattr(clean_swap, "X_SIGNAL_AUTO_USDC_TOPUP_ENABLED", False)
@@ -2007,6 +2007,7 @@ def test_ensure_usdc_for_x_signal_returns_early_when_topup_flag_disabled(monkeyp
     ok = clean_swap.ensure_usdc_for_x_signal(min_usdc=25.0, force=True)
     assert ok is False
     assert directions == []
+    assert "AUTO-USDC consider" in capsys.readouterr().out
 
 
 def test_ensure_usdc_for_x_signal_prefers_usdt_before_wmatic(monkeypatch):

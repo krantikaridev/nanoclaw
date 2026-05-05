@@ -9,8 +9,12 @@ echo "💰 BALANCE:"
 REPORT_OUTPUT="$(PYTHONIOENCODING=utf-8 python scripts/pnl_report.py 2>/dev/null || true)"
 DAILY_BALANCE_VIEW="$(
   printf '%s\n' "$REPORT_OUTPUT" | awk '
-    /^💰 CURRENT BALANCE/ {print; balance_left=4; next}
-    balance_left > 0 {print; balance_left--; next}
+    /^💰 CURRENT BALANCE/ {print; in_balance=1; next}
+    in_balance {
+      print
+      if ($0 ~ /^[[:space:]]*$/) {in_balance=0}
+      next
+    }
     /^📊 PNL SNAPSHOT/ {print; pnl_left=4; next}
     pnl_left > 0 {print; pnl_left--; next}
   '

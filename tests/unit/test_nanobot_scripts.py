@@ -319,3 +319,42 @@ def test_nanodaily_runs_from_outside_repo_root(tmp_path: Path):
     assert run_daily.returncode == 0, run_daily.stderr
     assert "can't open file" not in run_daily.stdout
     assert "USDC: $1.00" in run_daily.stdout
+
+
+def test_nanodaily_keeps_total_line_from_balance_block(tmp_path: Path):
+    _require_bash()
+    root = _sandbox_root(tmp_path)
+    env = {
+        **os.environ,
+        "PATH": f"{root / 'bin'}{os.pathsep}{os.environ.get('PATH', '')}",
+    }
+    (root / "scripts" / "pnl_report.py").write_text(
+        "\n".join(
+            [
+                "print('💰 CURRENT BALANCE  (source: ON-CHAIN LIVE)')",
+                "print('   USDC:   $12.00')",
+                "print('   WMATIC: $3.00')",
+                "print('   USDT:   $5.00')",
+                "print('   TOTAL:  $20.00')",
+                "print()",
+                "print('📊 PNL SNAPSHOT')",
+                "print('Since baseline: $+2.00 (+11.11%)')",
+                "print('Session PnL:   $+1.00 (+5.26%)')",
+                "print('Session start: 2026-05-05T00:00:00+00:00')",
+                "print('24h PnL:      $+0.50 (+2.56%)')",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    run_daily = subprocess.run(
+        ["bash", str(root / "nanodaily")],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert run_daily.returncode == 0, run_daily.stderr
+    assert "TOTAL:  $20.00" in run_daily.stdout
