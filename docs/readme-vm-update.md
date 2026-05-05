@@ -20,6 +20,8 @@ scripts/nanobot_aliases.sh --install
 source ~/.bashrc
 ```
 
+`--install` also places standalone `nano*` command shims in `~/.local/bin` so commands keep working in new shells without re-sourcing.
+
 Verify aliases are loaded:
 
 ```bash
@@ -28,6 +30,12 @@ type nanokill
 type nanorestart
 type nanostatus
 type nanodaily
+```
+
+Verify standalone shims are discoverable on `PATH`:
+
+```bash
+command -v nanoup nanostatus nanopnl nanodaily
 ```
 
 Fallback (no alias required):
@@ -72,6 +80,23 @@ bash scripts/nanorestart.sh
    - `git add .env.example AI_CONTEXT.md docs/readme-vm-update.md`
    - `git commit -m "chore: sync vm env template and runbook references"`
    - `git push origin V2`
+
+## Keepalive (always running after reboot/crash)
+
+If you are not using systemd/supervisor yet, set a minimal cron watchdog:
+
+```bash
+crontab -e
+```
+
+```cron
+@reboot cd ~/.nanobot/workspace/nanoclaw && nohup ./.venv/bin/python clean_swap.py >> real_cron.log 2>&1 &
+*/2 * * * * pgrep -f "clean_swap.py" >/dev/null || (cd ~/.nanobot/workspace/nanoclaw && nohup ./.venv/bin/python clean_swap.py >> real_cron.log 2>&1 &)
+```
+
+Notes:
+- `nanokill` intentionally stops the process; cron may restart it within 2 minutes.
+- Keep one writer bot per wallet/private key.
 
 ## Exceptional Flow: `.env.example` -> `.env` (use only when explicitly intended)
 

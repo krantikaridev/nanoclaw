@@ -30,8 +30,9 @@ def test_nanobot_aliases_script_supports_install_mode():
 
     assert "--install" in content
     assert "source ~/.bashrc" in content
+    assert "standalone nano* command shims" in content
     # Guard against accidental legacy alias block duplication.
-    assert content.count("#!/usr/bin/env bash") == 1
+    assert content.startswith("#!/usr/bin/env bash\n")
     assert 'alias nanoup=' not in content
 
 
@@ -165,6 +166,41 @@ def test_alias_functions_nanostatus_and_nanokill_are_callable(tmp_path: Path):
         check=False,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_install_mode_creates_standalone_command_shims(tmp_path: Path):
+    _require_bash()
+    root = _sandbox_root(tmp_path)
+    fake_home = tmp_path / "home"
+    fake_home.mkdir(parents=True, exist_ok=True)
+    (fake_home / ".bashrc").write_text("", encoding="utf-8")
+    env = {**os.environ, "HOME": str(fake_home), "NANOCLAW_ROOT": str(root)}
+
+    install = subprocess.run(
+        ["bash", str(root / "scripts" / "nanobot_aliases.sh"), "--install"],
+        cwd=root,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert install.returncode == 0, install.stderr
+
+    bindir = fake_home / ".local" / "bin"
+    assert (bindir / "nanostatus").is_file()
+    assert (bindir / "nanopnl").is_file()
+    assert (bindir / "nanodaily").is_file()
+
+    run_status = subprocess.run(
+        ["bash", "-lc", 'export PATH="$HOME/.local/bin:$PATH"; nanostatus'],
+        cwd=root,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert run_status.returncode == 0, run_status.stderr
+    assert "USDC: $1.00" in run_status.stdout
 
 
 def test_nanodaily_runs_from_outside_repo_root(tmp_path: Path):

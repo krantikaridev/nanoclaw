@@ -53,6 +53,7 @@ NANOUP_AUTOSTASH=1 nanorestart
 If aliases are missing on VM (`nanoup: command not found`), use direct script fallback once:
 `NANOUP_AUTOSTASH=1 bash scripts/nanoup.sh`, then install aliases via
 `scripts/nanobot_aliases.sh --install && source ~/.bashrc` (details in `docs/readme-vm-update.md`).
+`--install` also installs standalone command shims into `~/.local/bin` (`nanostatus`, `nanopnl`, etc.) so commands work in fresh shells without manual re-source.
 
 ### Stop / restart
 
