@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -279,6 +280,7 @@ class SignalEquityTrader:
         self.config = config
         self.gas_protector = gas_protector
         self.usdc_address = usdc_address
+        self.last_usdc_balance_source = "not_queried"
 
     @classmethod
     def builder(cls) -> SignalEquityTraderBuilder:
@@ -358,28 +360,61 @@ class SignalEquityTrader:
             return float(default)
 
     def _query_onchain_usdc_balance(self, fallback_balance: float) -> float:
-        """Read wallet USDC balance directly from chain; fallback to upstream snapshot on error."""
+        """Read wallet USDC balance directly from chain; fallback only if all retries fail."""
         wallet = cfg.env_str("WALLET", "")
         token = cfg.env_str("USDC", self.usdc_address)
         rpc_url = cfg.env_str("RPC", "")
+        attempts = max(2, int(cfg.env_int("X_SIGNAL_ONCHAIN_USDC_RETRY_ATTEMPTS", 2)))
         if not wallet or not token:
+            self.last_usdc_balance_source = "fallback_missing_wallet_or_token"
+            logger.warning(
+                "on-chain USDC balance query skipped (missing wallet/token); using fallback balance: $%.2f",
+                float(fallback_balance),
+            )
             return float(fallback_balance)
-        try:
-            from nanoclaw.config import connect_web3
-            from web3 import Web3
 
-            if rpc_url:
-                web3_client = connect_web3(urls=[rpc_url])
-            else:
-                web3_client = connect_web3()
-            checksum_wallet = Web3.to_checksum_address(wallet)
-            checksum_token = Web3.to_checksum_address(token)
-            contract = web3_client.eth.contract(address=checksum_token, abi=self._ERC20_BALANCE_OF_ABI)
-            raw_balance = contract.functions.balanceOf(checksum_wallet).call()
-            return float(raw_balance) / 1_000_000.0
-        except Exception as exc:
-            logger.warning("on-chain USDC balance query failed; using fallback snapshot: %s", exc)
-            return float(fallback_balance)
+        last_error: Optional[Exception] = None
+        for attempt in range(1, attempts + 1):
+            try:
+                from nanoclaw.config import connect_web3
+                from web3 import Web3
+
+                if rpc_url:
+                    web3_client = connect_web3(urls=[rpc_url])
+                else:
+                    web3_client = connect_web3()
+                checksum_wallet = Web3.to_checksum_address(wallet)
+                checksum_token = Web3.to_checksum_address(token)
+                contract = web3_client.eth.contract(address=checksum_token, abi=self._ERC20_BALANCE_OF_ABI)
+                raw_balance = contract.functions.balanceOf(checksum_wallet).call()
+                onchain_balance = float(raw_balance) / 1_000_000.0
+                if not math.isfinite(onchain_balance) or onchain_balance < 0.0:
+                    raise ValueError(f"invalid on-chain USDC balance {onchain_balance!r}")
+                self.last_usdc_balance_source = "onchain"
+                logger.info(
+                    "on-chain USDC balance query succeeded on attempt %d/%d: $%.2f",
+                    attempt,
+                    attempts,
+                    onchain_balance,
+                )
+                return onchain_balance
+            except Exception as exc:
+                last_error = exc
+                logger.warning(
+                    "on-chain USDC balance query attempt %d/%d failed: %s",
+                    attempt,
+                    attempts,
+                    exc,
+                )
+
+        self.last_usdc_balance_source = "fallback_after_retries"
+        logger.warning(
+            "on-chain USDC balance query failed after %d attempts; using fallback balance: $%.2f | last_error=%s",
+            attempts,
+            float(fallback_balance),
+            last_error,
+        )
+        return float(fallback_balance)
 
     def _estimate_gas_cost_usd(self, gas_gwei: float) -> float:
         # Approximate ERC20 swap gas on Polygon; converted with env-driven POL_USD_PRICE.

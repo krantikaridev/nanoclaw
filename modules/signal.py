@@ -453,6 +453,29 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
     cfg_enabled = bool(cfg.get("enabled", True)) if isinstance(cfg, dict) else True
     min_strength = fcb._effective_equity_signal_min(cfg)
     tuned_trader = fcb._tuned_signal_equity_trader(min_strength)
+    snapshot_usdc = float(balances.usdc)
+    query_onchain = getattr(tuned_trader, "_query_onchain_usdc_balance", None)
+    if callable(query_onchain):
+        onchain_preferred_usdc = float(query_onchain(snapshot_usdc))
+        usdc_source = str(getattr(tuned_trader, "last_usdc_balance_source", "unknown"))
+    else:
+        onchain_preferred_usdc = snapshot_usdc
+        usdc_source = "snapshot_no_onchain_query_hook"
+    balances = Balances(
+        usdt=balances.usdt,
+        wmatic=balances.wmatic,
+        pol=balances.pol,
+        usdc=onchain_preferred_usdc,
+        followed_equity_usd=balances.followed_equity_usd,
+        total_portfolio_usd=max(
+            0.0,
+            float(balances.total_portfolio_usd) - snapshot_usdc + onchain_preferred_usdc,
+        ),
+    )
+    print(
+        f"{runtime._nanolog()}USDC BALANCE SOURCE | source={usdc_source} | "
+        f"selected=${onchain_preferred_usdc:.2f} | snapshot=${snapshot_usdc:.2f}"
+    )
     strong_thr = fcb.X_SIGNAL_STRONG_THRESHOLD
     force_eligible_thr = fcb.X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD
     force_high_conviction = fcb.X_SIGNAL_FORCE_HIGH_CONVICTION

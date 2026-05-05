@@ -566,6 +566,86 @@ def test_query_onchain_usdc_balance_falls_back_to_snapshot_when_wallet_missing(m
     monkeypatch.delenv("WALLET", raising=False)
     fallback = 33.25
     assert s._query_onchain_usdc_balance(fallback) == pytest.approx(fallback)
+    assert s.last_usdc_balance_source == "fallback_missing_wallet_or_token"
+
+
+def test_query_onchain_usdc_balance_retries_and_succeeds(monkeypatch):
+    import nanoclaw.config as nc_cfg
+
+    s = _build_strategy_tuned()
+    monkeypatch.setenv("WALLET", "0x" + "3" * 40)
+    monkeypatch.setenv("USDC", "0x" + "2" * 40)
+    monkeypatch.setenv("X_SIGNAL_ONCHAIN_USDC_RETRY_ATTEMPTS", "2")
+
+    calls = {"count": 0}
+
+    class _FakeContract:
+        @property
+        def functions(self):
+            return self
+
+        def balanceOf(self, _wallet):
+            return self
+
+        def call(self):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                raise RuntimeError("temporary RPC error")
+            return 102_870_000
+
+    class _FakeEth:
+        def contract(self, address, abi):
+            _ = (address, abi)
+            return _FakeContract()
+
+    class _FakeWeb3Client:
+        eth = _FakeEth()
+
+    monkeypatch.setattr(nc_cfg, "connect_web3", lambda *args, **kwargs: _FakeWeb3Client())
+
+    out = s._query_onchain_usdc_balance(10.0)
+    assert out == pytest.approx(102.87)
+    assert calls["count"] == 2
+    assert s.last_usdc_balance_source == "onchain"
+
+
+def test_query_onchain_usdc_balance_uses_fallback_only_after_retries(monkeypatch):
+    import nanoclaw.config as nc_cfg
+
+    s = _build_strategy_tuned()
+    monkeypatch.setenv("WALLET", "0x" + "3" * 40)
+    monkeypatch.setenv("USDC", "0x" + "2" * 40)
+    monkeypatch.setenv("X_SIGNAL_ONCHAIN_USDC_RETRY_ATTEMPTS", "3")
+
+    calls = {"count": 0}
+
+    class _FakeContract:
+        @property
+        def functions(self):
+            return self
+
+        def balanceOf(self, _wallet):
+            return self
+
+        def call(self):
+            calls["count"] += 1
+            raise RuntimeError("RPC down")
+
+    class _FakeEth:
+        def contract(self, address, abi):
+            _ = (address, abi)
+            return _FakeContract()
+
+    class _FakeWeb3Client:
+        eth = _FakeEth()
+
+    monkeypatch.setattr(nc_cfg, "connect_web3", lambda *args, **kwargs: _FakeWeb3Client())
+
+    fallback = 41.5
+    out = s._query_onchain_usdc_balance(fallback)
+    assert out == pytest.approx(fallback)
+    assert calls["count"] == 3
+    assert s.last_usdc_balance_source == "fallback_after_retries"
 
 
 def test_buy_uses_onchain_balance_override_for_execution(monkeypatch):
