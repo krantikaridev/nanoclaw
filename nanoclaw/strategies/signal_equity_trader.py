@@ -5,7 +5,7 @@ import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional, Sequence, Tuple
+from typing import Any, Callable, Optional, Sequence, Tuple
 
 import config as cfg
 from config import (
@@ -32,8 +32,6 @@ from nanoclaw.utils.gas_protector import GasProtector
 
 logger = logging.getLogger(__name__)
 
-# BUY notional at high conviction: WMATIC-tier reference cap (USD); other symbols use ``_high_conviction_symbol_size_factor``.
-_HIGH_CONVICTION_WMATIC_MAX_USD = 4.50
 _HARD_BYPASS_ENABLED = cfg.env_bool("HARD_BYPASS_ENABLED", True)
 _HARD_BYPASS_MIN_TRADE_USD = cfg.env_float("MIN_TRADE_USD", 15.0)
 
@@ -262,6 +260,17 @@ class SignalEquityTraderBuilder:
 
 
 class SignalEquityTrader:
+    _ERC20_BALANCE_OF_ABI = [
+        {
+            "constant": True,
+            "inputs": [{"name": "_owner", "type": "address"}],
+            "name": "balanceOf",
+            "outputs": [{"name": "balance", "type": "uint256"}],
+            "stateMutability": "view",
+            "type": "function",
+        }
+    ]
+
     def __init__(self, config: SignalEquityTraderConfig, gas_protector: GasProtector, usdc_address: str) -> None:
         self.config = config
         self.gas_protector = gas_protector
@@ -338,24 +347,48 @@ class SignalEquityTrader:
         return can_trade_asset(symbol, current_time, self.config.per_asset_cooldown_seconds)
 
     @staticmethod
-    def _high_conviction_symbol_size_factor(symbol: str) -> float:
-        """Scale vs WMATIC reference cap (liquidity / volatility tier)."""
-        sym = str(symbol).strip().upper()
-        if "WMATIC" in sym:
-            return 1.0
-        if "WBTC" in sym or "BTC" in sym:
-            return 0.75
-        if "WETH" in sym:
-            return 0.90
-        if "LINK" in sym:
-            return 0.85
-        return 0.90
+    def _to_float(value: Any, default: float = 0.0) -> float:
+        try:
+            return float(value)
+        except Exception:
+            return float(default)
 
-    def _high_conviction_cap_usd(self, symbol: str, signal_strength: float) -> Optional[float]:
-        """USD cap for high-conviction BUY, or None if below high-conviction threshold."""
-        if float(signal_strength) < float(self.config.high_conviction_threshold):
-            return None
-        return float(_HIGH_CONVICTION_WMATIC_MAX_USD) * self._high_conviction_symbol_size_factor(symbol)
+    def _query_onchain_usdc_balance(self, fallback_balance: float) -> float:
+        """Read wallet USDC balance directly from chain; fallback to upstream snapshot on error."""
+        wallet = cfg.env_str("WALLET", "")
+        token = cfg.env_str("USDC", self.usdc_address)
+        rpc_url = cfg.env_str("RPC", "")
+        if not wallet or not token:
+            return float(fallback_balance)
+        try:
+            from nanoclaw.config import connect_web3
+            from web3 import Web3
+
+            if rpc_url:
+                web3_client = connect_web3(urls=[rpc_url])
+            else:
+                web3_client = connect_web3()
+            checksum_wallet = Web3.to_checksum_address(wallet)
+            checksum_token = Web3.to_checksum_address(token)
+            contract = web3_client.eth.contract(address=checksum_token, abi=self._ERC20_BALANCE_OF_ABI)
+            raw_balance = contract.functions.balanceOf(checksum_wallet).call()
+            return float(raw_balance) / 1_000_000.0
+        except Exception as exc:
+            logger.warning("on-chain USDC balance query failed; using fallback snapshot: %s", exc)
+            return float(fallback_balance)
+
+    def _estimate_gas_cost_usd(self, gas_gwei: float) -> float:
+        # Approximate ERC20 swap gas on Polygon; converted with env-driven POL_USD_PRICE.
+        est_swap_gas_units = 180000.0
+        pol_price_usd = max(0.0, float(getattr(cfg, "POL_USD_PRICE", 0.0)))
+        return max(0.0, (float(gas_gwei) * est_swap_gas_units / 1_000_000_000.0) * pol_price_usd)
+
+    def _expected_profit_usd(self, trade_size: float, upside_pct: Optional[float]) -> float:
+        if isinstance(upside_pct, (int, float)) and float(upside_pct) > 0:
+            expected_edge_pct = float(upside_pct)
+        else:
+            expected_edge_pct = max(0.0, float(self.config.strong_take_profit_pct))
+        return max(0.0, float(trade_size) * (expected_edge_pct / 100.0))
 
     def _compute_trade_size(
         self,
@@ -368,8 +401,9 @@ class SignalEquityTrader:
         """USD size between FIXED_TRADE_USD_MIN/MAX (runtime), scaled by |signal| vs strong threshold; capped by USDC."""
         from modules import runtime as rt
 
-        lo = float(rt.FIXED_TRADE_USD_MIN)
-        hi = float(rt.FIXED_TRADE_USD_MAX)
+        # Keep strategy dynamic but never in the gas-killed micro-trade band.
+        lo = max(float(rt.FIXED_TRADE_USD_MIN), 8.0)
+        hi = max(float(rt.FIXED_TRADE_USD_MAX), 12.0)
         if hi < lo:
             lo, hi = hi, lo
         thr = float(self.config.strong_signal_threshold)
@@ -380,10 +414,7 @@ class SignalEquityTrader:
             t = (s_abs - thr) / (1.0 - thr)
         t = max(0.0, min(1.0, t))
         raw = lo + (hi - lo) * t
-        sized = min(float(raw), float(usdc_balance))
-        cap = self._high_conviction_cap_usd(symbol, signal_strength)
-        if cap is not None:
-            sized = min(float(sized), cap)
+        sized = min(float(raw), float(usdc_balance), float(self.config.max_trade_usdc))
         _lp = (LOG_PREFIX or "").strip() or "[nanoclaw]"
         print(f"{_lp} DYNAMIC SIZING | Size=${sized:.2f} | Signal={float(signal_strength):.2f}")
         return max(0.0, float(sized))
@@ -530,7 +561,8 @@ class SignalEquityTrader:
                 print(f"[nanoclaw] BLOCK: {sym} | usdc_identity_noop")
                 logger.debug("build_plan block sym=%s reason=usdc_identity_noop", sym)
                 return None, "usdc_identity_noop"
-            usdc_balance = 18.0  # TEMP HARDCODE - remove tomorrow morning
+            # Prefer fresh on-chain USDC for execution sizing; keep upstream balance as fallback.
+            usdc_balance = self._to_float(self._query_onchain_usdc_balance(usdc_balance), 0.0)
             if usdc_balance <= 0:
                 print(f"[nanoclaw] BLOCK: {sym} | zero_usdc (balance=${usdc_balance:.2f})")
                 logger.debug("build_plan block sym=%s reason=zero_usdc", sym)
@@ -556,6 +588,20 @@ class SignalEquityTrader:
                     float(_HARD_BYPASS_MIN_TRADE_USD),
                 )
                 return None, "small_trade_bypass"
+            gas_cost_usd = self._estimate_gas_cost_usd(gas_gwei)
+            expected_profit_usd = self._expected_profit_usd(trade_size, upside_pct)
+            if expected_profit_usd <= gas_cost_usd:
+                print(
+                    f"[nanoclaw] BLOCK: {sym} | expected_profit_below_gas "
+                    f"(expected=${expected_profit_usd:.2f} <= gas=${gas_cost_usd:.2f})"
+                )
+                logger.debug(
+                    "build_plan block sym=%s reason=expected_profit_below_gas expected=%s gas=%s",
+                    sym,
+                    expected_profit_usd,
+                    gas_cost_usd,
+                )
+                return None, "expected_profit_below_gas"
             tp = float(self.config.strong_take_profit_pct)
             price_note = f" @ ${current_price_usd:.2f}" if isinstance(current_price_usd, (int, float)) else ""
             earn_note = (

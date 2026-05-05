@@ -2,6 +2,7 @@ import json
 
 import pytest
 
+from nanoclaw.strategies import signal_equity_trader as strategy_module
 from nanoclaw.strategies.signal_equity_trader import SignalEquityTrader
 from nanoclaw.utils.gas_protector import GasProtector
 
@@ -506,8 +507,8 @@ def test_buy_fixed_size_is_now_stopped_by_hard_bypass_when_under_15():
     assert reason == "small_trade_bypass"
 
 
-def test_buy_high_conviction_capped_below_min_trade_usdc_blocked():
-    """High-conviction per-asset cap can sit under min_trade_usdc; such plans must not execute."""
+def test_buy_no_longer_uses_legacy_high_conviction_cap():
+    """Regression: old per-asset cap removed; hard bypass remains the active small-trade guard."""
     s = _build_strategy_tuned(min_trade_usdc=5.0)
     _, reason = s.build_plan_with_block_reason(
         symbol="WBTC_ALPHA",
@@ -521,7 +522,7 @@ def test_buy_high_conviction_capped_below_min_trade_usdc_blocked():
         wallet_address_for_gas="0x" + "3" * 40,
         can_trade_asset=lambda *_a, **_k: True,
     )
-    assert reason == "below_min_trade_usdc"
+    assert reason == "small_trade_bypass"
 
 
 def test_buy_wmatic_high_conviction_cap_is_blocked_when_min_trade_usd_is_22():
@@ -558,6 +559,57 @@ def test_hard_bypass_blocks_micro_trade_under_15_usd():
     )
     assert plan is None
     assert reason == "small_trade_bypass"
+
+
+def test_query_onchain_usdc_balance_falls_back_to_snapshot_when_wallet_missing(monkeypatch):
+    s = _build_strategy_tuned()
+    monkeypatch.delenv("WALLET", raising=False)
+    fallback = 33.25
+    assert s._query_onchain_usdc_balance(fallback) == pytest.approx(fallback)
+
+
+def test_buy_uses_onchain_balance_override_for_execution(monkeypatch):
+    s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
+    monkeypatch.setattr(s, "_query_onchain_usdc_balance", lambda _fallback: 40.0)
+    monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 8.0)
+
+    plan, reason = s.build_plan_with_block_reason(
+        symbol="WETH_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.92,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=0.0,  # stale snapshot; should be replaced by on-chain read
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+        upside_pct=20.0,
+    )
+    assert reason is None
+    assert plan is not None
+    assert plan.trade_size > 0.0
+
+
+def test_buy_blocks_when_expected_profit_is_below_gas(monkeypatch):
+    s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
+    monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 1.0)
+    monkeypatch.setattr(s, "_estimate_gas_cost_usd", lambda _gas_gwei: 2.0)
+
+    _, reason = s.build_plan_with_block_reason(
+        symbol="WETH_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.92,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=40.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+        upside_pct=1.0,
+    )
+    assert reason == "expected_profit_below_gas"
 
 
 def test_sell_path_equity_to_usdc():
