@@ -31,8 +31,6 @@ from .runtime import (
     X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD,
     X_SIGNAL_FORCE_HIGH_CONVICTION,
     X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD,
-    X_SIGNAL_HIGH_CONVICTION_PREP_MIN_USDC,
-    X_SIGNAL_HIGH_CONVICTION_PREP_MIN_WMATIC,
     X_SIGNAL_USDC_MIN,
     X_SIGNAL_USDC_SAFE_FLOOR,
     X_SIGNAL_WMATIC_MIN_VALUE,
@@ -653,9 +651,6 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
         trader = tuned_trader
         min_trade_usdc = float(trader.config.min_trade_usdc)
         min_usdc = float(X_SIGNAL_USDC_MIN)
-        required_usdc_floor = max(float(min_usdc), min_trade_usdc)
-        # Align auto-USDC with equity sizing: never aim below min_trade_usdc.
-        auto_usdc_target = required_usdc_floor
 
         force_floor = float(min_usdc)
         if has_strong_buy and balances.usdc < max(force_floor, min_trade_usdc):

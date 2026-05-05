@@ -33,7 +33,7 @@ type nanodaily
 ```
 
 `nanostatus`, `nanopnl`, and `nanorestart` now forward CLI flags to `scripts/pnl_report.py` (example: `--reset-session`).
-`scripts/pnl_report.py` prefers live balance snapshots (paired `WALLET BALANCE` + `Real USDT` and direct `Real USDT`), chooses the most recent usable live snapshot, and only falls back to `MANUAL CORRECT BALANCE` when live data is not usable.
+`scripts/pnl_report.py` prefers live balance snapshots (paired `WALLET BALANCE` + `Real USDT` and direct `Real USDT`), chooses the most recent usable live snapshot, and only falls back to `MANUAL CORRECT BALANCE` when live data is not usable. Live/manual snapshots are filtered by sanity checks (finite, non-negative, and reasonable component bounds) before source preference is applied.
 
 Verify standalone shims are discoverable on `PATH`:
 

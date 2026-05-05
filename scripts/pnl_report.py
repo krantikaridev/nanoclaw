@@ -6,6 +6,7 @@ import csv
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import json
+import math
 from pathlib import Path
 import re
 import sys
@@ -15,11 +16,12 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from modules.baseline import resolve_portfolio_baseline_usd
+from modules.baseline import resolve_portfolio_baseline_usd  # noqa: E402
 
 LOG_FILE = "real_cron.log"
 PORTFOLIO_HISTORY_FILE = "portfolio_history.csv"
 SESSION_BASELINE_FILE = "portfolio_session_baseline.json"
+_MAX_REASONABLE_BALANCE_COMPONENT = 10_000_000.0
 MANUAL_PATTERN = re.compile(
     r"MANUAL CORRECT BALANCE.*USDC=\$?([\d.]+).*WMATIC=\$?([\d.]+).*USDT=\$?([\d.]+).*Source=([A-Za-z0-9_-]+)",
     re.IGNORECASE,
@@ -122,6 +124,13 @@ def _source_label(snapshot: BalanceSnapshot) -> str:
 
 
 def _is_usable_snapshot(snapshot: BalanceSnapshot) -> bool:
+    values = (snapshot.usdt, snapshot.usdc, snapshot.wmatic, snapshot.total)
+    if not all(math.isfinite(float(v)) for v in values):
+        return False
+    if any(float(v) < 0.0 for v in values):
+        return False
+    if max(float(snapshot.usdt), float(snapshot.usdc), float(snapshot.wmatic)) > _MAX_REASONABLE_BALANCE_COMPONENT:
+        return False
     if snapshot.total <= 5:
         return False
     return True

@@ -165,6 +165,26 @@ def test_get_current_balance_keeps_live_snapshot_when_wmatic_is_high(tmp_path: P
     assert current["total"] == 125.0
 
 
+def test_get_current_balance_discards_unreasonable_live_snapshot_and_falls_back(tmp_path: Path, monkeypatch) -> None:
+    log_file = _write_log(
+        tmp_path,
+        "\n".join(
+            [
+                # Corrupted/unreasonable WMATIC value should be rejected by sanity guard.
+                "2026-05-04 10:05:00 Real USDT: 20.00 | USDC: 80.00 | WMATIC: 99999999.00",
+                "[2026-05-04 10:06:00] MANUAL CORRECT BALANCE | USDC=$67.00 | WMATIC=$4.00 | USDT=$31.00 | TOTAL=$102.00 | Source=AutoLogger",
+            ]
+        ),
+    )
+    monkeypatch.setattr(pnl_report, "LOG_FILE", str(log_file))
+
+    current = pnl_report.get_current_balance()
+
+    assert current is not None
+    assert current["source"] == "MANUAL (AutoLogger)"
+    assert current["total"] == 102.0
+
+
 def test_resolve_session_baseline_creates_and_resets(tmp_path: Path, monkeypatch) -> None:
     baseline_file = tmp_path / "portfolio_session_baseline.json"
     monkeypatch.setattr(pnl_report, "SESSION_BASELINE_FILE", str(baseline_file))

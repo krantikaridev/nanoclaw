@@ -312,7 +312,7 @@ Earnings Volatility Capture Engine v1, while preserving strict hard risk limits 
 | Command | What it does |
 |---------|----------------|
 | `nanoup` | Safe update + restart (recommended) |
-| `nanostatus` | Runs `python scripts/pnl_report.py`: current balances (USDT/USDC/WMATIC/TOTAL), baseline/session/24h PnL, and recent trade hints from `real_cron.log`. Balance source preference is live first (paired `WALLET BALANCE` + `Real USDT` and direct `Real USDT` lines), selecting the most recent usable live snapshot; manual correction lines are fallback only. |
+| `nanostatus` | Runs `python scripts/pnl_report.py`: current balances (USDT/USDC/WMATIC/TOTAL), baseline/session/24h PnL, and recent trade hints from `real_cron.log`. Balance source preference is live first (paired `WALLET BALANCE` + `Real USDT` and direct `Real USDT` lines), selecting the most recent usable live snapshot. Snapshot sanity guard rejects non-finite/negative/unreasonable values before selection; manual correction lines are fallback only. |
 | `nanopnl` | Alias of `nanostatus` for fast PnL checks (same live-first balance sourcing rules) |
 | `nanodaily` | Daily health snapshot: balances, bypass/cooldown/protection counters, commit, TEST_MODE |
 | `nanobot` | Live `real_cron.log` stream (`tail -f`) for runtime diagnostics |
