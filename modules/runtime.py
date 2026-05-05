@@ -433,23 +433,43 @@ def _quote_followed_token_usdt_mtm(
         pass
 
     best_v3 = 0
-    quoter_addr = str(cfg.UNISWAP_V3_QUOTER).strip()
+    quoter_v1 = str(cfg.UNISWAP_V3_QUOTER).strip()
+    quoter_v2 = str(cfg.UNISWAP_V3_QUOTER_V2).strip()
+    from nanoclaw.execution.uniswap_v3_helpers import quote_exact_input_single_quoterv2
+
     for fee in (500, 3000, 10000):
-        try:
-            amt_out, _mn = quote_exact_input_single(
-                web3_client,
-                quoter_address=quoter_addr,
-                quoter_abi=UNISWAP_V3_QUOTER_ABI,
-                token_in=t_in,
-                token_out=t_usdt,
-                amount_in=int(amount_in_raw),
-                slippage_bps=slip,
-                fee=int(fee),
-            )
-            if int(amt_out) > best_v3:
-                best_v3 = int(amt_out)
-        except Exception:
-            continue
+        got = 0
+        if quoter_v2:
+            try:
+                got = int(
+                    quote_exact_input_single_quoterv2(
+                        web3_client,
+                        quoter_address=quoter_v2,
+                        token_in=t_in,
+                        token_out=t_usdt,
+                        amount_in=int(amount_in_raw),
+                        fee=int(fee),
+                    )
+                )
+            except Exception:
+                got = 0
+        if got <= 0 and quoter_v1:
+            try:
+                amt_out, _mn = quote_exact_input_single(
+                    web3_client,
+                    quoter_address=quoter_v1,
+                    quoter_abi=UNISWAP_V3_QUOTER_ABI,
+                    token_in=t_in,
+                    token_out=t_usdt,
+                    amount_in=int(amount_in_raw),
+                    slippage_bps=slip,
+                    fee=int(fee),
+                )
+                got = int(amt_out)
+            except Exception:
+                got = 0
+        if got > best_v3:
+            best_v3 = got
     return float(best_v3) / 1_000_000.0 if best_v3 > 0 else 0.0
 
 

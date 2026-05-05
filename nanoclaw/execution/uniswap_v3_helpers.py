@@ -148,3 +148,27 @@ def quote_exact_input_single(
     )
     amount_out_min = max(1, (amount_out * (10000 - min(int(slippage_bps), 9999))) // 10000)
     return amount_out, amount_out_min
+
+
+def quote_exact_input_single_quoterv2(
+    w3,
+    *,
+    quoter_address: str,
+    token_in: str,
+    token_out: str,
+    amount_in: int,
+    fee: int,
+) -> int:
+    """Quote amountOut via Uniswap QuoterV2 (struct ``quoteExactInputSingle``). Polygon-friendly."""
+    from nanoclaw.abi.uniswap_v3_abi import UNISWAP_V3_QUOTER_V2_ABI
+
+    quoter = w3.eth.contract(address=Web3.to_checksum_address(quoter_address), abi=UNISWAP_V3_QUOTER_V2_ABI)
+    params = (
+        Web3.to_checksum_address(token_in),
+        Web3.to_checksum_address(token_out),
+        int(amount_in),
+        int(fee),
+        0,
+    )
+    amount_out, _sqrt_after, _ticks, _gas_est = quoter.functions.quoteExactInputSingle(params).call()
+    return int(amount_out)
