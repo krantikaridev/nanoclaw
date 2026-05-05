@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 from web3 import Web3
 
@@ -171,4 +171,36 @@ def quote_exact_input_single_quoterv2(
         0,
     )
     amount_out, _sqrt_after, _ticks, _gas_est = quoter.functions.quoteExactInputSingle(params).call()
+    return int(amount_out)
+
+
+def encode_uniswap_v3_path(token_addresses: Sequence[str], fees: list[int]) -> bytes:
+    """Packed path for QuoterV2.quoteExactInput (token, fee, token, fee, …, token)."""
+    if len(fees) != len(token_addresses) - 1:
+        raise ValueError("fees must have length len(token_addresses) - 1")
+    out = b""
+    for i, addr in enumerate(token_addresses[:-1]):
+        cs = Web3.to_checksum_address(str(addr).strip())
+        out += bytes.fromhex(cs[2:])
+        fee = int(fees[i])
+        if fee < 0 or fee > 0xFFFFFF:
+            raise ValueError("fee must fit uint24")
+        out += fee.to_bytes(3, "big")
+    last = Web3.to_checksum_address(str(token_addresses[-1]).strip())
+    out += bytes.fromhex(last[2:])
+    return out
+
+
+def quote_exact_input_multihop_quoterv2(
+    w3,
+    *,
+    quoter_address: str,
+    path: bytes,
+    amount_in: int,
+) -> int:
+    """Quote full path via QuoterV2 (e.g. WETH→USDC→USDT on Polygon)."""
+    from nanoclaw.abi.uniswap_v3_abi import UNISWAP_V3_QUOTER_V2_ABI
+
+    quoter = w3.eth.contract(address=Web3.to_checksum_address(quoter_address), abi=UNISWAP_V3_QUOTER_V2_ABI)
+    amount_out, _slist, _tlist, _gas = quoter.functions.quoteExactInput(path, int(amount_in)).call()
     return int(amount_out)

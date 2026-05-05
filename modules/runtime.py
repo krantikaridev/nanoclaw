@@ -406,7 +406,7 @@ def _quote_followed_token_usdt_mtm(
     amount_in_raw: int,
     slippage_bps: int,
 ) -> float:
-    """USDT notional (human, 6 decimals) for FE_USD: QuickSwap-style router, then Uniswap V3 direct fee tiers."""
+    """USDT notional (human, 6 decimals) for FE_USD: V2 router, QuoterV2 single-hop, legacy Quoter, then QuoterV2 multi-hop."""
     if amount_in_raw <= 0:
         return 0.0
     from web3 import Web3 as Web3Local
@@ -470,6 +470,44 @@ def _quote_followed_token_usdt_mtm(
                 got = 0
         if got > best_v3:
             best_v3 = got
+    if best_v3 <= 0 and quoter_v2:
+        from nanoclaw.execution.uniswap_v3_helpers import (
+            encode_uniswap_v3_path,
+            quote_exact_input_multihop_quoterv2,
+        )
+
+        t_usdc = Web3Local.to_checksum_address(str(USDC).strip())
+        wm = Web3Local.to_checksum_address(str(WMATIC).strip())
+        hop_candidates: list[tuple[list[str], list[int]]] = [
+            ([t_in, t_usdc, t_usdt], [500, 500]),
+            ([t_in, t_usdc, t_usdt], [500, 3000]),
+            ([t_in, t_usdc, t_usdt], [3000, 500]),
+            ([t_in, t_usdc, t_usdt], [3000, 3000]),
+            ([t_in, t_usdc, t_usdt], [500, 100]),
+            ([t_in, t_usdc, t_usdt], [3000, 100]),
+            ([t_in, t_usdc, t_usdt], [10000, 500]),
+            ([t_in, wm, t_usdt], [500, 500]),
+            ([t_in, wm, t_usdt], [3000, 500]),
+            ([t_in, wm, t_usdt], [500, 3000]),
+            ([t_in, wm, t_usdt], [3000, 3000]),
+        ]
+        seen_paths: set[bytes] = set()
+        for toks, fees in hop_candidates:
+            try:
+                pbytes = encode_uniswap_v3_path(toks, fees)
+                if pbytes in seen_paths:
+                    continue
+                seen_paths.add(pbytes)
+                got = quote_exact_input_multihop_quoterv2(
+                    web3_client,
+                    quoter_address=quoter_v2,
+                    path=pbytes,
+                    amount_in=int(amount_in_raw),
+                )
+                if got > best_v3:
+                    best_v3 = got
+            except Exception:
+                continue
     return float(best_v3) / 1_000_000.0 if best_v3 > 0 else 0.0
 
 
