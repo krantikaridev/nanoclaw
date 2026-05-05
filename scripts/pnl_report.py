@@ -124,9 +124,6 @@ def _source_label(snapshot: BalanceSnapshot) -> str:
 def _is_usable_snapshot(snapshot: BalanceSnapshot) -> bool:
     if snapshot.total <= 5:
         return False
-    # Filter obviously broken WMATIC values from stale parse noise.
-    if snapshot.source in {"paired", "real"} and snapshot.wmatic >= 15:
-        return False
     return True
 
 
