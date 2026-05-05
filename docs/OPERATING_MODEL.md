@@ -1,53 +1,47 @@
 # Operating Model (Human + Grok + Cursor)
 
-This page defines who does what so execution is repeatable and role confusion stays low.
+This file only defines roles and collaboration.  
+Execution rules live in `docs/DEV_WORKFLOW.md`.
 
 ## Roles
 
-- **Grok (strategy/review partner)**
-  - Helps set vision, priorities, and acceptance criteria.
-  - Reviews outcomes and helps decide next deltas.
-  - Produces clear implementation prompts for Cursor when requested by human.
+- **Human (krantikari)**
+  - Owns priorities, risk posture, and final go/no-go decisions.
+  - Approves deploys and confirms runtime behavior on VM.
+  - Decides when a task is complete.
 
-- **Human operator (owner/approver)**
-  - Decides priorities, risk posture, and when to deploy.
-  - Runs/approves VM-stage commands, validates runtime behavior, and confirms readiness.
-  - Reviews Cursor changes before push/deploy.
+- **Grok (strategy + review partner)**
+  - Helps shape strategy, acceptance criteria, and task breakdown.
+  - Challenges weak assumptions and raises risk/regression concerns.
+  - Produces clear prompts/checklists for implementation when needed.
 
 - **Cursor (implementation engine)**
-  - Implements major functionality and refactors.
-  - Adds/updates tests and docs with code changes.
-  - Produces repo-ready diffs for human review and push.
+  - Implements code changes in local repo.
+  - Updates tests/docs with behavior changes.
+  - Delivers review-ready, verifiable diffs.
 
-## Standard Loop
+## Collaboration Loop
 
-1. **Brainstorm and prioritize** (Grok + Human).
-2. **Create execution prompt** (Grok -> Human -> Cursor).
-3. **Implement in local repo** (Cursor), with tests/docs/env-template alignment.
-4. **Human review + push from local**.
-5. **Deploy on VM/stage** (Human) using the VM runbook.
-6. **Observe logs/PnL and validate** (Grok + Human).
-7. **Tune env or apply small follow-up fixes** as needed.
-8. Repeat.
+1. Human + Grok align on target outcome and acceptance checklist.
+2. Cursor implements in one cohesive pass (code + tests + docs).
+3. Human reviews diff and test evidence.
+4. Human deploys to VM using workflow scripts.
+5. Human + Grok review runtime signals/PnL and define next iteration.
 
-## Deployment Responsibility Split
+## Handoff Contract
 
-- **Major functionality**: done in Cursor/local, reviewed, then pushed.
-- **Runtime tuning and incident response**: usually small VM-stage changes (env, restart, health checks), then fed back into repo as needed.
+Every handoff between Human, Grok, and Cursor includes:
 
-## Rules Everyone Follows
+- current objective
+- current state (what is done / not done)
+- exact next action
+- blockers or risks
 
-- Keep `.env` as runtime truth; never commit it.
-- Keep `.env.example` in sync using:
-  - `python scripts/nanoenv_example.py --write`
-  - `python scripts/verify_env_example_keys.py`
-- Use repo command layer (`nanoup`, `nanokill`, `nanorestart`, `nanostatus`) via:
-  - `scripts/nanobot_aliases.sh --install`
-- Never run two write-enabled bots on the same wallet key.
-- Verify on VM before declaring done (`git log`, runtime logs, `nanopnl`/`nanostatus`).
+No handoff is complete without these 4 items.
 
-## Canonical References
+## Non-Negotiables
 
-- Global context/backlog/rules: `AI_CONTEXT.md`
-- VM deployment flow: `docs/readme-vm-update.md`
-- Commit/test/env workflow: `docs/DEV_WORKFLOW.md`
+- One writer bot per wallet/private key.
+- No secret sharing in chat or commits.
+- No “done” without verification evidence.
+- Workflow/process truth lives in `docs/DEV_WORKFLOW.md`.
