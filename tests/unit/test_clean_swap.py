@@ -681,6 +681,65 @@ def test_main_skips_small_wmatic_exit_when_below_min_trade_usd(monkeypatch, caps
     assert "TRADE SKIPPED | below minimum size" in out
 
 
+def test_main_records_wallet_performance_on_wmatic_to_usdc_exit(monkeypatch):
+    monkeypatch.setenv("POLYGON_PRIVATE_KEY", "0x" + "a" * 64)
+    monkeypatch.setattr(clean_swap, "load_state", lambda: {"last_run": 0.0})
+    monkeypatch.setattr(
+        clean_swap,
+        "get_balances",
+        lambda: clean_swap.Balances(usdt=40.0, wmatic=20.0, pol=1.0, usdc=10.0),
+    )
+    monkeypatch.setattr(clean_swap, "has_active_lock", lambda: False)
+    monkeypatch.setattr(clean_swap, "create_lock", lambda: None)
+    monkeypatch.setattr(clean_swap, "release_lock", lambda: None)
+    monkeypatch.setattr(clean_swap, "get_live_wmatic_price", lambda: 2.0)
+    monkeypatch.setattr(clean_swap, "write_portfolio_history_snapshot", lambda _price: None)
+    monkeypatch.setattr(clean_swap, "is_global_cooldown_active", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(clean_swap, "save_state", lambda _state: None)
+    monkeypatch.setattr(clean_swap, "get_pol_balance", lambda: 1.0)
+    monkeypatch.setattr(
+        clean_swap,
+        "get_gas_status",
+        lambda: {
+            "ok": True,
+            "gas_gwei": 20.0,
+            "max_gwei": 80.0,
+            "pol_balance": 1.0,
+            "min_pol_balance": 0.005,
+        },
+    )
+
+    monkeypatch.setattr(
+        swap_exec,
+        "determine_trade_decision",
+        lambda *_args, **_kwargs: clean_swap.TradeDecision(
+            direction="WMATIC_TO_USDC",
+            amount_in=int(4 * 1_000_000_000_000_000_000),
+            message="wmatic to usdc exit",
+        ),
+    )
+    async def _approve_and_swap(*_args, **_kwargs):
+        return "0xhash"
+
+    monkeypatch.setattr(swap_exec, "approve_and_swap", _approve_and_swap)
+    monkeypatch.setattr(clean_swap, "mark_asset_traded", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(clean_swap, "mark_wallet_traded", lambda *_args, **_kwargs: None)
+
+    captured: dict[str, float] = {}
+
+    def _record_copy_exit(*, exit_price_usd, exit_notional_usd):
+        captured["exit_price_usd"] = float(exit_price_usd)
+        captured["exit_notional_usd"] = float(exit_notional_usd)
+        return []
+
+    monkeypatch.setattr(swap_exec.wallet_performance, "record_copy_exit", _record_copy_exit)
+
+    asyncio.run(clean_swap.main(dry_run=False))
+
+    assert captured["exit_price_usd"] == 2.0
+    assert captured["exit_notional_usd"] == 8.0
+
+
 def test_try_x_signal_equity_decision_applies_dynamic_size_for_strong_buy(monkeypatch):
     class _Plan:
         direction = "USDC_TO_EQUITY"
@@ -1369,6 +1428,59 @@ def test_try_x_signal_logs_high_conviction_auto_usdc_failure(monkeypatch, capsys
     assert "AUTO-USDC top-up attempted but floor not reached" in out
 
 
+def test_try_x_signal_skips_auto_topup_when_flag_disabled(monkeypatch):
+    class _TunedConfig:
+        min_trade_usdc = 5.0
+        per_asset_cooldown_seconds = 1800
+        min_pol_for_gas = 0.005
+
+    class _TunedTrader:
+        config = _TunedConfig()
+        gas_protector = _DummyGasProtector()
+
+        def build_plan_with_block_reason(self, **kwargs):
+            _ = kwargs
+            return None, "mock_no_plan"
+
+        def build_plan(self, **kwargs):
+            _ = kwargs
+            return None
+
+    class _BaseTrader:
+        def load_followed_equities(self):
+            return [
+                clean_swap.FollowedEquity(
+                    symbol="WETH_ALPHA",
+                    token_address="0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+                    decimals=18,
+                    signal_strength=0.90,
+                )
+            ]
+
+    calls = {"count": 0}
+
+    def _ensure(*_args, **_kwargs):
+        calls["count"] += 1
+        return False
+
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_AUTO_USDC_TOPUP_ENABLED", False)
+    monkeypatch.setattr(clean_swap, "_load_followed_equities_json_dict", lambda: {"enabled": True, "min_signal_strength": 0.60})
+    monkeypatch.setattr(clean_swap, "_effective_equity_signal_min", lambda cfg: 0.60)
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_EQUITY_TRADER", _BaseTrader())
+    monkeypatch.setattr(clean_swap, "_tuned_signal_equity_trader", lambda min_strength: _TunedTrader())
+    monkeypatch.setattr(clean_swap, "can_trade_asset", lambda symbol, now=None, cooldown_seconds=0: True)
+    monkeypatch.setattr(clean_swap, "get_token_balance", lambda *_args, **_kwargs: 0.0)
+    monkeypatch.setattr(clean_swap, "ensure_usdc_for_x_signal", _ensure)
+
+    clean_swap.try_x_signal_equity_decision(
+        clean_swap.Balances(usdt=40.0, wmatic=10.0, pol=1.0, usdc=2.0),
+        dry_run=False,
+    )
+
+    assert calls["count"] == 0
+
+
 def test_try_x_signal_logs_standard_auto_usdc_failure(monkeypatch, capsys):
     class _TunedConfig:
         min_trade_usdc = 5.0
@@ -1752,6 +1864,40 @@ def test_ensure_usdc_for_x_signal_skipped_when_wmatic_price_zero(monkeypatch):
     assert clean_swap.ensure_usdc_for_x_signal(min_usdc=50.0, force=True) is False
 
 
+def test_ensure_usdc_for_x_signal_force_works_even_if_topup_flag_disabled(monkeypatch):
+    from modules import signal as signal_module
+
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_AUTO_USDC_TOPUP_ENABLED", False)
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_AUTO_USDC_MIN_SWAP_USD", 8.0)
+    monkeypatch.setattr(clean_swap, "GAS_PROTECTOR", _GasProtectorOk())
+    monkeypatch.setenv("POLYGON_PRIVATE_KEY", "0x" + "a" * 64)
+    monkeypatch.setattr(clean_swap, "get_live_wmatic_price", lambda: 2.0)
+    monkeypatch.setattr(clean_swap, "_strong_x_signal_buy_present", lambda: False)
+
+    state = {"calls": 0}
+
+    def _get_balances():
+        if state["calls"] == 0:
+            state["calls"] += 1
+            return clean_swap.Balances(usdt=30.0, wmatic=0.0, pol=1.0, usdc=5.0)
+        state["calls"] += 1
+        return clean_swap.Balances(usdt=10.0, wmatic=0.0, pol=1.0, usdc=30.0)
+
+    monkeypatch.setattr(clean_swap, "get_balances", _get_balances)
+
+    directions: list[str] = []
+
+    async def _fake_swap(*_args, **kwargs):
+        directions.append(str(kwargs.get("direction")))
+        return "0xhash"
+
+    monkeypatch.setattr(signal_module, "approve_and_swap", _fake_swap)
+
+    ok = clean_swap.ensure_usdc_for_x_signal(min_usdc=25.0, force=True)
+    assert ok is True
+    assert directions == ["USDT_TO_USDC"]
+
+
 def test_ensure_usdc_for_x_signal_prefers_usdt_before_wmatic(monkeypatch):
     from modules import signal as signal_module
 
@@ -1784,6 +1930,51 @@ def test_ensure_usdc_for_x_signal_prefers_usdt_before_wmatic(monkeypatch):
     ok = clean_swap.ensure_usdc_for_x_signal(min_usdc=25.0, force=True)
     assert ok is True
     assert directions == ["USDT_TO_USDC"]
+
+
+def test_ensure_usdc_for_x_signal_min_swap_threshold_skips_small_usdt_leg(monkeypatch):
+    from modules import signal as signal_module
+
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_AUTO_USDC_TOPUP_ENABLED", True)
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_AUTO_USDC_MIN_SWAP_USD", 12.0)
+    monkeypatch.setattr(clean_swap, "GAS_PROTECTOR", _GasProtectorOk())
+    monkeypatch.setenv("POLYGON_PRIVATE_KEY", "0x" + "a" * 64)
+    monkeypatch.setattr(clean_swap, "get_live_wmatic_price", lambda: 2.0)
+
+    state = {"calls": 0}
+
+    def _get_balances():
+        if state["calls"] == 0:
+            state["calls"] += 1
+            return clean_swap.Balances(usdt=10.0, wmatic=20.0, pol=1.0, usdc=5.0)
+        state["calls"] += 1
+        return clean_swap.Balances(usdt=10.0, wmatic=10.0, pol=1.0, usdc=30.0)
+
+    monkeypatch.setattr(clean_swap, "get_balances", _get_balances)
+
+    directions: list[str] = []
+
+    async def _fake_swap(*_args, **kwargs):
+        directions.append(str(kwargs.get("direction")))
+        return "0xhash"
+
+    monkeypatch.setattr(signal_module, "approve_and_swap", _fake_swap)
+
+    ok = clean_swap.ensure_usdc_for_x_signal(min_usdc=25.0, force=True)
+    assert ok is True
+    assert directions == ["WMATIC_TO_USDC"]
+
+
+def test_project_balances_after_auto_usdc_respects_min_swap_threshold(monkeypatch):
+    monkeypatch.setattr(clean_swap, "_strong_x_signal_buy_present", lambda: True)
+    monkeypatch.setattr(clean_swap, "GAS_PROTECTOR", _GasProtectorOk())
+    monkeypatch.setenv("POLYGON_PRIVATE_KEY", "0x" + "a" * 64)
+    monkeypatch.setattr(clean_swap, "get_live_wmatic_price", lambda: 2.0)
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_AUTO_USDC_MIN_SWAP_USD", 12.0)
+
+    b = clean_swap.Balances(usdt=10.0, wmatic=0.0, pol=1.0, usdc=5.0)
+    out = clean_swap._project_balances_after_auto_usdc(b, min_usdc=14.0, min_wmatic_value=15.0)
+    assert out == b
 
 
 def test_select_copy_trade_none_when_all_target_wallets_on_cooldown(monkeypatch):

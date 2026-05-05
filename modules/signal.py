@@ -244,8 +244,6 @@ def strong_buy_detector() -> bool:
 def ensure_usdc_for_x_signal(min_usdc: float = 8.0, min_wmatic_value: float = 15.0, force: bool = False) -> bool:
     """If USDC is below ``min_usdc`` and (a strong X-Signal BUY is active or force=True), swap USDT→USDC first, then WMATIC→USDC."""
     fac = _cs_mod()
-    if not bool(getattr(fac, "X_SIGNAL_AUTO_USDC_TOPUP_ENABLED", X_SIGNAL_AUTO_USDC_TOPUP_ENABLED)):
-        return False
     balances = fac.get_balances()
     if balances.usdc >= min_usdc:
         return True

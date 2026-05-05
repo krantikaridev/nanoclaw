@@ -21,6 +21,7 @@ from nanoclaw.strategies.usdc_copy import USDCopyStrategy
 from swap_executor import approve_and_swap
 
 from modules import attribution
+from modules import wallet_performance
 from protection import record_buy
 
 from . import runtime
@@ -411,6 +412,24 @@ async def main(*, dry_run: bool = False) -> None:
         )
         if tx_hash:
             attribution.notify_swap_success(decision=decision, tx_hash=tx_hash)
+            if decision.direction == "USDC_TO_WMATIC" and decision.cooldown_wallet and decision.cooldown_wallet[0]:
+                wallet_performance.record_copy_entry(
+                    str(decision.cooldown_wallet[0]).strip(),
+                    entry_price_usd=float(current_price),
+                    notional_usd=float(decision.trade_size or 0.0),
+                )
+            elif decision.direction in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:
+                closed = wallet_performance.record_copy_exit(
+                    exit_price_usd=float(current_price),
+                    exit_notional_usd=float(_decision_notional_usd(decision, current_price_usd=current_price) or 0.0),
+                )
+                for row in closed:
+                    print(
+                        "[nanoclaw] COPY WALLET PERFORMANCE UPDATE | "
+                        f"wallet={str(row.get('wallet', ''))[:10]}... "
+                        f"pnl=${float(row.get('pnl_usd', 0.0)):.2f} "
+                        f"notional=${float(row.get('notional_usd', 0.0)):.2f}"
+                    )
             print("✅ Swap executed successfully!")
             if decision.cooldown_asset:
                 sym_ca, secs_a = decision.cooldown_asset

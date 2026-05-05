@@ -4,6 +4,7 @@ import time
 from dataclasses import dataclass
 from typing import Callable, Iterable, Optional, Sequence
 
+import config as cfg
 from config import (
     COPY_TRADE_PCT,
     ENABLE_USDC_COPY,
@@ -105,11 +106,29 @@ class USDCopyStrategy:
         *,
         can_trade_wallet: WalletCooldownFn,
         now: Optional[float],
-    ) -> Optional[str]:
+    ) -> tuple[Optional[str], float]:
+        from modules import wallet_performance as wp
+
+        ranked: list[tuple[float, str, float, dict]] = []
         for wallet in wallets:
-            if can_trade_wallet(wallet, now, self.config.per_wallet_cooldown_seconds):
-                return wallet
-        return None
+            if not can_trade_wallet(wallet, now, self.config.per_wallet_cooldown_seconds):
+                continue
+            health = wp.wallet_health(wallet)
+            mult = float(health.get("allocation_multiplier", 1.0))
+            ranked.append((mult, wallet, mult, health))
+        if not ranked:
+            return None, 1.0
+        ranked.sort(key=lambda row: row[0], reverse=True)
+        _score, chosen, mult, health = ranked[0]
+        if bool(health.get("deprioritize", False)):
+            print(
+                "[nanoclaw] COPY WALLET DEPRIORITIZED | "
+                f"{chosen[:10]}... | trades={int(health.get('trades', 0))} "
+                f"win_rate={float(health.get('win_rate', 0.0)):.2f} "
+                f"avg_pnl=${float(health.get('avg_pnl_usd', 0.0)):.2f} "
+                f"alloc_mult={mult:.2f}"
+            )
+        return chosen, mult
 
     def _compute_trade_size(self, usdc_balance: float, usdt_balance: float = 0.0) -> float:
         from modules import runtime
@@ -118,7 +137,18 @@ class USDCopyStrategy:
         cap = runtime.fixed_copy_trade_usd(
             usdc_balance, usdt_balance, float(self.config.copy_trade_pct)
         )
-        return min(cap, usdc_balance)
+        hard_floor = max(0.0, float(getattr(cfg, "MIN_TRADE_USD", 15.0)))
+        min_viable = max(float(self.config.min_trade_usdc), 10.0, min(hard_floor, float(self.config.max_trade_usdc)))
+        sized = min(float(cap), float(usdc_balance), float(self.config.max_trade_usdc))
+        if sized < min_viable and float(usdc_balance) >= min_viable:
+            sized = min_viable
+        return max(0.0, float(sized))
+
+    @staticmethod
+    def _estimate_gas_cost_usd(gas_gwei: float) -> float:
+        est_swap_gas_units = 180000.0
+        pol_price_usd = max(0.0, float(getattr(cfg, "POL_USD_PRICE", 0.0)))
+        return max(0.0, (float(gas_gwei) * est_swap_gas_units / 1_000_000_000.0) * pol_price_usd)
 
     def build_plan(
         self,
@@ -150,12 +180,42 @@ class USDCopyStrategy:
             return None
 
         current_time = time.time() if now is None else now
-        chosen_wallet = self._pick_wallet(wallet_list, can_trade_wallet=can_trade_wallet, now=current_time)
+        chosen_wallet, wallet_alloc_mult = self._pick_wallet(
+            wallet_list, can_trade_wallet=can_trade_wallet, now=current_time
+        )
         if not chosen_wallet:
             return None
 
-        trade_size = self._compute_trade_size(usdc_balance, usdt_balance)
+        trade_size = self._compute_trade_size(usdc_balance, usdt_balance) * float(wallet_alloc_mult)
         if trade_size <= 0 or trade_size > usdc_balance:
+            return None
+        if wallet_alloc_mult < 1.0 and trade_size < float(cfg.COPY_MIN_MARGINAL_TRADE_USD):
+            print(
+                "[nanoclaw] COPY TRADE SKIPPED | marginal signal after wallet penalty "
+                f"(wallet={chosen_wallet[:10]}..., size=${trade_size:.2f}, floor=${float(cfg.COPY_MIN_MARGINAL_TRADE_USD):.2f})"
+            )
+            return None
+
+        gas_gwei = float(gas_status.get("gas_gwei", 0.0) or 0.0)
+        gas_cost_usd = self._estimate_gas_cost_usd(gas_gwei)
+        expected_edge_pct = max(0.5, float(cfg.COPY_BASE_EXPECTED_EDGE_PCT) * float(wallet_alloc_mult))
+        expected_profit_usd = max(0.0, float(trade_size) * (expected_edge_pct / 100.0))
+        min_expected_profit_usd = float(cfg.COPY_GAS_EDGE_MULTIPLIER) * gas_cost_usd
+        effective_after_gas = float(trade_size) - gas_cost_usd
+        min_effective_after_gas = float(cfg.COPY_MIN_EFFECTIVE_TRADE_AFTER_GAS_USD)
+        if expected_profit_usd <= min_expected_profit_usd:
+            print(
+                "[nanoclaw] COPY TRADE SKIPPED | expected edge below gas threshold "
+                f"(wallet={chosen_wallet[:10]}..., expected=${expected_profit_usd:.2f}, "
+                f"required>${min_expected_profit_usd:.2f}, gas=${gas_cost_usd:.2f})"
+            )
+            return None
+        if effective_after_gas < min_effective_after_gas:
+            print(
+                "[nanoclaw] COPY TRADE SKIPPED | effective size below gas-adjusted minimum "
+                f"(wallet={chosen_wallet[:10]}..., effective=${effective_after_gas:.2f}, "
+                f"required>=${min_effective_after_gas:.2f}, gas=${gas_cost_usd:.2f})"
+            )
             return None
 
         return USDCopyPlan(
