@@ -12,6 +12,7 @@ import time
 import tempfile
 from datetime import datetime, timezone
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 try:
@@ -91,6 +92,27 @@ X_SIGNAL_AUTO_USDC_FAIL_COOLDOWN_SECONDS = cfg.X_SIGNAL_AUTO_USDC_FAIL_COOLDOWN_
 def _nanolog() -> str:
     p = (LOG_PREFIX or "").strip()
     return f"{p} " if p else ""
+
+
+# region agent log
+_AGENT_DEBUG_LOG = Path(__file__).resolve().parents[1] / "debug-0a457c.log"
+
+
+def _agent_debug_ndjson(payload: dict) -> None:
+    """Append one NDJSON line for debug-mode investigation (session 0a457c)."""
+    try:
+        row = {
+            "sessionId": "0a457c",
+            "timestamp": int(time.time() * 1000),
+            **payload,
+        }
+        with _AGENT_DEBUG_LOG.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, default=str) + "\n")
+    except Exception:
+        pass
+
+
+# endregion
 
 
 def _tp_thresholds_core() -> tuple[float, float]:
@@ -508,19 +530,82 @@ def _quote_followed_token_usdt_mtm(
                     best_v3 = got
             except Exception:
                 continue
-    return float(best_v3) / 1_000_000.0 if best_v3 > 0 else 0.0
+    # region agent log
+    out_usdt = float(best_v3) / 1_000_000.0 if best_v3 > 0 else 0.0
+    try:
+        _agent_debug_ndjson(
+            {
+                "hypothesisId": "H2",
+                "location": "runtime._quote_followed_token_usdt_mtm:exit",
+                "message": "followed token MTM quote",
+                "data": {
+                    "token_in_tail": str(t_in)[-12:],
+                    "amount_in_raw": int(amount_in_raw),
+                    "best_v3_raw": int(best_v3),
+                    "out_usdt": float(out_usdt),
+                },
+            }
+        )
+    except Exception:
+        pass
+    # endregion
+    return out_usdt
 
 
 def _followed_equity_tokens_usdt_usd() -> float:
     """Router-quoted USDT value for non-core followed tokens (excludes USDC/USDT/WMATIC already in Balances)."""
     total = 0.0
+    # region agent log
+    wf = ""
+    try:
+        w = str(WALLET).strip()
+        if len(w) >= 10:
+            wf = f"{w[:6]}…{w[-4:]}"
+    except Exception:
+        wf = ""
+    # endregion
     try:
         assets = X_SIGNAL_EQUITY_TRADER.load_followed_equities()
-    except Exception:
+    except Exception as exc:
+        # region agent log
+        _agent_debug_ndjson(
+            {
+                "hypothesisId": "H3",
+                "location": "runtime._followed_equity_tokens_usdt_usd:load",
+                "message": "load_followed_equities failed",
+                "data": {"err_type": type(exc).__name__, "err": str(exc)[:120]},
+            }
+        )
+        # endregion
         return 0.0
+    # region agent log
+    _agent_debug_ndjson(
+        {
+            "hypothesisId": "H3",
+            "location": "runtime._followed_equity_tokens_usdt_usd:entry",
+            "message": "followed equities scan",
+            "data": {
+                "n_assets": len(assets),
+                "followed_path": str(FOLLOWED_EQUITIES_PATH),
+                "wallet_fingerprint": wf,
+            },
+        }
+    )
+    # endregion
     for a in assets:
         addr = (a.token_address or "").strip()
+        sym = str(getattr(a, "symbol", "") or "").strip()
         if not addr:
+            # region agent log
+            _agent_debug_ndjson(
+                {
+                    "hypothesisId": "H3",
+                    "location": "runtime._followed_equity_tokens_usdt_usd:asset",
+                    "message": "skip asset",
+                    "data": {"symbol": sym, "reason": "no_addr"},
+                }
+            )
+            # endregion
             continue
         al = addr.lower()
         core_tokens = {USDC.lower(), USDT.lower(), WMATIC.lower()}
@@ -528,21 +613,89 @@ def _followed_equity_tokens_usdt_usd() -> float:
         if native:
             core_tokens.add(native)
         if al in core_tokens:
+            # region agent log
+            _agent_debug_ndjson(
+                {
+                    "hypothesisId": "H4",
+                    "location": "runtime._followed_equity_tokens_usdt_usd:asset",
+                    "message": "skip core token",
+                    "data": {"symbol": sym, "addr_tail": al[-8:]},
+                }
+            )
+            # endregion
             continue
         bal = get_token_balance(addr, int(a.decimals))
         if bal <= 0:
+            # region agent log
+            _agent_debug_ndjson(
+                {
+                    "hypothesisId": "H1",
+                    "location": "runtime._followed_equity_tokens_usdt_usd:asset",
+                    "message": "zero on-chain bal",
+                    "data": {"symbol": sym, "addr_tail": al[-8:], "bal": float(bal)},
+                }
+            )
+            # endregion
             continue
         amt = int(bal * (10 ** int(a.decimals)))
         if amt <= 0:
+            # region agent log
+            _agent_debug_ndjson(
+                {
+                    "hypothesisId": "H5",
+                    "location": "runtime._followed_equity_tokens_usdt_usd:asset",
+                    "message": "amount wei zero",
+                    "data": {"symbol": sym, "addr_tail": al[-8:], "bal": float(bal), "amt": int(amt), "decimals": int(a.decimals)},
+                }
+            )
+            # endregion
             continue
         slip = int(cfg.INVENTORY_MTM_SLIPPAGE_BPS)
         usdt_val = _quote_followed_token_usdt_mtm(w3, token_in=addr, amount_in_raw=amt, slippage_bps=slip)
+        added_px = 0.0
         if usdt_val > 0:
             total += usdt_val
+            # region agent log
+            _agent_debug_ndjson(
+                {
+                    "hypothesisId": "H2",
+                    "location": "runtime._followed_equity_tokens_usdt_usd:asset",
+                    "message": "fe leg quoted",
+                    "data": {"symbol": sym, "bal": float(bal), "amt": int(amt), "usdt_val": float(usdt_val)},
+                }
+            )
+            # endregion
             continue
         px = getattr(a, "current_price_usd", None)
         if px is not None and float(px) > 0 and bal > 0:
-            total += float(bal) * float(px)
+            added_px = float(bal) * float(px)
+            total += added_px
+        # region agent log
+        _agent_debug_ndjson(
+            {
+                "hypothesisId": "H2",
+                "location": "runtime._followed_equity_tokens_usdt_usd:asset",
+                "message": "quote zero for asset",
+                "data": {
+                    "symbol": sym,
+                    "bal": float(bal),
+                    "amt": int(amt),
+                    "usdt_val": float(usdt_val),
+                    "price_fallback_usd": float(added_px),
+                },
+            }
+        )
+        # endregion
+    # region agent log
+    _agent_debug_ndjson(
+        {
+            "hypothesisId": "H1",
+            "location": "runtime._followed_equity_tokens_usdt_usd:total",
+            "message": "fe_usd total",
+            "data": {"fe_usd": float(total)},
+        }
+    )
+    # endregion
     return total
 
 
