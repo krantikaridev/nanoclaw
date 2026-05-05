@@ -288,7 +288,16 @@ def get_token_balance(
     try:
         contract = client.eth.contract(address=token_a, abi=ERC20_ABI)
         return contract.functions.balanceOf(wallet_a).call() / (10**decimals)
-    except Exception:
+    except Exception as exc:
+        err_s = str(exc).strip().replace("\n", " ")
+        if len(err_s) > 220:
+            err_s = err_s[:217] + "..."
+        t_disp = f"{token_a[:10]}…{token_a[-6:]}" if len(str(token_a)) > 20 else str(token_a)
+        w_disp = f"{wallet_a[:10]}…{wallet_a[-6:]}" if len(str(wallet_a)) > 20 else str(wallet_a)
+        print(
+            f"{_nanolog()}BALANCE READ FAILED | token={t_disp} | wallet={w_disp} | "
+            f"{type(exc).__name__}: {err_s}"
+        )
         return 0.0
 
 
