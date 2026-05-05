@@ -230,14 +230,15 @@ if __name__ == "__main__":
     if not logging.root.handlers:
         logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
     _start_balance_logger()
-    startup_key, startup_key_source = cfg.resolve_private_key()
-    if startup_key:
-        print(f"{LOG_PREFIX} Private key resolved from {startup_key_source}")
-        print("🚀 Running one-time max approval at startup...")
-        _force_max_approval(w3, startup_key, UNISWAP_V3_SWAP_ROUTER)
-        print("✅ Startup approval complete. Bot ready.")
-    else:
-        print("⚠️ Startup approval skipped: private key not configured (POLYGON_PRIVATE_KEY / PRIVATE_KEY).")
+    try:
+        startup_key, startup_key_source = cfg.resolve_private_key(require=True, log_success=True)
+    except cfg.MissingPrivateKeyError as exc:
+        print(f"❌ {exc}")
+        raise SystemExit(2) from exc
+    print(f"{LOG_PREFIX} Private key resolved from {startup_key_source}")
+    print("🚀 Running one-time max approval at startup...")
+    _force_max_approval(w3, startup_key, UNISWAP_V3_SWAP_ROUTER)
+    print("✅ Startup approval complete. Bot ready.")
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--dry-run",

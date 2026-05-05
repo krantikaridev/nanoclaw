@@ -160,13 +160,13 @@ def test_approve_and_swap_prefers_polygon_private_key_over_other_sources(monkeyp
     assert source == "POLYGON_PRIVATE_KEY"
 
 
-def test_approve_and_swap_uses_function_arg_when_env_keys_missing(monkeypatch):
+def test_approve_and_swap_does_not_use_function_arg_when_env_keys_missing(monkeypatch):
     monkeypatch.delenv("POLYGON_PRIVATE_KEY", raising=False)
     monkeypatch.delenv("PRIVATE_KEY", raising=False)
 
     key, source = swap_executor._resolve_private_key("arg-key")
-    assert key == "arg-key"
-    assert source == "function_arg"
+    assert key == ""
+    assert source == "missing"
 
 
 def test_resolve_private_key_uses_legacy_when_polygon_missing(monkeypatch):

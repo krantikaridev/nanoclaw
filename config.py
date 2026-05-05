@@ -224,30 +224,46 @@ def parse_float(raw: Any, default: float) -> float:
 
 
 def get_resolved_key() -> str:
-    return resolve_private_key()[0]
+    return resolve_private_key(require=False)[0]
 
 
 class MissingPrivateKeyError(RuntimeError):
     """Raised when no supported private key source is available."""
 
 
-def resolve_private_key(private_key_param: str | None = None, *, require: bool = False) -> tuple[str, str]:
+_PRIVATE_KEY_LOGGED_SOURCE: str | None = None
+
+
+def _resolve_private_key_from_env() -> tuple[str, str]:
+    env_polygon_key = env_str("POLYGON_PRIVATE_KEY", "")
+    if env_polygon_key:
+        return env_polygon_key, "POLYGON_PRIVATE_KEY"
+    env_legacy_key = env_str("PRIVATE_KEY", "")
+    if env_legacy_key:
+        return env_legacy_key, "PRIVATE_KEY"
+    return "", "missing"
+
+
+def resolve_private_key(
+    private_key_param: str | None = None,
+    *,
+    require: bool = False,
+    log_success: bool = False,
+) -> tuple[str, str]:
     """
     Resolve signer key with a single shared precedence:
     1) POLYGON_PRIVATE_KEY
     2) PRIVATE_KEY (legacy)
-    3) function parameter fallback (when provided by caller)
+    Raises when ``require=True`` and neither env key exists.
     """
-    env_polygon_key = env_str("POLYGON_PRIVATE_KEY", "")
-    env_legacy_key = env_str("PRIVATE_KEY", "")
-    resolved_key = env_polygon_key or env_legacy_key or (str(private_key_param or "").strip())
-    source = (
-        "POLYGON_PRIVATE_KEY"
-        if env_polygon_key
-        else ("PRIVATE_KEY" if env_legacy_key else ("function_arg" if private_key_param else "missing"))
-    )
+    _ = private_key_param  # Kept for backward compatibility with existing call signatures.
+    global _PRIVATE_KEY_LOGGED_SOURCE
+    resolved_key, source = _resolve_private_key_from_env()
     if require and not resolved_key:
         raise MissingPrivateKeyError(
-            "Missing private key (set POLYGON_PRIVATE_KEY or PRIVATE_KEY, or pass private_key)"
+            "Missing private key. Set POLYGON_PRIVATE_KEY (preferred) or PRIVATE_KEY in your .env before running the bot."
         )
+    if log_success and resolved_key and _PRIVATE_KEY_LOGGED_SOURCE != source:
+        print(f"[nanoclaw] Private key loaded from {source}")
+        _PRIVATE_KEY_LOGGED_SOURCE = source
     return resolved_key, source

@@ -67,6 +67,8 @@ nanoup
 
 - **Install deps**: create/activate your Python environment and install requirements for this repo (project-specific).
 - **Configure env**: copy `.env.example` to `.env` (never commit secrets).
+  - Signing key resolution is centralized and env-only: `POLYGON_PRIVATE_KEY` (preferred), then `PRIVATE_KEY` (legacy).
+  - If neither key is present, startup exits with an actionable error before swaps/approvals run.
   - X-Signal equity now includes proactive USDC top-up before any BUY decision when USDC drops below `X_SIGNAL_USDC_SAFE_FLOOR`. The top-up target is `X_SIGNAL_AUTO_USDC_TARGET`.
 - **Run**:
 

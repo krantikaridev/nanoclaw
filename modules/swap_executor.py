@@ -291,6 +291,12 @@ def determine_trade_decision(
 
 async def main(*, dry_run: bool = False) -> None:
     cs = _facade()
+    if not dry_run:
+        try:
+            cfg.resolve_private_key(require=True, log_success=True)
+        except cfg.MissingPrivateKeyError as exc:
+            print(f"{runtime._nanolog()}startup blocked — {exc}")
+            return
     print(
         f"{runtime._nanolog()}SECRETS CHECK | All sensitive variables loaded from .env only (not hardcoded)"
     )
@@ -397,7 +403,7 @@ async def main(*, dry_run: bool = False) -> None:
 
         tx_hash = await approve_and_swap(
             w3,
-            cfg.get_resolved_key(),
+            None,
             decision.amount_in,
             direction=decision.direction,
             token_in=decision.token_in,

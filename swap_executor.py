@@ -273,7 +273,7 @@ def _oneinch_swap_payload(
 
 def _resolve_private_key(private_key_param: str | None) -> tuple[str, str]:
     """Delegate to central config resolver to keep key precedence consistent bot-wide."""
-    return cfg.resolve_private_key(private_key_param)
+    return cfg.resolve_private_key(private_key_param, require=False)
 
 
 async def approve_and_swap(
@@ -288,8 +288,8 @@ async def approve_and_swap(
     print(f"{_prefix}swap EXEC | direction={direction} | amount_in={amount_in}")
 
     try:
-        resolved_key, key_source = cfg.resolve_private_key(private_key, require=True)
-        print(f"{_prefix}private key resolved | source={key_source}")
+        resolved_key, key_source = cfg.resolve_private_key(private_key, require=True, log_success=True)
+        print(f"{_prefix}signer ready | source={key_source}")
         if token_in is None or token_out is None:
             if direction == "USDT_TO_WMATIC":
                 token_in, token_out = USDT, WMATIC
