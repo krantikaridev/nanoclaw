@@ -19,6 +19,16 @@ ENV_SYNC_EXCLUDED_KEYS = (
 )
 
 _EXCLUDED_KEYS_SET = frozenset(ENV_SYNC_EXCLUDED_KEYS)
+ENV_APPLY_PRESERVE_KEYS = (
+    *ENV_SYNC_EXCLUDED_KEYS,
+    "TELEGRAM_CHAT_ID",
+    # Preserve stage-specific RPC runtime selection when applying template.
+    "RPC_ENDPOINTS",
+    "RPC",
+    "RPC_URL",
+    "WEB3_PROVIDER_URI",
+    "RPC_FALLBACKS",
+)
 _ENV_ASSIGNMENT_RE = re.compile(r"^([^\s=#]+)\s*=\s*(.*)$")
 _ENV_KEY_RE = re.compile(r"^([A-Z][A-Z0-9_]*)=", re.MULTILINE)
 

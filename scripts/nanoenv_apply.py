@@ -19,12 +19,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from nanoclaw.env_sync import ENV_SYNC_EXCLUDED_KEYS, merge_env_from_example
+from nanoclaw.env_sync import ENV_APPLY_PRESERVE_KEYS, merge_env_from_example
 
 
 def _default_preserve_keys() -> tuple[str, ...]:
-    # Preserve secrets by default, plus Telegram chat id commonly treated as runtime-specific.
-    return (*ENV_SYNC_EXCLUDED_KEYS, "TELEGRAM_CHAT_ID")
+    # Preserve secrets + stage runtime keys (notably RPC routing) by default.
+    return tuple(ENV_APPLY_PRESERVE_KEYS)
 
 
 def main() -> int:

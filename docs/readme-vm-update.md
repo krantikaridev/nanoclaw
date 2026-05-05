@@ -118,6 +118,7 @@ This is not default stage behavior. Use only when you intentionally reset stage 
 
 2. Replace runtime env from template while preserving secrets:
    - `python scripts/nanoenv_apply.py --write`
+   - Default preserve set also keeps runtime RPC keys: `RPC_ENDPOINTS`, `RPC`, `RPC_URL`, `WEB3_PROVIDER_URI`, `RPC_FALLBACKS`.
 
 3. Immediately verify preserved runtime values in `.env`:
    - `POLYGON_PRIVATE_KEY` (or legacy `PRIVATE_KEY`)

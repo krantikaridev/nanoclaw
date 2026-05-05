@@ -1,4 +1,9 @@
-from nanoclaw.env_sync import compute_env_sync_diff, merge_env_from_example, sanitize_env_content
+from nanoclaw.env_sync import (
+    ENV_APPLY_PRESERVE_KEYS,
+    compute_env_sync_diff,
+    merge_env_from_example,
+    sanitize_env_content,
+)
 from pathlib import Path
 
 import pytest
@@ -85,3 +90,12 @@ def test_merge_env_from_example_appends_extra_keys_when_requested():
     assert "B=2\n" in out
     assert "# --- Extra keys kept from existing .env ---\n" in out
     assert "EXTRA_KEY=123\n" in out
+
+
+def test_env_apply_preserve_keys_include_rpc_runtime_keys():
+    keys = set(ENV_APPLY_PRESERVE_KEYS)
+    assert "RPC_ENDPOINTS" in keys
+    assert "RPC" in keys
+    assert "RPC_URL" in keys
+    assert "WEB3_PROVIDER_URI" in keys
+    assert "RPC_FALLBACKS" in keys
