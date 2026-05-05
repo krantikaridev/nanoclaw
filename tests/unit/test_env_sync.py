@@ -1,4 +1,4 @@
-from nanoclaw.env_sync import compute_env_sync_diff, sanitize_env_content
+from nanoclaw.env_sync import compute_env_sync_diff, merge_env_from_example, sanitize_env_content
 from pathlib import Path
 
 import pytest
@@ -44,3 +44,44 @@ def test_repo_env_example_keys_do_not_drift_when_env_exists():
     )
     assert diff.missing_in_example == ()
     assert diff.extra_in_example == ()
+
+
+def test_merge_env_from_example_preserves_selected_secret_keys():
+    current = (
+        "POLYGON_PRIVATE_KEY=super-secret\n"
+        "RPC_ENDPOINTS=https://old-rpc\n"
+        "X_SIGNAL_ONCHAIN_USDC_RETRY_ATTEMPTS=5\n"
+    )
+    template = (
+        "POLYGON_PRIVATE_KEY=\n"
+        "RPC_ENDPOINTS=https://new-rpc,https://backup-rpc\n"
+        "X_SIGNAL_ONCHAIN_USDC_RETRY_ATTEMPTS=2\n"
+    )
+
+    out = merge_env_from_example(
+        current,
+        template,
+        preserve_keys=("POLYGON_PRIVATE_KEY",),
+        keep_extra_keys=False,
+    )
+
+    assert "POLYGON_PRIVATE_KEY=super-secret\n" in out
+    assert "RPC_ENDPOINTS=https://new-rpc,https://backup-rpc\n" in out
+    assert "X_SIGNAL_ONCHAIN_USDC_RETRY_ATTEMPTS=2\n" in out
+
+
+def test_merge_env_from_example_appends_extra_keys_when_requested():
+    current = "A=old\nEXTRA_KEY=123\n"
+    template = "A=new\nB=2\n"
+
+    out = merge_env_from_example(
+        current,
+        template,
+        preserve_keys=(),
+        keep_extra_keys=True,
+    )
+
+    assert "A=new\n" in out
+    assert "B=2\n" in out
+    assert "# --- Extra keys kept from existing .env ---\n" in out
+    assert "EXTRA_KEY=123\n" in out

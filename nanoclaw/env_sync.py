@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import re
+from typing import Iterable
 
 # Explicitly excluded from value mirroring (always blanked in .env.example).
 # Keep this list short and reviewable.
@@ -73,3 +74,62 @@ def compute_env_sync_diff(env_content: str, env_example_content: str) -> EnvSync
         extra_in_example=tuple(sorted(example_keys - env_keys)),
         content_mismatch=(sanitized != normalized_example),
     )
+
+
+def _parse_env_assignments(content: str) -> tuple[list[str], dict[str, str]]:
+    order: list[str] = []
+    values: dict[str, str] = {}
+    for line in content.splitlines():
+        match = _ENV_ASSIGNMENT_RE.match(line.rstrip("\n"))
+        if not match:
+            continue
+        key = str(match.group(1)).strip()
+        value = str(match.group(2))
+        if key not in values:
+            order.append(key)
+        values[key] = value
+    return order, values
+
+
+def merge_env_from_example(
+    env_content: str,
+    env_example_content: str,
+    *,
+    preserve_keys: Iterable[str] = (),
+    keep_extra_keys: bool = False,
+) -> str:
+    """
+    Build runtime `.env` from `.env.example` while preserving selected key values from existing `.env`.
+
+    - Preserves comments/ordering from template.
+    - For preserved keys, keeps existing `.env` value when present.
+    - Optionally appends keys that exist only in `.env` (`keep_extra_keys=True`).
+    """
+    preserve_set = {str(key).strip() for key in preserve_keys if str(key).strip()}
+    current_order, current_values = _parse_env_assignments(env_content)
+    merged_lines: list[str] = []
+    template_keys_seen: set[str] = set()
+
+    for line in env_example_content.splitlines():
+        match = _ENV_ASSIGNMENT_RE.match(line.rstrip("\n"))
+        if not match:
+            merged_lines.append(line.rstrip("\n"))
+            continue
+        key = str(match.group(1)).strip()
+        template_value = str(match.group(2))
+        template_keys_seen.add(key)
+        if key in preserve_set and key in current_values:
+            merged_lines.append(f"{key}={current_values[key]}")
+            continue
+        merged_lines.append(f"{key}={template_value}")
+
+    if keep_extra_keys:
+        extras = [k for k in current_order if k not in template_keys_seen]
+        if extras:
+            if merged_lines and merged_lines[-1].strip():
+                merged_lines.append("")
+            merged_lines.append("# --- Extra keys kept from existing .env ---")
+            for key in extras:
+                merged_lines.append(f"{key}={current_values[key]}")
+
+    return "\n".join(merged_lines) + "\n"

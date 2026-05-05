@@ -33,6 +33,7 @@ For operators and agents, **`AI_CONTEXT.md`** on branch **`V2`** is the authorit
 | `nanocommit` | Enforce repo hooks, then run `git commit` |
 | `nanopush` | Secret check + env sync/check + stage `.env.example`, then `git push` |
 | `python scripts/nanoenv_example.py --write` | Redact secrets from `.env` → refresh `.env.example` (review diff before commit) |
+| `python scripts/nanoenv_apply.py --write` | Apply latest `.env.example` keys into `.env` while preserving secret/runtime keys |
 
 **`sprintmon`** is not in this repo; use **`nanostatus`** / **`nanopnl`** for quick health + PnL and **`nanobot`** / **`nanoattach`** for live logs.
 Session baseline can be reset manually with `nanopnl --reset-session` (or `nanostatus --reset-session` / `nanorestart --reset-session`).

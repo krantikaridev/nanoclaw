@@ -72,7 +72,14 @@ bash scripts/nanorestart.sh
    - `python scripts/verify_env_example_keys.py`
    - `git diff .env.example`
 
-4. Verify deployed code/runtime:
+4. Apply latest template keys into runtime `.env` safely (preserve secrets):
+   - `python scripts/nanoenv_apply.py --write`
+   - Optional: keep unknown local keys too:
+     - `python scripts/nanoenv_apply.py --write --keep-extra-keys`
+   - Verify:
+     - `python scripts/verify_env_example_keys.py`
+
+5. Verify deployed code/runtime:
    - `git log --oneline -5`
    - `nanostatus`
    - `nanopnl`
@@ -80,7 +87,7 @@ bash scripts/nanorestart.sh
    - `./nanodaily`
    - `tail -n 120 real_cron.log`
 
-5. If VM produced tracked changes (for example `.env.example`, docs):
+6. If VM produced tracked changes (for example `.env.example`, docs):
    - `git add .env.example AI_CONTEXT.md docs/readme-vm-update.md`
    - `git commit -m "chore: sync vm env template and runbook references"`
    - `git push origin V2`
@@ -109,13 +116,13 @@ This is not default stage behavior. Use only when you intentionally reset stage 
 1. Backup current runtime env:
    - `cp .env .env.bak.$(date +%Y%m%d_%H%M%S)`
 
-2. Replace runtime env from template:
-   - `cp .env.example .env`
+2. Replace runtime env from template while preserving secrets:
+   - `python scripts/nanoenv_apply.py --write`
 
-3. Immediately restore stage secrets/runtime values in `.env`:
+3. Immediately verify preserved runtime values in `.env`:
    - `POLYGON_PRIVATE_KEY` (or legacy `PRIVATE_KEY`)
-   - RPC values (`RPC`, `RPC_URL`, `WEB3_PROVIDER_URI`)
    - Any stage integrations (`ONEINCH_API_KEY`, `GROK_API_KEY`, `TELEGRAM_*`, etc.)
+   - RPC chain (`RPC_ENDPOINTS` preferred)
    - Current required knobs for this cycle:
      - `COOLDOWN_MINUTES=3`
      - `TEST_MODE=true`
