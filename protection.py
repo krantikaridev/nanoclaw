@@ -167,11 +167,27 @@ def check_exit_conditions():
         trades = json.load(f)
     
     current_price = get_live_wmatic_price()
-    
-    for t in trades:
-        if t["status"] == "OPEN" and current_price >= t["target_price"]:
-            print(f"🎯 PER-TRADE EXIT HIT | Buy ${t['buy_price']:.4f} → Current ${current_price:.4f} (+{PROFIT_LOCK_PERCENT}%)")
-            return True, "PER_TRADE_EXIT"
+
+    # Evaluate only the latest valid OPEN trade to avoid stale historical rows
+    # repeatedly monopolizing cycle precedence.
+    if isinstance(trades, list):
+        for t in reversed(trades):
+            if not isinstance(t, dict) or t.get("status") != "OPEN":
+                continue
+            try:
+                buy_price = float(t.get("buy_price", 0.0) or 0.0)
+                target_price = float(t.get("target_price", 0.0) or 0.0)
+            except Exception:
+                continue
+            if buy_price <= 0.0 or target_price <= 0.0:
+                continue
+            if current_price >= target_price:
+                print(
+                    "🎯 PER-TRADE EXIT HIT | "
+                    f"Buy ${buy_price:.4f} → Current ${current_price:.4f} (+{PROFIT_LOCK_PERCENT}%)"
+                )
+                return True, "PER_TRADE_EXIT"
+            break
     
     return False, None
 

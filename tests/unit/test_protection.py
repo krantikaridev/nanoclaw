@@ -116,6 +116,37 @@ def test_check_exit_conditions_allows_per_trade_exit_when_fluctuation_suppressed
     assert reason == "PER_TRADE_EXIT"
 
 
+def test_check_exit_conditions_uses_latest_open_trade_only(monkeypatch, tmp_path):
+    trade_log = tmp_path / "trade_exits.json"
+    trade_log.write_text(
+        json.dumps(
+            [
+                {
+                    "status": "OPEN",
+                    "buy_price": 1.0,
+                    "target_price": 1.01,
+                },
+                {
+                    "status": "OPEN",
+                    "buy_price": 1.0,
+                    "target_price": 1.50,
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(protection, "TRADE_LOG_FILE", str(trade_log))
+    monkeypatch.setattr(protection, "get_balances", lambda: (60.0, 20.0))
+    monkeypatch.setattr(protection, "get_live_wmatic_price", lambda: 1.10)
+    monkeypatch.setattr(protection, "_last_fluctuation_trigger_ts", None)
+    monkeypatch.setattr(protection, "_last_fluctuation_context", {})
+
+    should_exit, reason = protection.check_exit_conditions()
+
+    assert should_exit is False
+    assert reason is None
+
+
 def test_record_buy_writes_open_trade_with_target_price(monkeypatch, tmp_path):
     trade_log = tmp_path / "trade_exits.json"
     monkeypatch.setattr(protection, "TRADE_LOG_FILE", str(trade_log))
