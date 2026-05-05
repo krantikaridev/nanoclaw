@@ -8,6 +8,12 @@ from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 import re
+import sys
+
+# Ensure repo root is importable when this script is run as `python scripts/pnl_report.py`.
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 from modules.baseline import resolve_portfolio_baseline_usd
 
