@@ -32,6 +32,8 @@ type nanostatus
 type nanodaily
 ```
 
+`nanostatus`, `nanopnl`, and `nanorestart` now forward CLI flags to `scripts/pnl_report.py` (example: `--reset-session`).
+
 Verify standalone shims are discoverable on `PATH`:
 
 ```bash
@@ -73,6 +75,7 @@ bash scripts/nanorestart.sh
    - `git log --oneline -5`
    - `nanostatus`
    - `nanopnl`
+   - `nanopnl --reset-session` (optional: reset session baseline to current total)
    - `./nanodaily`
    - `tail -n 120 real_cron.log`
 

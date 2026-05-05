@@ -34,3 +34,31 @@ def test_get_resolved_key_falls_back_to_legacy_private_key(monkeypatch):
     monkeypatch.delenv("POLYGON_PRIVATE_KEY", raising=False)
     monkeypatch.setenv("PRIVATE_KEY", "legacy-key")
     assert config.get_resolved_key() == "legacy-key"
+
+
+def test_resolve_private_key_prefers_env_over_function_arg(monkeypatch):
+    monkeypatch.setenv("POLYGON_PRIVATE_KEY", "polygon-key")
+    monkeypatch.setenv("PRIVATE_KEY", "legacy-key")
+    key, source = config.resolve_private_key("arg-key")
+    assert key == "polygon-key"
+    assert source == "POLYGON_PRIVATE_KEY"
+
+
+def test_resolve_private_key_falls_back_to_function_arg_when_env_missing(monkeypatch):
+    monkeypatch.delenv("POLYGON_PRIVATE_KEY", raising=False)
+    monkeypatch.delenv("PRIVATE_KEY", raising=False)
+    key, source = config.resolve_private_key("arg-key")
+    assert key == "arg-key"
+    assert source == "function_arg"
+
+
+def test_resolve_private_key_raises_when_required_and_missing(monkeypatch):
+    monkeypatch.delenv("POLYGON_PRIVATE_KEY", raising=False)
+    monkeypatch.delenv("PRIVATE_KEY", raising=False)
+    try:
+        config.resolve_private_key(require=True)
+    except config.MissingPrivateKeyError as exc:
+        assert "POLYGON_PRIVATE_KEY" in str(exc)
+        assert "PRIVATE_KEY" in str(exc)
+    else:
+        raise AssertionError("Expected MissingPrivateKeyError when required key is missing")

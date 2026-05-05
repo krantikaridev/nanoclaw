@@ -272,16 +272,8 @@ def _oneinch_swap_payload(
 
 
 def _resolve_private_key(private_key_param: str | None) -> tuple[str, str]:
-    """Resolve signer key precedence: POLYGON_PRIVATE_KEY -> PRIVATE_KEY -> function arg."""
-    env_polygon_key = cfg.env_str("POLYGON_PRIVATE_KEY", "")
-    env_legacy_key = cfg.env_str("PRIVATE_KEY", "")
-    resolved_key = env_polygon_key or env_legacy_key or (private_key_param or "")
-    key_source = (
-        "POLYGON_PRIVATE_KEY"
-        if env_polygon_key
-        else ("PRIVATE_KEY" if env_legacy_key else ("function_arg" if private_key_param else "missing"))
-    )
-    return resolved_key, key_source
+    """Delegate to central config resolver to keep key precedence consistent bot-wide."""
+    return cfg.resolve_private_key(private_key_param)
 
 
 async def approve_and_swap(
@@ -296,9 +288,7 @@ async def approve_and_swap(
     print(f"{_prefix}swap EXEC | direction={direction} | amount_in={amount_in}")
 
     try:
-        resolved_key, key_source = _resolve_private_key(private_key)
-        if not resolved_key:
-            raise ValueError("Missing private key (set POLYGON_PRIVATE_KEY or PRIVATE_KEY, or pass private_key)")
+        resolved_key, key_source = cfg.resolve_private_key(private_key, require=True)
         print(f"{_prefix}private key resolved | source={key_source}")
         if token_in is None or token_out is None:
             if direction == "USDT_TO_WMATIC":

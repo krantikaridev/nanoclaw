@@ -291,7 +291,7 @@ def ensure_pol_for_trade(min_pol: float = 0.025) -> bool:
     if current_pol >= float(min_pol):
         return True
 
-    key = cfg.get_resolved_key()
+    key, _key_source = cfg.resolve_private_key()
     if not key:
         print(f"{_nanolog()}AUTO-POL skipped — no private key")
         return False

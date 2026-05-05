@@ -245,7 +245,7 @@ def ensure_usdc_for_x_signal(min_usdc: float = 8.0, min_wmatic_value: float = 15
         print(f"{runtime._nanolog()}AUTO-USDC skipped — gas/POL guard")
         return False
 
-    key = cfg.get_resolved_key()
+    key, _key_source = cfg.resolve_private_key()
     if not key:
         print(f"{runtime._nanolog()}AUTO-USDC skipped — no private key")
         return False
@@ -334,7 +334,7 @@ def _project_balances_after_auto_usdc(
     if not gst.get("ok", False):
         return balances
 
-    key = cfg.get_resolved_key()
+    key, _key_source = cfg.resolve_private_key()
     if not key:
         return balances
 

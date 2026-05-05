@@ -62,6 +62,7 @@ Windows gate shortcut:
 
 - Develop logic locally in Cursor, then push to branch.
 - On VM, use script-driven flow (`nanoup` / `nanorestart`), not ad-hoc pull/restart chains.
+- `nanostatus`, `nanopnl`, and `nanorestart` forward CLI args to `scripts/pnl_report.py` (use `--reset-session` when resetting session PnL anchor).
 - For dirty VM runtime state, use `NANOUP_AUTOSTASH=1 nanoup` instead of manual stash gymnastics.
 - Keep VM runtime and repo template aligned:
   - `python scripts/nanoenv_example.py --write`

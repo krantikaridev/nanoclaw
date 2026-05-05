@@ -224,4 +224,30 @@ def parse_float(raw: Any, default: float) -> float:
 
 
 def get_resolved_key() -> str:
-    return env_str("POLYGON_PRIVATE_KEY", "") or env_str("PRIVATE_KEY", "")
+    return resolve_private_key()[0]
+
+
+class MissingPrivateKeyError(RuntimeError):
+    """Raised when no supported private key source is available."""
+
+
+def resolve_private_key(private_key_param: str | None = None, *, require: bool = False) -> tuple[str, str]:
+    """
+    Resolve signer key with a single shared precedence:
+    1) POLYGON_PRIVATE_KEY
+    2) PRIVATE_KEY (legacy)
+    3) function parameter fallback (when provided by caller)
+    """
+    env_polygon_key = env_str("POLYGON_PRIVATE_KEY", "")
+    env_legacy_key = env_str("PRIVATE_KEY", "")
+    resolved_key = env_polygon_key or env_legacy_key or (str(private_key_param or "").strip())
+    source = (
+        "POLYGON_PRIVATE_KEY"
+        if env_polygon_key
+        else ("PRIVATE_KEY" if env_legacy_key else ("function_arg" if private_key_param else "missing"))
+    )
+    if require and not resolved_key:
+        raise MissingPrivateKeyError(
+            "Missing private key (set POLYGON_PRIVATE_KEY or PRIVATE_KEY, or pass private_key)"
+        )
+    return resolved_key, source
