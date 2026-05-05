@@ -659,6 +659,54 @@ def test_determine_trade_decision_defers_dust_x_signal_and_falls_through_to_main
     assert "DECISION PATH: MAIN_STRATEGY" in captured
 
 
+def test_determine_trade_decision_defers_dust_usdc_copy_and_falls_through_to_main(monkeypatch, capsys):
+    class _CopyPlan:
+        amount_in = int(4.0 * 1_000_000)
+        trade_size = 4.0
+        message = "tiny usdc copy"
+        wallet = "0xwallet"
+
+    class _USDCopyStrategyStub:
+        class config:
+            per_wallet_cooldown_seconds = 300
+
+        def build_plan(self, **kwargs):
+            _ = kwargs
+            return _CopyPlan()
+
+    monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))
+    monkeypatch.setattr(clean_swap, "evaluate_take_profit", lambda *_args, **_kwargs: (False, None))
+    monkeypatch.setattr(clean_swap, "MIN_TRADE_USD", 15.0)
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", False)
+    monkeypatch.setattr(clean_swap, "ENABLE_USDC_COPY", True)
+    monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: ["0xwallet"])
+    monkeypatch.setattr(swap_exec, "is_copy_trading_enabled", lambda: True)
+    monkeypatch.setattr(swap_exec, "USDC_COPY_STRATEGY", _USDCopyStrategyStub())
+
+    main_ok = clean_swap.TradeDecision(
+        direction="USDT_TO_WMATIC",
+        amount_in=int(18.0 * 1_000_000),
+        trade_size=18.0,
+        message="main buy",
+    )
+    monkeypatch.setattr(swap_exec, "select_main_strategy_trade", lambda *_args, **_kwargs: main_ok)
+
+    skipped: list[str] = []
+    monkeypatch.setattr(clean_swap, "_log_trade_skipped", lambda reason: skipped.append(reason))
+
+    out = clean_swap.determine_trade_decision(
+        state={},
+        balances=clean_swap.Balances(usdt=40.0, wmatic=5.0, pol=1.0, usdc=10.0),
+        current_price=1.0,
+    )
+
+    captured = capsys.readouterr().out
+    assert out is main_ok
+    assert any("usdc_copy_dust_deferred" in reason for reason in skipped)
+    assert "USDC_COPY DUST DEFER" in captured
+    assert "DECISION PATH: MAIN_STRATEGY" in captured
+
+
 def test_determine_trade_decision_defers_dust_polycopy_and_falls_through_to_main(monkeypatch, capsys):
     monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))
     monkeypatch.setattr(clean_swap, "evaluate_take_profit", lambda *_args, **_kwargs: (False, None))
