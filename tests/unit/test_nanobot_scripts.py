@@ -168,6 +168,30 @@ def test_alias_functions_nanostatus_and_nanokill_are_callable(tmp_path: Path):
     assert result.returncode == 0, result.stderr
 
 
+def test_sourcing_aliases_preserves_caller_shell_options(tmp_path: Path):
+    _require_bash()
+    root = _sandbox_root(tmp_path)
+    env = {**os.environ, "NANOCLAW_ROOT": str(root)}
+
+    cmd = (
+        "set +e +u; set +o pipefail; "
+        "source scripts/nanobot_aliases.sh; "
+        "set -o | awk '/errexit|nounset|pipefail/ {print $1 \"=\" $2}'"
+    )
+    result = subprocess.run(
+        ["bash", "-lc", cmd],
+        cwd=root,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "errexit=off" in result.stdout
+    assert "nounset=off" in result.stdout
+    assert "pipefail=off" in result.stdout
+
+
 def test_install_mode_creates_standalone_command_shims(tmp_path: Path):
     _require_bash()
     root = _sandbox_root(tmp_path)

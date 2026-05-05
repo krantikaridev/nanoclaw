@@ -270,6 +270,9 @@ class SignalEquityTrader:
             "type": "function",
         }
     ]
+    _PROFIT_TO_GAS_MULTIPLIER = 2.5
+    _MIN_EFFECTIVE_TRADE_AFTER_GAS_USD = 8.0
+    _LIMITED_USDC_FORCE_ELIGIBLE_THRESHOLD = 0.85
 
     def __init__(self, config: SignalEquityTraderConfig, gas_protector: GasProtector, usdc_address: str) -> None:
         self.config = config
@@ -390,6 +393,14 @@ class SignalEquityTrader:
             expected_edge_pct = max(0.0, float(self.config.strong_take_profit_pct))
         return max(0.0, float(trade_size) * (expected_edge_pct / 100.0))
 
+    def _effective_force_eligible_threshold(self, usdc_balance: float) -> float:
+        """Raise force-eligible bar when USDC is limited to prioritize strongest signals only."""
+        base_threshold = float(self.config.force_eligible_threshold)
+        usdc_safe_floor = float(cfg.env_float("X_SIGNAL_USDC_SAFE_FLOOR", 20.0))
+        if float(usdc_balance) < usdc_safe_floor:
+            return max(base_threshold, float(self._LIMITED_USDC_FORCE_ELIGIBLE_THRESHOLD))
+        return base_threshold
+
     def _compute_trade_size(
         self,
         usdc_balance: float,
@@ -476,19 +487,9 @@ class SignalEquityTrader:
             return None, "invalid_symbol_or_token"
 
         strength = float(signal_strength)
-        fe_thr = float(self.config.force_eligible_threshold)
+        fe_thr = self._effective_force_eligible_threshold(usdc_balance)
         is_force_eligible = abs(strength) >= fe_thr
 
-        # === ELIGIBILITY DEBUG LOG ===
-        print(
-            f"[nanoclaw] BUILD_PLAN_ENTRY | {sym} | signal={strength:.3f} | "
-            f"force_eligible_threshold={fe_thr:.3f} | is_force_eligible={is_force_eligible} | "
-            f"force_high_conviction={self.config.force_high_conviction} | "
-            f"high_conviction_threshold={self.config.high_conviction_threshold:.3f} | "
-            f"strong_threshold={self.config.strong_signal_threshold:.3f} | "
-            f"earnings_days={earnings_proximity_days!r} | "
-            f"usdc_balance=${usdc_balance:.2f} | equity_balance={equity_balance:.2f}"
-        )
         logger.debug(
             "build_plan_with_block_reason entry sym=%s signal=%s fe_thr=%s is_force_eligible=%s",
             sym,
@@ -590,18 +591,38 @@ class SignalEquityTrader:
                 return None, "small_trade_bypass"
             gas_cost_usd = self._estimate_gas_cost_usd(gas_gwei)
             expected_profit_usd = self._expected_profit_usd(trade_size, upside_pct)
-            if expected_profit_usd <= gas_cost_usd:
+            min_expected_profit_usd = gas_cost_usd * float(self._PROFIT_TO_GAS_MULTIPLIER)
+            effective_trade_size_after_gas = trade_size - gas_cost_usd
+            print(
+                f"[nanoclaw] SIZING DECISION | {sym} | signal={strength:.2f} | size=${trade_size:.2f} | "
+                f"gas=${gas_cost_usd:.2f} | expected=${expected_profit_usd:.2f} | "
+                f"required_expected>${min_expected_profit_usd:.2f} | effective_after_gas=${effective_trade_size_after_gas:.2f}"
+            )
+            if expected_profit_usd <= min_expected_profit_usd:
                 print(
                     f"[nanoclaw] BLOCK: {sym} | expected_profit_below_gas "
-                    f"(expected=${expected_profit_usd:.2f} <= gas=${gas_cost_usd:.2f})"
+                    f"(expected=${expected_profit_usd:.2f} <= required=${min_expected_profit_usd:.2f}, gas=${gas_cost_usd:.2f})"
                 )
                 logger.debug(
-                    "build_plan block sym=%s reason=expected_profit_below_gas expected=%s gas=%s",
+                    "build_plan block sym=%s reason=expected_profit_below_gas expected=%s required=%s gas=%s",
                     sym,
                     expected_profit_usd,
+                    min_expected_profit_usd,
                     gas_cost_usd,
                 )
                 return None, "expected_profit_below_gas"
+            if effective_trade_size_after_gas < float(self._MIN_EFFECTIVE_TRADE_AFTER_GAS_USD):
+                print(
+                    f"[nanoclaw] BLOCK: {sym} | low_effective_trade_after_gas "
+                    f"(effective=${effective_trade_size_after_gas:.2f} < ${self._MIN_EFFECTIVE_TRADE_AFTER_GAS_USD:.2f})"
+                )
+                logger.debug(
+                    "build_plan block sym=%s reason=low_effective_trade_after_gas effective=%s gas=%s",
+                    sym,
+                    effective_trade_size_after_gas,
+                    gas_cost_usd,
+                )
+                return None, "low_effective_trade_after_gas"
             tp = float(self.config.strong_take_profit_pct)
             price_note = f" @ ${current_price_usd:.2f}" if isinstance(current_price_usd, (int, float)) else ""
             earn_note = (

@@ -612,6 +612,47 @@ def test_buy_blocks_when_expected_profit_is_below_gas(monkeypatch):
     assert reason == "expected_profit_below_gas"
 
 
+def test_buy_blocks_when_effective_trade_after_gas_is_too_small(monkeypatch):
+    s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
+    monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 1.0)
+    monkeypatch.setattr(s, "_estimate_gas_cost_usd", lambda _gas_gwei: 8.2)
+
+    _, reason = s.build_plan_with_block_reason(
+        symbol="WETH_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.92,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=40.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+        upside_pct=400.0,
+    )
+    assert reason == "low_effective_trade_after_gas"
+
+
+def test_limited_usdc_raises_force_eligible_threshold_to_085(monkeypatch):
+    s = _build_strategy_tuned(force_eligible_threshold=0.80, strong_signal_threshold=0.90)
+    monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 50.0)
+    monkeypatch.setattr(s, "_query_onchain_usdc_balance", lambda _fallback: 10.0)
+
+    _, reason = s.build_plan_with_block_reason(
+        symbol="WETH_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.82,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=10.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+    )
+    assert reason is not None and "below_strong_threshold" in reason
+
+
 def test_sell_path_equity_to_usdc():
     s = _build_strategy_tuned()
     plan, reason = s.build_plan_with_block_reason(

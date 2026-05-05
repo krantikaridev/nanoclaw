@@ -3,9 +3,13 @@
 # Usage:
 #   source scripts/nanobot_aliases.sh
 #   scripts/nanobot_aliases.sh --install
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
-  set -euo pipefail
+_NANOCLAW_ALIASES_SOURCED=0
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
+  _NANOCLAW_ALIASES_SOURCED=1
+  # Keep strict checks active while loading definitions, then restore caller shell flags.
+  _NANOCLAW_ALIASES_SAVED_SET_OPTS="$(set +o)"
 fi
+set -euo pipefail
 
 _nanoclaw_resolve_root() {
   local script_dir
@@ -207,3 +211,10 @@ Use one of:
   scripts/nanobot_aliases.sh --install
 EOF
 fi
+
+if [[ "${_NANOCLAW_ALIASES_SOURCED}" -eq 1 ]]; then
+  # Restore caller shell options to avoid mutating interactive behavior after `source`.
+  eval "${_NANOCLAW_ALIASES_SAVED_SET_OPTS}"
+  unset _NANOCLAW_ALIASES_SAVED_SET_OPTS
+fi
+unset _NANOCLAW_ALIASES_SOURCED
