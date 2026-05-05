@@ -98,3 +98,50 @@ def test_get_current_balance_prefers_botlogger_or_autologger(tmp_path: Path, mon
     assert current is not None
     assert current["source"] == "MANUAL (AutoLogger)"
     assert current["total"] == 102.0
+
+
+def test_resolve_session_baseline_creates_and_resets(tmp_path: Path, monkeypatch) -> None:
+    baseline_file = tmp_path / "portfolio_session_baseline.json"
+    monkeypatch.setattr(pnl_report, "SESSION_BASELINE_FILE", str(baseline_file))
+
+    first_total, _ = pnl_report.resolve_session_baseline(100.0, reset=False)
+    assert first_total == 100.0
+    second_total, _ = pnl_report.resolve_session_baseline(120.0, reset=False)
+    assert second_total == 100.0
+
+    reset_total, _ = pnl_report.resolve_session_baseline(120.0, reset=True)
+    assert reset_total == 120.0
+
+
+def test_resolve_24h_baseline_uses_latest_value_before_cutoff(tmp_path: Path, monkeypatch) -> None:
+    csv_file = tmp_path / "portfolio_history.csv"
+    csv_file.write_text(
+        "\n".join(
+            [
+                "timestamp,usdt,usdc,wmatic,pol,pol_usd_price,total_value",
+                "2026-05-01T00:00:00+00:00,1,1,1,1,0.1,90",
+                "2026-05-04T12:00:00+00:00,1,1,1,1,0.1,100",
+                "2026-05-05T13:00:00+00:00,1,1,1,1,0.1,130",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(pnl_report, "PORTFOLIO_HISTORY_FILE", str(csv_file))
+
+    class _FakeDateTime:
+        @staticmethod
+        def now(tz):
+            from datetime import datetime
+
+            return datetime(2026, 5, 6, 0, 0, 0, tzinfo=tz)
+
+        @staticmethod
+        def fromisoformat(raw):
+            from datetime import datetime
+
+            return datetime.fromisoformat(raw)
+
+    monkeypatch.setattr(pnl_report, "datetime", _FakeDateTime)
+
+    baseline = pnl_report.resolve_24h_baseline(140.0)
+    assert baseline == 100.0

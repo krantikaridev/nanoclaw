@@ -33,6 +33,7 @@ from nanoclaw.utils.gas_protector import GasProtector
 logger = logging.getLogger(__name__)
 
 _HARD_BYPASS_ENABLED = cfg.env_bool("HARD_BYPASS_ENABLED", True)
+# Hard execution floor for BUY notional; configured from .env (MIN_TRADE_USD).
 _HARD_BYPASS_MIN_TRADE_USD = cfg.env_float("MIN_TRADE_USD", 15.0)
 
 
@@ -487,15 +488,20 @@ class SignalEquityTrader:
             return None, "invalid_symbol_or_token"
 
         strength = float(signal_strength)
-        fe_thr = self._effective_force_eligible_threshold(usdc_balance)
+        effective_usdc_balance = float(usdc_balance)
+        # For BUY eligibility, use fresh on-chain USDC so force-eligible threshold reflects real liquidity.
+        if strength > 0 and not self._addrs_equal_case_insensitive(token_address, self.usdc_address):
+            effective_usdc_balance = self._to_float(self._query_onchain_usdc_balance(usdc_balance), usdc_balance)
+        fe_thr = self._effective_force_eligible_threshold(effective_usdc_balance)
         is_force_eligible = abs(strength) >= fe_thr
 
         logger.debug(
-            "build_plan_with_block_reason entry sym=%s signal=%s fe_thr=%s is_force_eligible=%s",
+            "build_plan_with_block_reason entry sym=%s signal=%s fe_thr=%s is_force_eligible=%s usdc_for_eligibility=%s",
             sym,
             strength,
             fe_thr,
             is_force_eligible,
+            effective_usdc_balance,
         )
 
         # === Earnings window check (bypass if force-eligible) ===
@@ -562,8 +568,7 @@ class SignalEquityTrader:
                 print(f"[nanoclaw] BLOCK: {sym} | usdc_identity_noop")
                 logger.debug("build_plan block sym=%s reason=usdc_identity_noop", sym)
                 return None, "usdc_identity_noop"
-            # Prefer fresh on-chain USDC for execution sizing; keep upstream balance as fallback.
-            usdc_balance = self._to_float(self._query_onchain_usdc_balance(usdc_balance), 0.0)
+            usdc_balance = self._to_float(effective_usdc_balance, 0.0)
             if usdc_balance <= 0:
                 print(f"[nanoclaw] BLOCK: {sym} | zero_usdc (balance=${usdc_balance:.2f})")
                 logger.debug("build_plan block sym=%s reason=zero_usdc", sym)

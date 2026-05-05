@@ -21,7 +21,7 @@ For operators and agents, **`AI_CONTEXT.md`** on branch **`V2`** is the authorit
 |---------|----------------|
 | `nanoup` | Safe update + restart (recommended); repo script: **`scripts/nanoup.sh`** |
 | `nanostatus` | PnL/status report from `real_cron.log` via `scripts/pnl_report.py` |
-| `nanopnl` | Alias of `nanostatus` for quick PnL view |
+| `nanopnl` | PnL view with current balance, baseline/session %, and 24h delta (best-effort from `portfolio_history.csv`) |
 | `nanobot` | Live log stream (`tail -f real_cron.log`) |
 | `nanorestart` | Safe restart flow: `nanoup && nanostatus` |
 | `nanokill` | Stop the bot |
@@ -35,6 +35,7 @@ For operators and agents, **`AI_CONTEXT.md`** on branch **`V2`** is the authorit
 | `python scripts/nanoenv_example.py --write` | Redact secrets from `.env` → refresh `.env.example` (review diff before commit) |
 
 **`sprintmon`** is not in this repo; use **`nanostatus`** / **`nanopnl`** for quick health + PnL and **`nanobot`** / **`nanoattach`** for live logs.
+Session baseline can be reset manually with `nanopnl --reset-session`.
 
 **USDC top-up for X-Signal equity** is handled inside the bot (`try_x_signal_equity_decision`), not as a separate shell alias. Configure `X_SIGNAL_USDC_SAFE_FLOOR` and `X_SIGNAL_AUTO_USDC_TARGET` in `.env` (see `.env.example`).
 

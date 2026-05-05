@@ -653,6 +653,27 @@ def test_limited_usdc_raises_force_eligible_threshold_to_085(monkeypatch):
     assert reason is not None and "below_strong_threshold" in reason
 
 
+def test_force_eligibility_uses_fresh_onchain_usdc_not_stale_param(monkeypatch):
+    s = _build_strategy_tuned(force_eligible_threshold=0.80, strong_signal_threshold=0.90)
+    monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 50.0)
+    # Stale upstream balance says "not limited", but fresh on-chain says USDC is limited.
+    monkeypatch.setattr(s, "_query_onchain_usdc_balance", lambda _fallback: 10.0)
+
+    _, reason = s.build_plan_with_block_reason(
+        symbol="WETH_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.82,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=100.0,  # stale snapshot (should not drive force-eligible gate)
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+    )
+    assert reason is not None and "below_strong_threshold" in reason
+
+
 def test_sell_path_equity_to_usdc():
     s = _build_strategy_tuned()
     plan, reason = s.build_plan_with_block_reason(
