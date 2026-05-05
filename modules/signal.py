@@ -579,15 +579,16 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
     )
     auto_topup_target = max(float(X_SIGNAL_AUTO_USDC_TARGET), float(X_SIGNAL_USDC_SAFE_FLOOR))
     auto_topup_enabled = bool(getattr(fcb, "X_SIGNAL_AUTO_USDC_TOPUP_ENABLED", X_SIGNAL_AUTO_USDC_TOPUP_ENABLED))
+    auto_topup_buy_gate = has_buy_signal and (has_buy_ready_on_cooldown or high_conviction)
     should_consider_auto_topup = (
         auto_topup_enabled
-        and has_buy_signal
-        and has_buy_ready_on_cooldown
+        and auto_topup_buy_gate
         and float(balances.usdc) < float(X_SIGNAL_USDC_SAFE_FLOOR)
     )
     print(
         f"{runtime._nanolog()}AUTO-USDC consider | enabled={auto_topup_enabled} "
         f"| has_buy_signal={has_buy_signal} | cooldown_ready={has_buy_ready_on_cooldown} "
+        f"| high_conviction={high_conviction} | buy_gate={auto_topup_buy_gate} "
         f"| usdc=${float(balances.usdc):.2f} | safe_floor=${float(X_SIGNAL_USDC_SAFE_FLOOR):.2f}"
     )
     if (

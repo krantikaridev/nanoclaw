@@ -53,12 +53,32 @@ Role boundaries and collaboration are defined in `docs/OPERATING_MODEL.md`.
   - One-push override (explicit operator confirmation): `NANOCLAW_CONFIRM_ENV_SYNC_SKIP=1 git push`.
 - Strategy precedence note:
   - Dust-sized protection exits (`< MIN_TRADE_USD`) are non-blocking; cycle falls through to the next strategy in precedence.
+  - Same non-blocking dust defer applies to downstream branches (`PROFIT_TAKE`, `X_SIGNAL_EQUITY`, `USDC_COPY`/`POLYCOPY`, `MAIN_STRATEGY`) to prevent single-branch dust loops from monopolizing cycles.
+  - `MIN_TRADE_USD` remains a global hard execution floor; dust defer only affects branch fallthrough, never execution safety.
 - Before commit:
   1. `python -m ruff check .`
   2. `python -m compileall -q .`
   3. `python -m pytest tests/ --cov=. --cov-report=term-missing:skip-covered --cov-report=xml`
   4. `git diff --stat` and verify only intended files.
 - Any behavior/config change must include tests + docs + `.env.example` updates in same PR.
+
+## Stable Trading Validation (Pre-Tag)
+
+Run this checklist before creating a release tag (for `v2.7` and later):
+
+1. Keep one bot process running (watchdog cron only) for a continuous 30-60 minute window.
+2. Confirm no lock thrash:
+   - No repeated lock-active spam loops.
+   - No overlapping writer processes for `clean_swap.py`.
+3. Confirm non-blocking dust behavior:
+   - Logs may show `* DUST DEFER`, but cycle should continue to downstream paths in the same loop.
+   - No single branch repeatedly owning cycles with sub-min notional exits.
+4. Confirm at least one actionable path exists under current market state:
+   - Either a non-dust strategy decision appears, or AUTO-USDC top-up runs under valid BUY conditions.
+5. Then run commit gate:
+   - `python -m ruff check .`
+   - `python -m compileall -q .`
+   - `python -m pytest tests/ --cov=. --cov-report=term-missing:skip-covered --cov-report=xml`
 
 Windows gate shortcut:
 - `powershell -ExecutionPolicy Bypass -File .\scripts\pre_commit_gate.ps1`

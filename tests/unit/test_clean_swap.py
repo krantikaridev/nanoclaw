@@ -536,6 +536,7 @@ def test_determine_trade_decision_defers_dust_protection_and_falls_through(monke
 
 def test_determine_trade_decision_prioritizes_profit_take_over_xsignal(monkeypatch):
     monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))
+    monkeypatch.setattr(clean_swap, "MIN_TRADE_USD", 0.0)
     monkeypatch.setattr(
         clean_swap,
         "evaluate_take_profit",
@@ -566,6 +567,7 @@ def test_determine_trade_decision_prioritizes_profit_take_over_xsignal(monkeypat
 def test_determine_trade_decision_uses_xsignal_before_copy_and_main(monkeypatch):
     monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))
     monkeypatch.setattr(clean_swap, "evaluate_take_profit", lambda *_args, **_kwargs: (False, None))
+    monkeypatch.setattr(clean_swap, "MIN_TRADE_USD", 0.0)
     monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
     monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: ["0xwallet"])
 
@@ -579,6 +581,152 @@ def test_determine_trade_decision_uses_xsignal_before_copy_and_main(monkeypatch)
     )
 
     assert out is sentinel
+
+
+def test_determine_trade_decision_defers_dust_profit_take_and_falls_through(monkeypatch, capsys):
+    monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))
+    monkeypatch.setattr(
+        clean_swap,
+        "evaluate_take_profit",
+        lambda *_args, **_kwargs: (True, {"reason": "TP_HIT", "message": "tp", "sell_fraction": 0.12}),
+    )
+    monkeypatch.setattr(clean_swap, "MIN_TRADE_USD", 15.0)
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
+
+    profit_dust = clean_swap.TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(5 * 1_000_000_000_000_000_000),
+        message="tiny tp",
+    )
+    sentinel = clean_swap.TradeDecision(direction="USDC_TO_EQUITY", amount_in=25_000_000, message="x-signal")
+    monkeypatch.setattr(clean_swap, "build_profit_exit_decision", lambda *_args, **_kwargs: profit_dust)
+    monkeypatch.setattr(clean_swap, "try_x_signal_equity_decision", lambda *_args, **_kwargs: sentinel)
+
+    skipped: list[str] = []
+    monkeypatch.setattr(clean_swap, "_log_trade_skipped", lambda reason: skipped.append(reason))
+
+    out = clean_swap.determine_trade_decision(
+        state={},
+        balances=clean_swap.Balances(usdt=10.0, wmatic=5.0, pol=1.0, usdc=30.0),
+        current_price=1.0,
+    )
+
+    captured = capsys.readouterr().out
+    assert out is sentinel
+    assert any("profit_take_dust_deferred" in reason for reason in skipped)
+    assert "PROFIT_TAKE DUST DEFER" in captured
+    assert "continuing to next strategy" in captured
+
+
+def test_determine_trade_decision_defers_dust_x_signal_and_falls_through_to_main(monkeypatch, capsys):
+    monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))
+    monkeypatch.setattr(clean_swap, "evaluate_take_profit", lambda *_args, **_kwargs: (False, None))
+    monkeypatch.setattr(clean_swap, "MIN_TRADE_USD", 15.0)
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
+
+    x_dust = clean_swap.TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=int(4.15 * 1_000_000),
+        trade_size=4.15,
+        message="tiny x buy",
+        token_in="0x" + "2" * 40,
+        token_out="0x" + "1" * 40,
+    )
+    main_ok = clean_swap.TradeDecision(
+        direction="USDT_TO_WMATIC",
+        amount_in=int(20 * 1_000_000),
+        trade_size=20.0,
+        message="main buy",
+    )
+    monkeypatch.setattr(clean_swap, "try_x_signal_equity_decision", lambda *_args, **_kwargs: x_dust)
+    monkeypatch.setattr(swap_exec, "select_main_strategy_trade", lambda *_args, **_kwargs: main_ok)
+
+    skipped: list[str] = []
+    monkeypatch.setattr(clean_swap, "_log_trade_skipped", lambda reason: skipped.append(reason))
+
+    out = clean_swap.determine_trade_decision(
+        state={},
+        balances=clean_swap.Balances(usdt=40.0, wmatic=5.0, pol=1.0, usdc=10.0),
+        current_price=1.0,
+    )
+
+    captured = capsys.readouterr().out
+    assert out is main_ok
+    assert any("x_signal_equity_dust_deferred" in reason for reason in skipped)
+    assert "X_SIGNAL_EQUITY DUST DEFER" in captured
+    assert "DECISION PATH: MAIN_STRATEGY" in captured
+
+
+def test_determine_trade_decision_defers_dust_polycopy_and_falls_through_to_main(monkeypatch, capsys):
+    monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))
+    monkeypatch.setattr(clean_swap, "evaluate_take_profit", lambda *_args, **_kwargs: (False, None))
+    monkeypatch.setattr(clean_swap, "MIN_TRADE_USD", 15.0)
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", False)
+    monkeypatch.setattr(clean_swap, "ENABLE_USDC_COPY", False)
+    monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: ["0xwallet"])
+    monkeypatch.setattr(swap_exec, "is_copy_trading_enabled", lambda: True)
+
+    polycopy_dust = clean_swap.TradeDecision(
+        direction="USDT_TO_WMATIC",
+        amount_in=int(4.0 * 1_000_000),
+        trade_size=4.0,
+        message="tiny copy",
+    )
+    main_ok = clean_swap.TradeDecision(
+        direction="USDT_TO_WMATIC",
+        amount_in=int(18.0 * 1_000_000),
+        trade_size=18.0,
+        message="main buy",
+    )
+    monkeypatch.setattr(swap_exec, "select_copy_trade", lambda *_args, **_kwargs: polycopy_dust)
+    monkeypatch.setattr(swap_exec, "select_main_strategy_trade", lambda *_args, **_kwargs: main_ok)
+
+    skipped: list[str] = []
+    monkeypatch.setattr(clean_swap, "_log_trade_skipped", lambda reason: skipped.append(reason))
+
+    out = clean_swap.determine_trade_decision(
+        state={},
+        balances=clean_swap.Balances(usdt=40.0, wmatic=5.0, pol=1.0, usdc=10.0),
+        current_price=1.0,
+    )
+
+    captured = capsys.readouterr().out
+    assert out is main_ok
+    assert any("polycopy_dust_deferred" in reason for reason in skipped)
+    assert "POLYCOPY DUST DEFER" in captured
+    assert "DECISION PATH: MAIN_STRATEGY" in captured
+
+
+def test_determine_trade_decision_defers_dust_main_strategy_with_no_further_fallback(monkeypatch, capsys):
+    monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))
+    monkeypatch.setattr(clean_swap, "evaluate_take_profit", lambda *_args, **_kwargs: (False, None))
+    monkeypatch.setattr(clean_swap, "MIN_TRADE_USD", 15.0)
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", False)
+    monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
+
+    main_dust = clean_swap.TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(4.0 * 1_000_000_000_000_000_000),
+        message="tiny main sell",
+    )
+    monkeypatch.setattr(swap_exec, "select_main_strategy_trade", lambda *_args, **_kwargs: main_dust)
+
+    skipped: list[str] = []
+    monkeypatch.setattr(clean_swap, "_log_trade_skipped", lambda reason: skipped.append(reason))
+
+    out = clean_swap.determine_trade_decision(
+        state={},
+        balances=clean_swap.Balances(usdt=40.0, wmatic=5.0, pol=1.0, usdc=0.0),
+        current_price=1.0,
+    )
+
+    captured = capsys.readouterr().out
+    assert out.should_execute is False
+    assert "deferred" in out.message.lower()
+    assert any("main_strategy_dust_deferred" in reason for reason in skipped)
+    assert "MAIN_STRATEGY DUST DEFER" in captured
 
 
 def test_main_skips_cycle_on_global_cooldown_and_logs_reason(monkeypatch):
@@ -1539,7 +1687,7 @@ def test_try_x_signal_auto_topup_skips_when_buy_asset_on_cooldown(monkeypatch):
                     symbol="WETH_ALPHA",
                     token_address="0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
                     decimals=18,
-                    signal_strength=0.91,
+                    signal_strength=0.74,
                 )
             ]
 
@@ -1570,6 +1718,64 @@ def test_try_x_signal_auto_topup_skips_when_buy_asset_on_cooldown(monkeypatch):
     )
 
     assert calls["count"] == 0
+
+
+def test_try_x_signal_auto_topup_runs_when_high_conviction_even_if_cooldown_blocked(monkeypatch):
+    class _TunedConfig:
+        min_trade_usdc = 5.0
+        per_asset_cooldown_seconds = 1800
+        min_pol_for_gas = 0.005
+
+    class _TunedTrader:
+        config = _TunedConfig()
+        gas_protector = _DummyGasProtector()
+
+        def build_plan_with_block_reason(self, **kwargs):
+            _ = kwargs
+            return None, "mock_no_plan"
+
+        def build_plan(self, **kwargs):
+            _ = kwargs
+            return None
+
+    class _BaseTrader:
+        def load_followed_equities(self):
+            return [
+                clean_swap.FollowedEquity(
+                    symbol="WETH_ALPHA",
+                    token_address="0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+                    decimals=18,
+                    signal_strength=0.91,
+                )
+            ]
+
+    calls = {"count": 0}
+
+    def _ensure(*_args, **_kwargs):
+        calls["count"] += 1
+        return False
+
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_AUTO_USDC_TOPUP_ENABLED", True)
+    monkeypatch.setattr(clean_swap, "_load_followed_equities_json_dict", lambda: {"enabled": True, "min_signal_strength": 0.60})
+    monkeypatch.setattr(clean_swap, "_effective_equity_signal_min", lambda cfg: 0.60)
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_EQUITY_TRADER", _BaseTrader())
+    monkeypatch.setattr(clean_swap, "_tuned_signal_equity_trader", lambda min_strength: _TunedTrader())
+    monkeypatch.setattr(clean_swap, "can_trade_asset", lambda symbol, now=None, cooldown_seconds=0: False)
+    monkeypatch.setattr(clean_swap, "get_token_balance", lambda *_args, **_kwargs: 0.0)
+    monkeypatch.setattr(clean_swap, "ensure_usdc_for_x_signal", _ensure)
+    monkeypatch.setattr(
+        clean_swap,
+        "get_balances",
+        lambda: clean_swap.Balances(usdt=40.0, wmatic=10.0, pol=1.0, usdc=2.0),
+    )
+
+    clean_swap.try_x_signal_equity_decision(
+        clean_swap.Balances(usdt=40.0, wmatic=10.0, pol=1.0, usdc=2.0),
+        dry_run=False,
+    )
+
+    assert calls["count"] == 1
 
 
 def test_try_x_signal_logs_auto_topup_consideration(monkeypatch, capsys):

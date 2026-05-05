@@ -202,6 +202,34 @@ def _decision_notional_usd(decision: TradeDecision, *, current_price_usd: float 
     return None
 
 
+def _defer_if_dust(
+    decision: TradeDecision,
+    *,
+    branch_name: str,
+    current_price_usd: float,
+) -> bool:
+    """Return True when branch decision is below MIN_TRADE_USD and should fall through."""
+    cs = _facade()
+    min_trade_usd = float(getattr(cs, "MIN_TRADE_USD", 0.0) or 0.0)
+    if min_trade_usd <= 0:
+        return False
+    notional_usd = _decision_notional_usd(decision, current_price_usd=current_price_usd)
+    if notional_usd is None or notional_usd + 1e-9 >= min_trade_usd:
+        return False
+
+    reason_txt = (
+        f"{branch_name.lower()}_dust_deferred "
+        f"({decision.direction}: ${notional_usd:.2f} < MIN_TRADE_USD ${min_trade_usd:.2f})"
+    )
+    cs._log_trade_skipped(reason_txt)
+    print(
+        f"{runtime._nanolog()}{branch_name} DUST DEFER | "
+        f"direction={decision.direction} | size=${notional_usd:.2f} | min=${min_trade_usd:.2f} | "
+        "continuing to next strategy"
+    )
+    return True
+
+
 def determine_trade_decision(
     state: dict,
     balances: Balances,
@@ -242,35 +270,23 @@ def determine_trade_decision(
             wmatic_balance=balances.wmatic,
             open_trade=cs_get_latest_open_trade(),
         )
-        min_trade_usd = float(getattr(cs, "MIN_TRADE_USD", 0.0) or 0.0)
-        protection_notional_usd = _decision_notional_usd(
+        if not _defer_if_dust(
             protection_decision,
+            branch_name="PROTECTION",
             current_price_usd=current_price,
-        )
-        if (
-            min_trade_usd > 0
-            and protection_notional_usd is not None
-            and protection_notional_usd + 1e-9 < min_trade_usd
         ):
-            reason_txt = (
-                "protection_dust_deferred "
-                f"({protection_decision.direction}: ${protection_notional_usd:.2f} < "
-                f"MIN_TRADE_USD ${min_trade_usd:.2f})"
-            )
-            cs._log_trade_skipped(reason_txt)
-            print(
-                f"{runtime._nanolog()}PROTECTION DUST DEFER | "
-                f"direction={protection_decision.direction} | "
-                f"size=${protection_notional_usd:.2f} | min=${min_trade_usd:.2f} | "
-                "continuing to next strategy"
-            )
-        else:
             return protection_decision
 
     should_take_profit, profit_signal = cs_evaluate_take_profit(current_price, state)
     if should_take_profit and profit_signal and balances.wmatic > 0:
         print(f"🔍 DECISION PATH: PROFIT_TAKE ({profit_signal.get('reason','')})")
-        return cs_build_profit_exit_decision(profit_signal, balances.wmatic)
+        profit_decision = cs_build_profit_exit_decision(profit_signal, balances.wmatic)
+        if not _defer_if_dust(
+            profit_decision,
+            branch_name="PROFIT_TAKE",
+            current_price_usd=current_price,
+        ):
+            return profit_decision
 
     if profit_signal and profit_signal["reason"] == "HOLD":
         print(f"📈 {profit_signal['message']}")
@@ -279,7 +295,12 @@ def determine_trade_decision(
         xd = cs_try_x_signal_equity_decision(balances, dry_run=dry_run)
         if xd and xd.should_execute:
             print("🔍 DECISION PATH: X_SIGNAL_EQUITY")
-            return xd
+            if not _defer_if_dust(
+                xd,
+                branch_name="X_SIGNAL_EQUITY",
+                current_price_usd=current_price,
+            ):
+                return xd
 
     target_wallets = target_wallets_prelude or cs.get_target_wallets()
     if is_copy_trading_enabled() and target_wallets:
@@ -298,20 +319,40 @@ def determine_trade_decision(
                     str(plan.wallet).strip(),
                     int(USDC_COPY_STRATEGY.config.per_wallet_cooldown_seconds),
                 ) if plan.wallet else None
-                return TradeDecision(
+                copy_decision = TradeDecision(
                     direction="USDC_TO_WMATIC",
                     amount_in=plan.amount_in,
                     trade_size=plan.trade_size,
                     message=plan.message,
                     cooldown_wallet=cw_usdc,
                 )
+                if not _defer_if_dust(
+                    copy_decision,
+                    branch_name="USDC_COPY",
+                    current_price_usd=current_price,
+                ):
+                    return copy_decision
+                print("🟦 USDC COPY DEFERRED | dust-sized notional, falling through")
             print("🟦 USDC COPY ACTIVE | No eligible copy-trade this cycle")
         else:
             print("🔍 DECISION PATH: POLYCOPY_TARGET_WALLETS")
-            return select_copy_trade(balances, target_wallets)
+            polycopy_decision = select_copy_trade(balances, target_wallets)
+            if not _defer_if_dust(
+                polycopy_decision,
+                branch_name="POLYCOPY",
+                current_price_usd=current_price,
+            ):
+                return polycopy_decision
 
     print(f"🔍 DECISION PATH: MAIN_STRATEGY (WMATIC≈${current_price:.4f})")
-    return select_main_strategy_trade(balances, current_price)
+    main_decision = select_main_strategy_trade(balances, current_price)
+    if _defer_if_dust(
+        main_decision,
+        branch_name="MAIN_STRATEGY",
+        current_price_usd=current_price,
+    ):
+        return TradeDecision(message="ℹ️ Main strategy deferred (dust-sized trade)")
+    return main_decision
 
 
 async def main(*, dry_run: bool = False) -> None:
