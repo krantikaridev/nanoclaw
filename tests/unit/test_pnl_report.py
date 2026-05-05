@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from scripts import pnl_report
 from scripts.pnl_report import extract_snapshots
 
@@ -98,6 +100,42 @@ def test_extract_snapshots_parses_authoritative_runtime_total_line(tmp_path: Pat
     assert snapshots[0].usdt == 10.0
     assert snapshots[0].usdc == 80.0
     assert snapshots[0].wmatic == 25.123456
+    assert snapshots[0].stable_usd_hint is None
+
+
+def test_extract_snapshots_parses_authoritative_v2_stable_usd_hint(tmp_path: Path) -> None:
+    body = (
+        "2026-05-06 11:00:00 [nanoclaw] WALLET TOTAL USD | TOTAL=$101.49 | "
+        "USDT=$25.09 | USDC=$25.76 | STABLE_USD=$50.85 | "
+        "WMATIC=363.364463 | POL=1.215000 | FE_USD=$14.79"
+    )
+    log_file = _write_log(tmp_path, body)
+
+    snapshots = extract_snapshots(log_file)
+
+    assert len(snapshots) == 1
+    assert snapshots[0].stable_usd_hint == pytest.approx(50.85)
+    assert snapshots[0].usdt == pytest.approx(25.09)
+    assert snapshots[0].usdc == pytest.approx(25.76)
+
+
+def test_get_current_balance_rpc_read_suspect_when_stables_near_zero_but_total_high(tmp_path: Path, monkeypatch) -> None:
+    log_file = _write_log(
+        tmp_path,
+        "\n".join(
+            [
+                "2026-05-06 11:05:00 [nanoclaw] WALLET TOTAL USD | TOTAL=$60.00 | "
+                "USDT=$0.10 | USDC=$0.00 | STABLE_USD=$0.10 | "
+                "WMATIC=363.364463 | POL=1.20 | FE_USD=$0.00",
+            ]
+        ),
+    )
+    monkeypatch.setattr(pnl_report, "LOG_FILE", str(log_file))
+
+    current = pnl_report.get_current_balance()
+    assert current is not None
+    assert current["rpc_read_suspect"] is True
+    assert current["stable_usd"] == pytest.approx(0.1)
 
 
 def test_get_current_balance_prefers_live_onchain_snapshot_over_manual(tmp_path: Path, monkeypatch) -> None:
@@ -137,6 +175,8 @@ def test_get_current_balance_prefers_authoritative_total_over_legacy_live(tmp_pa
     assert current is not None
     assert current["source"] == "RUNTIME WALLET TRUTH (TOTAL USD)"
     assert current["total"] == 130.55
+    assert current["stable_usd"] == pytest.approx(90.0)
+    assert current["rpc_read_suspect"] is False
 
 
 def test_get_current_balance_uses_most_recent_snapshot_within_best_rank(tmp_path: Path, monkeypatch) -> None:

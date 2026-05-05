@@ -27,7 +27,13 @@ MANUAL_PATTERN = re.compile(
     re.IGNORECASE,
 )
 WALLET_PATTERN = re.compile(r"WALLET BALANCE.*USDC=\$?([\d.]+)")
-AUTHORITATIVE_TOTAL_PATTERN = re.compile(
+AUTHORITATIVE_TOTAL_PATTERN_V2 = re.compile(
+    r"WALLET TOTAL USD\s*\|\s*TOTAL=\$?([\d.]+)\s*\|\s*USDT=\$?([\d.]+)\s*\|\s*USDC=\$?([\d.]+)\s*\|\s*"
+    r"STABLE_USD=\$?([\d.]+)\s*\|\s*WMATIC=([\d.]+)",
+    re.IGNORECASE,
+)
+# Legacy line without STABLE_USD (older logs before v2.8 PnL clarity).
+AUTHORITATIVE_TOTAL_PATTERN_V1 = re.compile(
     r"WALLET TOTAL USD\s*\|\s*TOTAL=\$?([\d.]+)\s*\|\s*USDT=\$?([\d.]+)\s*\|\s*USDC=\$?([\d.]+)\s*\|\s*WMATIC=([\d.]+)",
     re.IGNORECASE,
 )
@@ -45,6 +51,8 @@ class BalanceSnapshot:
     total: float
     source: str
     logger_source: str | None = None
+    # When set (WALLET TOTAL USD v2 log), explicit USDT+USDC from runtime; else infer from usdt+usdc.
+    stable_usd_hint: float | None = None
 
 
 def extract_snapshots(log_file: Path) -> list[BalanceSnapshot]:
@@ -57,7 +65,27 @@ def extract_snapshots(log_file: Path) -> list[BalanceSnapshot]:
     pending_wallet: tuple[int, float] | None = None
 
     for idx, line in enumerate(lines):
-        authoritative_total_match = AUTHORITATIVE_TOTAL_PATTERN.search(line)
+        authoritative_total_match = AUTHORITATIVE_TOTAL_PATTERN_V2.search(line)
+        if authoritative_total_match:
+            total = float(authoritative_total_match.group(1))
+            usdt = float(authoritative_total_match.group(2))
+            usdc = float(authoritative_total_match.group(3))
+            stable_hint = float(authoritative_total_match.group(4))
+            wmatic = float(authoritative_total_match.group(5))
+            snapshots.append(
+                BalanceSnapshot(
+                    usdt=usdt,
+                    usdc=usdc,
+                    wmatic=wmatic,
+                    total=total,
+                    source="authoritative_total",
+                    stable_usd_hint=stable_hint,
+                )
+            )
+            pending_wallet = None
+            continue
+
+        authoritative_total_match = AUTHORITATIVE_TOTAL_PATTERN_V1.search(line)
         if authoritative_total_match:
             total = float(authoritative_total_match.group(1))
             usdt = float(authoritative_total_match.group(2))
@@ -70,6 +98,7 @@ def extract_snapshots(log_file: Path) -> list[BalanceSnapshot]:
                     wmatic=wmatic,
                     total=total,
                     source="authoritative_total",
+                    stable_usd_hint=None,
                 )
             )
             pending_wallet = None
@@ -162,6 +191,26 @@ def _is_usable_snapshot(snapshot: BalanceSnapshot) -> bool:
     return True
 
 
+def _stable_usd_for_snapshot(snapshot: BalanceSnapshot) -> float:
+    if snapshot.stable_usd_hint is not None:
+        return float(snapshot.stable_usd_hint)
+    return float(snapshot.usdt) + float(snapshot.usdc)
+
+
+def _print_balance_block(bal: dict) -> None:
+    print(f"💰 CURRENT BALANCE  (source: {bal['source']})")
+    print(f"   Stables USD (USDT+USDC): ${float(bal['stable_usd']):.2f}")
+    print(f"   USDC:   ${float(bal['usdc']):.2f}")
+    print(f"   USDT:   ${float(bal['usdt']):.2f}")
+    print(f"   WMATIC: {float(bal['wmatic']):.6f} (qty, native units — not USD)")
+    print(f"   TOTAL:  ${float(bal['total']):.2f}")
+    if bal.get("rpc_read_suspect"):
+        print(
+            "   ⚠️  RPC read suspect: near-zero stables but material TOTAL "
+            "(compare MetaMask / Polygonscan; fix RPC in .env — see docs/readme-vm-update.md)."
+        )
+
+
 def get_current_balance():
     snapshots = extract_snapshots(Path(LOG_FILE))
     if not snapshots:
@@ -176,12 +225,20 @@ def get_current_balance():
     chosen = next(
         snapshot for snapshot in reversed(usable) if _source_rank(snapshot) == best_rank
     )
+    stable_usd = _stable_usd_for_snapshot(chosen)
+    rpc_read_suspect = bool(
+        chosen.source == "authoritative_total"
+        and stable_usd < 5.0
+        and float(chosen.total) > 45.0
+    )
     return {
         "usdt": chosen.usdt,
         "usdc": chosen.usdc,
         "wmatic": chosen.wmatic,
         "total": chosen.total,
         "source": _source_label(chosen),
+        "stable_usd": stable_usd,
+        "rpc_read_suspect": rpc_read_suspect,
     }
 
 
@@ -192,11 +249,7 @@ def print_daily_summary(*, reset_session: bool = False) -> int:
         return 0
 
     total = float(bal["total"])
-    print(f"💰 CURRENT BALANCE  (source: {bal['source']})")
-    print(f"   USDC:   ${bal['usdc']:.2f}")
-    print(f"   WMATIC: ${bal['wmatic']:.2f}")
-    print(f"   USDT:   ${bal['usdt']:.2f}")
-    print(f"   TOTAL:  ${total:.2f}")
+    _print_balance_block(bal)
     print()
 
     baseline_total = float(resolve_portfolio_baseline_usd(total))
@@ -333,11 +386,7 @@ def print_report(*, reset_session: bool = False) -> int:
         return 0
 
     total = float(bal["total"])
-    print(f"💰 CURRENT BALANCE  (source: {bal['source']})")
-    print(f"   USDC:   ${bal['usdc']:.2f}")
-    print(f"   WMATIC: ${bal['wmatic']:.2f}")
-    print(f"   USDT:   ${bal['usdt']:.2f}")
-    print(f"   TOTAL:  ${total:.2f}")
+    _print_balance_block(bal)
     print()
 
     baseline_total = float(resolve_portfolio_baseline_usd(total))

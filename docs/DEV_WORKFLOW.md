@@ -94,7 +94,9 @@ Fast iteration mode (for stage diagnosis loops, not final sign-off):
 - Keep final pre-tag decision on a longer window (30-60 minutes) even when fast mode is green.
 
 Runtime/template note:
-- Stage runtime tuning may be kept in VM-local `.env.local` for rapid iteration.
+
+- **`nanoup`** merges `.env.example` → `.env` (`scripts/nanoenv_apply.py`), preserving secrets and RPC-related keys only. Promote tuning by updating `.env.example` (sanitized), then VM `pull`/`nanoup`.
+- Edits to `.env` alone may be overwritten on the next `nanoup` unless those keys are in `.env.example` afterward or on the preserve list—see `nanoclaw/env_sync.py`.
 - `.env.example` must remain sanitized and document knobs/semantics (not secret values or machine-specific endpoints).
 
 Windows gate shortcut:

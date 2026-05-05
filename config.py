@@ -8,7 +8,6 @@ from typing import Any
 from dotenv import load_dotenv
 
 load_dotenv()
-load_dotenv(".env.local", override=True)
 
 
 def env(name: str, default: str | None = None) -> str:

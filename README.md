@@ -37,7 +37,7 @@ For operators and agents, **`AI_CONTEXT.md`** on branch **`V2`** is the authorit
 
 **`sprintmon`** is not in this repo; use **`nanostatus`** / **`nanopnl`** for quick health + PnL and **`nanobot`** / **`nanoattach`** for live logs.
 Session baseline can be reset manually with `nanopnl --reset-session` (or `nanostatus --reset-session` / `nanorestart --reset-session`).
-`scripts/pnl_report.py` now prioritizes the runtime wallet-truth line (`WALLET TOTAL USD`) as the authoritative portfolio total for `nanostatus`/`nanopnl`/`nanodaily`. If that line is missing, it falls back to live parser snapshots (`WALLET BALANCE` + `Real USDT` pairing and direct `Real USDT` lines), then `MANUAL CORRECT BALANCE`. Snapshot validation rejects non-finite (`NaN`/`inf`), negative, or clearly unreasonable values before fallback selection.
+`scripts/pnl_report.py` now prefers the runtime line **`WALLET TOTAL USD`** (`STABLE_USD` = USDT+USDC when present, **WMATIC** = token qty — not USD) for `nanostatus`/`nanopnl`/`nanodaily`; then legacy live snapshots, then `MANUAL CORRECT BALANCE`. If authoritative stables are ~0 but TOTAL is large, the report flags **RPC read suspect** (compare wallet UI / Polygonscan).
 
 **USDC top-up for X-Signal equity** is handled inside the bot (`try_x_signal_equity_decision`), not as a separate shell alias. Configure `X_SIGNAL_USDC_SAFE_FLOOR`, `X_SIGNAL_AUTO_USDC_TARGET`, `X_SIGNAL_AUTO_USDC_TOPUP_ENABLED`, `X_SIGNAL_AUTO_USDC_MIN_SWAP_USD`, and `X_SIGNAL_AUTO_USDC_FAIL_COOLDOWN_SECONDS` in `.env` (see `.env.example`). Top-up prefers `USDT -> USDC` and falls back to `WMATIC -> USDC`. On-chain USDC reads retry before fallback (`X_SIGNAL_ONCHAIN_USDC_RETRY_ATTEMPTS`). AUTO-USDC logs now include per-attempt pre/post/target telemetry and a short failure backoff to reduce repeated retry loops.
 **USDC copy quality controls** now include gas-aware filtering and per-wallet performance weighting. Configure `COPY_BASE_EXPECTED_EDGE_PCT`, `COPY_GAS_EDGE_MULTIPLIER`, `COPY_MIN_EFFECTIVE_TRADE_AFTER_GAS_USD`, `COPY_MIN_MARGINAL_TRADE_USD`, and the `COPY_WALLET_PERFORMANCE_*` keys to tune allocation penalties for poor recent wallet performance.
@@ -136,9 +136,10 @@ For ROI-first iteration, review deltas in:
 
 ## Configuration
 
-- **Template**: `.env.example`
-- **Do not commit**: `.env` (contains secrets)
-- Optional local override file: `.env.local` (loaded after `.env` when present)
+- **Template**: `.env.example` (committed; sanitized defaults and comments)
+- **Runtime**: `.env` (not committed; secrets and machine values)
+- **`nanoup`** merges `.env.example` → `.env`, preserving secrets and RPC-related keys only (see `nanoclaw/env_sync.py`). Other keys take template values on each deploy—**promote VM tuning by updating `.env.example`**, then pull/`nanoup`, or edit `.env` after `nanoup` knowing the next `nanoup` may reset non-preserved keys.
+- VM steps (RPC placeholders, **`MAX_GWEI`**, probe snippet): **`docs/readme-vm-update.md`**. Send USDC on Polygon to the bot (**beginner**): **`docs/OPERATOR_SEND_USDC_POLYGON.md`**.
 
 ### Required addresses (Polygon)
 
@@ -189,9 +190,7 @@ Policy:
 
 ## VM fix script env target
 
-`scripts/fix_vm.sh` now writes gas overrides into `.env` by default.
-If your runtime uses `.env.local` overrides, point it explicitly via `NANOCLAW_ENV_PATH`.
-Override env file path if needed:
+`scripts/fix_vm.sh` writes gas overrides into `.env` by default. To target another file:
 
 ```bash
 NANOCLAW_ENV_PATH=/path/to/.env ./scripts/fix_vm.sh

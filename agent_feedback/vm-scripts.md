@@ -18,6 +18,6 @@
 
 ## Follow-ups
 
-- Optionally read `RPC` from `.env.local` (when present) so the default endpoint isn’t duplicated in multiple places.
+- Optionally read `RPC` from runtime `.env` (via config) so the default endpoint isn’t duplicated in multiple places.
 - Consider logging health check output to a timestamped file in an artifacts directory for later post-mortems.
 

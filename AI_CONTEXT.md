@@ -153,7 +153,34 @@ Operational focus: correctness of this precedence, USDC liquidity for equity **b
 Examples: `RPC`, `COOLDOWN_MINUTES`, `ENABLE_X_SIGNAL_EQUITY`, `X_SIGNAL_EQUITY_MIN_STRENGTH` **(default template 0.60; tighten in prod if desired)**,
 `SWAP_SLIPPAGE_BPS`, `LOG_PREFIX`, Polygon token addresses (`USDC`, `WMATIC`, `ROUTER`), and `MIN_TRADE_USD` (hard execution floor for stable-in BUY notional; `FIXED_TRADE_USD_MIN` is reconciled to never sit below it).
 
-Load order: `.env` then optional `.env.local` (`override=True`) when present.
+Load order: **`python-dotenv` loads `.env` only** (repo root). Runtime tuning lives in `.env`; **`nanoup` rebuilds `.env` from `.env.example`** while preserving secrets + RPC keys (`nanoclaw/env_sync.py`). Update `.env.example` when promoting non-secret defaults, then VM `pull`/`nanoup`.
+
+### Canonical VM env workflow (single file)
+
+1. **`cp .env.example .env`** once; fill secrets in `.env` only (never commit `.env`).
+2. **`NANOUP_AUTOSTASH=1 nanoup`** — refreshes `.env` from `.env.example`, keeps preserved keys from existing `.env`.
+3. **Tune stage knobs** — either edit `.env.example` + commit + `nanoup` on VM, or temporarily edit `.env` (knowing the next `nanoup` may overwrite keys that are not on the preserve list).
+
+## v2.8.x PnL / ops stabilization (reporting + template)
+
+- **`WALLET TOTAL USD` log** includes **`STABLE_USD`** (USDT+USDC) from the same `get_balances()` call as other fields.
+- **`scripts/pnl_report.py`**: prints **Stables USD (USDT+USDC)** first, labels **WMATIC** as **token qty (not USD)**, optional **RPC read suspect** when stables ≈ 0 but TOTAL is material; parses both new and legacy `WALLET TOTAL USD` lines.
+- **`.env.example`**: **`MAX_GWEI=150`** so `nanoup` on VM stops defaulting swaps/AUTO-USDC to `gas_ok=False` during typical Polygon congestion (adjust per ops).
+- Full **seed-numeraire PnL** and public reconciliation are still **v2.9+** (see backlog below).
+
+## Planned — v2.9 backlog
+- **Operator docs shipped (v2.8.x)**: **`docs/readme-vm-update.md`** explicit RPC + **`MAX_GWEI`** checklist; **`docs/OPERATOR_SEND_USDC_POLYGON.md`** for funding **`WALLET=`** on Polygon. (VM may stay the deploy source of truth for a tagged **v2.8**; fold doc-only deltas into the **v2.9** branch when you open it—no requirement to push from every local Cursor sandbox.)
+- **Trustworthy PnL (v2.9 — must fix, not polish)**: Today’s `nanostatus` / `nanopnl` / session % are **not operator-grade** when RPC fails, price feeds drift, or totals mix **stables vs mark-to-market**. **v2.9 goal:** define **one seed accounting line** (pick **USDC xor USDT** as the numeraire, not both interchangeably) with an **explicit snapshot time** and **`delta = current_same_basis − seed` in USD** as the **headline PnL** for “did we make money in stables.” **Do not** pretend that single number explains **WMATIC/WETH/POSI** price moves—that is **inventory MTM**, a **separate** series (defer full split to **v3.0** if needed, but v2.9 must stop shipping misleading % labels off wrong totals).
+- **Internal vs public reconcile (v2.9)**: Bot logs and **public** sources (wallet UI, block explorer token balances) must be **reconcilable**; emit **compact deltas** (e.g. stablecoin bucket, total wallet-truth, discrepancy flag) on a schedule—not every line every cycle unless debugging.
+- **Event store + verified flag (v3.0 direction)**: Move toward an **append-only event DB** (swaps, snapshots, reconciliations). A **separate process** may mark rows **verified** against **public** on-chain reads (or indexer); after that, dashboards can trust DB as read model. **v2.9** can stay file/log/CSV-based if the **math and seed definition** are fixed first.
+- **Env ergonomics**: Revisit `nanoenv_apply` preservation list vs operator knobs (`MAX_GWEI`, X-Signal AUTO-USDC thresholds, etc.) so frequent VM tuning survives `nanoup` without accidental resets—or document one blessed workflow explicitly in `docs/readme-vm-update.md`.
+- **Gas vs AUTO-USDC**: Dedicated max-gwei ceiling for AUTO-USDC top-up (decouple from global swap gas cap) plus tests/docs.
+- **WMATIC USD price sanity**: Fallback / bounds when oracle-style feed drifts vs spot (reduces bogus dust sizing).
+- **PnL/reporting polish (mechanical)**: Clarify `nanostatus` / `nanopnl` labels for **WMATIC quantity vs USD** so totals and components cannot be misread side-by-side (**not** a substitute for the trust model above).
+
+### Cross-check vs wallet UI (May 2026)
+
+- If **MetaMask / Polygonscan** shows **non-zero USDC** on **`WALLET=`** but **`real_cron.log`** prints **`USDC=$0`** and **`fallback_after_all_rpcs_failed`**, treat the UI as **ground truth for balances** and the log as **degraded telemetry** until RPC/read paths are fixed. **AUTO-USDC** may be redundant when stables exist on-chain—symptoms often mean **mis-read**, not “need more top-up.”
 
 ## Recent implementation notes (April 2026)
 

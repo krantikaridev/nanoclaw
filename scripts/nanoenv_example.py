@@ -3,6 +3,9 @@
 """
 Sanitize a live `.env` into shareable form (secrets blanked).
 
+Before commit after --write: git diff .env.example — never commit paid RPC paths
+(e.g. Ankr /multichain/<key>) or any non-public endpoint from VM .env into the repo template.
+
 Usage (repo root, with `.venv` activated):
   python scripts/nanoenv_example.py              # print to stdout
   python scripts/nanoenv_example.py --write      # overwrite ./.env.example — ALWAYS git diff before commit

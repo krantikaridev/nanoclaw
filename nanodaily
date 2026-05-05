@@ -14,7 +14,7 @@ else
   # Fallback when --daily-summary fails or emits no usable output.
   echo "⚠️ daily-summary fallback (exit=$SUMMARY_EXIT)"
   REPORT_OUTPUT="$(PYTHONIOENCODING=utf-8 python scripts/pnl_report.py 2>&1 || true)"
-  printf '%s\n' "$REPORT_OUTPUT" | grep -E "(CURRENT BALANCE|source:|USDC|WMATIC|USDT|TOTAL|Since baseline|Session PnL|24h PnL)"
+  printf '%s\n' "$REPORT_OUTPUT" | grep -E "(CURRENT BALANCE|source:|Stables USDC|USDC|WMATIC|USDT|TOTAL|suspect|Since baseline|Session PnL|24h PnL)"
 fi
 echo ""
 echo "📊 TODAY STATS:"

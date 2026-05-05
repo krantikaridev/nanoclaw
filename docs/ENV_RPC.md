@@ -13,8 +13,9 @@ This is the **intended** behavior in the repo today; adjust in `nanoclaw.config`
 
 `connect_web3()` without arguments walks that list: for each URL it builds `Web3.HTTPProvider`, calls `eth.block_number`, and returns the first client that succeeds (with a few transient retries per URL). If all fail, it raises.
 
-**Operator guidance:** Prefer setting **`RPC_ENDPOINTS`** with 2-3 providers in priority order, and keep `RPC`/`RPC_URL` aligned to your preferred primary for compatibility. Use `WEB3_PROVIDER_URI` as a legacy alias only.
-Always use real reachable URLs in runtime `.env`/`.env.local`; do not leave placeholder values in any RPC key.
+**Operator guidance:** Prefer **`RPC_ENDPOINTS`** with 2–3 HTTPS providers in priority order, and keep `RPC` / `RPC_URL` / `WEB3_PROVIDER_URI` aligned with your primary where tools still read those aliases.
+
+Always use real reachable URLs in runtime `.env`; remove tutorial placeholders (`YOUR_*`, `PASTE_*`). In Python, **`config.RPC_ENDPOINTS` is a `list`**, not a string—use the probe in **`docs/readme-vm-update.md`** (section *Explicit checklist: RPC and `MAX_GWEI`*) instead of calling `.strip()` on it.
 
 Example:
 
