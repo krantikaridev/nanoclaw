@@ -118,8 +118,29 @@ def test_get_current_balance_uses_most_recent_snapshot_within_best_rank(tmp_path
 
     assert current is not None
     assert current["source"] == "ON-CHAIN LIVE (WALLET+REAL paired)"
-    # Latest paired snapshot should win: USDT 20 + USDC 90 + WMATIC 4
+    # Latest live snapshot should win: USDT 20 + USDC 90 + WMATIC 4
     assert current["total"] == 114.0
+
+
+def test_get_current_balance_prefers_newer_real_over_older_paired(tmp_path: Path, monkeypatch) -> None:
+    log_file = _write_log(
+        tmp_path,
+        "\n".join(
+            [
+                "2026-05-04 10:00:00 [nanoclaw] WALLET BALANCE | USDC=60.00",
+                "2026-05-04 10:00:01 Real USDT: 10.00 | USDC: 50.00 | WMATIC: 5.00",
+                # Later cycle has only direct real line (no wallet pair).
+                "2026-05-04 10:05:00 Real USDT: 21.00 | USDC: 81.00 | WMATIC: 4.00",
+            ]
+        ),
+    )
+    monkeypatch.setattr(pnl_report, "LOG_FILE", str(log_file))
+
+    current = pnl_report.get_current_balance()
+
+    assert current is not None
+    assert current["source"] == "ON-CHAIN LIVE (Real USDT line)"
+    assert current["total"] == 106.0
 
 
 def test_resolve_session_baseline_creates_and_resets(tmp_path: Path, monkeypatch) -> None:

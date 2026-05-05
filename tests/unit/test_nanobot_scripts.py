@@ -358,3 +358,37 @@ def test_nanodaily_keeps_total_line_from_balance_block(tmp_path: Path):
     )
     assert run_daily.returncode == 0, run_daily.stderr
     assert "TOTAL:  $20.00" in run_daily.stdout
+
+
+def test_nanodaily_falls_back_when_daily_summary_fails(tmp_path: Path):
+    _require_bash()
+    root = _sandbox_root(tmp_path)
+    env = {
+        **os.environ,
+        "PATH": f"{root / 'bin'}{os.pathsep}{os.environ.get('PATH', '')}",
+    }
+    (root / "scripts" / "pnl_report.py").write_text(
+        "\n".join(
+            [
+                "import sys",
+                "if '--daily-summary' in sys.argv:",
+                "    raise SystemExit(2)",
+                "print('USDC: $7.00')",
+                "print('TOTAL: $7.00')",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    run_daily = subprocess.run(
+        ["bash", str(root / "nanodaily")],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert run_daily.returncode == 0, run_daily.stderr
+    assert "USDC: $7.00" in run_daily.stdout
+    assert "TOTAL: $7.00" in run_daily.stdout

@@ -314,7 +314,10 @@ def ensure_usdc_for_x_signal(min_usdc: float = 8.0, min_wmatic_value: float = 15
         try:
             return asyncio.run(coro)
         except Exception as exc:
-            print(f"{runtime._nanolog()}AUTO-USDC swap call failed before submission — {exc}")
+            print(
+                f"{runtime._nanolog()}AUTO-USDC swap call raised exception; "
+                f"submission status unknown — {exc}"
+            )
             return False
 
     # Preferred source: USDT first.

@@ -2077,6 +2077,33 @@ def test_ensure_usdc_for_x_signal_min_swap_threshold_skips_small_usdt_leg(monkey
     assert directions == ["WMATIC_TO_USDC"]
 
 
+def test_ensure_usdc_for_x_signal_reports_unknown_submission_when_swap_raises(monkeypatch, capsys):
+    from modules import signal as signal_module
+
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_AUTO_USDC_TOPUP_ENABLED", True)
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_AUTO_USDC_MIN_SWAP_USD", 8.0)
+    monkeypatch.setattr(clean_swap, "GAS_PROTECTOR", _GasProtectorOk())
+    monkeypatch.setenv("POLYGON_PRIVATE_KEY", "0x" + "a" * 64)
+    monkeypatch.setattr(clean_swap, "get_live_wmatic_price", lambda: 2.0)
+
+    monkeypatch.setattr(
+        clean_swap,
+        "get_balances",
+        lambda: clean_swap.Balances(usdt=40.0, wmatic=50.0, pol=1.0, usdc=5.0),
+    )
+
+    async def _raise_on_swap(*_args, **_kwargs):
+        raise RuntimeError("rpc timeout")
+
+    monkeypatch.setattr(signal_module, "approve_and_swap", _raise_on_swap)
+
+    ok = clean_swap.ensure_usdc_for_x_signal(min_usdc=25.0, force=True)
+    out = capsys.readouterr().out
+    assert ok is False
+    assert "submission status unknown" in out
+    assert "before submission" not in out
+
+
 def test_project_balances_after_auto_usdc_respects_min_swap_threshold(monkeypatch):
     monkeypatch.setattr(clean_swap, "_strong_x_signal_buy_present", lambda: True)
     monkeypatch.setattr(clean_swap, "GAS_PROTECTOR", _GasProtectorOk())

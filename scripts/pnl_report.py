@@ -102,13 +102,13 @@ def extract_snapshots(log_file: Path) -> list[BalanceSnapshot]:
 
 
 def _source_rank(snapshot: BalanceSnapshot) -> int:
-    if snapshot.source == "paired":
+    # Treat direct real and paired wallet+real as the same "live" class.
+    # Recency is resolved in ``get_current_balance``.
+    if snapshot.source in {"paired", "real"}:
         return 0
-    if snapshot.source == "real":
-        return 1
     if snapshot.source == "manual" and snapshot.logger_source in {"BotLogger", "AutoLogger"}:
-        return 2
-    return 3
+        return 1
+    return 2
 
 
 def _source_label(snapshot: BalanceSnapshot) -> str:
@@ -151,6 +151,42 @@ def get_current_balance():
         "total": chosen.total,
         "source": _source_label(chosen),
     }
+
+
+def print_daily_summary(*, reset_session: bool = False) -> int:
+    bal = get_current_balance()
+    if not bal:
+        print("No valid balance found.")
+        return 0
+
+    total = float(bal["total"])
+    print(f"💰 CURRENT BALANCE  (source: {bal['source']})")
+    print(f"   USDC:   ${bal['usdc']:.2f}")
+    print(f"   WMATIC: ${bal['wmatic']:.2f}")
+    print(f"   USDT:   ${bal['usdt']:.2f}")
+    print(f"   TOTAL:  ${total:.2f}")
+    print()
+
+    baseline_total = float(resolve_portfolio_baseline_usd(total))
+    baseline_delta = total - baseline_total
+    baseline_pct = _pct_change(total, baseline_total)
+    session_total, session_started_at = resolve_session_baseline(total, reset=reset_session)
+    session_delta = total - session_total
+    session_pct = _pct_change(total, session_total)
+    baseline_24h = resolve_24h_baseline(total)
+    if baseline_24h is not None:
+        pnl_24h = total - baseline_24h
+        pct_24h = _pct_change(total, baseline_24h)
+        pnl_24h_line = f"24h PnL:      ${pnl_24h:+.2f} ({pct_24h:+.2f}%)"
+    else:
+        pnl_24h_line = "24h PnL:      n/a (need >=24h history in portfolio_history.csv)"
+
+    print("📊 PNL SNAPSHOT")
+    print(f"Since baseline: ${baseline_delta:+.2f} ({baseline_pct:+.2f}%)")
+    print(f"Session PnL:   ${session_delta:+.2f} ({session_pct:+.2f}%)")
+    print(f"Session start: {session_started_at}")
+    print(pnl_24h_line)
+    return 0
 
 
 def get_recent_trades(n=8):
@@ -310,11 +346,18 @@ def print_report(*, reset_session: bool = False) -> int:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Nanoclaw PnL report")
     parser.add_argument("--reset-session", action="store_true", help="Reset session baseline to current total")
+    parser.add_argument(
+        "--daily-summary",
+        action="store_true",
+        help="Print compact balance + PnL summary for nanodaily",
+    )
     return parser
 
 
 def main() -> int:
     args = _build_parser().parse_args()
+    if bool(args.daily_summary):
+        return print_daily_summary(reset_session=bool(args.reset_session))
     return print_report(reset_session=bool(args.reset_session))
 
 
