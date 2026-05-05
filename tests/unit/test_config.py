@@ -44,12 +44,20 @@ def test_resolve_private_key_prefers_env_over_function_arg(monkeypatch):
     assert source == "POLYGON_PRIVATE_KEY"
 
 
-def test_resolve_private_key_ignores_function_arg_when_env_missing(monkeypatch):
+def test_resolve_private_key_uses_function_arg_when_env_missing(monkeypatch):
     monkeypatch.delenv("POLYGON_PRIVATE_KEY", raising=False)
     monkeypatch.delenv("PRIVATE_KEY", raising=False)
     key, source = config.resolve_private_key("arg-key")
-    assert key == ""
-    assert source == "missing"
+    assert key == "arg-key"
+    assert source == "function_arg"
+
+
+def test_resolve_private_key_requires_uses_function_arg_when_provided(monkeypatch):
+    monkeypatch.delenv("POLYGON_PRIVATE_KEY", raising=False)
+    monkeypatch.delenv("PRIVATE_KEY", raising=False)
+    key, source = config.resolve_private_key("arg-key", require=True)
+    assert key == "arg-key"
+    assert source == "function_arg"
 
 
 def test_resolve_private_key_raises_when_required_and_missing(monkeypatch):

@@ -138,8 +138,15 @@ class USDCopyStrategy:
             usdc_balance, usdt_balance, float(self.config.copy_trade_pct)
         )
         hard_floor = max(0.0, float(getattr(cfg, "MIN_TRADE_USD", 15.0)))
-        min_viable = max(float(self.config.min_trade_usdc), 10.0, min(hard_floor, float(self.config.max_trade_usdc)))
-        sized = min(float(cap), float(usdc_balance), float(self.config.max_trade_usdc))
+        max_cap = min(float(usdc_balance), float(self.config.max_trade_usdc))
+        min_viable = max(float(self.config.min_trade_usdc), 10.0, hard_floor)
+        if max_cap + 1e-9 < min_viable:
+            print(
+                "[nanoclaw] COPY TRADE SKIPPED | max cap below viable minimum "
+                f"(max_cap=${max_cap:.2f}, min_viable=${min_viable:.2f})"
+            )
+            return 0.0
+        sized = min(float(cap), max_cap)
         if sized < min_viable and float(usdc_balance) >= min_viable:
             sized = min_viable
         return max(0.0, float(sized))

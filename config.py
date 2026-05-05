@@ -266,14 +266,18 @@ def resolve_private_key(
     Resolve signer key with a single shared precedence:
     1) POLYGON_PRIVATE_KEY
     2) PRIVATE_KEY (legacy)
-    Raises when ``require=True`` and neither env key exists.
+    3) explicit function argument fallback (legacy call compatibility)
+    Raises when ``require=True`` and no source resolves a key.
     """
-    _ = private_key_param  # Kept for backward compatibility with existing call signatures.
     global _PRIVATE_KEY_LOGGED_SOURCE
     resolved_key, source = _resolve_private_key_from_env()
+    if not resolved_key:
+        arg_key = str(private_key_param or "").strip()
+        if arg_key:
+            resolved_key, source = arg_key, "function_arg"
     if require and not resolved_key:
         raise MissingPrivateKeyError(
-            "Missing private key. Set POLYGON_PRIVATE_KEY (preferred) or PRIVATE_KEY in your .env before running the bot."
+            "Missing private key. Set POLYGON_PRIVATE_KEY (preferred) or PRIVATE_KEY in your .env, or pass private_key explicitly."
         )
     if log_success and resolved_key and _PRIVATE_KEY_LOGGED_SOURCE != source:
         print(f"[nanoclaw] Private key loaded from {source}")
