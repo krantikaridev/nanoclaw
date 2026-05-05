@@ -112,6 +112,7 @@ def test_merge_env_from_example_appends_extra_keys_when_requested():
 def test_env_apply_preserve_keys_include_rpc_runtime_keys():
     keys = set(ENV_APPLY_PRESERVE_KEYS)
     assert "WALLET" in keys
+    assert "MIN_POL_FOR_GAS" in keys
     assert "ANKR_RPC_KEY" in keys
     assert "RPC_ENDPOINTS" in keys
     assert "RPC" in keys

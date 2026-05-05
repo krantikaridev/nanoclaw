@@ -208,7 +208,7 @@ Operational focus: correctness of this precedence, USDC liquidity for equity **b
 Examples: `RPC`, `COOLDOWN_MINUTES`, `ENABLE_X_SIGNAL_EQUITY`, `X_SIGNAL_EQUITY_MIN_STRENGTH` **(default template 0.60; tighten in prod if desired)**,
 `SWAP_SLIPPAGE_BPS`, `LOG_PREFIX`, Polygon token addresses (`USDC`, `WMATIC`, `ROUTER`), and `MIN_TRADE_USD` (hard execution floor for stable-in BUY notional; `FIXED_TRADE_USD_MIN` is reconciled to never sit below it).
 
-Load order: **`python-dotenv` loads `.env` only** (repo root). Runtime tuning lives in `.env`; **`nanoup` rebuilds `.env` from `.env.example`** while preserving secrets, RPC keys, and **`WALLET=`** (`nanoclaw/env_sync.py`). Update `.env.example` when promoting non-secret defaults, then VM `pull`/`nanoup`.
+Load order: **`python-dotenv` loads `.env` only** (repo root). Runtime tuning lives in `.env`; **`nanoup` rebuilds `.env` from `.env.example`** while preserving secrets, RPC keys, **`WALLET=`**, **`MIN_POL_FOR_GAS=`** (`nanoclaw/env_sync.py`). Update `.env.example` when promoting non-secret defaults, then VM `pull`/`nanoup`.
 
 ### Canonical VM env workflow (single file)
 

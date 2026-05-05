@@ -68,7 +68,7 @@ Find `MAX_GWEI=` in `.env`. If logs show ~130 **gwei** and `MAX_GWEI=80`, set e.
 
 Durability:
 
-- **`nanoup` merges template → `.env` but preserves RPC keys, secrets, and **`WALLET=`**—not `MAX_GWEI`** (see `ENV_APPLY_PRESERVE_KEYS` in `nanoclaw/env_sync.py`). After this change, verify **`grep '^WALLET=' .env`** still matches your MetaMask / Polygonscan custody address after a `nanoup` (older runs could have reset `WALLET` to the `.env.example` placeholder).
+- **`nanoup` merges template → `.env` but preserves RPC keys, secrets, and **`WALLET=`**, **`MIN_POL_FOR_GAS=`**—not `MAX_GWEI`** (see `ENV_APPLY_PRESERVE_KEYS` in `nanoclaw/env_sync.py`). After this change, verify **`grep '^WALLET=' .env`** still matches your MetaMask / Polygonscan custody address after a `nanoup` (older runs could have reset `WALLET` to the `.env.example` placeholder).
 - After you pick a ceiling, bump the same **`MAX_GWEI=`** in repo **`.env.example`**, commit, push, VM `pull`, then **`NANOUP_AUTOSTASH=1 nanoup`** so redeploy does not silently reset gas limits.
 
 ### 5) Connectivity probe (handles `RPC_ENDPOINTS` as a list in `config`)
