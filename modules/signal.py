@@ -25,6 +25,8 @@ from .runtime import (
     TradeDecision,
     USDC,
     X_SIGNAL_AUTO_USDC_TARGET,
+    X_SIGNAL_AUTO_USDC_MIN_SWAP_USD,
+    X_SIGNAL_AUTO_USDC_TOPUP_ENABLED,
     X_SIGNAL_EQUITY_TRADER,
     X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD,
     X_SIGNAL_FORCE_HIGH_CONVICTION,
@@ -39,6 +41,16 @@ from .runtime import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _reconcile_total_portfolio_usd_with_onchain_usdc(
+    total_portfolio_usd: float,
+    snapshot_usdc: float,
+    onchain_preferred_usdc: float,
+) -> float:
+    """Reconcile aggregate total with latest USDC component while keeping totals non-negative."""
+    current_total = float(total_portfolio_usd)
+    return max(0.0, current_total - float(snapshot_usdc) + float(onchain_preferred_usdc))
 
 
 def _wrong_chain_eth_like_addresses() -> frozenset[str]:
@@ -230,8 +242,10 @@ def strong_buy_detector() -> bool:
 
 
 def ensure_usdc_for_x_signal(min_usdc: float = 8.0, min_wmatic_value: float = 15.0, force: bool = False) -> bool:
-    """If USDC is below ``min_usdc`` and (a strong X-Signal BUY is active or force=True), swap WMATIC→USDC (preferred) or USDT→USDC."""
+    """If USDC is below ``min_usdc`` and (a strong X-Signal BUY is active or force=True), swap USDT→USDC first, then WMATIC→USDC."""
     fac = _cs_mod()
+    if not bool(getattr(fac, "X_SIGNAL_AUTO_USDC_TOPUP_ENABLED", X_SIGNAL_AUTO_USDC_TOPUP_ENABLED)):
+        return False
     balances = fac.get_balances()
     if balances.usdc >= min_usdc:
         return True
@@ -250,18 +264,12 @@ def ensure_usdc_for_x_signal(min_usdc: float = 8.0, min_wmatic_value: float = 15
         print(f"{runtime._nanolog()}AUTO-USDC skipped — no private key")
         return False
 
-    try:
-        wmatic_price = float(fac.get_live_wmatic_price())
-    except Exception:
-        wmatic_price = 0.0
-    if wmatic_price <= 0:
-        print(f"{runtime._nanolog()}AUTO-USDC skipped — WMATIC price unavailable")
-        return False
+    min_swap_usd = max(1.0, float(getattr(fac, "X_SIGNAL_AUTO_USDC_MIN_SWAP_USD", X_SIGNAL_AUTO_USDC_MIN_SWAP_USD)))
+    target_usdc = max(float(min_usdc), float(getattr(fac, "X_SIGNAL_AUTO_USDC_TARGET", X_SIGNAL_AUTO_USDC_TARGET)))
 
-    shortfall = max(0.0, float(min_usdc) - float(balances.usdc))
-    # Gas-optimized: if we need to populate, do a meaningful swap (avoid $0.40 USDC drips).
-    target_usd = max(shortfall * 1.05, float(AUTO_POPULATE_USDC_AMOUNT))
-    wmatic_usd = balances.wmatic * wmatic_price
+    def _target_swap_usd(current_usdc: float) -> float:
+        shortfall = max(0.0, target_usdc - float(current_usdc))
+        return max(shortfall * 1.05, float(AUTO_POPULATE_USDC_AMOUNT), min_swap_usd)
 
     async def _swap_wmatic(amount_wei: int) -> bool:
         if amount_wei <= 0:
@@ -288,30 +296,36 @@ def ensure_usdc_for_x_signal(min_usdc: float = 8.0, min_wmatic_value: float = 15
     def _run(coro):
         return asyncio.run(coro)
 
-    use_wmatic_first = wmatic_usd >= float(min_wmatic_value)
-    if use_wmatic_first:
-        swap_usd = min(wmatic_usd * 0.95, target_usd)
-        wmatic_to_swap = min(balances.wmatic * 0.95, swap_usd / wmatic_price)
-        amount_wei = int(wmatic_to_swap * 1e18)
-        if amount_wei > 0:
-            print(f"🔄 AUTO-USDC | Swapping ${swap_usd:.2f} from WMATIC → USDC (gas optimized)")
-            ok = _run(_swap_wmatic(amount_wei))
-            if ok:
-                print(f"🔄 AUTO-USDC | Swapped ${swap_usd:.2f} from WMATIC → USDC (gas optimized)")
-            if ok and fac.get_balances().usdc >= min_usdc:
+    # Preferred source: USDT first.
+    current = fac.get_balances()
+    if current.usdt >= min_swap_usd:
+        usdt_amt = min(current.usdt * 0.95, _target_swap_usd(current.usdc))
+        if usdt_amt >= min_swap_usd:
+            print(f"{runtime._nanolog()}Auto top-up triggered: swapping ${usdt_amt:.2f} from USDT → USDC")
+            if _run(_swap_usdt(int(usdt_amt * 1_000_000))) and fac.get_balances().usdc >= min_usdc:
                 return True
-        after = fac.get_balances()
-        if after.usdt >= 0.5:
-            print("🔄 AUTO-USDC | Using USDT path (fallback)")
-            usdt_amt = min(after.usdt * 0.95, target_usd)
-            ok2 = _run(_swap_usdt(int(usdt_amt * 1_000_000)))
-            return ok2 and fac.get_balances().usdc >= min_usdc
-        return fac.get_balances().usdc >= min_usdc
 
-    print("🔄 AUTO-USDC | Using USDT path (fallback)")
-    after = fac.get_balances()
-    usdt_amt = min(after.usdt * 0.95, target_usd)
-    ok = _run(_swap_usdt(int(usdt_amt * 1_000_000)))
+    # Fallback source: WMATIC when USDT is insufficient or first leg didn't reach floor.
+    after_usdt = fac.get_balances()
+    try:
+        wmatic_price = float(fac.get_live_wmatic_price())
+    except Exception:
+        wmatic_price = 0.0
+    if wmatic_price <= 0:
+        print(f"{runtime._nanolog()}AUTO-USDC skipped — WMATIC price unavailable for fallback leg")
+        return after_usdt.usdc >= min_usdc
+    if (after_usdt.wmatic * wmatic_price) < max(float(min_wmatic_value), min_swap_usd):
+        return after_usdt.usdc >= min_usdc
+
+    wmatic_swap_usd = min(after_usdt.wmatic * wmatic_price * 0.95, _target_swap_usd(after_usdt.usdc))
+    if wmatic_swap_usd < min_swap_usd:
+        return after_usdt.usdc >= min_usdc
+    wmatic_to_swap = min(after_usdt.wmatic * 0.95, wmatic_swap_usd / wmatic_price)
+    amount_wei = int(wmatic_to_swap * 1e18)
+    if amount_wei <= 0:
+        return after_usdt.usdc >= min_usdc
+    print(f"{runtime._nanolog()}Auto top-up triggered: swapping ${wmatic_swap_usd:.2f} from WMATIC → USDC")
+    ok = _run(_swap_wmatic(amount_wei))
     return ok and fac.get_balances().usdc >= min_usdc
 
 
@@ -356,42 +370,33 @@ def _project_balances_after_auto_usdc(
         return balances
 
     shortfall = max(0.0, float(min_usdc) - float(balances.usdc))
-    target_usd = max(shortfall * 1.05, float(AUTO_POPULATE_USDC_AMOUNT))
+    min_swap_usd = max(1.0, float(getattr(fac, "X_SIGNAL_AUTO_USDC_MIN_SWAP_USD", X_SIGNAL_AUTO_USDC_MIN_SWAP_USD)))
+    target_usd = max(shortfall * 1.05, float(AUTO_POPULATE_USDC_AMOUNT), min_swap_usd)
     wmatic_usd = balances.wmatic * wmatic_price
 
-    use_wmatic_first = wmatic_usd >= float(min_wmatic_value)
-    if use_wmatic_first:
-        swap_usd = min(wmatic_usd * 0.95, target_usd)
-        wmatic_to_swap = min(balances.wmatic * 0.95, swap_usd / wmatic_price)
-        if wmatic_to_swap > 0:
-            est_usdc_out = min(wmatic_to_swap * wmatic_price, swap_usd)
-            if balances.usdc + est_usdc_out >= min_usdc:
-                return _projected_balances(
-                    usdt=balances.usdt,
-                    wmatic=balances.wmatic - wmatic_to_swap,
-                    pol=balances.pol,
-                    usdc=balances.usdc + est_usdc_out,
-                )
-        if balances.usdt >= 0.5:
-            usdt_amt = min(balances.usdt * 0.95, target_usd)
-            if usdt_amt > 0 and balances.usdc + usdt_amt >= min_usdc:
-                return _projected_balances(
-                    usdt=balances.usdt - usdt_amt,
-                    wmatic=balances.wmatic,
-                    pol=balances.pol,
-                    usdc=balances.usdc + usdt_amt,
-                )
-        return balances
-
-    if balances.usdt >= 0.5:
+    if balances.usdt >= min_swap_usd:
         usdt_amt = min(balances.usdt * 0.95, target_usd)
-        if usdt_amt > 0 and balances.usdc + usdt_amt >= min_usdc:
+        if usdt_amt >= min_swap_usd and balances.usdc + usdt_amt >= min_usdc:
             return _projected_balances(
                 usdt=balances.usdt - usdt_amt,
                 wmatic=balances.wmatic,
                 pol=balances.pol,
                 usdc=balances.usdc + usdt_amt,
             )
+
+    if wmatic_usd >= max(float(min_wmatic_value), min_swap_usd):
+        swap_usd = min(wmatic_usd * 0.95, target_usd)
+        if swap_usd >= min_swap_usd:
+            wmatic_to_swap = min(balances.wmatic * 0.95, swap_usd / wmatic_price)
+            if wmatic_to_swap > 0:
+                est_usdc_out = min(wmatic_to_swap * wmatic_price, swap_usd)
+                if balances.usdc + est_usdc_out >= min_usdc:
+                    return _projected_balances(
+                        usdt=balances.usdt,
+                        wmatic=balances.wmatic - wmatic_to_swap,
+                        pol=balances.pol,
+                        usdc=balances.usdc + est_usdc_out,
+                    )
     return balances
 
 
@@ -444,19 +449,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
         )
         return None
 
-    # Proactive USDC maintenance runs before any eligibility/plan logic that uses balances.
     if not dry_run:
-        probe = fcb.get_balances()
-        if probe.usdc < X_SIGNAL_USDC_SAFE_FLOOR:
-            print(
-                f"🚀 PROACTIVE USDC TOP-UP triggered (have ${probe.usdc:.2f} < ${X_SIGNAL_USDC_SAFE_FLOOR:.2f}, "
-                f"target ${X_SIGNAL_AUTO_USDC_TARGET:.2f})"
-            )
-            fcb.ensure_usdc_for_x_signal(
-                min_usdc=X_SIGNAL_AUTO_USDC_TARGET,
-                min_wmatic_value=X_SIGNAL_WMATIC_MIN_VALUE,
-                force=True,
-            )
         balances = fcb.get_balances()
 
     cfg = fcb._load_followed_equities_json_dict()
@@ -477,9 +470,10 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
         pol=balances.pol,
         usdc=onchain_preferred_usdc,
         followed_equity_usd=balances.followed_equity_usd,
-        total_portfolio_usd=max(
-            0.0,
-            float(balances.total_portfolio_usd) - snapshot_usdc + onchain_preferred_usdc,
+        total_portfolio_usd=_reconcile_total_portfolio_usd_with_onchain_usdc(
+            balances.total_portfolio_usd,
+            snapshot_usdc,
+            onchain_preferred_usdc,
         ),
     )
     print(
@@ -521,6 +515,40 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
             f"⚠️ HIGH-CONVICTION signal present ({high_conviction_threshold:.2f}+), but force_high_conviction is disabled"
         )
 
+    # Unified, conservative USDC top-up before planning BUY paths.
+    has_buy_signal = any(float(a.signal_strength) > 0 for a in eligible)
+    secs_order = int(tuned_trader.config.per_asset_cooldown_seconds)
+    has_buy_ready_on_cooldown = any(
+        float(a.signal_strength) > 0 and fcb.can_trade_asset(str(a.symbol).strip(), None, secs_order)
+        for a in eligible
+    )
+    auto_topup_target = max(float(X_SIGNAL_AUTO_USDC_TARGET), float(X_SIGNAL_USDC_SAFE_FLOOR))
+    auto_topup_enabled = bool(getattr(fcb, "X_SIGNAL_AUTO_USDC_TOPUP_ENABLED", X_SIGNAL_AUTO_USDC_TOPUP_ENABLED))
+    if (
+        auto_topup_enabled
+        and has_buy_signal
+        and has_buy_ready_on_cooldown
+        and float(balances.usdc) < float(X_SIGNAL_USDC_SAFE_FLOOR)
+    ):
+        if dry_run:
+            balances = _project_balances_after_auto_usdc(
+                balances,
+                min_usdc=auto_topup_target,
+                min_wmatic_value=float(X_SIGNAL_WMATIC_MIN_VALUE),
+            )
+        else:
+            topup_ok = fcb.ensure_usdc_for_x_signal(
+                min_usdc=auto_topup_target,
+                min_wmatic_value=float(X_SIGNAL_WMATIC_MIN_VALUE),
+                force=True,
+            )
+            balances = fcb.get_balances()
+            if not topup_ok:
+                print(
+                    f"{runtime._nanolog()}AUTO-USDC top-up attempted but floor not reached "
+                    f"(have ${balances.usdc:.2f}, target ${auto_topup_target:.2f})"
+                )
+
     print(f"🟦 X-SIGNAL EQUITY CHECK | Checking {len(assets)} assets")
     if not cfg_enabled:
         result = f"NO TRADE | followed_equities disabled (enabled=false in {fcb.FOLLOWED_EQUITIES_PATH})"
@@ -544,28 +572,6 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                 f"🚀 HIGH-CONVICTION GAS OVERRIDE | {strong_thr:.2f}+ strength detected — bypassing {MAX_GWEI:.0f} gwei limit "
                 "(PnL+ Sprint Mode, high return high conviction, net expected positive)"
             )
-            # Force USDC top-up for high-conviction.
-            if dry_run:
-                balances = _project_balances_after_auto_usdc(
-                    balances,
-                    min_usdc=X_SIGNAL_HIGH_CONVICTION_PREP_MIN_USDC,
-                    min_wmatic_value=X_SIGNAL_HIGH_CONVICTION_PREP_MIN_WMATIC,
-                )
-            else:
-                topup_ok = fcb.ensure_usdc_for_x_signal(
-                    min_usdc=X_SIGNAL_HIGH_CONVICTION_PREP_MIN_USDC,
-                    min_wmatic_value=X_SIGNAL_HIGH_CONVICTION_PREP_MIN_WMATIC,
-                )
-                balances = fcb.get_balances()
-                if not topup_ok and balances.usdc < X_SIGNAL_HIGH_CONVICTION_PREP_MIN_USDC:
-                    print(
-                        "🟦 X-SIGNAL EQUITY | Auto-USDC failed during HIGH-CONVICTION prep "
-                        "(PnL+ Sprint Mode, high return high conviction)"
-                    )
-                    fcb._log_trade_skipped(
-                        f"AUTO-USDC failed during high-conviction prep "
-                        f"(have ${balances.usdc:.2f}, need ${X_SIGNAL_HIGH_CONVICTION_PREP_MIN_USDC:.2f})"
-                    )
 
         has_strong_buy = any(
             float(a.signal_strength) > 0 and float(a.signal_strength) >= strong_thr for a in eligible
@@ -578,42 +584,14 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
         auto_usdc_target = required_usdc_floor
 
         force_floor = float(min_usdc)
-        if has_strong_buy and balances.usdc < max(force_floor, auto_usdc_target):
-            if dry_run:
-                balances = _project_balances_after_auto_usdc(
-                    balances,
-                    min_usdc=max(force_floor, auto_usdc_target),
-                    min_wmatic_value=float(X_SIGNAL_WMATIC_MIN_VALUE),
-                )
-            else:
-                topup_ok = fcb.ensure_usdc_for_x_signal(
-                    min_usdc=max(force_floor, auto_usdc_target),
-                    min_wmatic_value=float(X_SIGNAL_WMATIC_MIN_VALUE),
-                )
-                balances = fcb.get_balances()
-                if not topup_ok and balances.usdc < max(force_floor, min_trade_usdc):
-                    print(
-                        "🟦 X-SIGNAL EQUITY | Auto-USDC attempt failed "
-                        "(guard/tx) — BUY paths may be skipped"
-                    )
-                    fcb._log_trade_skipped(
-                        f"AUTO-USDC failed (have ${balances.usdc:.2f}, need ${max(force_floor, min_trade_usdc):.2f})"
-                    )
-            if balances.usdc >= max(force_floor, min_trade_usdc):
-                if dry_run:
-                    print(
-                        "🟦 X-SIGNAL EQUITY | DRY-RUN: projected post auto-USDC | Proceeding with BUY analysis"
-                    )
-                else:
-                    print("🟦 X-SIGNAL EQUITY | USDC ensured via WMATIC/USDT | Proceeding with BUY")
-            else:
-                print(
-                    f"🟦 X-SIGNAL EQUITY | Auto-USDC insufficient for BUY equity "
-                    f"(USDC ${balances.usdc:.2f} < ${max(force_floor, min_trade_usdc):.2f}) — BUY paths skipped"
-                )
-                fcb._log_trade_skipped(
-                    f"USDC low (have ${balances.usdc:.2f}, need ${max(force_floor, min_trade_usdc):.2f})"
-                )
+        if has_strong_buy and balances.usdc < max(force_floor, min_trade_usdc):
+            print(
+                f"🟦 X-SIGNAL EQUITY | Auto-USDC insufficient for BUY equity "
+                f"(USDC ${balances.usdc:.2f} < ${max(force_floor, min_trade_usdc):.2f}) — BUY paths may be skipped"
+            )
+            fcb._log_trade_skipped(
+                f"USDC low (have ${balances.usdc:.2f}, need ${max(force_floor, min_trade_usdc):.2f})"
+            )
 
         if not dry_run and has_strong_buy:
             balances = fcb.get_balances()
@@ -646,7 +624,6 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                         f"POL low for BUY path (pol={float(balances.pol):.4f}, min={fcb.MIN_POL_FOR_GAS:.4f})"
                     )
 
-        secs_order = int(trader.config.per_asset_cooldown_seconds)
         eligible_ordered = _order_eligible_x_signal_candidates(eligible, per_asset_cooldown_seconds=secs_order)
         
         print(f"{runtime._nanolog()}=== ELIGIBLE ASSET ORDERING ===")

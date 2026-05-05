@@ -1189,10 +1189,12 @@ def test_try_x_signal_high_conviction_bypasses_high_gas_and_forces_usdc_topup(mo
 
     usdc_topup_calls = []
 
-    def _ensure_usdc_for_x_signal(min_usdc, min_wmatic_value):
+    def _ensure_usdc_for_x_signal(min_usdc, min_wmatic_value, force=False):
+        _ = force
         usdc_topup_calls.append((float(min_usdc), float(min_wmatic_value)))
 
     monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_AUTO_USDC_TOPUP_ENABLED", True)
     monkeypatch.setattr(clean_swap, "AUTO_TOPUP_POL", False)
     monkeypatch.setattr(clean_swap, "_load_followed_equities_json_dict", lambda: {"enabled": True, "min_signal_strength": 0.60})
     monkeypatch.setattr(clean_swap, "_effective_equity_signal_min", lambda cfg: 0.60)
@@ -1204,7 +1206,7 @@ def test_try_x_signal_high_conviction_bypasses_high_gas_and_forces_usdc_topup(mo
     monkeypatch.setattr(
         clean_swap,
         "get_balances",
-        lambda: clean_swap.Balances(usdt=40.0, wmatic=10.0, pol=1.0, usdc=20.0),
+        lambda: clean_swap.Balances(usdt=40.0, wmatic=10.0, pol=1.0, usdc=2.0),
     )
 
     decision = clean_swap.try_x_signal_equity_decision(
@@ -1216,7 +1218,7 @@ def test_try_x_signal_high_conviction_bypasses_high_gas_and_forces_usdc_topup(mo
     assert decision is not None
     assert decision.direction == "USDC_TO_EQUITY"
     assert captured_kwargs.get("allow_high_gas_override") is True
-    assert usdc_topup_calls == [(8.0, 12.0)]
+    assert usdc_topup_calls == [(25.0, 15.0)]
     assert "🚀 HIGH-CONVICTION MODE ACTIVE" in out
     assert "🚀 HIGH-CONVICTION GAS OVERRIDE" in out
     assert "gas blocked (gas≈" not in out
@@ -1342,6 +1344,7 @@ def test_try_x_signal_logs_high_conviction_auto_usdc_failure(monkeypatch, capsys
             ]
 
     monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_AUTO_USDC_TOPUP_ENABLED", True)
     monkeypatch.setattr(clean_swap, "AUTO_TOPUP_POL", False)
     monkeypatch.setattr(clean_swap, "_load_followed_equities_json_dict", lambda: {"enabled": True, "min_signal_strength": 0.60})
     monkeypatch.setattr(clean_swap, "_effective_equity_signal_min", lambda cfg: 0.60)
@@ -1363,7 +1366,7 @@ def test_try_x_signal_logs_high_conviction_auto_usdc_failure(monkeypatch, capsys
 
     out = capsys.readouterr().out
     assert decision is None
-    assert "Auto-USDC failed during HIGH-CONVICTION prep" in out
+    assert "AUTO-USDC top-up attempted but floor not reached" in out
 
 
 def test_try_x_signal_logs_standard_auto_usdc_failure(monkeypatch, capsys):
@@ -1472,6 +1475,31 @@ def test_effective_floor_for_equity_prefers_per_asset_floor():
         signal_strength=0.5,
     )
     assert clean_swap._effective_floor_for_equity(base_only, 0.60) == 0.60
+
+
+def test_reconcile_total_portfolio_with_onchain_adjusts_only_when_populated():
+    from modules import signal as signal_module
+
+    adjusted = signal_module._reconcile_total_portfolio_usd_with_onchain_usdc(
+        total_portfolio_usd=250.0,
+        snapshot_usdc=100.0,
+        onchain_preferred_usdc=120.0,
+    )
+    assert adjusted == 270.0
+
+    uninitialized = signal_module._reconcile_total_portfolio_usd_with_onchain_usdc(
+        total_portfolio_usd=0.0,
+        snapshot_usdc=100.0,
+        onchain_preferred_usdc=120.0,
+    )
+    assert uninitialized == 20.0
+
+    negative_total = signal_module._reconcile_total_portfolio_usd_with_onchain_usdc(
+        total_portfolio_usd=-10.0,
+        snapshot_usdc=100.0,
+        onchain_preferred_usdc=140.0,
+    )
+    assert negative_total == 30.0
 
 
 def test_effective_equity_signal_min_uses_env_when_json_floor_lower(monkeypatch):
@@ -1722,6 +1750,40 @@ def test_ensure_usdc_for_x_signal_skipped_when_wmatic_price_zero(monkeypatch):
     monkeypatch.setenv("POLYGON_PRIVATE_KEY", "0x" + "a" * 64)
     monkeypatch.setattr(clean_swap, "get_live_wmatic_price", lambda: 0.0)
     assert clean_swap.ensure_usdc_for_x_signal(min_usdc=50.0, force=True) is False
+
+
+def test_ensure_usdc_for_x_signal_prefers_usdt_before_wmatic(monkeypatch):
+    from modules import signal as signal_module
+
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_AUTO_USDC_TOPUP_ENABLED", True)
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_AUTO_USDC_MIN_SWAP_USD", 8.0)
+    monkeypatch.setattr(clean_swap, "GAS_PROTECTOR", _GasProtectorOk())
+    monkeypatch.setenv("POLYGON_PRIVATE_KEY", "0x" + "a" * 64)
+    monkeypatch.setattr(clean_swap, "get_live_wmatic_price", lambda: 2.0)
+
+    state = {"calls": 0}
+
+    def _get_balances():
+        # Initial read, then reads during/after USDT top-up path.
+        if state["calls"] == 0:
+            state["calls"] += 1
+            return clean_swap.Balances(usdt=40.0, wmatic=50.0, pol=1.0, usdc=5.0)
+        state["calls"] += 1
+        return clean_swap.Balances(usdt=20.0, wmatic=50.0, pol=1.0, usdc=30.0)
+
+    monkeypatch.setattr(clean_swap, "get_balances", _get_balances)
+
+    directions: list[str] = []
+
+    async def _fake_swap(*_args, **kwargs):
+        directions.append(str(kwargs.get("direction")))
+        return "0xhash"
+
+    monkeypatch.setattr(signal_module, "approve_and_swap", _fake_swap)
+
+    ok = clean_swap.ensure_usdc_for_x_signal(min_usdc=25.0, force=True)
+    assert ok is True
+    assert directions == ["USDT_TO_USDC"]
 
 
 def test_select_copy_trade_none_when_all_target_wallets_on_cooldown(monkeypatch):

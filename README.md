@@ -37,7 +37,7 @@ For operators and agents, **`AI_CONTEXT.md`** on branch **`V2`** is the authorit
 **`sprintmon`** is not in this repo; use **`nanostatus`** / **`nanopnl`** for quick health + PnL and **`nanobot`** / **`nanoattach`** for live logs.
 Session baseline can be reset manually with `nanopnl --reset-session` (or `nanostatus --reset-session` / `nanorestart --reset-session`).
 
-**USDC top-up for X-Signal equity** is handled inside the bot (`try_x_signal_equity_decision`), not as a separate shell alias. Configure `X_SIGNAL_USDC_SAFE_FLOOR` and `X_SIGNAL_AUTO_USDC_TARGET` in `.env` (see `.env.example`). On-chain USDC reads now retry before fallback; tune with `X_SIGNAL_ONCHAIN_USDC_RETRY_ATTEMPTS`.
+**USDC top-up for X-Signal equity** is handled inside the bot (`try_x_signal_equity_decision`), not as a separate shell alias. Configure `X_SIGNAL_USDC_SAFE_FLOOR`, `X_SIGNAL_AUTO_USDC_TARGET`, `X_SIGNAL_AUTO_USDC_TOPUP_ENABLED`, and `X_SIGNAL_AUTO_USDC_MIN_SWAP_USD` in `.env` (see `.env.example`). Top-up prefers `USDT -> USDC` and falls back to `WMATIC -> USDC`. On-chain USDC reads now retry before fallback; tune with `X_SIGNAL_ONCHAIN_USDC_RETRY_ATTEMPTS`.
 
 ### Safe Update Flow (use this every time)
 
