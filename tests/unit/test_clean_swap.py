@@ -573,6 +573,7 @@ def test_main_skips_cycle_on_global_cooldown_and_logs_reason(monkeypatch):
 
 
 def test_main_skips_small_stable_in_trade_when_below_min_trade_usd(monkeypatch, capsys):
+    monkeypatch.setenv("POLYGON_PRIVATE_KEY", "0x" + "a" * 64)
     monkeypatch.setattr(clean_swap, "load_state", lambda: {"last_run": 0.0})
     monkeypatch.setattr(
         clean_swap,
@@ -628,6 +629,7 @@ def test_main_skips_small_stable_in_trade_when_below_min_trade_usd(monkeypatch, 
 
 
 def test_main_skips_small_wmatic_exit_when_below_min_trade_usd(monkeypatch, capsys):
+    monkeypatch.setenv("POLYGON_PRIVATE_KEY", "0x" + "a" * 64)
     monkeypatch.setattr(clean_swap, "load_state", lambda: {"last_run": 0.0})
     monkeypatch.setattr(
         clean_swap,

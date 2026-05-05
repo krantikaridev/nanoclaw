@@ -249,6 +249,7 @@ def test_approve_and_swap_returns_none_when_token_in_equals_token_out():
 def test_approve_and_swap_uses_router_fallback_when_oneinch_key_missing(monkeypatch):
     monkeypatch.delenv("ONEINCH_API_KEY", raising=False)
     monkeypatch.delenv("INCH_API_KEY", raising=False)
+    monkeypatch.setenv("POLYGON_PRIVATE_KEY", "0x" + "a" * 64)
 
     called = {"v3_quote": False}
 
