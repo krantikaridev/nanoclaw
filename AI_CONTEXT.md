@@ -2,10 +2,44 @@
 
 **Canonical governance**: All process steps, backlog items, handoff rules, and session hygiene for this repo are defined **here first**. Cross-link from README or chat, but avoid duplicating TODO lists elsewhere—update this file.
 
+## **AI / Cursor convention (Aniki)**
+
+- **Aniki**: Operator shorthand for the default **Cursor (or Grok) coding agent** on this repo—use in threads, commits notes, and handoffs so humans and agents share one label.
+- **“What the bot said”** means output from **`real_cron.log`**, **`nanostatus`**, **`nanopnl`**, and **`nanodaily`**—it reflects **coded** balance math and parsers, **not** custody UI (MetaMask) or full wallet taxonomy by default. **Capital decisions** should cross-check **Polygonscan** (see **On-chain ground truth**).
+- **Every new agent thread** (Cursor / Grok / etc.): do **not** rely on in-chat memory alone—pull or paste the sections listed in **New Thread Protocol**. When **`TOTAL`** or **`STABLE_USD`** disagreed with MetaMask, record **both numbers + date/time (UTC)** in commit messages, **`agent_feedback/`**, or PR notes under the label **“what the bot said”** so the record shows the divergence explicitly.
+
+## **On-chain ground truth (no screenshot required)**
+
+- **Authoritative public state** for the bot wallet is **Polygon PoS** at **`https://polygonscan.com/address/<WALLET>`** where **`<WALLET>` must exactly match `WALLET=` in runtime `.env`** (also in `.env.example` as the stage template). If the URL address and **`WALLET=`** differ, fix the URL or env before reconciling PnL—reconciling against **another** address (e.g. an old paste) guarantees a false PnL story.
+- **Historical “~\$103 two days ago”** when no screenshot exists: there is **no** archived “single ground-truth frame” unless you **define** it. Reconstruct deliberately: pick the **UTC date/time** of the observation, then label the **source**—**MetaMask** total (which network tab?), **Polygonscan** token-holdings / exports for **`WALLET=`**, an **`old nanopnl` / `real_cron.log` `WALLET TOTAL USD` line**, or **`portfolio_history.csv`**. Those four **often diverge** (dual USDC, WETH/POSI not in bot **`TOTAL`**, RPC failures, oracle marks); do **not** treat them as interchangeable without naming which one you mean.
+- **Polygonscan** for the canonical wallet is the best **public** anchor for **token quantities**; USD at a past instant still depends on oracles/UI. Use **Transactions** + optional **CSV export** + dated log lines for the same window.
+- **MetaMask “All popular networks”** can aggregate **multiple chains and hidden tokens**; **`nanopnl` TOTAL** is **intentionally narrower** until **v2.9** expands “full wallet mark-to-market” (see **What the bot reports vs UI**).
+
+## **Stage policy — one wallet, what “PnL” means**
+
+- **Canonical custody**: **One Polygon `WALLET=`** is the stage/production trading wallet unless you explicitly rotate keys and update **`.env`** everywhere.
+- **v2.8 benchmark (today’s bar)**: **Headline success** = **RPC green (`nanohealth`)**, **stablecoin bucket** (`STABLE_USD` / both USDC variants + USDT) reconciles to **Polygonscan** for that wallet, **`nanopnl --reset-session`** anchored once—session % is meaningful **relative to that baseline**, even if MetaMask **all-network** headline ≠ bot **`TOTAL`**.
+- **v2.9+ (full picture, MetaMask-parity direction)**: **Operator intent** is to model **as much of the wallet as practical**—extend **`followed_equities` / quoting**, add an **inventory / MTM series**, or an explicit **`unmodeled USD`** bucket so reports do not silently ignore **WETH / POSI / dust**. Until then, **`TOTAL`** is **not** promised to match MetaMask’s headline.
+
+## **What the bot reports vs MetaMask / Polygonscan**
+
+| Source | What it is |
+|--------|------------|
+| **`STABLE_USD` / USDT / USDC** in logs | **USDT** + **USDC.e + native USDC** (`USDC` + `USDC_NATIVE` in `.env`), from **`balanceOf`**. Should be close to MetaMask’s two USDC lines summed. |
+| **WMATIC** in logs | **Token quantity**, not USD; USD in TOTAL uses **`get_live_wmatic_price()`** (can differ slightly from MetaMask’s mark). |
+| **`FE_USD`** | Router-quoted USD for tokens in **`followed_equities.json`** that are **not** core stables/WMATIC. If **`FE_USD=0`** but the wallet holds **WETH / POSI / dust**, MetaMask total can exceed bot **TOTAL** until those are modeled or v2.9 adds inventory MTM. |
+| **`TOTAL` (runtime)** | **USDT + USDC (both) + WMATIC×price + POL×`POL_USD_PRICE` + `FE_USD`**. Not guaranteed to equal MetaMask’s all-network headline. |
+
 ## **Operating Model (roles + loop)**
 
 - Canonical role split and collaboration loop live in `docs/OPERATING_MODEL.md`.
 - Keep this file as canonical backlog/process memory; keep role mechanics in the operating-model doc to avoid drift.
+
+## **Developer environments (shell + machine)**
+
+- **Local / Cursor**: Often **Windows + PowerShell** — do not assume **`&&`** (use **`;`** / **`$LASTEXITCODE`** on PS 5.x, or **PowerShell 7+**). See **`docs/DEV_WORKFLOW.md`** § *Shell: Windows vs Linux*.
+- **Stage VM**: **Ubuntu + bash** — `nanoup`, `grep`, and **`docs/readme-vm-update.md`** snippets are written for **POSIX**.
+- **Agents**: When giving copy/paste commands, **name the environment** or provide both forms so instructions match where they run.
 
 ## **Systematic Learning & History**
 
@@ -21,7 +55,7 @@
 When a Grok (or Cursor) thread hits the message limit—or you deliberately start fresh—avoid losing operational truth.
 
 1. **Open the canonical snapshot**: Fetch raw `AI_CONTEXT.md` from branch `V2`: `https://raw.githubusercontent.com/krantikaridev/nanoclaw/V2/AI_CONTEXT.md`
-2. **Paste the operative sections** into the new thread **or** the first message: minimum = **Systematic Learning & History**, **Strategic release train (big picture)**, **Current Situation**, **TODO & Backlog**, **House-Cleaning Checklist**, and **V2.5.11+ Roadmap**, plus wallet (public) context if rotating.
+2. **Paste the operative sections** into the new thread **or** the first message: minimum = **AI / Cursor convention (Aniki)**, **On-chain ground truth**, **What the bot reports vs UI**, **Systematic Learning & History**, **Strategic release train (big picture)**, **Current Situation**, **TODO & Backlog**, **House-Cleaning Checklist**, and **V2.5.11+ Roadmap**, plus wallet (public) context if rotating.
 3. **Follow the detailed checklist**: Step-by-step copy/paste order and pitfalls live in **`docs/NEW_THREAD_PROTOCOL.md`**.
 4. **Declare branch + scope** in thread #1 (`V2`, stage vs prod, VM vs local).
 5. **Secrets**: Never paste `.env`; refer only to **`.env.example` keys by name.**
@@ -37,7 +71,28 @@ When a Grok (or Cursor) thread hits the message limit—or you deliberately star
 - [ ] **CSV sanity** — if anything looked like test-mode spikes, run **`scripts/clean_dummy_data.sh`** after backup approval; reconcile with Polygonscan.
 - [ ] **`nanohealth`**, then **`nanostatus` / `nanopnl`** — RPC gate first; then spot-check totals vs on-chain intuition after deploy.
 - [ ] **Optional artifact bundle** — `./scripts/package_runtime_artifacts.sh` before sharing externally.
+- [ ] **Parked ops** — `bash scripts/nanobot_aliases.sh --install` + `source ~/.bashrc` on VM once so **`nanohealth`** is on `PATH` (until then: `python scripts/nanohealth.py`).
 - [ ] **Reminder**: no two write-enabled bots on one wallet key.
+
+## **v2.8.0 PnL benchmark — same-day closure (operator)**
+
+Use when tagging **v2.8.0** after stage is RPC-green and accounting is understood (even if MetaMask headline ≠ bot TOTAL—document **Why** using **What the bot reports vs UI**).
+
+**Razor focus (operator)**: Treat **v2.8 PnL benchmark closure** as the blockers for the tag—not feature churn. Same calendar day in IST is an explicit target when you say “must go today”; anything else is **parked** to **v2.9** unless it is RPC, stable reconcile, or **tag hygiene**.
+
+- [ ] **`nanohealth`** (or `python scripts/nanohealth.py`) **ok** (`chain_id=137`).
+- [ ] Recent **`WALLET TOTAL USD`** lines show **`STABLE_USD=`**; stables reconcile with Polygonscan token tab for **`WALLET=`** (both USDC contracts + USDT).
+- [ ] **`nanopnl --reset-session`** done once after trusting balances—session % anchored to that instant.
+- [ ] **`nanodaily`** (or `python scripts/pnl_report.py --daily-summary`) shows **📅 LOOKBACK** — past **`total_value`** from **`portfolio_history.csv`** at each horizon (default **24h** if you omit `--lookback`; **`nanodaily`** passes **1h … ~1m**). **n/a** until the CSV has a row **at or before** that time — needs the bot to have run and appended snapshots. **Wallet top-ups / withdrawals** appear as **step changes** in that series (same as your gold-chart mental model); separating **performance vs flows** is a **v3.0+** accounting item, not a v2.8.0 tag blocker.
+- [ ] **`git log -1 --oneline`** on VM matches commit you tag locally; **`git tag -a v2.8.0`** + **`git push origin v2.8.0`** when satisfied.
+
+## **Venue scope (India, Polymarket, equities) — not legal advice**
+
+- **Nanoclaw `V2`** scope today: **Polygon PoS on-chain** execution and telemetry in this repo. Prove **reliable PnL here** before adding venues.
+- **India**: Automated trading in **Indian retail equities/derivatives** is **heavily regulated** (SEBI, broker APIs, retail algo rules). Treat any India expansion as **separate product + compliance review**—not a quick env toggle.
+- **Polymarket / prediction / CEX**: **Geo, KYC, and availability** vary; often **not** drop-in for the current `swap_executor` path. Defer to **v3+** with explicit jurisdictional sign-off.
+- **\$100k big-picture**: sequencing is **credible stage PnL → production ramp (v3.0.0) → scale (v4)** per **Strategic release train**—venue diversification only **after** accounting and risk gates hold.
+- **Pragmatic next bets**: Getting **one chain + one wallet** to a **provable** daily PnL beats spreading capital across **Polymarket**, **Indian cash equities**, or **discretionary bots** before you trust the numbers here—those venues need **compliance and product** work, not a hurried env flag.
 
 ## **V2.5.11+ Roadmap**
 
@@ -193,6 +248,7 @@ Directional milestones only—**capital scales when gates pass**, not on calenda
 - **Operator docs shipped (v2.8.x)**: **`docs/readme-vm-update.md`** explicit RPC + **`MAX_GWEI`** checklist; **`docs/OPERATOR_SEND_USDC_POLYGON.md`** for funding **`WALLET=`** on Polygon. (VM may stay the deploy source of truth for a tagged **v2.8**; fold doc-only deltas into the **v2.9** branch when you open it—no requirement to push from every local Cursor sandbox.)
 - **Green environment (v2.9)**: Treat **RPC + chain truth** as a **hard gate**. **`nanohealth`** (and the same check at the end of **`nanoup`**) answers: can we reach Polygon PoS (**137**) with the configured endpoint chain? **If unhealthy:** fix `.env` / egress / provider first — `nanostatus` / `nanopnl` / swap logs are not trustworthy until then. **Secrets hygiene:** provider tokens (**`ANKR_RPC_KEY`**, keyed RPC paths) must **never** appear in **`.env.example` / git**; if one ever hit **`origin`**, **rotate at the vendor** and update **VM `.env` only**. Extend automation later (e.g. cron **`nanohealth`**, alerts) without duplicating probe logic.
 - **Trustworthy PnL (v2.9 — must fix, not polish)**: Today’s `nanostatus` / `nanopnl` / session % are **not operator-grade** when RPC fails, price feeds drift, or totals mix **stables vs mark-to-market**. **v2.9 goal:** define **one seed accounting line** (pick **USDC xor USDT** as the numeraire, not both interchangeably) with an **explicit snapshot time** and **`delta = current_same_basis − seed` in USD** as the **headline PnL** for “did we make money in stables.” **Do not** pretend that single number explains **WMATIC/WETH/POSI** price moves—that is **inventory MTM**, a **separate** series (defer full split to **v3.0** if needed, but v2.9 must stop shipping misleading % labels off wrong totals).
+- **Wallet-wide MTM vs MetaMask (v2.9)**: For “everything under the sun” on **one `WALLET=`**,” add either **quotes for every material token** (via **`followed_equities`** / routers) or a named **`unmodeled`** USD bucket fed from explorer-style token lists—so the **sum of reported parts** can be reconciled to **Polygonscan + MetaMask** without silent gaps.
 - **Internal vs public reconcile (v2.9)**: Bot logs and **public** sources (wallet UI, block explorer token balances) must be **reconcilable**; emit **compact deltas** (e.g. stablecoin bucket, total wallet-truth, discrepancy flag) on a schedule—not every line every cycle unless debugging.
 - **Event store + verified flag (v3.0 direction)**: Move toward an **append-only event DB** (swaps, snapshots, reconciliations). A **separate process** may mark rows **verified** against **public** on-chain reads (or indexer); after that, dashboards can trust DB as read model. **v2.9** can stay file/log/CSV-based if the **math and seed definition** are fixed first.
 - **Env ergonomics**: Revisit `nanoenv_apply` preservation list vs operator knobs (`MAX_GWEI`, X-Signal AUTO-USDC thresholds, etc.) so frequent VM tuning survives `nanoup` without accidental resets—or document one blessed workflow explicitly in `docs/readme-vm-update.md`.
@@ -280,6 +336,7 @@ Directional milestones only—**capital scales when gates pass**, not on calenda
 - Verification gate (must pass):
   - `python -m compileall -q .`
   - `python -m pytest -q`
+  - **PowerShell 5.x** (local): run the two lines above separately, or use `; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }` between them — avoid **`&&`** unless **pwsh** 7+ (see **`docs/DEV_WORKFLOW.md`**).
   - Coverage baseline check (periodic): `python -m pytest --cov=. --cov-report=term-missing -q`
   - Coverage history update (periodic): `python scripts/update_coverage_history.py`
 - Code quality baseline (as of 2026-05-01):

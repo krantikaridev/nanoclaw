@@ -267,6 +267,38 @@ class MissingPrivateKeyError(RuntimeError):
 
 _PRIVATE_KEY_LOGGED_SOURCE: str | None = None
 
+_HEX_NIBBLE = frozenset("0123456789abcdefABCDEF")
+
+
+def normalize_private_key_hex(key: str) -> str:
+    """Strip `.env` / editor cruft and normalize secp256k1 hex keys for `eth_account`.
+
+    - Trims ASCII whitespace (including stray newlines that make `from_key` see 33 bytes).
+    - Strips a leading UTF-8 BOM if present.
+    - If the payload is exactly 64 hex digits, prefixes ``0x`` (some operators paste hex without it).
+    - If every character is hex but length is not 64, raises ``ValueError`` (e.g. 66 nibbles → 33-byte error at signing).
+    """
+    k = (key or "").strip()
+    if k.startswith("\ufeff"):
+        k = k.lstrip("\ufeff").strip()
+    if not k:
+        return k
+    if k.lower().startswith("0x"):
+        body = k[2:].strip()
+    else:
+        body = k
+    if not body:
+        return k
+    if all(ch in _HEX_NIBBLE for ch in body):
+        if len(body) == 64:
+            return "0x" + body.lower()
+        raise ValueError(
+            "POLYGON_PRIVATE_KEY hex has length %d nibbles (expected 64). "
+            "Use one line in .env: 0x + 64 hex (or 64 hex only); remove quotes, NULs, and stray characters."
+            % len(body)
+        )
+    return k
+
 
 def _resolve_private_key_from_env() -> tuple[str, str]:
     env_polygon_key = env_str("POLYGON_PRIVATE_KEY", "")
@@ -304,4 +336,6 @@ def resolve_private_key(
     if log_success and resolved_key and _PRIVATE_KEY_LOGGED_SOURCE != source:
         print(f"[nanoclaw] Private key loaded from {source}")
         _PRIVATE_KEY_LOGGED_SOURCE = source
+    if resolved_key:
+        resolved_key = normalize_private_key_hex(resolved_key)
     return resolved_key, source

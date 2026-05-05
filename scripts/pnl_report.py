@@ -242,7 +242,7 @@ def get_current_balance():
     }
 
 
-def print_daily_summary(*, reset_session: bool = False) -> int:
+def print_daily_summary(*, reset_session: bool = False, lookback: str | None = None) -> int:
     bal = get_current_balance()
     if not bal:
         print("No valid balance found.")
@@ -271,6 +271,12 @@ def print_daily_summary(*, reset_session: bool = False) -> int:
     print(f"Session PnL:   ${session_delta:+.2f} ({session_pct:+.2f}%)")
     print(f"Session start: {session_started_at}")
     print(pnl_24h_line)
+    print()
+
+    win_spec = lookback if (lookback and str(lookback).strip()) else "24h"
+    _print_lookback_table(total, parse_lookback_windows(win_spec))
+    print()
+    _print_portfolio_csv_analytics()
     return 0
 
 
@@ -342,12 +348,13 @@ def resolve_session_baseline(current_total: float, *, reset: bool = False) -> tu
     return float(data["session_start_total"]), str(data["session_started_at"])
 
 
-def resolve_24h_baseline(current_total: float) -> float | None:
+def _resolve_history_at_or_before(cutoff_utc: datetime) -> tuple[float | None, datetime | None]:
+    """Portfolio_history row: last in file order with timestamp <= cutoff (append-only CSV semantics)."""
     csv_path = Path(PORTFOLIO_HISTORY_FILE)
     if not csv_path.is_file():
-        return None
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
-    best_before_cutoff: float | None = None
+        return None, None
+    best_total: float | None = None
+    best_ts: datetime | None = None
     try:
         with csv_path.open("r", encoding="utf-8", newline="") as fh:
             reader = csv.DictReader(fh)
@@ -359,13 +366,211 @@ def resolve_24h_baseline(current_total: float) -> float | None:
                     total = float(row.get("total_value", ""))
                 except Exception:
                     continue
-                if ts <= cutoff:
-                    best_before_cutoff = total
+                if ts <= cutoff_utc:
+                    best_ts = ts
+                    best_total = total
     except Exception:
-        return None
-    if best_before_cutoff is None:
-        return None
-    return float(best_before_cutoff)
+        return None, None
+    if best_total is None or best_ts is None:
+        return None, None
+    return float(best_total), best_ts
+
+
+def resolve_24h_baseline(current_total: float) -> float | None:
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    ref, _ts = _resolve_history_at_or_before(cutoff)
+    return ref
+
+
+def parse_lookback_windows(raw: str) -> list[tuple[str, float]]:
+    """
+    Parse comma-separated lookback specs for portfolio_history.csv (hour counts).
+
+    Suffixes: h (hours), d (days→×24), w (weeks→×24×7), m (months→×24×30, ops approximation).
+    Examples: \"24h\", \"1d\", \"2d\", \"1w\", \"2w\", \"1m\"
+    """
+    out: list[tuple[str, float]] = []
+    if not raw or not str(raw).strip():
+        return [("24h", 24.0)]
+    for part in str(raw).split(","):
+        token = part.strip().lower()
+        if not token:
+            continue
+        try:
+            if token.endswith("h"):
+                label = token
+                hours = float(token[:-1])
+            elif token.endswith("d"):
+                label = token
+                hours = float(token[:-1]) * 24.0
+            elif token.endswith("w"):
+                label = token
+                hours = float(token[:-1]) * 24.0 * 7.0
+            elif token.endswith("m"):
+                label = token
+                hours = float(token[:-1]) * 24.0 * 30.0
+            else:
+                # Bare number = hours
+                label = f"{token}h"
+                hours = float(token)
+        except ValueError:
+            continue
+        if hours <= 0 or not math.isfinite(hours):
+            continue
+        out.append((label, hours))
+    return out if out else [("24h", 24.0)]
+
+
+def load_portfolio_total_series() -> list[tuple[datetime, float]]:
+    """Chronological (timestamp, total_value) from portfolio_history.csv."""
+    csv_path = Path(PORTFOLIO_HISTORY_FILE)
+    if not csv_path.is_file():
+        return []
+    out: list[tuple[datetime, float]] = []
+    try:
+        with csv_path.open("r", encoding="utf-8", newline="") as fh:
+            reader = csv.DictReader(fh)
+            for row in reader:
+                ts = _parse_iso_ts(row.get("timestamp", ""))
+                if ts is None:
+                    continue
+                try:
+                    tv = float(row.get("total_value", ""))
+                except Exception:
+                    continue
+                if not math.isfinite(tv):
+                    continue
+                out.append((ts, tv))
+    except Exception:
+        return []
+    out.sort(key=lambda x: x[0])
+    dedup: list[tuple[datetime, float]] = []
+    for ts, tv in out:
+        if dedup and dedup[-1][0] == ts:
+            dedup[-1] = (ts, tv)
+        else:
+            dedup.append((ts, tv))
+    return dedup
+
+
+_SPARK_BLOCKS = "▁▂▃▄▅▆▇█"
+
+
+def render_ascii_sparkline(values: list[float], width: int = 64) -> str:
+    """Single-row Unicode height chart (no external deps)."""
+    if not values:
+        return ""
+    w = max(8, min(120, int(width)))
+    pts = list(values)
+    if len(pts) == 1:
+        c = _SPARK_BLOCKS[len(_SPARK_BLOCKS) // 2]
+        return c * w
+    if len(pts) < w:
+        stretched: list[float] = []
+        for i in range(w):
+            t = i / (w - 1)
+            idx = min(int(t * (len(pts) - 1) + 0.5), len(pts) - 1)
+            stretched.append(pts[idx])
+        pts = stretched
+    elif len(pts) > w:
+        step = len(pts) / w
+        sampled = []
+        for i in range(w):
+            idx = min(int((i + 0.5) * step), len(pts) - 1)
+            sampled.append(pts[idx])
+        pts = sampled
+    lo, hi = min(pts), max(pts)
+    if hi <= lo:
+        c = _SPARK_BLOCKS[len(_SPARK_BLOCKS) // 2]
+        return c * len(pts)
+    chars: list[str] = []
+    for v in pts:
+        t = (v - lo) / (hi - lo)
+        idx = int(t * (len(_SPARK_BLOCKS) - 1) + 0.5)
+        idx = max(0, min(len(_SPARK_BLOCKS) - 1, idx))
+        chars.append(_SPARK_BLOCKS[idx])
+    return "".join(chars)
+
+
+def _hourly_last_close_rows(series: list[tuple[datetime, float]]) -> list[tuple[datetime, float]]:
+    """One row per UTC hour: last total_value in that hour."""
+    buckets: dict[datetime, float] = {}
+    for ts, tv in series:
+        hour = ts.replace(minute=0, second=0, microsecond=0)
+        buckets[hour] = tv
+    return sorted(buckets.items(), key=lambda x: x[0])
+
+
+def _print_portfolio_csv_analytics(*, chart_width: int = 72, hourly_rows: int = 24) -> None:
+    """ASCII trend + hourly closes from portfolio_history (decision support, not accounting-grade)."""
+    series = load_portfolio_total_series()
+    if len(series) < 2:
+        print("📈 TREND (portfolio_history.csv): need ≥2 rows for chart/hourly stats")
+        return
+
+    values = [tv for _ts, tv in series]
+    spark = render_ascii_sparkline(values, width=chart_width)
+    lo_v, hi_v = min(values), max(values)
+    first_t, last_t = series[0][0], series[-1][0]
+    print("📈 TREND — bot TOTAL ($) from portfolio_history.csv (ups/downs; deposits = steps)")
+    print(f"   {spark}")
+    print(
+        f"   span {first_t.isoformat()} → {last_t.isoformat()}  |  "
+        f"range ${lo_v:.2f} … ${hi_v:.2f}  |  {len(values)} snapshots"
+    )
+
+    hourly = _hourly_last_close_rows(series)
+    if len(hourly) < 2:
+        return
+
+    tail = hourly[-max(2, int(hourly_rows) + 1) :]
+    print()
+    print(f"🕐 HOURLY (UTC, last {min(hourly_rows, len(tail) - 1)} completed hour-boundaries)")
+    print("   hour_start (UTC)     close USD    Δ vs prev hr")
+    deltas: list[float] = []
+    prev: float | None = None
+    rows_shown = 0
+    for hour, clo in tail:
+        if prev is None:
+            prev = clo
+            continue
+        d = clo - prev
+        deltas.append(d)
+        if rows_shown < hourly_rows:
+            print(f"   {hour.isoformat()}   ${clo:8.2f}   ${d:+8.2f}")
+        prev = clo
+        rows_shown += 1
+
+    if deltas:
+        net = sum(deltas)
+        avg = net / len(deltas)
+        ups = sum(1 for x in deltas if x > 0.01)
+        downs = sum(1 for x in deltas if x < -0.01)
+        print(
+            f"   — over printed window: net ${net:+.2f}  |  avg hr Δ ${avg:+.2f}  |  "
+            f"up {ups} / down {downs} (hours)"
+        )
+
+
+def _print_lookback_table(current_total: float, windows: list[tuple[str, float]]) -> None:
+    now_utc = datetime.now(timezone.utc)
+    print("📅 LOOKBACK (portfolio_history.csv — bot TOTAL at snapshot time)")
+    print(
+        "   Deposits/top-ups show as sudden steps up; same for large withdrawals "
+        "(not performance — v3+ can tag flows if needed)."
+    )
+    for label, hours in windows:
+        cutoff = now_utc - timedelta(hours=hours)
+        ref, ref_ts = _resolve_history_at_or_before(cutoff)
+        if ref is None or ref_ts is None:
+            print(f"   {label:>5}  n/a (no CSV row at or before {cutoff.isoformat()} — need longer history)")
+            continue
+        delta = current_total - ref
+        pct = _pct_change(current_total, ref)
+        print(
+            f"   {label:>5}  ref ${ref:.2f} @ {ref_ts.isoformat()}  |  "
+            f"Δ vs now ${delta:+.2f} ({pct:+.2f}%)"
+        )
 
 
 def print_report(*, reset_session: bool = False) -> int:
@@ -430,15 +635,27 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--daily-summary",
         action="store_true",
-        help="Print compact balance + PnL summary for nanodaily",
+        help="Compact balance + PnL + lookback + CSV trend/hourly table (for nanodaily)",
+    )
+    parser.add_argument(
+        "--lookback",
+        metavar="SPECS",
+        default="",
+        help=(
+            "Comma-separated horizons from portfolio_history.csv: "
+            "1h,4h,12h,24h,1d,2d,1w,2w,1m (d=24h, w=7d, m≈30d). "
+            "Default for --daily-summary is 24h; omit to use default."
+        ),
     )
     return parser
 
 
 def main() -> int:
     args = _build_parser().parse_args()
+    lookback_arg = str(getattr(args, "lookback", "") or "").strip()
     if bool(args.daily_summary):
-        return print_daily_summary(reset_session=bool(args.reset_session))
+        lb = lookback_arg if lookback_arg else None
+        return print_daily_summary(reset_session=bool(args.reset_session), lookback=lb)
     return print_report(reset_session=bool(args.reset_session))
 
 

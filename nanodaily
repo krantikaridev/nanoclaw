@@ -6,7 +6,8 @@ echo "════════════════════════�
 echo "           NANODAILY HEALTH — $(date '+%Y-%m-%d %H:%M')"
 echo "═══════════════════════════════════════════════"
 echo "💰 BALANCE:"
-REPORT_OUTPUT="$(PYTHONIOENCODING=utf-8 python scripts/pnl_report.py --daily-summary 2>&1)"
+# Multi-window lookback from portfolio_history.csv (sparse rows → n/a until history exists).
+REPORT_OUTPUT="$(PYTHONIOENCODING=utf-8 python scripts/pnl_report.py --daily-summary --lookback "1h,4h,12h,24h,48h,168h,336h,720h" 2>&1)"
 SUMMARY_EXIT=$?
 if [ "$SUMMARY_EXIT" -eq 0 ] && [ -n "${REPORT_OUTPUT//[[:space:]]/}" ]; then
   printf '%s\n' "$REPORT_OUTPUT"

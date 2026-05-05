@@ -50,12 +50,45 @@ def test_get_resolved_key_falls_back_to_legacy_private_key(monkeypatch):
     assert config.get_resolved_key() == "legacy-key"
 
 
+def test_normalize_private_key_hex_strips_whitespace_and_bom() -> None:
+    body = "a" * 64
+    assert config.normalize_private_key_hex(f"  0x{body}  ") == "0x" + body.lower()
+    assert config.normalize_private_key_hex(f"\ufeff0x{body}") == "0x" + body.lower()
+    assert config.normalize_private_key_hex(f"{body}\n\r") == "0x" + body.lower()
+
+
+def test_normalize_private_key_hex_adds_0x_for_bare_64_hex() -> None:
+    body = "b" * 64
+    assert config.normalize_private_key_hex(body) == "0x" + body.lower()
+
+
+def test_normalize_private_key_hex_leaves_placeholder_strings() -> None:
+    assert config.normalize_private_key_hex("polygon-key") == "polygon-key"
+
+
+def test_normalize_private_key_hex_rejects_wrong_hex_length() -> None:
+    try:
+        config.normalize_private_key_hex("a" * 66)
+    except ValueError as exc:
+        assert "66" in str(exc) and "64" in str(exc)
+    else:
+        raise AssertionError("expected ValueError for 66 nibbles")
+
+
 def test_resolve_private_key_prefers_env_over_function_arg(monkeypatch):
     monkeypatch.setenv("POLYGON_PRIVATE_KEY", "polygon-key")
     monkeypatch.setenv("PRIVATE_KEY", "legacy-key")
     key, source = config.resolve_private_key("arg-key")
     assert key == "polygon-key"
     assert source == "POLYGON_PRIVATE_KEY"
+
+
+def test_resolve_private_key_normalizes_env_hex(monkeypatch) -> None:
+    body = "c" * 64
+    monkeypatch.setenv("POLYGON_PRIVATE_KEY", body + "\n")
+    key, source = config.resolve_private_key()
+    assert source == "POLYGON_PRIVATE_KEY"
+    assert key == "0x" + body.lower()
 
 
 def test_resolve_private_key_uses_function_arg_when_env_missing(monkeypatch):

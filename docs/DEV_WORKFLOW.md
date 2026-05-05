@@ -4,6 +4,13 @@ This file is the operational source of truth for day-to-day work.
 
 Role boundaries and collaboration are defined in `docs/OPERATING_MODEL.md`.
 
+## Shell: Windows (local) vs Linux (VM)
+
+- **Local**: Developers often use **Windows PowerShell**. Chaining commands with **`&&`** only works on **PowerShell 7+**; on Windows PowerShell 5.x use **`;`** and check **`$LASTEXITCODE`** (see **Release safety gates** in `AI_CONTEXT.md`). Prefer **`scripts/pre_commit_gate.ps1`** for a known-good sequence.
+- **Stage VM** (Ubuntu): **`bash`**, `nanoup`, and **`docs/readme-vm-update.md`** examples assume POSIX shell.
+
+When writing agent instructions or runbook steps, **label the shell** if a snippet is not portable.
+
 ## Core Principles
 
 - Prefer one-shot flows over multi-step manual sequences.

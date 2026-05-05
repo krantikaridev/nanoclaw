@@ -102,6 +102,29 @@ Retry the probe with **`eps[1]`** (second URL) if the list has more than one ent
 
 Same check in one command: **`nanohealth`** (alias) or **`python scripts/nanohealth.py`** — uses the bot’s **`connect_web3()`** path and **must** report **`chain_id=137`**.
 
+### 5b) Reconcile **`WALLET TOTAL USD`** vs Polygonscan (exact commands)
+
+**Bash (VM):** last lines with **v2** shape (**`STABLE_USD=`** = USDT + both USDC the bot sums):
+
+```bash
+grep -E 'WALLET TOTAL USD' real_cron.log | grep 'STABLE_USD=' | tail -n 15
+```
+
+**Show the runtime wallet** (must match the explorer URL):
+
+```bash
+grep '^WALLET=' .env
+```
+
+Then open **`https://polygonscan.com/address/<WALLET>`** (paste the `0x…` from `.env`) and compare **USDT** + **USDC (native)** + **USDC.e** token balances to **`USDT=`**, **`USDC=`**, and **`STABLE_USD=`** on the newest grep lines. If the address in the URL ≠ **`WALLET=`**, fix that before trusting any PnL.
+
+**PowerShell (Windows repo copy):**
+
+```powershell
+Select-String -Path real_cron.log -Pattern 'WALLET TOTAL USD' | Where-Object { $_.Line -match 'STABLE_USD=' } | Select-Object -Last 15
+Select-String -Path .env -Pattern '^WALLET='
+```
+
 ### 6) Restart and spot-check RPC lines in the log
 
 ```bash
@@ -265,6 +288,7 @@ This is not default stage behavior. Use only when you intentionally reset stage 
 ## Guardrails
 
 - Do not paste secrets in chat or commit `.env`.
+- **`POLYGON_PRIVATE_KEY` / `PRIVATE_KEY`**: single line (`0x` + 64 hex or 64 hex); no accidental trailing newline (code strips whitespace, but bad editor merges can still confuse operators). If the bot fails with **private key must be exactly 32 bytes**, reopen `.env` and clean that line.
 - Do not run two write-enabled bot instances for the same wallet.
 - Prefer `nanoup`/`nanorestart` over ad-hoc pull/restart commands.
 - `portfolio_session_baseline.json` is runtime-only and ignored by git; do not stage/commit it.

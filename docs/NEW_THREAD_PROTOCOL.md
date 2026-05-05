@@ -18,7 +18,7 @@ Paste or adapt blocks in this order (trim only if token budget forces it):
 
 1. **Link**: `AI_CONTEXT.md` raw for `V2`  
    https://raw.githubusercontent.com/krantikaridev/nanoclaw/V2/AI_CONTEXT.md  
-   Or paste the **Systematic Learning & History**, **New Thread Protocol**, **House-Cleaning Checklist**, **V2.5.11+ Roadmap**, **TODO & Backlog**, and **Current Situation / Status** sections from your local checkout (they must match repo after edits).
+   Or paste the **AI / Cursor convention (Aniki)**, **On-chain ground truth**, **What the bot reports vs UI**, **Systematic Learning & History**, **New Thread Protocol**, **House-Cleaning Checklist**, **V2.5.11+ Roadmap**, **TODO & Backlog**, and **Current Situation / Status** sections from your local checkout (they must match repo after edits).
 
 2. **One-line mission**: Example: “Continue nanoclaw `V2` stage bot iteration; no broad refactors; ROI-first deltas only.”
 

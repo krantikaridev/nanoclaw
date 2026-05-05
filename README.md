@@ -27,7 +27,7 @@ For operators and agents, **`AI_CONTEXT.md`** on branch **`V2`** is the authorit
 | `nanorestart` | **`nanoup`** then **`nanohealth`** then **`pnl_report`** (forwards flags where applicable) |
 | `nanokill` | Stop the bot |
 | `nanoattach` | Attach to live bot logs |
-| `nanodaily` | Daily health snapshot: balances, bypass/cooldown/protection counters, commit, TEST_MODE |
+| `nanodaily` | Daily health snapshot: **LOOKBACK** table (current log total vs `portfolio_history.csv` at 1h…~1m horizons), baseline/session PnL, bypass/cooldown/protection counters, commit, TEST_MODE |
 | `nanoenvsync` | Sync `.env.example` from `.env` (secrets blanked) and verify drift/coverage |
 | `nanoenvcheck` | Verify `.env.example` key coverage and drift vs sanitized `.env` |
 | `nanoenvstage` | Run env sync/check and stage `.env.example` for commit |
@@ -38,7 +38,7 @@ For operators and agents, **`AI_CONTEXT.md`** on branch **`V2`** is the authorit
 
 **`sprintmon`** is not in this repo; use **`nanohealth`** before trusting PnL, then **`nanostatus`** / **`nanopnl`** and **`nanobot`** / **`nanoattach`** for live logs.
 Session baseline can be reset manually with `nanopnl --reset-session` (or `nanostatus --reset-session` / `nanorestart --reset-session`).
-`scripts/pnl_report.py` now prefers the runtime line **`WALLET TOTAL USD`** (`STABLE_USD` = USDT+USDC when present, **WMATIC** = token qty — not USD) for `nanostatus`/`nanopnl`/`nanodaily`; then legacy live snapshots, then `MANUAL CORRECT BALANCE`. If authoritative stables are ~0 but TOTAL is large, the report flags **RPC read suspect** (compare wallet UI / Polygonscan).
+`scripts/pnl_report.py` now prefers the runtime line **`WALLET TOTAL USD`** (`STABLE_USD` = USDT+USDC when present, **WMATIC** = token qty — not USD) for `nanostatus`/`nanopnl`/`nanodaily`; then legacy live snapshots, then `MANUAL CORRECT BALANCE`. If authoritative stables are ~0 but TOTAL is large, the report flags **RPC read suspect** (compare wallet UI / Polygonscan). **`--daily-summary`** adds **LOOKBACK** (past **`portfolio_history.csv`** vs now), a one-line **Unicode sparkline** of **`total_value`**, and a **UTC hourly** close / Δ table (decision support—not a substitute for on-chain reconcile). **`--lookback`** accepts **`1h,4h,24h,1d,1w,1m`**; **`nanodaily`** passes a multi-window list by default.
 
 **USDC top-up for X-Signal equity** is handled inside the bot (`try_x_signal_equity_decision`), not as a separate shell alias. Configure `X_SIGNAL_USDC_SAFE_FLOOR`, `X_SIGNAL_AUTO_USDC_TARGET`, `X_SIGNAL_AUTO_USDC_TOPUP_ENABLED`, `X_SIGNAL_AUTO_USDC_MIN_SWAP_USD`, and `X_SIGNAL_AUTO_USDC_FAIL_COOLDOWN_SECONDS` in `.env` (see `.env.example`). Top-up prefers `USDT -> USDC` and falls back to `WMATIC -> USDC`. On-chain USDC reads retry before fallback (`X_SIGNAL_ONCHAIN_USDC_RETRY_ATTEMPTS`). AUTO-USDC logs now include per-attempt pre/post/target telemetry and a short failure backoff to reduce repeated retry loops.
 **USDC copy quality controls** now include gas-aware filtering and per-wallet performance weighting. Configure `COPY_BASE_EXPECTED_EDGE_PCT`, `COPY_GAS_EDGE_MULTIPLIER`, `COPY_MIN_EFFECTIVE_TRADE_AFTER_GAS_USD`, `COPY_MIN_MARGINAL_TRADE_USD`, and the `COPY_WALLET_PERFORMANCE_*` keys to tune allocation penalties for poor recent wallet performance.

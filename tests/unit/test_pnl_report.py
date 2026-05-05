@@ -342,3 +342,109 @@ def test_resolve_24h_baseline_uses_latest_value_before_cutoff(tmp_path: Path, mo
 
     baseline = pnl_report.resolve_24h_baseline(140.0)
     assert baseline == 100.0
+
+
+def test_parse_lookback_windows_default_and_tokens() -> None:
+    assert pnl_report.parse_lookback_windows("") == [("24h", 24.0)]
+    assert pnl_report.parse_lookback_windows("  ") == [("24h", 24.0)]
+    w = {label: hrs for label, hrs in pnl_report.parse_lookback_windows("1h,1d,2w,1m")}
+    assert w["1h"] == pytest.approx(1.0)
+    assert w["1d"] == pytest.approx(24.0)
+    assert w["2w"] == pytest.approx(336.0)
+    assert w["1m"] == pytest.approx(720.0)
+
+
+def test_resolve_history_at_or_before_returns_timestamp(tmp_path: Path, monkeypatch) -> None:
+    csv_file = tmp_path / "portfolio_history.csv"
+    csv_file.write_text(
+        "\n".join(
+            [
+                "timestamp,usdt,usdc,wmatic,pol,pol_usd_price,total_value",
+                "2026-05-05T10:00:00+00:00,1,1,1,1,0.1,80",
+                "2026-05-05T14:00:00+00:00,1,1,1,1,0.1,85",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(pnl_report, "PORTFOLIO_HISTORY_FILE", str(csv_file))
+    cutoff = pnl_report.datetime(2026, 5, 5, 15, 0, 0, tzinfo=pnl_report.timezone.utc)
+    total, ts = pnl_report._resolve_history_at_or_before(cutoff)
+    assert total == pytest.approx(85.0)
+    assert ts == pnl_report.datetime(2026, 5, 5, 14, 0, 0, tzinfo=pnl_report.timezone.utc)
+
+
+def test_print_daily_summary_emits_lookback_block(tmp_path: Path, monkeypatch, capsys) -> None:
+    from datetime import datetime, timezone
+
+    log_file = tmp_path / "real_cron.log"
+    log_file.write_text(
+        "2026-05-06 10:02:00 [nanoclaw] WALLET TOTAL USD | TOTAL=$90.00 | USDT=$10.00 | "
+        "USDC=$80.00 | STABLE_USD=$90.00 | WMATIC=0.000000 | POL=0 | FE_USD=$0\n",
+        encoding="utf-8",
+    )
+    csv_file = tmp_path / "portfolio_history.csv"
+    csv_file.write_text(
+        "\n".join(
+            [
+                "timestamp,usdt,usdc,wmatic,pol,pol_usd_price,total_value",
+                "2026-05-05T00:00:00+00:00,1,1,1,1,0.1,100",
+                "2026-05-06T10:00:00+00:00,1,1,1,1,0.1,95",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(pnl_report, "LOG_FILE", str(log_file))
+    monkeypatch.setattr(pnl_report, "PORTFOLIO_HISTORY_FILE", str(csv_file))
+    monkeypatch.setattr(pnl_report, "SESSION_BASELINE_FILE", str(tmp_path / "portfolio_session_baseline.json"))
+
+    fixed_now = datetime(2026, 5, 6, 12, 0, 0, tzinfo=timezone.utc)
+
+    class _FakeDateTime:
+        @staticmethod
+        def now(tz=None):
+            return fixed_now
+
+        @staticmethod
+        def fromisoformat(raw):
+            text = str(raw or "").strip()
+            return datetime.fromisoformat(text.replace("Z", "+00:00") if text.endswith("Z") else text)
+
+    monkeypatch.setattr(pnl_report, "datetime", _FakeDateTime)
+
+    def _fixed_baseline(total: float) -> float:
+        return 100.0
+
+    monkeypatch.setattr(pnl_report, "resolve_portfolio_baseline_usd", _fixed_baseline)
+
+    pnl_report.print_daily_summary(lookback="24h")
+    out = capsys.readouterr().out
+    assert "📅 LOOKBACK" in out
+    assert "ref $100.00" in out
+    assert "📈 TREND" in out
+    assert "▁" in out or "█" in out or "▄" in out
+
+
+def test_render_ascii_sparkline_scales_range() -> None:
+    s = pnl_report.render_ascii_sparkline([10.0, 11.0, 15.0, 19.0, 20.0], width=16)
+    assert len(s) == 16
+    assert pnl_report._SPARK_BLOCKS[0] in s and pnl_report._SPARK_BLOCKS[-1] in s
+
+
+def test_load_portfolio_total_series_sorted_and_dedupes_same_ts(tmp_path: Path, monkeypatch) -> None:
+    csv_file = tmp_path / "portfolio_history.csv"
+    csv_file.write_text(
+        "\n".join(
+            [
+                "timestamp,usdt,usdc,wmatic,pol,pol_usd_price,total_value",
+                "2026-05-05T12:00:01+00:00,1,1,1,1,0.1,90",
+                "2026-05-05T10:00:00+00:00,1,1,1,1,0.1,80",
+                "2026-05-05T12:00:01+00:00,1,1,1,1,0.1,95",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(pnl_report, "PORTFOLIO_HISTORY_FILE", str(csv_file))
+    series = pnl_report.load_portfolio_total_series()
+    assert len(series) == 2
+    assert series[0][1] == pytest.approx(80.0)
+    assert series[1][1] == pytest.approx(95.0)
