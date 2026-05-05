@@ -1,5 +1,6 @@
 """Central configuration - Single Source of Truth (SRP)"""
 
+import logging
 import time
 from dataclasses import dataclass
 from typing import Any, List, Sequence
@@ -25,6 +26,8 @@ _DEFAULT_POLYGON_PUBLIC_RPCS: tuple[str, ...] = (
 # Per-endpoint: first attempt + 2 retries, 1s apart (transient 401 / connection / timeout).
 _RPC_CONNECT_ATTEMPTS = 3
 _RPC_CONNECT_DELAY_SEC = 1.0
+_RPC_CHAIN_LOGGED = False
+logger = logging.getLogger(__name__)
 
 
 def default_json_rpc_url() -> List[str]:
@@ -69,6 +72,16 @@ def _connect_one(endpoint: str, *, timeout: int) -> Any:
     raise last_exc
 
 
+def _log_rpc_chain_once(chain: Sequence[str]) -> None:
+    """Emit resolved RPC chain once per process for easier ops debugging."""
+    global _RPC_CHAIN_LOGGED
+    if _RPC_CHAIN_LOGGED:
+        return
+    _RPC_CHAIN_LOGGED = True
+    rendered = " -> ".join(str(url).strip() for url in chain if str(url).strip())
+    logger.info("Resolved RPC endpoint chain (%d): %s", len(chain), rendered)
+
+
 def connect_web3(
     *,
     urls: Sequence[str] | None = None,
@@ -85,6 +98,7 @@ def connect_web3(
         chain = list(default_json_rpc_url())
     if not chain:
         chain = list(_DEFAULT_POLYGON_PUBLIC_RPCS)
+    _log_rpc_chain_once(chain)
 
     last_exc: Exception | None = None
     for endpoint in chain:
