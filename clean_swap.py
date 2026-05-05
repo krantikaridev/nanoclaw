@@ -37,7 +37,7 @@ from protection import check_exit_conditions, get_live_wmatic_price, record_buy
 
 try:
     COMMIT = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).decode().strip()
-except:
+except Exception:
     COMMIT = "unknown"
 
 LOG_FORMAT = "%(asctime)s | %(levelname)s | [" + COMMIT + "] %(message)s"

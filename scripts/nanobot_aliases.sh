@@ -52,7 +52,7 @@ nanopnl() {
 }
 
 nanorestart() {
-  nanoup "$@" && nanostatus
+  nanoup "$@" && nanostatus "$@"
 }
 
 nanodaily() {
