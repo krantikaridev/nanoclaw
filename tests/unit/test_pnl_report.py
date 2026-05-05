@@ -185,6 +185,39 @@ def test_get_current_balance_discards_unreasonable_live_snapshot_and_falls_back(
     assert current["total"] == 102.0
 
 
+def test_is_usable_snapshot_rejects_nan_component() -> None:
+    snap = pnl_report.BalanceSnapshot(
+        usdt=float("nan"),
+        usdc=10.0,
+        wmatic=1.0,
+        total=11.0,
+        source="real",
+    )
+    assert pnl_report._is_usable_snapshot(snap) is False
+
+
+def test_is_usable_snapshot_rejects_infinite_component() -> None:
+    snap = pnl_report.BalanceSnapshot(
+        usdt=float("inf"),
+        usdc=10.0,
+        wmatic=1.0,
+        total=11.0,
+        source="real",
+    )
+    assert pnl_report._is_usable_snapshot(snap) is False
+
+
+def test_is_usable_snapshot_rejects_negative_component() -> None:
+    snap = pnl_report.BalanceSnapshot(
+        usdt=10.0,
+        usdc=10.0,
+        wmatic=-0.5,
+        total=19.5,
+        source="real",
+    )
+    assert pnl_report._is_usable_snapshot(snap) is False
+
+
 def test_resolve_session_baseline_creates_and_resets(tmp_path: Path, monkeypatch) -> None:
     baseline_file = tmp_path / "portfolio_session_baseline.json"
     monkeypatch.setattr(pnl_report, "SESSION_BASELINE_FILE", str(baseline_file))
