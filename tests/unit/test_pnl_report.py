@@ -80,6 +80,26 @@ def test_extract_snapshots_discards_orphan_wallet_balance_at_eof(tmp_path: Path)
     assert snapshots == []
 
 
+def test_extract_snapshots_parses_authoritative_runtime_total_line(tmp_path: Path) -> None:
+    log_file = _write_log(
+        tmp_path,
+        "\n".join(
+            [
+                "2026-05-06 10:00:00 [nanoclaw] WALLET TOTAL USD | TOTAL=$145.25 | USDT=$10.00 | USDC=$80.00 | WMATIC=25.123456 | POL=4.000000 | FE_USD=$12.34",
+            ]
+        ),
+    )
+
+    snapshots = extract_snapshots(log_file)
+
+    assert len(snapshots) == 1
+    assert snapshots[0].source == "authoritative_total"
+    assert snapshots[0].total == 145.25
+    assert snapshots[0].usdt == 10.0
+    assert snapshots[0].usdc == 80.0
+    assert snapshots[0].wmatic == 25.123456
+
+
 def test_get_current_balance_prefers_live_onchain_snapshot_over_manual(tmp_path: Path, monkeypatch) -> None:
     log_file = _write_log(
         tmp_path,
@@ -98,6 +118,25 @@ def test_get_current_balance_prefers_live_onchain_snapshot_over_manual(tmp_path:
     assert current is not None
     assert current["source"] == "ON-CHAIN LIVE (Real USDT line)"
     assert current["total"] == 95.0
+
+
+def test_get_current_balance_prefers_authoritative_total_over_legacy_live(tmp_path: Path, monkeypatch) -> None:
+    log_file = _write_log(
+        tmp_path,
+        "\n".join(
+            [
+                "2026-05-04 10:01:00 Real USDT: 10.00 | USDC: 80.00 | WMATIC: 5.00",
+                "2026-05-04 10:02:00 [nanoclaw] WALLET TOTAL USD | TOTAL=$130.55 | USDT=$10.00 | USDC=$80.00 | WMATIC=5.000000 | POL=4.000000 | FE_USD=$36.55",
+            ]
+        ),
+    )
+    monkeypatch.setattr(pnl_report, "LOG_FILE", str(log_file))
+
+    current = pnl_report.get_current_balance()
+
+    assert current is not None
+    assert current["source"] == "RUNTIME WALLET TRUTH (TOTAL USD)"
+    assert current["total"] == 130.55
 
 
 def test_get_current_balance_uses_most_recent_snapshot_within_best_rank(tmp_path: Path, monkeypatch) -> None:

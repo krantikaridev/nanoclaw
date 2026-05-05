@@ -6,6 +6,14 @@ import clean_swap
 from modules import swap_executor as swap_exec
 
 
+def _reset_auto_usdc_failure_state() -> None:
+    from modules import signal as signal_module
+
+    signal_module._AUTO_USDC_FAILURE_STATE["next_retry_ts"] = 0.0
+    signal_module._AUTO_USDC_FAILURE_STATE["last_failure_usdc"] = -1.0
+    signal_module._AUTO_USDC_FAILURE_STATE["consecutive_failures"] = 0
+
+
 def test_log_format_prefixes_short_commit_hash():
     assert clean_swap.COMMIT
     assert f"[{clean_swap.COMMIT}]" in clean_swap.LOG_FORMAT
@@ -1423,6 +1431,7 @@ def test_try_x_signal_equity_prioritizes_ready_asset_sorted_before_build_plan(mo
 
 
 def test_try_x_signal_high_conviction_bypasses_high_gas_and_forces_usdc_topup(monkeypatch, capsys):
+    _reset_auto_usdc_failure_state()
     class _Plan:
         direction = "USDC_TO_EQUITY"
         amount_in = 1
@@ -1504,12 +1513,12 @@ def test_try_x_signal_high_conviction_bypasses_high_gas_and_forces_usdc_topup(mo
     )
 
     out = capsys.readouterr().out
-    assert decision is not None
-    assert decision.direction == "USDC_TO_EQUITY"
-    assert captured_kwargs.get("allow_high_gas_override") is True
+    assert decision is None
+    assert captured_kwargs == {}
     assert usdc_topup_calls == [(25.0, 15.0)]
     assert "🚀 HIGH-CONVICTION MODE ACTIVE" in out
     assert "🚀 HIGH-CONVICTION GAS OVERRIDE" in out
+    assert "short-circuit cycle after AUTO-USDC failure" in out
     assert "gas blocked (gas≈" not in out
 
 
@@ -1605,6 +1614,7 @@ def test_try_x_signal_does_not_log_high_conviction_when_followed_equities_disabl
 
 
 def test_try_x_signal_logs_high_conviction_auto_usdc_failure(monkeypatch, capsys):
+    _reset_auto_usdc_failure_state()
     class _TunedConfig:
         min_trade_usdc = 5.0
         per_asset_cooldown_seconds = 1800
@@ -1770,6 +1780,7 @@ def test_try_x_signal_auto_topup_skips_when_buy_asset_on_cooldown(monkeypatch):
 
 
 def test_try_x_signal_auto_topup_runs_when_high_conviction_even_if_cooldown_blocked(monkeypatch):
+    _reset_auto_usdc_failure_state()
     class _TunedConfig:
         min_trade_usdc = 5.0
         per_asset_cooldown_seconds = 1800
@@ -1933,6 +1944,142 @@ def test_try_x_signal_logs_standard_auto_usdc_failure(monkeypatch, capsys):
     assert "Auto-USDC attempt failed (guard/tx) — BUY paths may be skipped" not in out
     assert "Auto-USDC failed during HIGH-CONVICTION prep" not in out
 
+
+def test_try_x_signal_short_circuits_cycle_after_failed_auto_usdc(monkeypatch):
+    from modules import signal as signal_module
+
+    class _TunedConfig:
+        min_trade_usdc = 5.0
+        per_asset_cooldown_seconds = 1800
+        min_pol_for_gas = 0.005
+
+    class _TunedTrader:
+        config = _TunedConfig()
+        gas_protector = _DummyGasProtector()
+
+        def __init__(self):
+            self.build_plan_calls = 0
+
+        def build_plan_with_block_reason(self, **kwargs):
+            self.build_plan_calls += 1
+            _ = kwargs
+            return None, "zero_usdc"
+
+        def build_plan(self, **kwargs):
+            _ = kwargs
+            return None
+
+    class _BaseTrader:
+        def load_followed_equities(self):
+            return [
+                clean_swap.FollowedEquity(
+                    symbol="WETH_ALPHA",
+                    token_address="0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+                    decimals=18,
+                    signal_strength=0.91,
+                ),
+                clean_swap.FollowedEquity(
+                    symbol="WMATIC_ALPHA",
+                    token_address="0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
+                    decimals=18,
+                    signal_strength=0.88,
+                ),
+            ]
+
+    tuned = _TunedTrader()
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_AUTO_USDC_TOPUP_ENABLED", True)
+    monkeypatch.setattr(clean_swap, "_load_followed_equities_json_dict", lambda: {"enabled": True, "min_signal_strength": 0.60})
+    monkeypatch.setattr(clean_swap, "_effective_equity_signal_min", lambda cfg: 0.60)
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_EQUITY_TRADER", _BaseTrader())
+    monkeypatch.setattr(clean_swap, "_tuned_signal_equity_trader", lambda min_strength: tuned)
+    monkeypatch.setattr(clean_swap, "can_trade_asset", lambda symbol, now=None, cooldown_seconds=0: True)
+    monkeypatch.setattr(clean_swap, "get_token_balance", lambda *_args, **_kwargs: 0.0)
+    monkeypatch.setattr(clean_swap, "ensure_usdc_for_x_signal", lambda **_kwargs: False)
+    monkeypatch.setattr(
+        clean_swap,
+        "get_balances",
+        lambda: clean_swap.Balances(usdt=40.0, wmatic=10.0, pol=1.0, usdc=2.0),
+    )
+    signal_module._AUTO_USDC_FAILURE_STATE["next_retry_ts"] = 0.0
+    signal_module._AUTO_USDC_FAILURE_STATE["last_failure_usdc"] = -1.0
+    signal_module._AUTO_USDC_FAILURE_STATE["consecutive_failures"] = 0
+
+    decision = clean_swap.try_x_signal_equity_decision(
+        clean_swap.Balances(usdt=40.0, wmatic=10.0, pol=1.0, usdc=2.0),
+        dry_run=False,
+    )
+
+    assert decision is None
+    assert tuned.build_plan_calls == 0
+
+
+def test_try_x_signal_auto_usdc_failure_backoff_skips_immediate_retry(monkeypatch, capsys):
+    from modules import signal as signal_module
+
+    class _TunedConfig:
+        min_trade_usdc = 5.0
+        per_asset_cooldown_seconds = 1800
+        min_pol_for_gas = 0.005
+
+    class _TunedTrader:
+        config = _TunedConfig()
+        gas_protector = _DummyGasProtector()
+
+        def build_plan_with_block_reason(self, **kwargs):
+            _ = kwargs
+            return None, "no_plan"
+
+        def build_plan(self, **kwargs):
+            _ = kwargs
+            return None
+
+    class _BaseTrader:
+        def load_followed_equities(self):
+            return [
+                clean_swap.FollowedEquity(
+                    symbol="WETH_ALPHA",
+                    token_address="0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+                    decimals=18,
+                    signal_strength=0.91,
+                )
+            ]
+
+    calls = {"count": 0}
+
+    def _ensure(**_kwargs):
+        calls["count"] += 1
+        return False
+
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_AUTO_USDC_TOPUP_ENABLED", True)
+    monkeypatch.setattr(signal_module, "X_SIGNAL_AUTO_USDC_FAIL_COOLDOWN_SECONDS", 300)
+    monkeypatch.setattr(clean_swap, "_load_followed_equities_json_dict", lambda: {"enabled": True, "min_signal_strength": 0.60})
+    monkeypatch.setattr(clean_swap, "_effective_equity_signal_min", lambda cfg: 0.60)
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_EQUITY_TRADER", _BaseTrader())
+    monkeypatch.setattr(clean_swap, "_tuned_signal_equity_trader", lambda min_strength: _TunedTrader())
+    monkeypatch.setattr(clean_swap, "can_trade_asset", lambda symbol, now=None, cooldown_seconds=0: True)
+    monkeypatch.setattr(clean_swap, "get_token_balance", lambda *_args, **_kwargs: 0.0)
+    monkeypatch.setattr(clean_swap, "ensure_usdc_for_x_signal", _ensure)
+    monkeypatch.setattr(
+        clean_swap,
+        "get_balances",
+        lambda: clean_swap.Balances(usdt=40.0, wmatic=10.0, pol=1.0, usdc=2.0),
+    )
+    _reset_auto_usdc_failure_state()
+
+    clean_swap.try_x_signal_equity_decision(
+        clean_swap.Balances(usdt=40.0, wmatic=10.0, pol=1.0, usdc=2.0),
+        dry_run=False,
+    )
+    clean_swap.try_x_signal_equity_decision(
+        clean_swap.Balances(usdt=40.0, wmatic=10.0, pol=1.0, usdc=2.0),
+        dry_run=False,
+    )
+
+    out = capsys.readouterr().out
+    assert calls["count"] == 1
+    assert "AUTO-USDC skipped — failure backoff active" in out
 
 # --- clean_swap helper coverage (load JSON, USDC projection, strong-buy gate, copy-trade) ---
 

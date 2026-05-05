@@ -654,7 +654,10 @@ class SignalEquityTrader:
                 return None, "usdc_identity_noop"
             usdc_balance = self._to_float(effective_usdc_balance, 0.0)
             if usdc_balance <= 0:
-                print(f"[nanoclaw] BLOCK: {sym} | zero_usdc (balance=${usdc_balance:.2f})")
+                print(
+                    f"[nanoclaw] BLOCK: {sym} | zero_usdc (balance=${usdc_balance:.2f}, "
+                    f"source={self.last_usdc_balance_source})"
+                )
                 logger.debug("build_plan block sym=%s reason=zero_usdc", sym)
                 return None, "zero_usdc"
             trade_size = self._compute_trade_size(usdc_balance, strength, usdt_balance, symbol=sym)

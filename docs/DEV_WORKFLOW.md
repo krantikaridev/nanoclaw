@@ -82,7 +82,8 @@ Run this checklist before creating a release tag (for `v2.7` and later):
    - `python -m compileall -q .`
    - `python -m pytest tests/ --cov=. --cov-report=term-missing:skip-covered --cov-report=xml`
 6. Data-quality cross-check (required before interpreting PnL):
-   - Compare `nanodaily`/`nanostatus` balances against wallet UI/on-chain view for USDT/USDC/WMATIC totals.
+   - Compare `nanodaily`/`nanostatus` total against wallet-truth runtime telemetry (`WALLET TOTAL USD`) and wallet/on-chain view.
+   - Treat `WALLET TOTAL USD` as authoritative; legacy `Real USDT` parser values are fallback only.
    - If totals diverge, treat reported PnL as provisional and log a parser/source reconciliation task before tagging.
 
 Fast iteration mode (for stage diagnosis loops, not final sign-off):

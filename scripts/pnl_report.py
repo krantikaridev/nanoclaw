@@ -27,6 +27,10 @@ MANUAL_PATTERN = re.compile(
     re.IGNORECASE,
 )
 WALLET_PATTERN = re.compile(r"WALLET BALANCE.*USDC=\$?([\d.]+)")
+AUTHORITATIVE_TOTAL_PATTERN = re.compile(
+    r"WALLET TOTAL USD\s*\|\s*TOTAL=\$?([\d.]+)\s*\|\s*USDT=\$?([\d.]+)\s*\|\s*USDC=\$?([\d.]+)\s*\|\s*WMATIC=([\d.]+)",
+    re.IGNORECASE,
+)
 REAL_PATTERN = re.compile(
     r"Real USDT:\s*\$?([\d.]+)\s*\|\s*USDC:\s*\$?([\d.]+)\s*\|\s*WMATIC:\s*\$?([\d.]+)",
     re.IGNORECASE,
@@ -53,6 +57,24 @@ def extract_snapshots(log_file: Path) -> list[BalanceSnapshot]:
     pending_wallet: tuple[int, float] | None = None
 
     for idx, line in enumerate(lines):
+        authoritative_total_match = AUTHORITATIVE_TOTAL_PATTERN.search(line)
+        if authoritative_total_match:
+            total = float(authoritative_total_match.group(1))
+            usdt = float(authoritative_total_match.group(2))
+            usdc = float(authoritative_total_match.group(3))
+            wmatic = float(authoritative_total_match.group(4))
+            snapshots.append(
+                BalanceSnapshot(
+                    usdt=usdt,
+                    usdc=usdc,
+                    wmatic=wmatic,
+                    total=total,
+                    source="authoritative_total",
+                )
+            )
+            pending_wallet = None
+            continue
+
         manual_match = MANUAL_PATTERN.search(line)
         if manual_match:
             usdc = float(manual_match.group(1))
@@ -104,6 +126,8 @@ def extract_snapshots(log_file: Path) -> list[BalanceSnapshot]:
 
 
 def _source_rank(snapshot: BalanceSnapshot) -> int:
+    if snapshot.source == "authoritative_total":
+        return -1
     # Treat direct real and paired wallet+real as the same "live" class.
     # Recency is resolved in ``get_current_balance``.
     if snapshot.source in {"paired", "real"}:
@@ -114,6 +138,8 @@ def _source_rank(snapshot: BalanceSnapshot) -> int:
 
 
 def _source_label(snapshot: BalanceSnapshot) -> str:
+    if snapshot.source == "authoritative_total":
+        return "RUNTIME WALLET TRUTH (TOTAL USD)"
     if snapshot.source == "paired":
         return "ON-CHAIN LIVE (WALLET+REAL paired)"
     if snapshot.source == "real":

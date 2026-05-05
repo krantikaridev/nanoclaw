@@ -119,7 +119,7 @@ This is not default stage behavior. Use only when you intentionally reset stage 
 3. Immediately verify preserved runtime values in `.env`:
    - `POLYGON_PRIVATE_KEY` (or legacy `PRIVATE_KEY`)
    - Any stage integrations (`ONEINCH_API_KEY`, `GROK_API_KEY`, `TELEGRAM_*`, etc.)
-   - RPC chain (`RPC_ENDPOINTS` preferred)
+   - RPC chain (`RPC_ENDPOINTS` preferred) with real URLs only (no placeholders)
    - Current required knobs for this cycle:
      - `COOLDOWN_MINUTES=3`
      - `TEST_MODE=true`

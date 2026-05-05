@@ -488,6 +488,26 @@ def test_buy_blocked_zero_usdc():
     assert reason == "zero_usdc"
 
 
+def test_buy_blocked_zero_usdc_logs_balance_source(capsys):
+    s = _build_strategy_tuned()
+    s.last_usdc_balance_source = "fallback_after_all_rpcs_failed"
+    _, reason = s.build_plan_with_block_reason(
+        symbol="WETH",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.92,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=0.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+    )
+    out = capsys.readouterr().out
+    assert reason == "zero_usdc"
+    assert "source=" in out
+
+
 def test_buy_fixed_size_is_now_stopped_by_hard_bypass_when_under_15():
     """BUY fixed sizing now enforces hard 15 USD floor even if legacy min_trade_usdc allows the amount."""
     s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)

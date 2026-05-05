@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from typing import Optional, Sequence
 
 import config as cfg
@@ -26,6 +27,7 @@ from .runtime import (
     USDC,
     X_SIGNAL_AUTO_USDC_TARGET,
     X_SIGNAL_AUTO_USDC_MIN_SWAP_USD,
+    X_SIGNAL_AUTO_USDC_FAIL_COOLDOWN_SECONDS,
     X_SIGNAL_AUTO_USDC_TOPUP_ENABLED,
     X_SIGNAL_EQUITY_TRADER,
     X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD,
@@ -39,6 +41,11 @@ from .runtime import (
 )
 
 logger = logging.getLogger(__name__)
+_AUTO_USDC_FAILURE_STATE = {
+    "next_retry_ts": 0.0,
+    "last_failure_usdc": -1.0,
+    "consecutive_failures": 0,
+}
 
 
 def _reconcile_total_portfolio_usd_with_onchain_usdc(
@@ -281,6 +288,9 @@ def ensure_usdc_for_x_signal(min_usdc: float = 8.0, min_wmatic_value: float = 15
 
     min_swap_usd = max(1.0, float(getattr(fac, "X_SIGNAL_AUTO_USDC_MIN_SWAP_USD", X_SIGNAL_AUTO_USDC_MIN_SWAP_USD)))
     target_usdc = max(float(min_usdc), float(getattr(fac, "X_SIGNAL_AUTO_USDC_TARGET", X_SIGNAL_AUTO_USDC_TARGET)))
+    pre_usdc = float(balances.usdc)
+    attempted_legs: list[str] = []
+    fail_class = "no_leg_attempted"
 
     def _target_swap_usd(current_usdc: float) -> float:
         shortfall = max(0.0, target_usdc - float(current_usdc))
@@ -312,6 +322,8 @@ def ensure_usdc_for_x_signal(min_usdc: float = 8.0, min_wmatic_value: float = 15
         try:
             return asyncio.run(coro)
         except Exception as exc:
+            nonlocal fail_class
+            fail_class = "swap_exception"
             print(
                 f"{runtime._nanolog()}AUTO-USDC swap call raised exception; "
                 f"submission status unknown — {exc}"
@@ -328,15 +340,26 @@ def ensure_usdc_for_x_signal(min_usdc: float = 8.0, min_wmatic_value: float = 15
     if current.usdt >= min_swap_usd:
         usdt_amt = min(current.usdt * 0.95, _target_swap_usd(current.usdc))
         if usdt_amt >= min_swap_usd:
+            attempted_legs.append("USDT_TO_USDC")
             print(f"{runtime._nanolog()}Auto top-up triggered: swapping ${usdt_amt:.2f} from USDT → USDC")
             usdt_ok = _run(_swap_usdt(int(usdt_amt * 1_000_000)))
             post_usdt = fac.get_balances()
             print(
                 f"{runtime._nanolog()}AUTO-USDC result | leg=USDT_TO_USDC | ok={usdt_ok} "
-                f"| usdc_after=${post_usdt.usdc:.2f}"
+                f"| pre_usdc=${pre_usdc:.2f} | usdc_after=${post_usdt.usdc:.2f} "
+                f"| target=${target_usdc:.2f}"
             )
             if usdt_ok and post_usdt.usdc >= min_usdc:
+                print(
+                    f"{runtime._nanolog()}AUTO-USDC final | ok=True | fail_class=none "
+                    f"| legs={','.join(attempted_legs)} | pre_usdc=${pre_usdc:.2f} "
+                    f"| post_usdc=${post_usdt.usdc:.2f} | target=${target_usdc:.2f}"
+                )
                 return True
+            if not usdt_ok:
+                fail_class = "usdt_swap_failed"
+            else:
+                fail_class = "usdt_leg_insufficient"
 
     # Fallback source: WMATIC when USDT is insufficient or first leg didn't reach floor.
     after_usdt = fac.get_balances()
@@ -346,25 +369,42 @@ def ensure_usdc_for_x_signal(min_usdc: float = 8.0, min_wmatic_value: float = 15
         wmatic_price = 0.0
     if wmatic_price <= 0:
         print(f"{runtime._nanolog()}AUTO-USDC skipped — WMATIC price unavailable for fallback leg")
+        fail_class = "wmatic_price_unavailable"
         return after_usdt.usdc >= min_usdc
     if (after_usdt.wmatic * wmatic_price) < max(float(min_wmatic_value), min_swap_usd):
+        fail_class = "wmatic_leg_below_min_value"
         return after_usdt.usdc >= min_usdc
 
     wmatic_swap_usd = min(after_usdt.wmatic * wmatic_price * 0.95, _target_swap_usd(after_usdt.usdc))
     if wmatic_swap_usd < min_swap_usd:
+        fail_class = "wmatic_swap_below_min_swap_usd"
         return after_usdt.usdc >= min_usdc
     wmatic_to_swap = min(after_usdt.wmatic * 0.95, wmatic_swap_usd / wmatic_price)
     amount_wei = int(wmatic_to_swap * 1e18)
     if amount_wei <= 0:
+        fail_class = "wmatic_amount_too_small"
         return after_usdt.usdc >= min_usdc
+    attempted_legs.append("WMATIC_TO_USDC")
     print(f"{runtime._nanolog()}Auto top-up triggered: swapping ${wmatic_swap_usd:.2f} from WMATIC → USDC")
     ok = _run(_swap_wmatic(amount_wei))
     post_wmatic = fac.get_balances()
     print(
         f"{runtime._nanolog()}AUTO-USDC result | leg=WMATIC_TO_USDC | ok={ok} "
-        f"| usdc_after=${post_wmatic.usdc:.2f}"
+        f"| pre_usdc=${pre_usdc:.2f} | usdc_after=${post_wmatic.usdc:.2f} "
+        f"| target=${target_usdc:.2f}"
     )
-    return ok and post_wmatic.usdc >= min_usdc
+    topup_ok = bool(ok and post_wmatic.usdc >= min_usdc)
+    if not topup_ok:
+        if not ok:
+            fail_class = "wmatic_swap_failed"
+        else:
+            fail_class = "wmatic_leg_insufficient"
+    print(
+        f"{runtime._nanolog()}AUTO-USDC final | ok={topup_ok} | fail_class={fail_class if not topup_ok else 'none'} "
+        f"| legs={','.join(attempted_legs) if attempted_legs else 'none'} | pre_usdc=${pre_usdc:.2f} "
+        f"| post_usdc=${post_wmatic.usdc:.2f} | target=${target_usdc:.2f}"
+    )
+    return topup_ok
 
 
 def _project_balances_after_auto_usdc(
@@ -580,6 +620,10 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
     auto_topup_target = max(float(X_SIGNAL_AUTO_USDC_TARGET), float(X_SIGNAL_USDC_SAFE_FLOOR))
     auto_topup_enabled = bool(getattr(fcb, "X_SIGNAL_AUTO_USDC_TOPUP_ENABLED", X_SIGNAL_AUTO_USDC_TOPUP_ENABLED))
     auto_topup_buy_gate = has_buy_signal and (has_buy_ready_on_cooldown or high_conviction)
+    auto_topup_backoff_s = max(
+        0,
+        int(getattr(fcb, "X_SIGNAL_AUTO_USDC_FAIL_COOLDOWN_SECONDS", X_SIGNAL_AUTO_USDC_FAIL_COOLDOWN_SECONDS)),
+    )
     should_consider_auto_topup = (
         auto_topup_enabled
         and auto_topup_buy_gate
@@ -589,8 +633,13 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
         f"{runtime._nanolog()}AUTO-USDC consider | enabled={auto_topup_enabled} "
         f"| has_buy_signal={has_buy_signal} | cooldown_ready={has_buy_ready_on_cooldown} "
         f"| high_conviction={high_conviction} | buy_gate={auto_topup_buy_gate} "
-        f"| usdc=${float(balances.usdc):.2f} | safe_floor=${float(X_SIGNAL_USDC_SAFE_FLOOR):.2f}"
+        f"| usdc=${float(balances.usdc):.2f} | safe_floor=${float(X_SIGNAL_USDC_SAFE_FLOOR):.2f} "
+        f"| fail_backoff_s={auto_topup_backoff_s}"
     )
+    auto_topup_attempted = False
+    auto_topup_ok = False
+    auto_topup_pre_usdc = float(balances.usdc)
+    auto_topup_post_usdc = float(balances.usdc)
     if (
         should_consider_auto_topup
     ):
@@ -601,26 +650,59 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                 min_wmatic_value=float(X_SIGNAL_WMATIC_MIN_VALUE),
             )
         else:
-            print(
-                f"{runtime._nanolog()}AUTO-USDC execution start | "
-                f"current_usdc=${balances.usdc:.2f} target=${auto_topup_target:.2f}"
-            )
-            topup_ok = fcb.ensure_usdc_for_x_signal(
-                min_usdc=auto_topup_target,
-                min_wmatic_value=float(X_SIGNAL_WMATIC_MIN_VALUE),
-                force=True,
-            )
-            balances = fcb.get_balances()
-            if not topup_ok:
+            now_ts = float(time.time())
+            backoff_until = float(_AUTO_USDC_FAILURE_STATE.get("next_retry_ts", 0.0) or 0.0)
+            if backoff_until > now_ts:
+                remaining_s = max(0.0, backoff_until - now_ts)
                 print(
-                    f"{runtime._nanolog()}AUTO-USDC top-up attempted but floor not reached "
-                    f"(have ${balances.usdc:.2f}, target ${auto_topup_target:.2f})"
+                    f"{runtime._nanolog()}AUTO-USDC skipped — failure backoff active "
+                    f"(remaining={remaining_s:.0f}s)"
                 )
+                auto_topup_post_usdc = float(balances.usdc)
             else:
+                auto_topup_attempted = True
+                auto_topup_pre_usdc = float(balances.usdc)
                 print(
-                    f"{runtime._nanolog()}AUTO-USDC top-up successful "
-                    f"(have ${balances.usdc:.2f}, target ${auto_topup_target:.2f})"
+                    f"{runtime._nanolog()}AUTO-USDC execution start | "
+                    f"pre_usdc=${auto_topup_pre_usdc:.2f} target=${auto_topup_target:.2f}"
                 )
+                auto_topup_ok = fcb.ensure_usdc_for_x_signal(
+                    min_usdc=auto_topup_target,
+                    min_wmatic_value=float(X_SIGNAL_WMATIC_MIN_VALUE),
+                    force=True,
+                )
+                balances = fcb.get_balances()
+                auto_topup_post_usdc = float(balances.usdc)
+                unchanged_usdc = abs(auto_topup_post_usdc - auto_topup_pre_usdc) < 0.01
+                if auto_topup_ok:
+                    _AUTO_USDC_FAILURE_STATE["next_retry_ts"] = 0.0
+                    _AUTO_USDC_FAILURE_STATE["last_failure_usdc"] = -1.0
+                    _AUTO_USDC_FAILURE_STATE["consecutive_failures"] = 0
+                elif auto_topup_backoff_s > 0 and unchanged_usdc:
+                    prev_failures = int(_AUTO_USDC_FAILURE_STATE.get("consecutive_failures", 0) or 0)
+                    _AUTO_USDC_FAILURE_STATE["consecutive_failures"] = prev_failures + 1
+                    _AUTO_USDC_FAILURE_STATE["last_failure_usdc"] = auto_topup_post_usdc
+                    _AUTO_USDC_FAILURE_STATE["next_retry_ts"] = now_ts + float(auto_topup_backoff_s)
+                fail_class = "none"
+                if not auto_topup_ok:
+                    fail_class = "floor_not_reached"
+                    if unchanged_usdc:
+                        fail_class = "no_balance_change"
+                print(
+                    f"{runtime._nanolog()}AUTO-USDC attempt summary | ok={auto_topup_ok} "
+                    f"| fail_class={fail_class} | pre_usdc=${auto_topup_pre_usdc:.2f} "
+                    f"| post_usdc=${auto_topup_post_usdc:.2f} | target=${auto_topup_target:.2f}"
+                )
+                if not auto_topup_ok:
+                    print(
+                        f"{runtime._nanolog()}AUTO-USDC top-up attempted but floor not reached "
+                        f"(have ${balances.usdc:.2f}, target ${auto_topup_target:.2f})"
+                    )
+                else:
+                    print(
+                        f"{runtime._nanolog()}AUTO-USDC top-up successful "
+                        f"(have ${balances.usdc:.2f}, target ${auto_topup_target:.2f})"
+                    )
 
     print(f"🟦 X-SIGNAL EQUITY CHECK | Checking {len(assets)} assets")
     if not cfg_enabled:
@@ -662,6 +744,21 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
             fcb._log_trade_skipped(
                 f"USDC low (have ${balances.usdc:.2f}, need ${max(force_floor, min_trade_usdc):.2f})"
             )
+        if (
+            auto_topup_attempted
+            and not auto_topup_ok
+            and has_strong_buy
+            and float(balances.usdc) < max(force_floor, min_trade_usdc)
+        ):
+            print(
+                f"{runtime._nanolog()}X-SIGNAL EQUITY | short-circuit cycle after AUTO-USDC failure "
+                f"(pre=${auto_topup_pre_usdc:.2f}, post=${auto_topup_post_usdc:.2f}, "
+                f"need=${max(force_floor, min_trade_usdc):.2f})"
+            )
+            fcb._log_trade_skipped(
+                f"x_signal_cycle_short_circuit (auto_usdc_failed; usdc={float(balances.usdc):.2f})"
+            )
+            return None
 
         if not dry_run and has_strong_buy:
             balances = fcb.get_balances()

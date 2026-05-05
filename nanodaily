@@ -6,13 +6,14 @@ echo "════════════════════════�
 echo "           NANODAILY HEALTH — $(date '+%Y-%m-%d %H:%M')"
 echo "═══════════════════════════════════════════════"
 echo "💰 BALANCE:"
-REPORT_OUTPUT="$(PYTHONIOENCODING=utf-8 python scripts/pnl_report.py --daily-summary 2>/dev/null)"
+REPORT_OUTPUT="$(PYTHONIOENCODING=utf-8 python scripts/pnl_report.py --daily-summary 2>&1)"
 SUMMARY_EXIT=$?
 if [ "$SUMMARY_EXIT" -eq 0 ] && [ -n "${REPORT_OUTPUT//[[:space:]]/}" ]; then
   printf '%s\n' "$REPORT_OUTPUT"
 else
   # Fallback when --daily-summary fails or emits no usable output.
-  REPORT_OUTPUT="$(PYTHONIOENCODING=utf-8 python scripts/pnl_report.py 2>/dev/null || true)"
+  echo "⚠️ daily-summary fallback (exit=$SUMMARY_EXIT)"
+  REPORT_OUTPUT="$(PYTHONIOENCODING=utf-8 python scripts/pnl_report.py 2>&1 || true)"
   printf '%s\n' "$REPORT_OUTPUT" | grep -E "(CURRENT BALANCE|source:|USDC|WMATIC|USDT|TOTAL|Since baseline|Session PnL|24h PnL)"
 fi
 echo ""
