@@ -27,7 +27,7 @@
 |--------|------------|
 | **`STABLE_USD` / USDT / USDC** in logs | **USDT** + **USDC.e + native USDC** (`USDC` + `USDC_NATIVE` in `.env`), from **`balanceOf`**. Should be close to MetaMask’s two USDC lines summed. |
 | **WMATIC** in logs | **Token quantity**, not USD; USD in TOTAL uses **`get_live_wmatic_price()`** (can differ slightly from MetaMask’s mark). |
-| **`FE_USD`** | Router-quoted USD for tokens in **`followed_equities.json`** that are **not** core stables/WMATIC. If **`FE_USD=0`** but the wallet holds **WETH / POSI / dust**, MetaMask total can exceed bot **TOTAL** until those are modeled or v2.9 adds inventory MTM. |
+| **`FE_USD`** | **USDT-notional** mark for tokens in **`followed_equities.json`** that are **not** core stables/WMATIC. Quoted via **V2 router paths**, then **Uniswap V3 `quoteExactInputSingle`** (fees 500/3000/10000), then optional JSON **`current_price_usd × balance`**. If still **~0** while MetaMask shows value, check RPC/quoter or add **`current_price_usd`** on that asset row for a manual MTM fallback. |
 | **`TOTAL` (runtime)** | **USDT + USDC (both) + WMATIC×price + POL×`POL_USD_PRICE` + `FE_USD`**. Not guaranteed to equal MetaMask’s all-network headline. |
 
 ## **Operating Model (roles + loop)**

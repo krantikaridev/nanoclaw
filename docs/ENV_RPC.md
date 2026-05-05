@@ -33,3 +33,7 @@ So **`RPC_FALLBACKS` may be left empty**; you still get all public fallbacks aft
 ## ROI / PnL baseline (separate from RPC)
 
 Portfolio return labels use `modules/baseline.py`, not the RPC list. **`PORTFOLIO_BASELINE_USD=0`** (or unset/empty) means “do not pin from env”—baseline resolves from `portfolio_baseline.json`, then the first `portfolio_history.csv` row, then the caller’s live total. Any **positive** value pins starting capital for ROI-style labels.
+
+## `FE_USD` inventory quotes (MetaMask parity)
+
+`FE_USD` in **`WALLET TOTAL USD`** sums **followed-equities** holdings (e.g. **WETH**) into approximate **USDT** using on-chain quotes. **`INVENTORY_MTM_SLIPPAGE_BPS`** (default **300**) applies to these **read-only** quotes. The code tries the configured **V2-style router** paths first, then **Uniswap V3** direct **token→USDT** quotes at fee tiers **500 / 3000 / 10000**. If all fail, an optional per-asset **`current_price_usd`** in `followed_equities.json` can MTM that row (**USD ≈ USDT** for ops). Bad RPC or missing pools still yield **0** for that leg—treat **MetaMask** as custody truth when debugging.

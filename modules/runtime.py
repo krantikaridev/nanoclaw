@@ -399,12 +399,62 @@ def fixed_copy_trade_usd(usdc: float, usdt: float, copy_trade_pct: float) -> flo
     return max(lo, min(hi, float(raw)))
 
 
-def _followed_equity_tokens_usdt_usd() -> float:
-    """Router-quoted USDT value for non-core followed tokens (excludes USDC/USDT/WMATIC already in Balances)."""
-    from web3 import Web3
+def _quote_followed_token_usdt_mtm(
+    web3_client: Web3,
+    *,
+    token_in: str,
+    amount_in_raw: int,
+    slippage_bps: int,
+) -> float:
+    """USDT notional (human, 6 decimals) for FE_USD: QuickSwap-style router, then Uniswap V3 direct fee tiers."""
+    if amount_in_raw <= 0:
+        return 0.0
+    from web3 import Web3 as Web3Local
 
+    from nanoclaw.abi.uniswap_v3_abi import UNISWAP_V3_QUOTER_ABI
+    from nanoclaw.execution.uniswap_v3_helpers import quote_exact_input_single
     from swap_executor import _best_quote_path, build_polygon_swap_path_candidates
 
+    slip = int(slippage_bps)
+    t_in = Web3Local.to_checksum_address(str(token_in).strip())
+    t_usdt = Web3Local.to_checksum_address(str(USDT).strip())
+    paths = build_polygon_swap_path_candidates(t_in, t_usdt)
+    try:
+        _path, best_amt, _min_out = _best_quote_path(
+            web3_client,
+            router=ROUTER,
+            amount_in=int(amount_in_raw),
+            paths=paths,
+            slippage_bps=slip,
+        )
+        if best_amt > 0:
+            return float(best_amt) / 1_000_000.0
+    except Exception:
+        pass
+
+    best_v3 = 0
+    quoter_addr = str(cfg.UNISWAP_V3_QUOTER).strip()
+    for fee in (500, 3000, 10000):
+        try:
+            amt_out, _mn = quote_exact_input_single(
+                web3_client,
+                quoter_address=quoter_addr,
+                quoter_abi=UNISWAP_V3_QUOTER_ABI,
+                token_in=t_in,
+                token_out=t_usdt,
+                amount_in=int(amount_in_raw),
+                slippage_bps=slip,
+                fee=int(fee),
+            )
+            if int(amt_out) > best_v3:
+                best_v3 = int(amt_out)
+        except Exception:
+            continue
+    return float(best_v3) / 1_000_000.0 if best_v3 > 0 else 0.0
+
+
+def _followed_equity_tokens_usdt_usd() -> float:
+    """Router-quoted USDT value for non-core followed tokens (excludes USDC/USDT/WMATIC already in Balances)."""
     total = 0.0
     try:
         assets = X_SIGNAL_EQUITY_TRADER.load_followed_equities()
@@ -427,15 +477,14 @@ def _followed_equity_tokens_usdt_usd() -> float:
         amt = int(bal * (10 ** int(a.decimals)))
         if amt <= 0:
             continue
-        try:
-            paths = build_polygon_swap_path_candidates(
-                Web3.to_checksum_address(addr),
-                Web3.to_checksum_address(USDT),
-            )
-            _, best_amt, _ = _best_quote_path(w3, router=ROUTER, amount_in=amt, paths=paths)
-            total += best_amt / 1_000_000
-        except Exception:
+        slip = int(cfg.INVENTORY_MTM_SLIPPAGE_BPS)
+        usdt_val = _quote_followed_token_usdt_mtm(w3, token_in=addr, amount_in_raw=amt, slippage_bps=slip)
+        if usdt_val > 0:
+            total += usdt_val
             continue
+        px = getattr(a, "current_price_usd", None)
+        if px is not None and float(px) > 0 and bal > 0:
+            total += float(bal) * float(px)
     return total
 
 
