@@ -66,20 +66,14 @@ bash scripts/nanorestart.sh
      - bot stop/start
      - `git pull --ff-only`
      - dirty runtime files (`portfolio_history.csv`, `real_cron.log`) via autostash
+     - `.env` sync from `.env.example` via `scripts/nanoenv_apply.py --write` (preserves secrets + runtime RPC keys)
 
 3. VM env parity sync (required before push/tag from VM):
    - `python scripts/nanoenv_example.py --write`
    - `python scripts/verify_env_example_keys.py`
    - `git diff .env.example`
 
-4. Apply latest template keys into runtime `.env` safely (preserve secrets):
-   - `python scripts/nanoenv_apply.py --write`
-   - Optional: keep unknown local keys too:
-     - `python scripts/nanoenv_apply.py --write --keep-extra-keys`
-   - Verify:
-     - `python scripts/verify_env_example_keys.py`
-
-5. Verify deployed code/runtime:
+4. Verify deployed code/runtime:
    - `git log --oneline -5`
    - `nanostatus`
    - `nanopnl`
@@ -87,7 +81,7 @@ bash scripts/nanorestart.sh
    - `./nanodaily`
    - `tail -n 120 real_cron.log`
 
-6. If VM produced tracked changes (for example `.env.example`, docs):
+5. If VM produced tracked changes (for example `.env.example`, docs):
    - `git add .env.example AI_CONTEXT.md docs/readme-vm-update.md`
    - `git commit -m "chore: sync vm env template and runbook references"`
    - `git push origin V2`

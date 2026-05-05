@@ -392,3 +392,93 @@ def test_nanodaily_falls_back_when_daily_summary_fails(tmp_path: Path):
     assert run_daily.returncode == 0, run_daily.stderr
     assert "USDC: $7.00" in run_daily.stdout
     assert "TOTAL: $7.00" in run_daily.stdout
+
+
+def _sandbox_root_for_nanoup(tmp_path: Path) -> Path:
+    root = tmp_path / "nanoup-sandbox"
+    scripts = root / "scripts"
+    scripts.mkdir(parents=True)
+
+    nanoup_src = REPO_ROOT / "scripts" / "nanoup.sh"
+    nanoup_dst = scripts / "nanoup.sh"
+    nanoup_dst.write_text(nanoup_src.read_text(encoding="utf-8"), encoding="utf-8")
+    nanoup_dst.chmod(nanoup_dst.stat().st_mode | stat.S_IXUSR)
+
+    # Presence checked by nanoup before sync call.
+    (scripts / "nanoenv_apply.py").write_text(
+        "#!/usr/bin/env python3\nprint('nanoenv_apply placeholder')\n",
+        encoding="utf-8",
+    )
+    (root / "clean_swap.py").write_text("print('bot placeholder')\n", encoding="utf-8")
+    (root / ".env").write_text("A=1\n", encoding="utf-8")
+    (root / ".env.example").write_text("A=2\n", encoding="utf-8")
+
+    bin_dir = root / "bin"
+    bin_dir.mkdir()
+    git_stub = bin_dir / "git"
+    git_stub.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        "if [[ \"${1:-}\" == \"rev-parse\" && \"${2:-}\" == \"--is-inside-work-tree\" ]]; then\n"
+        "  echo true\n"
+        "  exit 0\n"
+        "fi\n"
+        "if [[ \"${1:-}\" == \"rev-parse\" && \"${2:-}\" == \"--abbrev-ref\" ]]; then\n"
+        "  echo V2\n"
+        "  exit 0\n"
+        "fi\n"
+        "if [[ \"${1:-}\" == \"status\" ]]; then\n"
+        "  exit 0\n"
+        "fi\n"
+        "if [[ \"${1:-}\" == \"fetch\" || \"${1:-}\" == \"pull\" || \"${1:-}\" == \"config\" || \"${1:-}\" == \"stash\" ]]; then\n"
+        "  exit 0\n"
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    git_stub.chmod(git_stub.stat().st_mode | stat.S_IXUSR)
+
+    python_stub = bin_dir / "python"
+    python_stub.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        "order_log=\"${NANO_TEST_ORDER_LOG:?NANO_TEST_ORDER_LOG missing}\"\n"
+        "if [[ \"${1:-}\" == \"scripts/nanoenv_apply.py\" ]]; then\n"
+        "  echo NANOENV_APPLY_CALLED >> \"$order_log\"\n"
+        "  exit 0\n"
+        "fi\n"
+        "if [[ \"${1:-}\" == \"clean_swap.py\" ]]; then\n"
+        "  echo CLEAN_SWAP_CALLED >> \"$order_log\"\n"
+        "  exit 0\n"
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    python_stub.chmod(python_stub.stat().st_mode | stat.S_IXUSR)
+    return root
+
+
+def test_nanoup_runs_env_apply_before_bot_restart(tmp_path: Path):
+    _require_bash()
+    root = _sandbox_root_for_nanoup(tmp_path)
+    order_log = root / "order.log"
+    env = {
+        **os.environ,
+        "NANOCLAW_ROOT": str(root),
+        "PATH": f"{root / 'bin'}{os.pathsep}{os.environ.get('PATH', '')}",
+        "NANO_TEST_ORDER_LOG": str(order_log),
+    }
+
+    result = subprocess.run(
+        ["bash", str(root / "scripts" / "nanoup.sh")],
+        cwd=root,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "syncing .env from .env.example" in result.stdout
+
+    steps = [line.strip() for line in order_log.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert steps == ["NANOENV_APPLY_CALLED", "CLEAN_SWAP_CALLED"]

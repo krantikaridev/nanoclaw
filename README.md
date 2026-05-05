@@ -19,7 +19,7 @@ For operators and agents, **`AI_CONTEXT.md`** on branch **`V2`** is the authorit
 
 | Command | What it does |
 |---------|----------------|
-| `nanoup` | Safe update + restart (recommended); repo script: **`scripts/nanoup.sh`** |
+| `nanoup` | Safe update + restart (recommended), including `.env` apply from `.env.example` with secret/runtime-key preserve; repo script: **`scripts/nanoup.sh`** |
 | `nanostatus` | PnL/status report from `real_cron.log` via `scripts/pnl_report.py` (forwards CLI flags, e.g. `--reset-session`) |
 | `nanopnl` | PnL view with current balance, baseline/session %, and 24h delta (best-effort from `portfolio_history.csv`) |
 | `nanobot` | Live log stream (`tail -f real_cron.log`) |
