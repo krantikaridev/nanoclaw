@@ -82,6 +82,14 @@ if [[ "${DID_STASH}" -eq 1 ]]; then
   echo "✅ nanoup: restored stashed local changes"
 fi
 
+# Keep runtime .env aligned with latest template keys while preserving stage secrets/runtime values.
+if [[ ! -f "scripts/nanoenv_apply.py" ]]; then
+  echo "❌ nanoup: scripts/nanoenv_apply.py missing; cannot safely sync .env from .env.example"
+  exit 1
+fi
+echo "🔄 nanoup: syncing .env from .env.example (preserving secrets/runtime keys)"
+python scripts/nanoenv_apply.py --write
+
 nohup python clean_swap.py >>real_cron.log 2>&1 &
 echo "✅ nanoup: bot started (tail -f real_cron.log)"
 sleep 1
