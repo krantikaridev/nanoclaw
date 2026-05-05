@@ -441,3 +441,31 @@ Grok may never say “task complete / loop closed” until BOTH sides have:
 ### Dual verification confirmation
 - User-side runtime checks: completed (commands and VM logs shared in-thread).
 - Assistant-side verification: completed for local code/tests/docs and interpreted VM runtime evidence.
+
+## v2.9 Backlog Entry (post-2.8 phase-1 validation)
+
+### 2.8 phase-1 closure status
+- Phase-1 is healthy and behaving as designed: PR1 and PR2 acceptance checks were confirmed on VM logs.
+- PR1 accepted: `nanodaily`, `nanostatus`, and `nanopnl` now show the same current total with source `RUNTIME WALLET TRUTH (TOTAL USD)`.
+- PR2 accepted: repeated per-asset `zero_usdc` spam after failed AUTO-USDC paths is reduced to one explicit per-cycle short-circuit reason, with no observed lock/cooldown regression.
+
+### Pending for 2.9
+1. **USDC contract reconciliation hardening**
+   - Runtime still can diverge from wallet UI when stage holdings include a USDC contract variant not included in `.env` (`USDC`/`USDC_NATIVE` mapping).
+   - Add a startup/runtime warning when `_total_usdc_balance()` is effectively zero while X-signal requires USDC floor and wallet-level heuristics suggest a likely mapping/config issue.
+   - Document and enforce VM expectation: both Polygon USDC contracts configured when needed (`USDC.e` + native USDC).
+
+2. **AUTO-USDC conversion reliability under gas constraints**
+   - Current behavior is safe but often blocked by gas guard (`gas_ok=False`), leaving conversion attempts unsuccessful in some windows.
+   - Tune policy/thresholds and retry strategy for top-up attempts without weakening risk controls (guard-aware execution policy, bounded retries, and clearer outcome classes).
+
+3. **Fluctuation + dust-defer efficiency**
+   - Protection and main-strategy dust defers still consume cycle bandwidth in low-notional windows.
+   - Evaluate branch-level notional rules and/or protection sell-fraction tuning to reduce repeated no-op cycles while preserving risk-first behavior.
+
+4. **Operational evidence automation**
+   - Promote benchmark capture into a single maintained command/script for release checks (marker -> timed window -> summarized acceptance evidence).
+   - Keep PR1/PR2-style acceptance snippets as reusable release gates for future tags.
+
+5. **Status output polish**
+   - Investigate `nanodaily` "Small trades bypassed: 0" duplicate line (`0` echoed twice in some runs) and normalize output formatting for operator clarity.
