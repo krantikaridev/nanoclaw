@@ -236,12 +236,36 @@ def determine_trade_decision(
     should_force_sell, reason = cs_check_exit_conditions()
     if should_force_sell:
         print(f"🔍 DECISION PATH: PROTECTION ({reason})")
-        return cs_build_protection_exit_decision(
+        protection_decision = cs_build_protection_exit_decision(
             reason=reason or "UNKNOWN",
             current_price=current_price,
             wmatic_balance=balances.wmatic,
             open_trade=cs_get_latest_open_trade(),
         )
+        min_trade_usd = float(getattr(cs, "MIN_TRADE_USD", 0.0) or 0.0)
+        protection_notional_usd = _decision_notional_usd(
+            protection_decision,
+            current_price_usd=current_price,
+        )
+        if (
+            min_trade_usd > 0
+            and protection_notional_usd is not None
+            and protection_notional_usd + 1e-9 < min_trade_usd
+        ):
+            reason_txt = (
+                "protection_dust_deferred "
+                f"({protection_decision.direction}: ${protection_notional_usd:.2f} < "
+                f"MIN_TRADE_USD ${min_trade_usd:.2f})"
+            )
+            cs._log_trade_skipped(reason_txt)
+            print(
+                f"{runtime._nanolog()}PROTECTION DUST DEFER | "
+                f"direction={protection_decision.direction} | "
+                f"size=${protection_notional_usd:.2f} | min=${min_trade_usd:.2f} | "
+                "continuing to next strategy"
+            )
+        else:
+            return protection_decision
 
     should_take_profit, profit_signal = cs_evaluate_take_profit(current_price, state)
     if should_take_profit and profit_signal and balances.wmatic > 0:

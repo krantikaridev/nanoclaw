@@ -487,6 +487,7 @@ def test_x_signal_buy_paths_block_when_topup_reports_success_but_pol_remains_low
 def test_determine_trade_decision_prioritizes_protection_first(monkeypatch):
     monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (True, "PER_TRADE_EXIT"))
     monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
+    monkeypatch.setattr(clean_swap, "MIN_TRADE_USD", 0.0)
 
     sentinel = clean_swap.TradeDecision(direction="WMATIC_TO_USDT", amount_in=123, message="protection")
     monkeypatch.setattr(clean_swap, "build_protection_exit_decision", lambda **kwargs: sentinel)
@@ -499,6 +500,38 @@ def test_determine_trade_decision_prioritizes_protection_first(monkeypatch):
     )
 
     assert out is sentinel
+
+
+def test_determine_trade_decision_defers_dust_protection_and_falls_through(monkeypatch, capsys):
+    monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (True, "PER_TRADE_EXIT"))
+    monkeypatch.setattr(clean_swap, "evaluate_take_profit", lambda *_args, **_kwargs: (False, None))
+    monkeypatch.setattr(clean_swap, "MIN_TRADE_USD", 15.0)
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
+
+    protection_dust = clean_swap.TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(5 * 1_000_000_000_000_000_000),  # $5.00 at current_price=1.0
+        message="protection dust",
+    )
+    monkeypatch.setattr(clean_swap, "build_protection_exit_decision", lambda **kwargs: protection_dust)
+    sentinel = clean_swap.TradeDecision(direction="USDC_TO_EQUITY", amount_in=25_000_000, message="x-signal")
+    monkeypatch.setattr(clean_swap, "try_x_signal_equity_decision", lambda *_args, **_kwargs: sentinel)
+
+    skipped: list[str] = []
+    monkeypatch.setattr(clean_swap, "_log_trade_skipped", lambda reason: skipped.append(reason))
+
+    out = clean_swap.determine_trade_decision(
+        state={},
+        balances=clean_swap.Balances(usdt=10.0, wmatic=5.0, pol=1.0, usdc=30.0),
+        current_price=1.0,
+    )
+
+    captured = capsys.readouterr().out
+    assert out is sentinel
+    assert any("protection_dust_deferred" in reason for reason in skipped)
+    assert "PROTECTION DUST DEFER" in captured
+    assert "continuing to next strategy" in captured
 
 
 def test_determine_trade_decision_prioritizes_profit_take_over_xsignal(monkeypatch):

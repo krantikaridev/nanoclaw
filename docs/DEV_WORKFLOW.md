@@ -51,6 +51,8 @@ Role boundaries and collaboration are defined in `docs/OPERATING_MODEL.md`.
   - `.githooks/pre-push` blocks push when `.env.example` drifts from sanitized `.env`.
   - Sync with: `python scripts/nanoenv_example.py --write && python scripts/verify_env_example_keys.py`.
   - One-push override (explicit operator confirmation): `NANOCLAW_CONFIRM_ENV_SYNC_SKIP=1 git push`.
+- Strategy precedence note:
+  - Dust-sized protection exits (`< MIN_TRADE_USD`) are non-blocking; cycle falls through to the next strategy in precedence.
 - Before commit:
   1. `python -m ruff check .`
   2. `python -m compileall -q .`
