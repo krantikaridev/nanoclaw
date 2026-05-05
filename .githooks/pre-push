@@ -1,4 +1,5 @@
 #!/usr/bin/env sh
 # Nanoclaw: block pushes when tracked content contains committed-secret patterns.
 ROOT="$(git rev-parse --show-toplevel)"
-exec python3 "$ROOT/scripts/check_committed_secrets.py" --all-tracked
+python3 "$ROOT/scripts/check_committed_secrets.py" --all-tracked || exit 1
+exec python3 "$ROOT/scripts/check_vm_env_sync_before_push.py"

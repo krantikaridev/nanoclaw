@@ -47,6 +47,10 @@ Role boundaries and collaboration are defined in `docs/OPERATING_MODEL.md`.
 - Do not use rebase/pull conflict gymnastics for normal deploy flow.
 - Never stage runtime artifacts (`portfolio_history.csv`, `real_cron.log`).
 - Keep hooks enabled: `git config core.hooksPath .githooks`.
+- Push gate on VM:
+  - `.githooks/pre-push` blocks push when `.env.example` drifts from sanitized `.env`.
+  - Sync with: `python scripts/nanoenv_example.py --write && python scripts/verify_env_example_keys.py`.
+  - One-push override (explicit operator confirmation): `NANOCLAW_CONFIRM_ENV_SYNC_SKIP=1 git push`.
 - Before commit:
   1. `python -m ruff check .`
   2. `python -m compileall -q .`

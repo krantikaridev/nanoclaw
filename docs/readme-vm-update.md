@@ -72,6 +72,8 @@ bash scripts/nanorestart.sh
    - `python scripts/nanoenv_example.py --write`
    - `python scripts/verify_env_example_keys.py`
    - `git diff .env.example`
+   - `git push` now also enforces this via pre-push hook; one-time override:
+     - `NANOCLAW_CONFIRM_ENV_SYNC_SKIP=1 git push`
 
 4. Verify deployed code/runtime:
    - `git log --oneline -5`
@@ -138,6 +140,7 @@ This is not default stage behavior. Use only when you intentionally reset stage 
 - Do not paste secrets in chat or commit `.env`.
 - Do not run two write-enabled bot instances for the same wallet.
 - Prefer `nanoup`/`nanorestart` over ad-hoc pull/restart commands.
+- `portfolio_session_baseline.json` is runtime-only and ignored by git; do not stage/commit it.
 - If deploy looks wrong, restore env quickly:
   - `cp .env.bak.<timestamp> .env`
   - `nanokill && nanoup`

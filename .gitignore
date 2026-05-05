@@ -64,4 +64,5 @@ __pycache__/
 # Runtime artifacts intentionally tracked (manual commits only)
 !portfolio_history.csv
 !real_cron.log
+portfolio_session_baseline.json
 
