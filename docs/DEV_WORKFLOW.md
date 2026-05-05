@@ -55,6 +55,7 @@ Role boundaries and collaboration are defined in `docs/OPERATING_MODEL.md`.
   - Dust-sized protection exits (`< MIN_TRADE_USD`) are non-blocking; cycle falls through to the next strategy in precedence.
   - Same non-blocking dust defer applies to downstream branches (`PROFIT_TAKE`, `X_SIGNAL_EQUITY`, `USDC_COPY`/`POLYCOPY`, `MAIN_STRATEGY`) to prevent single-branch dust loops from monopolizing cycles.
   - `MIN_TRADE_USD` remains a global hard execution floor; dust defer only affects branch fallthrough, never execution safety.
+  - AUTO-USDC prep may run even when per-asset cooldown is not ready if a high-conviction BUY signal is active; this is intentional to pre-fund USDC for the next eligible BUY path.
 - Before commit:
   1. `python -m ruff check .`
   2. `python -m compileall -q .`

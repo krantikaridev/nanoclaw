@@ -704,6 +704,7 @@ def test_determine_trade_decision_defers_dust_usdc_copy_and_falls_through_to_mai
     assert out is main_ok
     assert any("usdc_copy_dust_deferred" in reason for reason in skipped)
     assert "USDC_COPY DUST DEFER" in captured
+    assert "No eligible copy-trade this cycle" not in captured
     assert "DECISION PATH: MAIN_STRATEGY" in captured
 
 

@@ -333,7 +333,8 @@ def determine_trade_decision(
                 ):
                     return copy_decision
                 print("🟦 USDC COPY DEFERRED | dust-sized notional, falling through")
-            print("🟦 USDC COPY ACTIVE | No eligible copy-trade this cycle")
+            else:
+                print("🟦 USDC COPY ACTIVE | No eligible copy-trade this cycle")
         else:
             print("🔍 DECISION PATH: POLYCOPY_TARGET_WALLETS")
             polycopy_decision = select_copy_trade(balances, target_wallets)
