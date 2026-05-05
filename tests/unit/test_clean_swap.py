@@ -1490,6 +1490,7 @@ def test_try_x_signal_high_conviction_bypasses_high_gas_and_forces_usdc_topup(mo
     def _ensure_usdc_for_x_signal(min_usdc, min_wmatic_value, force=False):
         _ = force
         usdc_topup_calls.append((float(min_usdc), float(min_wmatic_value)))
+        return False
 
     monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
     monkeypatch.setattr(clean_swap, "X_SIGNAL_AUTO_USDC_TOPUP_ENABLED", True)
