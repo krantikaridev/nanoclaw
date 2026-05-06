@@ -595,3 +595,9 @@ v2.8.1 ACCEPTED - Session PnL >=0 achieved
 2. Operator-grade accounting: single numéraire, verified snapshots, wallet MTM vs Polygonscan reconcile
 3. Event-store foundations + POL auto top-up logic
 4. Monitoring playbook: run `watch -n 300 "nanodaily --lookback 1h && nanopnl"` during office hours
+
+### v2.9 copy-trading benchmarking TODO
+- Explore Binance lead trader 4990326484420505601 (30D PnL, ROI, followers, AUM, MDD)
+- Compare vs nanoclaw COPY_TRADE_PCT / dynamic sizing / wallet_performance.json
+- Add leader-style metrics (win-rate, max-drawdown filter) to copy module
+
