@@ -39,27 +39,31 @@ echo ""
 echo "Protection thresholds: USDT < \$$USDT_TH | WMATIC > $WMATIC_TH"
 echo ""
 
-# === More proactive pre-protection warnings ===
+# === More aggressive pre-protection + divergence warning ===
 WARN=0
 SUGGEST=""
 
-# Critical zone
-if (( $(echo "$USDT_ON < $USDT_TH" | bc -l 2>/dev/null || echo 0) )); then
-    echo "🚨 CRITICAL: USDT below protection threshold"
-    SUGGEST="Strongly consider pausing X-signal buys until USDT recovers"
-    WARN=2
-# Early warning zone (more sensitive now)
-elif (( $(echo "$USDT_ON < ($USDT_TH * 1.5)" | bc -l 2>/dev/null || echo 0) )); then
-    if (( $(echo "$WMATIC_ON > $WMATIC_TH" | bc -l 2>/dev/null || echo 0) )); then
-        echo "⚠️  WARNING: USDT getting low while WMATIC exposure is high"
-        SUGGEST="Consider: Reduce X-signal size or top-up stables"
-        WARN=1
-    fi
+USDT_DIFF=$(echo "$USDT_RT - $USDT_ON" | bc -l 2>/dev/null || echo "0")
+
+# Large divergence warning (early signal)
+if (( $(echo "$USDT_DIFF > 8" | bc -l 2>/dev/null || echo 0) )); then
+    echo "⚠️  WARNING: Large USDT divergence detected (Runtime higher than on-chain by \$$USDT_DIFF)"
+    SUGGEST="On-chain USDT is lower than bot thinks — protection risk rising"
+    WARN=1
 fi
 
-if (( $(echo "$STABLES_ON < 30" | bc -l 2>/dev/null || echo 0) )); then
-    echo "⚠️  WARNING: Total stables are getting low"
-    WARN=1
+# Critical
+if (( $(echo "$USDT_ON < $USDT_TH" | bc -l 2>/dev/null || echo 0) )); then
+    echo "🚨 CRITICAL: On-chain USDT below protection threshold"
+    SUGGEST="Pause X-signal buys until USDT recovers above \$$(echo "$USDT_TH + 5" | bc)"
+    WARN=2
+# Early warning (more sensitive)
+elif (( $(echo "$USDT_ON < ($USDT_TH + 8)" | bc -l 2>/dev/null || echo 0) )); then
+    if (( $(echo "$WMATIC_ON > $WMATIC_TH" | bc -l 2>/dev/null || echo 0) )); then
+        echo "⚠️  WARNING: USDT getting close to protection threshold + high WMATIC"
+        SUGGEST="Consider reducing X-signal size temporarily"
+        WARN=1
+    fi
 fi
 
 if [ "$WARN" -ge 1 ] && [ -n "$SUGGEST" ]; then
@@ -69,7 +73,7 @@ fi
 if [ "$WARN" -eq 0 ]; then
     echo "✅ Risk level: Low — good conditions for PnL stability"
 elif [ "$WARN" -eq 1 ]; then
-    echo "⚠️  Overall Risk: Medium — watch closely to protect PnL"
+    echo "⚠️  Overall Risk: Medium — monitor to protect PnL"
 else
     echo "🚨 Overall Risk: High — action recommended"
 fi
