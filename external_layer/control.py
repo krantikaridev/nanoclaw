@@ -10,11 +10,13 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-# ``python external_layer/control.py`` adds this directory to ``sys.path`` so a plain
-# ``risk_checker`` import works; importing via tests/tools does not, so mirror that here.
+# ``python external_layer/control.py`` must resolve repo-root modules (``config``,
+# ``nanoclaw``) and this folder (plain ``risk_checker`` import when ``__package__`` is unset).
+_REPO_ROOT = str(Path(__file__).resolve().parent.parent)
 _THIS_DIR = str(Path(__file__).resolve().parent)
-if _THIS_DIR not in sys.path:
-    sys.path.insert(0, _THIS_DIR)
+for _p in (_REPO_ROOT, _THIS_DIR):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 # Prefer package-relative import; fall back after direct script execution (no parent package).
 try:
@@ -35,6 +37,8 @@ class CycleControlSnapshot:
     max_copy_trade_pct: float | None = None
     # Parsed for future use; not enforced by the trading loop yet.
     force_defensive: bool = False
+    # Optional operator message from the external layer (logging only in nanoclaw).
+    reason: str | None = None
 
 
 def _parse_bool(val: object | None, *, default: bool = False) -> bool:
@@ -87,10 +91,16 @@ def load_cycle_control(path: Path | None = None) -> CycleControlSnapshot:
     if "max_copy_trade_pct" in data:
         max_pct = _parse_optional_float(data.get("max_copy_trade_pct"))
 
+    reason_raw = data.get("reason")
+    reason: str | None = None
+    if isinstance(reason_raw, str) and reason_raw.strip():
+        reason = reason_raw.strip()
+
     return CycleControlSnapshot(
         paused=paused,
         max_copy_trade_pct=max_pct,
         force_defensive=force_defensive,
+        reason=reason,
     )
 
 
@@ -119,17 +129,77 @@ def write_control(command: dict) -> None:
 _last_successful_risk: dict[str, bool | str | float] | None = None
 
 
+def _optional_json_balance(val: object) -> float | None:
+    """Finite float suitable for JSON ``usdt_balance`` / ``wmatic_balance`` fields."""
+    if isinstance(val, (int, float)):
+        f = float(val)
+        if f == f and not math.isnan(f):
+            return f
+    return None
+
+
 def _risk_to_control_payload(risk: dict[str, bool | str | float]) -> dict[str, object]:
-    """Build the JSON payload for ``control.json`` (balances are not persisted)."""
+    """Build the JSON payload for ``control.json`` (includes live balances when known)."""
+    raw_pct = risk.get("max_copy_trade_pct")
+    if isinstance(raw_pct, (int, float)) and raw_pct == raw_pct:
+        max_pct = float(raw_pct)
+    else:
+        max_pct = float(ControlCommand.max_copy_trade_pct)
+
     payload: dict[str, object] = {
         "paused": bool(risk["paused"]),
-        "max_copy_trade_pct": ControlCommand.max_copy_trade_pct,
+        "max_copy_trade_pct": max_pct,
         "force_defensive": False,
         "last_updated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
     reason = risk.get("reason")
+    if isinstance(reason, str) and reason.strip():
+        payload["reason"] = reason.strip()
+    u = _optional_json_balance(risk.get("usdt_balance"))
+    w = _optional_json_balance(risk.get("wmatic_balance"))
+    if u is not None:
+        payload["usdt_balance"] = u
+    if w is not None:
+        payload["wmatic_balance"] = w
+    return payload
+
+
+def _load_full_control_dict() -> dict[str, object]:
+    """Raw ``control.json`` object for merge paths (heartbeat on RPC failure)."""
+    try:
+        raw = CONTROL_JSON_PATH.read_text(encoding="utf-8").strip()
+        if not raw:
+            return {}
+        data = json.loads(raw)
+        return dict(data) if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return {}
+
+
+def _heartbeat_payload_after_failure(*, snap: CycleControlSnapshot) -> dict[str, object]:
+    """Preserve on-disk ``paused`` / ``reason`` / knobs; always refresh ``last_updated``."""
+    existing = _load_full_control_dict()
+    paused = _parse_bool(existing.get("paused"), default=snap.paused)
+    max_pct = _parse_optional_float(existing.get("max_copy_trade_pct"))
+    if max_pct is None:
+        max_pct = ControlCommand.max_copy_trade_pct
+    force_defensive = _parse_bool(existing.get("force_defensive"), default=False)
+    payload: dict[str, object] = {
+        "paused": paused,
+        "max_copy_trade_pct": max_pct,
+        "force_defensive": force_defensive,
+        "last_updated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+    reason = existing.get("reason")
     if isinstance(reason, str) and reason:
         payload["reason"] = reason
+    # Keep last known on-chain balances visible while RPC is down.
+    u = _optional_json_balance(existing.get("usdt_balance"))
+    w = _optional_json_balance(existing.get("wmatic_balance"))
+    if u is not None:
+        payload["usdt_balance"] = u
+    if w is not None:
+        payload["wmatic_balance"] = w
     return payload
 
 
@@ -150,6 +220,7 @@ def update_control() -> dict[str, bool | str | float]:
         risk = evaluate_risk()
         _last_successful_risk = dict(risk)
         write_control(_risk_to_control_payload(risk))
+        _log_external_risk_line(risk, tag="control.json")
         return risk
 
     except Exception as exc:  # noqa: BLE001 — RPC / contract errors should not kill the loop
@@ -161,12 +232,47 @@ def update_control() -> dict[str, bool | str | float]:
         if _last_successful_risk is not None:
             risk = dict(_last_successful_risk)
             write_control(_risk_to_control_payload(risk))
+            _log_external_risk_line(risk, tag="stale_cache")
             return risk
 
+        # No successful RPC yet this process: still rewrite JSON so ``last_updated``
+        # moves and operators can see the loop is alive (preserves file contents).
         snap = load_cycle_control()
-        # Omit balances — operator line prints "(unknown)" until the next good RPC read.
-        out: dict[str, bool | str | float] = {"paused": snap.paused}
+        payload = _heartbeat_payload_after_failure(snap=snap)
+        write_control(payload)
+        print(
+            "[EXTERNAL] heartbeat | refreshed last_updated only (no fresh balances) | "
+            f"paused={payload['paused']} max_copy_trade_pct={payload['max_copy_trade_pct']}",
+            flush=True,
+        )
+        out: dict[str, bool | str | float] = {
+            "paused": bool(payload["paused"]),
+            "max_copy_trade_pct": float(payload["max_copy_trade_pct"]),
+        }
+        r = payload.get("reason")
+        if isinstance(r, str) and r:
+            out["reason"] = r
+        u = _optional_json_balance(payload.get("usdt_balance"))
+        w = _optional_json_balance(payload.get("wmatic_balance"))
+        if u is not None:
+            out["usdt_balance"] = u
+        if w is not None:
+            out["wmatic_balance"] = w
         return out
+
+
+def _log_external_risk_line(risk: dict[str, bool | str | float], *, tag: str = "decision") -> None:
+    """Stdout trace for operators: what the external layer wrote to ``control.json``."""
+    paused = bool(risk.get("paused"))
+    mcp = risk.get("max_copy_trade_pct", "?")
+    reason = risk.get("reason")
+    reason_txt = f" | reason={reason}" if isinstance(reason, str) and reason else ""
+    bal = _format_balance_line(risk)
+    trading = "PAUSED" if paused else "ACTIVE"
+    print(
+        f"[EXTERNAL] {tag} | trading={trading} | max_copy_trade_pct={mcp}{reason_txt} | {bal}",
+        flush=True,
+    )
 
 
 def _format_balance_line(risk: dict[str, bool | str | float]) -> str:
@@ -188,20 +294,7 @@ def _run_control_loop(interval_seconds: float = 25.0) -> None:
     Default interval is 25 seconds (within the 20–30s operator window).
     """
     while True:
-        risk = update_control()
-        paused = bool(risk.get("paused"))
-        bal = _format_balance_line(risk)
-        trading = "PAUSED" if paused else "ACTIVE"
-        reason = risk.get("reason")
-        reason_txt = (
-            f" | Reason: {reason}"
-            if paused and isinstance(reason, str) and reason
-            else ""
-        )
-        print(
-            f"[EXTERNAL] {bal} | Trading: {trading}{reason_txt}",
-            flush=True,
-        )
+        update_control()
         time.sleep(interval_seconds)
 
 

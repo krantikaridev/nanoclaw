@@ -62,38 +62,52 @@ def test_risk_checker_skeleton():
 
 def test_evaluate_risk_healthy_balances(monkeypatch):
     monkeypatch.setattr(risk_checker, "get_wallet_balances", lambda: (100.0, 100.0))
-    assert risk_checker.evaluate_risk() == {
-        "paused": False,
-        "usdt_balance": 100.0,
-        "wmatic_balance": 100.0,
-    }
+    out = risk_checker.evaluate_risk()
+    assert out["paused"] is False
+    assert out["max_copy_trade_pct"] == 0.08
+    assert out["usdt_balance"] == 100.0
+    assert out["wmatic_balance"] == 100.0
+    assert "Healthy balance" in str(out.get("reason", ""))
 
 
 def test_evaluate_risk_low_usdt():
-    assert risk_checker.evaluate_risk(usdt_balance=49.0, wmatic_balance=100.0) == {
-        "paused": True,
-        "reason": "Low balance protection",
-        "usdt_balance": 49.0,
-        "wmatic_balance": 100.0,
-    }
+    out = risk_checker.evaluate_risk(usdt_balance=49.0, wmatic_balance=100.0)
+    assert out["paused"] is True
+    assert out["max_copy_trade_pct"] == 0.02
+    assert out["usdt_balance"] == 49.0
+    assert out["wmatic_balance"] == 100.0
+    assert "Critical low balance" in str(out.get("reason", ""))
 
 
 def test_evaluate_risk_low_wmatic():
-    assert risk_checker.evaluate_risk(usdt_balance=100.0, wmatic_balance=39.0) == {
-        "paused": True,
-        "reason": "Low balance protection",
-        "usdt_balance": 100.0,
-        "wmatic_balance": 39.0,
-    }
+    out = risk_checker.evaluate_risk(usdt_balance=100.0, wmatic_balance=39.0)
+    assert out["paused"] is True
+    assert out["max_copy_trade_pct"] == 0.02
+    assert out["usdt_balance"] == 100.0
+    assert out["wmatic_balance"] == 39.0
 
 
-def test_evaluate_risk_threshold_at_minimum_not_paused():
-    """Exactly at thresholds should not pause (strictly less than)."""
-    assert risk_checker.evaluate_risk(usdt_balance=50.0, wmatic_balance=40.0) == {
-        "paused": False,
-        "usdt_balance": 50.0,
-        "wmatic_balance": 40.0,
-    }
+def test_evaluate_risk_at_critical_floor_is_moderate_not_critical():
+    """Exactly 50 USDT / 40 WMATIC clears the critical tier (not <)."""
+    out = risk_checker.evaluate_risk(usdt_balance=50.0, wmatic_balance=40.0)
+    assert out["paused"] is False
+    assert out["max_copy_trade_pct"] == 0.04
+    assert out["usdt_balance"] == 50.0
+    assert out["wmatic_balance"] == 40.0
+    assert "Moderate balance" in str(out.get("reason", ""))
+
+
+def test_evaluate_risk_moderate_tier():
+    out = risk_checker.evaluate_risk(usdt_balance=79.0, wmatic_balance=100.0)
+    assert out["paused"] is False
+    assert out["max_copy_trade_pct"] == 0.04
+
+
+def test_evaluate_risk_full_health_threshold():
+    """At least 80 USDT and 60 WMATIC → top tier."""
+    out = risk_checker.evaluate_risk(usdt_balance=80.0, wmatic_balance=60.0)
+    assert out["paused"] is False
+    assert out["max_copy_trade_pct"] == 0.08
 
 
 def test_control_py_imports_when_loaded_as_filepath():
@@ -120,7 +134,8 @@ def test_update_control_writes_json_from_evaluate_risk(tmp_path: Path, monkeypat
     def fake_evaluate_risk():
         return {
             "paused": True,
-            "reason": "Low balance protection",
+            "max_copy_trade_pct": 0.02,
+            "reason": "Critical low balance (test)",
             "usdt_balance": 1.0,
             "wmatic_balance": 1.0,
         }
@@ -128,12 +143,14 @@ def test_update_control_writes_json_from_evaluate_risk(tmp_path: Path, monkeypat
     monkeypatch.setattr(control, "evaluate_risk", fake_evaluate_risk)
     risk_back = control.update_control()
     assert risk_back["paused"] is True
-    assert risk_back["reason"] == "Low balance protection"
+    assert risk_back["reason"] == "Critical low balance (test)"
 
     written = json.loads(out.read_text(encoding="utf-8"))
     assert written["paused"] is True
-    assert written["reason"] == "Low balance protection"
-    assert written["max_copy_trade_pct"] == 0.08
+    assert written["reason"] == "Critical low balance (test)"
+    assert written["usdt_balance"] == 1.0
+    assert written["wmatic_balance"] == 1.0
+    assert written["max_copy_trade_pct"] == 0.02
     assert written["force_defensive"] is False
     assert written["last_updated"].endswith("Z")
 
@@ -170,20 +187,59 @@ def test_load_cycle_control_empty_file_defaults(tmp_path):
     assert control.load_cycle_control(p) == control.CycleControlSnapshot()
 
 
+def test_load_cycle_control_reads_reason(tmp_path):
+    p = tmp_path / "x.json"
+    p.write_text(
+        '{"paused": false, "max_copy_trade_pct": 0.04, "reason": "Moderate balance"}',
+        encoding="utf-8",
+    )
+    snap = control.load_cycle_control(p)
+    assert snap.reason == "Moderate balance"
+
+
 def test_update_control_survives_evaluate_failure_without_prior_snapshot(
     tmp_path: Path, monkeypatch, capsys
 ):
-    monkeypatch.setattr(control, "CONTROL_JSON_PATH", tmp_path / "missing.json")
+    out_path = tmp_path / "missing.json"
+    monkeypatch.setattr(control, "CONTROL_JSON_PATH", out_path)
     monkeypatch.setattr(
         control,
         "evaluate_risk",
         lambda: (_ for _ in ()).throw(RuntimeError("RPC unavailable")),
     )
     out = control.update_control()
-    assert out == {"paused": False}
+    assert out["paused"] is False
+    assert out["max_copy_trade_pct"] == 0.08
     captured = capsys.readouterr()
     assert "WARNING" in captured.out
-    assert not (tmp_path / "missing.json").exists()
+    assert out_path.exists()
+    written = json.loads(out_path.read_text(encoding="utf-8"))
+    assert written["paused"] is False
+    assert written["last_updated"].endswith("Z")
+
+
+def test_update_control_failure_heartbeat_preserves_existing_reason(
+    tmp_path: Path, monkeypatch
+):
+    out_path = tmp_path / "control.json"
+    out_path.write_text(
+        '{"paused": true, "reason": "Low balance protection", "max_copy_trade_pct": 0.08, '
+        '"usdt_balance": 12.5, "wmatic_balance": 3.25}\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(control, "CONTROL_JSON_PATH", out_path)
+    monkeypatch.setattr(
+        control,
+        "evaluate_risk",
+        lambda: (_ for _ in ()).throw(RuntimeError("RPC unavailable")),
+    )
+    control.update_control()
+    written = json.loads(out_path.read_text(encoding="utf-8"))
+    assert written["paused"] is True
+    assert written["reason"] == "Low balance protection"
+    assert written["usdt_balance"] == 12.5
+    assert written["wmatic_balance"] == 3.25
+    assert written["last_updated"].endswith("Z")
 
 
 def test_update_control_failure_reuses_last_good_state(tmp_path: Path, monkeypatch, capsys):
@@ -197,7 +253,8 @@ def test_update_control_failure_reuses_last_good_state(tmp_path: Path, monkeypat
         if calls["n"] == 1:
             return {
                 "paused": True,
-                "reason": "Low balance protection",
+                "max_copy_trade_pct": 0.02,
+                "reason": "Critical low balance (test)",
                 "usdt_balance": 10.0,
                 "wmatic_balance": 10.0,
             }
@@ -214,7 +271,9 @@ def test_update_control_failure_reuses_last_good_state(tmp_path: Path, monkeypat
 
     written = json.loads(out_path.read_text(encoding="utf-8"))
     assert written["paused"] is True
-    assert written["reason"] == "Low balance protection"
+    assert written["reason"] == "Critical low balance (test)"
+    assert written["usdt_balance"] == 10.0
+    assert written["wmatic_balance"] == 10.0
 
     captured = capsys.readouterr()
     assert "WARNING" in captured.out

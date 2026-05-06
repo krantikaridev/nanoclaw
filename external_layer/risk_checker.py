@@ -4,9 +4,19 @@ from __future__ import annotations
 
 from typing import Any
 
-# Minimum balances before we ask nanoclaw to pause new entries via ``control.json``.
-_MIN_USDT = 50.0
-_MIN_WMATIC = 40.0
+# Tier thresholds (USDT / WMATIC human balances from Polygon).
+_CRITICAL_USDT = 50.0
+_CRITICAL_WMATIC = 40.0
+_MODERATE_USDT = 80.0
+_MODERATE_WMATIC = 60.0
+
+# Copy-trade cap bounds written to ``control.json`` (fraction of portfolio logic).
+_MIN_COPY_PCT = 0.02
+_MAX_COPY_PCT = 0.10
+
+
+def _clamp_copy_pct(pct: float) -> float:
+    return max(_MIN_COPY_PCT, min(_MAX_COPY_PCT, float(pct)))
 
 # Minimal ERC-20 ``balanceOf`` ABI for USDT / WMATIC reads.
 _ERC20_BALANCE_ABI: list[dict[str, Any]] = [
@@ -53,15 +63,19 @@ def evaluate_risk(
     usdt_balance: float | None = None,
     wmatic_balance: float | None = None,
 ) -> dict[str, bool | str | float]:
-    """Decide whether external risk rules should pause trading.
+    """Decide pause state, copy-trade cap, and reason from wallet balances.
 
     By default reads live balances via ``get_wallet_balances()``. When both
     ``usdt_balance`` and ``wmatic_balance`` are passed (e.g. unit tests), those
     values are used instead of RPC.
 
-    Returns a dict consumed by ``external_layer.control.update_control``:
-    ``paused``, optional ``reason``, and ``usdt_balance`` / ``wmatic_balance``
-    for operator logging.
+    Returns ``paused``, ``max_copy_trade_pct`` (0.02–0.10), ``reason``, plus
+    ``usdt_balance`` / ``wmatic_balance`` for logging.
+
+    Rules:
+    - USDT < 50 or WMATIC < 40 → paused, cap 0.02
+    - Else USDT < 80 or WMATIC < 60 → not paused, cap 0.04
+    - Else → not paused, cap 0.08
     """
     if usdt_balance is not None and wmatic_balance is not None:
         usdt = float(usdt_balance)
@@ -69,15 +83,35 @@ def evaluate_risk(
     else:
         usdt, wmatic = get_wallet_balances()
 
-    paused = usdt < _MIN_USDT or wmatic < _MIN_WMATIC
-    out: dict[str, bool | str | float] = {
+    critical = usdt < _CRITICAL_USDT or wmatic < _CRITICAL_WMATIC
+    moderate = usdt < _MODERATE_USDT or wmatic < _MODERATE_WMATIC
+
+    if critical:
+        paused = True
+        max_pct = _clamp_copy_pct(0.02)
+        reason = (
+            "Critical low balance: trading paused; copy trades capped at 2% "
+            f"(USDT<{_CRITICAL_USDT} or WMATIC<{_CRITICAL_WMATIC})"
+        )
+    elif moderate:
+        paused = False
+        max_pct = _clamp_copy_pct(0.04)
+        reason = (
+            "Moderate balance: copy trades capped at 4% "
+            f"(USDT<{_MODERATE_USDT} or WMATIC<{_MODERATE_WMATIC})"
+        )
+    else:
+        paused = False
+        max_pct = _clamp_copy_pct(0.08)
+        reason = "Healthy balance: copy trades capped at 8%"
+
+    return {
         "paused": paused,
+        "max_copy_trade_pct": max_pct,
+        "reason": reason,
         "usdt_balance": usdt,
         "wmatic_balance": wmatic,
     }
-    if paused:
-        out["reason"] = "Low balance protection"
-    return out
 
 
 def get_current_risk_state() -> str:

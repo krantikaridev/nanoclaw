@@ -337,15 +337,20 @@ def determine_trade_decision(
     ctrl = cycle_control if cycle_control is not None else CycleControlSnapshot()
     entries_paused = bool(ctrl.paused)
     # Copy-trade sizing only (USDT polycopy + USDC copy). Main-strategy buys keep ``COPY_TRADE_PCT`` from env.
-    effective_copy_pct = (
-        float(ctrl.max_copy_trade_pct)
-        if ctrl.max_copy_trade_pct is not None
-        else float(cs.COPY_TRADE_PCT)
-    )
+    env_pct = float(cs.COPY_TRADE_PCT)
     if ctrl.max_copy_trade_pct is not None:
-        print(f"[CONTROL] Using reduced max size: {effective_copy_pct:.2f}")
+        effective_copy_pct = float(ctrl.max_copy_trade_pct)
+        pct_source = "control.json"
+    else:
+        effective_copy_pct = env_pct
+        pct_source = "env COPY_TRADE_PCT (no max_copy_trade_pct in control.json)"
+    print(
+        f"[CONTROL] Copy-trade pct={effective_copy_pct:.2f} | source={pct_source} | env COPY_TRADE_PCT={env_pct:.2f}"
+    )
+    if ctrl.reason:
+        print(f"[CONTROL] External layer reason: {ctrl.reason}")
     if entries_paused:
-        print("[CONTROL] Paused = True → Skipping new trades")
+        print("[CONTROL] paused=True → skipping new entry trades (protection exits still allowed)")
     # ``ctrl.force_defensive`` is parsed in ``load_cycle_control`` for future wiring — does not alter protection yet.
 
     risk_level = _cycle_risk_level(balances)

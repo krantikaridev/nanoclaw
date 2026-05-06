@@ -1,6 +1,9 @@
 {
   "force_defensive": false,
-  "last_updated": "2026-05-06T17:10:48Z",
+  "last_updated": "2026-05-06T17:58:17Z",
   "max_copy_trade_pct": 0.08,
-  "paused": false
+  "paused": true,
+  "reason": "Low balance protection",
+  "usdt_balance": 17.044702,
+  "wmatic_balance": 850.1088016856512
 }
