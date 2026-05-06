@@ -1092,6 +1092,192 @@ def test_try_x_signal_equity_decision_skips_buys_when_risk_high(monkeypatch, cap
     assert "Risk: HIGH → Skipping X-signal buy this cycle to protect PnL" in out
 
 
+def test_try_x_signal_equity_decision_triggers_high_at_threshold_plus_2(monkeypatch, capsys):
+    from modules import signal as signal_module
+
+    class _Plan:
+        direction = "USDC_TO_EQUITY"
+        amount_in = 1
+        trade_size = 20.0
+        message = "buy"
+        token_in = "0x" + "2" * 40
+        token_out = "0x" + "1" * 40
+
+    class _TunedConfig:
+        min_trade_usdc = 5.0
+        per_asset_cooldown_seconds = 1800
+        min_pol_for_gas = 0.005
+
+    class _TunedTrader:
+        config = _TunedConfig()
+        gas_protector = _DummyGasProtector()
+
+        def build_plan(self, **kwargs):
+            _ = kwargs
+            return _Plan()
+
+        def build_plan_with_block_reason(self, **kwargs):
+            return self.build_plan(**kwargs), None
+
+    class _BaseTrader:
+        def load_followed_equities(self):
+            return [
+                clean_swap.FollowedEquity(
+                    symbol="WMATIC_ALPHA",
+                    token_address="0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
+                    decimals=18,
+                    signal_strength=0.92,
+                )
+            ]
+
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(clean_swap, "_load_followed_equities_json_dict", lambda: {"enabled": True, "min_signal_strength": 0.60})
+    monkeypatch.setattr(clean_swap, "_effective_equity_signal_min", lambda cfg: 0.60)
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_EQUITY_TRADER", _BaseTrader())
+    monkeypatch.setattr(clean_swap, "_tuned_signal_equity_trader", lambda min_strength: _TunedTrader())
+    monkeypatch.setattr(clean_swap, "can_trade_asset", lambda symbol, now=None, cooldown_seconds=0: True)
+    monkeypatch.setattr(clean_swap, "get_token_balance", lambda *_args, **_kwargs: 0.0)
+    monkeypatch.setattr(signal_module.cfg, "PROTECTION_FLUCTUATION_USDT_THRESHOLD", 30.0, raising=False)
+    monkeypatch.setattr(signal_module.cfg, "PROTECTION_FLUCTUATION_MIN_WMATIC", 0.0, raising=False)
+
+    # New HIGH rule: trigger when USDT < (USDT_TH + 2) = 32.0
+    decision = clean_swap.try_x_signal_equity_decision(
+        clean_swap.Balances(usdt=31.0, wmatic=10.0, pol=1.0, usdc=20.0),
+        dry_run=True,
+    )
+    out = capsys.readouterr().out
+
+    assert decision is None
+    assert "Risk: HIGH → Skipping X-signal buy this cycle to protect PnL" in out
+
+
+def test_try_x_signal_equity_decision_pauses_buys_when_risk_medium(monkeypatch, capsys):
+    from modules import signal as signal_module
+
+    class _Plan:
+        direction = "USDC_TO_EQUITY"
+        amount_in = 1
+        trade_size = 20.0
+        message = "buy"
+        token_in = "0x" + "2" * 40
+        token_out = "0x" + "1" * 40
+
+    class _TunedConfig:
+        min_trade_usdc = 5.0
+        per_asset_cooldown_seconds = 1800
+        min_pol_for_gas = 0.005
+
+    class _TunedTrader:
+        config = _TunedConfig()
+        gas_protector = _DummyGasProtector()
+
+        def build_plan(self, **kwargs):
+            _ = kwargs
+            return _Plan()
+
+        def build_plan_with_block_reason(self, **kwargs):
+            return self.build_plan(**kwargs), None
+
+    class _BaseTrader:
+        def load_followed_equities(self):
+            return [
+                clean_swap.FollowedEquity(
+                    symbol="WMATIC_ALPHA",
+                    token_address="0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
+                    decimals=18,
+                    signal_strength=0.92,
+                )
+            ]
+
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(clean_swap, "_load_followed_equities_json_dict", lambda: {"enabled": True, "min_signal_strength": 0.60})
+    monkeypatch.setattr(clean_swap, "_effective_equity_signal_min", lambda cfg: 0.60)
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_EQUITY_TRADER", _BaseTrader())
+    monkeypatch.setattr(clean_swap, "_tuned_signal_equity_trader", lambda min_strength: _TunedTrader())
+    monkeypatch.setattr(clean_swap, "can_trade_asset", lambda symbol, now=None, cooldown_seconds=0: True)
+    monkeypatch.setattr(clean_swap, "get_token_balance", lambda *_args, **_kwargs: 0.0)
+    monkeypatch.setattr(signal_module.cfg, "PROTECTION_FLUCTUATION_USDT_THRESHOLD", 30.0, raising=False)
+    monkeypatch.setattr(signal_module.cfg, "PROTECTION_FLUCTUATION_MIN_WMATIC", 5.0, raising=False)
+
+    # MEDIUM rule: USDT < (USDT_TH + 8) = 38.0 AND WMATIC > WMATIC_TH
+    decision = clean_swap.try_x_signal_equity_decision(
+        clean_swap.Balances(usdt=37.5, wmatic=10.0, pol=1.0, usdc=20.0),
+        dry_run=True,
+    )
+    out = capsys.readouterr().out
+
+    assert decision is None
+    assert "Risk: MEDIUM → Pausing X-signal BUYs this cycle" in out
+
+
+def test_try_x_signal_equity_decision_triggers_high_on_large_usdt_divergence(monkeypatch, capsys):
+    from modules import signal as signal_module
+
+    class _Plan:
+        direction = "USDC_TO_EQUITY"
+        amount_in = 1
+        trade_size = 20.0
+        message = "buy"
+        token_in = "0x" + "2" * 40
+        token_out = "0x" + "1" * 40
+
+    class _TunedConfig:
+        min_trade_usdc = 5.0
+        per_asset_cooldown_seconds = 1800
+        min_pol_for_gas = 0.005
+
+    class _TunedTrader:
+        config = _TunedConfig()
+        gas_protector = _DummyGasProtector()
+
+        def build_plan(self, **kwargs):
+            _ = kwargs
+            return _Plan()
+
+        def build_plan_with_block_reason(self, **kwargs):
+            return self.build_plan(**kwargs), None
+
+    class _BaseTrader:
+        def load_followed_equities(self):
+            return [
+                clean_swap.FollowedEquity(
+                    symbol="WMATIC_ALPHA",
+                    token_address="0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
+                    decimals=18,
+                    signal_strength=0.92,
+                )
+            ]
+
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(clean_swap, "_load_followed_equities_json_dict", lambda: {"enabled": True, "min_signal_strength": 0.60})
+    monkeypatch.setattr(clean_swap, "_effective_equity_signal_min", lambda cfg: 0.60)
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_EQUITY_TRADER", _BaseTrader())
+    monkeypatch.setattr(clean_swap, "_tuned_signal_equity_trader", lambda min_strength: _TunedTrader())
+    monkeypatch.setattr(clean_swap, "can_trade_asset", lambda symbol, now=None, cooldown_seconds=0: True)
+    monkeypatch.setattr(clean_swap, "get_token_balance", lambda *_args, **_kwargs: 0.0)
+    monkeypatch.setattr(signal_module.cfg, "PROTECTION_FLUCTUATION_USDT_THRESHOLD", 30.0, raising=False)
+    monkeypatch.setattr(signal_module.cfg, "PROTECTION_FLUCTUATION_MIN_WMATIC", 999999.0, raising=False)
+    monkeypatch.setenv("X_SIGNAL_BUY_RISK_HIGH_USDT_DIVERGENCE_USD", "20")
+
+    # Snapshot says $0 USDT, on-chain says $50 USDT. Divergence ($50) should trigger HIGH even though
+    # on-chain USDT is healthy vs thresholds.
+    monkeypatch.setattr(
+        clean_swap,
+        "get_balances",
+        lambda: clean_swap.Balances(usdt=50.0, wmatic=0.0, pol=1.0, usdc=20.0),
+    )
+
+    decision = clean_swap.try_x_signal_equity_decision(
+        clean_swap.Balances(usdt=0.0, wmatic=0.0, pol=1.0, usdc=20.0),
+        dry_run=False,
+    )
+    out = capsys.readouterr().out
+
+    assert decision is None
+    assert "Risk: HIGH → Skipping X-signal buy this cycle to protect PnL" in out
+    assert "very_large_usdt_divergence" in out
+
+
 def test_try_x_signal_equity_decision_caps_dynamic_size_to_available_usdc(monkeypatch):
     class _Plan:
         direction = "USDC_TO_EQUITY"
