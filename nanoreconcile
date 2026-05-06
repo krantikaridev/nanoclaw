@@ -25,13 +25,18 @@ except:
 USDC_ON=$(get_balance "0x2791bca1f2de4661ed88a30c99a7a9449aa84174")
 USDT_ON=$(get_balance "0xc2132d05d31c914a87c6611c10748aeb04b58e8f")
 
-# Robust runtime parsing
 USDC_RT=$(nanopnl | awk '/USDC:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
 USDT_RT=$(nanopnl | awk '/USDT:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
 
 echo ""
-printf "On-chain USDC: %8.2f    Runtime: %8.2f    Δ: %+7.2f\n" "$USDC_ON" "$USDC_RT" "$(echo "$USDC_ON - $USDC_RT" | bc -l 2>/dev/null || echo 0)"
-printf "On-chain USDT: %8.2f    Runtime: %8.2f    Δ: %+7.2f\n" "$USDT_ON" "$USDT_RT" "$(echo "$USDT_ON - $USDT_RT" | bc -l 2>/dev/null || echo 0)"
+awk -v u_on="$USDC_ON" -v u_rt="$USDC_RT" '
+    delta = u_on - u_rt
+    printf "On-chain USDC: %8.2f    Runtime: %8.2f    Δ: %+7.2f\n", u_on, u_rt, delta
+'
+awk -v t_on="$USDT_ON" -v t_rt="$USDT_RT" '
+    delta = t_on - t_rt
+    printf "On-chain USDT: %8.2f    Runtime: %8.2f    Δ: %+7.2f\n", t_on, t_rt, delta
+'
 
 echo ""
 if (( $(echo "$USDC_ON < 8" | bc -l 2>/dev/null || echo 0) )); then
