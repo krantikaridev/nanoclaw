@@ -33,49 +33,34 @@ POL_ON=$(get_balance "0x0000000000000000000000000000000000001010" 10000000000000
 USDC_RT=$(nanopnl | awk '/USDC:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
 USDT_RT=$(nanopnl | awk '/USDT:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
 
-STABLES_ON=$(echo "$USDC_ON + $USDT_ON" | bc -l 2>/dev/null || echo "0")
-
 echo ""
 echo "Protection thresholds: USDT < \$$USDT_TH | WMATIC > $WMATIC_TH"
 echo ""
 
-# === More aggressive pre-protection + divergence warning ===
-WARN=0
-SUGGEST=""
-
 USDT_DIFF=$(echo "$USDT_RT - $USDT_ON" | bc -l 2>/dev/null || echo "0")
 
-# Large divergence warning (early signal)
-if (( $(echo "$USDT_DIFF > 8" | bc -l 2>/dev/null || echo 0) )); then
-    echo "⚠️  WARNING: Large USDT divergence detected (Runtime higher than on-chain by \$$USDT_DIFF)"
-    SUGGEST="On-chain USDT is lower than bot thinks — protection risk rising"
-    WARN=1
+# Divergence warning (always show if significant)
+if (( $(echo "$USDT_DIFF > 10" | bc -l 2>/dev/null || echo 0) )); then
+    printf "⚠️  WARNING: Large USDT divergence (%.2f). On-chain is lower than runtime.\n" "$USDT_DIFF"
+    echo "   → Protection risk is elevated"
 fi
 
 # Critical
 if (( $(echo "$USDT_ON < $USDT_TH" | bc -l 2>/dev/null || echo 0) )); then
-    echo "🚨 CRITICAL: On-chain USDT below protection threshold"
-    SUGGEST="Pause X-signal buys until USDT recovers above \$$(echo "$USDT_TH + 5" | bc)"
-    WARN=2
-# Early warning (more sensitive)
-elif (( $(echo "$USDT_ON < ($USDT_TH + 8)" | bc -l 2>/dev/null || echo 0) )); then
+    echo "🚨 CRITICAL: On-chain USDT below protection threshold (< \$$USDT_TH)"
+elif (( $(echo "$USDT_ON < ($USDT_TH + 6)" | bc -l 2>/dev/null || echo 0) )); then
     if (( $(echo "$WMATIC_ON > $WMATIC_TH" | bc -l 2>/dev/null || echo 0) )); then
-        echo "⚠️  WARNING: USDT getting close to protection threshold + high WMATIC"
-        SUGGEST="Consider reducing X-signal size temporarily"
-        WARN=1
+        echo "⚠️  WARNING: USDT getting close to protection threshold while WMATIC is high"
     fi
 fi
 
-if [ "$WARN" -ge 1 ] && [ -n "$SUGGEST" ]; then
-    echo "   → Suggested action: $SUGGEST"
-fi
-
-if [ "$WARN" -eq 0 ]; then
-    echo "✅ Risk level: Low — good conditions for PnL stability"
-elif [ "$WARN" -eq 1 ]; then
-    echo "⚠️  Overall Risk: Medium — monitor to protect PnL"
+# Overall risk level
+if (( $(echo "$USDT_ON < $USDT_TH" | bc -l 2>/dev/null || echo 0) )); then
+    echo "🚨 Overall Risk: High — protection likely soon"
+elif (( $(echo "$USDT_DIFF > 10" | bc -l 2>/dev/null || echo 0) )); then
+    echo "⚠️  Overall Risk: Medium-High — monitor closely"
 else
-    echo "🚨 Overall Risk: High — action recommended"
+    echo "✅ Risk level: Low — good conditions for PnL stability"
 fi
 
 echo ""
