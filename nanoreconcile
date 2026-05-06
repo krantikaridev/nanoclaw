@@ -2,7 +2,6 @@
 echo "=== NanoReconcile v2.9 (Polygon-only, automatic) ==="
 WALLET=$(grep '^WALLET=' .env | cut -d= -f2)
 
-# Read protection thresholds
 USDT_TH=$(grep '^PROTECTION_FLUCTUATION_USDT_THRESHOLD=' .env | cut -d= -f2 || echo "12")
 WMATIC_TH=$(grep '^PROTECTION_FLUCTUATION_MIN_WMATIC=' .env | cut -d= -f2 || echo "200")
 SELL_FR=$(grep '^PROTECTION_FLUCTUATION_SELL_FRACTION=' .env | cut -d= -f2 || echo "0.40")
@@ -41,20 +40,25 @@ echo ""
 echo "Protection thresholds: USDT < \$$USDT_TH | WMATIC > $WMATIC_TH | Sell: ${SELL_FR}%"
 echo ""
 
-# Warnings + POL top-up suggestion
+# Warnings + practical POL top-up suggestion
 WARN=0
 if (( $(echo "$USDT_ON < $USDT_TH" | bc -l 2>/dev/null || echo 0) )); then
-    echo "🚨 HIGH RISK: On-chain USDT low (< \$$USDT_TH) → protection may trigger"
+    echo "🚨 HIGH RISK: On-chain USDT low (< \$$USDT_TH) → protection may trigger soon"
     WARN=1
 fi
 if (( $(echo "$STABLES_ON < 25" | bc -l 2>/dev/null || echo 0) )); then
     echo "⚠️  WARNING: Total stables low while holding high WMATIC"
     WARN=1
 fi
+
+# POL top-up suggestion (practical)
+POL_SAFE=2.0
 if (( $(echo "$POL_ON < 1.0" | bc -l 2>/dev/null || echo 0) )); then
-    SUGGEST=$(echo "2 - $POL_ON" | bc -l 2>/dev/null || echo "1.0")
-    echo "⚠️  WARNING: POL is low (< 1.0). Suggested top-up: ~${SUGGEST} POL"
+    SUGGEST=$(echo "$POL_SAFE - $POL_ON" | bc -l 2>/dev/null || echo "1.0")
+    printf "🚨 WARNING: POL is low (%.2f). Suggested top-up: ~%.2f POL (to reach %.1f)\n" "$POL_ON" "$SUGGEST" "$POL_SAFE"
     WARN=1
+else
+    printf "POL: %.2f qty (healthy)\n" "$POL_ON"
 fi
 
 if [ "$WARN" -eq 0 ]; then
@@ -68,7 +72,6 @@ DELTA_USDT=$(awk -v a="$USDT_ON" -v b="$USDT_RT" 'BEGIN {printf "%.2f", a-b}')
 printf "On-chain USDC:   %8.2f    Runtime: %8.2f    Δ: %+7.2f\n" "$USDC_ON" "$USDC_RT" "$DELTA_USDC"
 printf "On-chain USDT:   %8.2f    Runtime: %8.2f    Δ: %+7.2f\n" "$USDT_ON" "$USDT_RT" "$DELTA_USDT"
 printf "On-chain WMATIC: %12.4f qty\n" "$WMATIC_ON"
-printf "On-chain POL:    %12.4f qty\n" "$POL_ON"
 
 echo ""
 echo "Done. Run daily."
