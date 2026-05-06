@@ -3,6 +3,11 @@ echo "=== NanoReconcile v2.9 (Polygon-only, automatic) ==="
 WALLET=$(grep '^WALLET=' .env | cut -d= -f2)
 echo "Wallet: $WALLET"
 
+# Read current protection thresholds from .env
+USDT_THRESH=$(grep '^PROTECTION_FLUCTUATION_USDT_THRESHOLD=' .env | cut -d= -f2 || echo "12")
+WMATIC_THRESH=$(grep '^PROTECTION_FLUCTUATION_MIN_WMATIC=' .env | cut -d= -f2 || echo "200")
+SELL_FRAC=$(grep '^PROTECTION_FLUCTUATION_SELL_FRACTION=' .env | cut -d= -f2 || echo "0.40")
+
 ANKR_KEY=$(grep '^ANKR_RPC_KEY=' .env | cut -d= -f2- | tr -d '"')
 RPC="https://rpc.ankr.com/polygon/${ANKR_KEY}"
 
@@ -34,21 +39,21 @@ USDT_RT=$(nanopnl | awk '/USDT:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo
 STABLES_ON=$(echo "$USDC_ON + $USDT_ON" | bc -l 2>/dev/null || echo "0")
 
 echo ""
-echo "Protection thresholds (current): USDT < $12 | WMATIC > 200"
+echo "Protection thresholds (from .env): USDT < \$$USDT_THRESH | WMATIC > $WMATIC_THRESH | Sell: ${SELL_FRAC}%"
 echo ""
 
-# Warnings first (most important)
+# Warnings
 WARN=0
-if (( $(echo "$USDT_ON < 10" | bc -l 2>/dev/null || echo 0) )); then
-    echo "🚨 CRITICAL: On-chain USDT is very low (< $10) → high protection risk"
+if (( $(echo "$USDT_ON < $USDT_THRESH" | bc -l 2>/dev/null || echo 0) )); then
+    echo "🚨 CRITICAL: On-chain USDT is very low (< \$$USDT_THRESH) → high protection risk"
     WARN=1
 fi
 if (( $(echo "$STABLES_ON < 20" | bc -l 2>/dev/null || echo 0) )); then
-    echo "🚨 WARNING: Total stables (USDC+USDT) are low (< $20)"
+    echo "🚨 WARNING: Total stables (USDC+USDT) are low (< \$20)"
     WARN=1
 fi
 if (( $(echo "$USDC_ON < 8" | bc -l 2>/dev/null || echo 0) )); then
-    echo "⚠️  WARNING: On-chain USDC is low (< $8)"
+    echo "⚠️  WARNING: On-chain USDC is low (< \$8)"
     WARN=1
 fi
 if (( $(echo "$POL_ON < 0.8" | bc -l 2>/dev/null || echo 0) )); then
