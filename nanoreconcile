@@ -29,14 +29,11 @@ USDC_RT=$(nanopnl | awk '/USDC:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo
 USDT_RT=$(nanopnl | awk '/USDT:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
 
 echo ""
-awk -v u_on="$USDC_ON" -v u_rt="$USDC_RT" '
-    delta = u_on - u_rt
-    printf "On-chain USDC: %8.2f    Runtime: %8.2f    Δ: %+7.2f\n", u_on, u_rt, delta
-'
-awk -v t_on="$USDT_ON" -v t_rt="$USDT_RT" '
-    delta = t_on - t_rt
-    printf "On-chain USDT: %8.2f    Runtime: %8.2f    Δ: %+7.2f\n", t_on, t_rt, delta
-'
+DELTA_USDC=$(awk -v a="$USDC_ON" -v b="$USDC_RT" 'BEGIN {printf "%.2f", a-b}')
+DELTA_USDT=$(awk -v a="$USDT_ON" -v b="$USDT_RT" 'BEGIN {printf "%.2f", a-b}')
+
+printf "On-chain USDC: %8.2f    Runtime: %8.2f    Δ: %+7.2f\n" "$USDC_ON" "$USDC_RT" "$DELTA_USDC"
+printf "On-chain USDT: %8.2f    Runtime: %8.2f    Δ: %+7.2f\n" "$USDT_ON" "$USDT_RT" "$DELTA_USDT"
 
 echo ""
 if (( $(echo "$USDC_ON < 8" | bc -l 2>/dev/null || echo 0) )); then
