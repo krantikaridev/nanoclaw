@@ -13,7 +13,7 @@ select = ["E", "F", "B"]
 ignore = ["E501"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["nanoclaw", "modules"]
+known-first-party = ["nanoclaw", "modules", "external_layer"]
 
 [tool.ruff.lint.per-file-ignores]
 # Public façade: symbols are imported so `clean_swap.X` / monkeypatch targets exist.
