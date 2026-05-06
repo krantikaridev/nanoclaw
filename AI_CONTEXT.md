@@ -583,3 +583,9 @@ Grok may never say “task complete / loop closed” until BOTH sides have:
 5. **Status output polish**
    - Investigate `nanodaily` "Small trades bypassed: 0" duplicate line (`0` echoed twice in some runs) and normalize output formatting for operator clarity.
 v2.8.1 ACCEPTED - Session PnL >=0 achieved
+
+### nanoup improvement (post-v2.8.1 TODO - high ROI)
+- Add flag `NANOUP_PRESERVE_LOCAL_ENV=true` (or make default with AUTOSTASH)
+- Behaviour: pull latest code + new .env.example keys, but **preserve existing local .env values** unless .env.example marks a key with `# OVERRIDE_REQUIRED`
+- This makes rapid iteration safe without forcing every tweak into .env.example
+- Priority: #1 after v2.8.1 acceptance
