@@ -5,7 +5,6 @@ echo "════════════════════════�
 echo "Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo ""
 
-# Clean one-line summary
 USDC_RT=$(nanopnl | awk '/USDC:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
 USDT_RT=$(nanopnl | awk '/USDT:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
 TOTAL=$(nanopnl | awk '/TOTAL:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
@@ -13,8 +12,7 @@ SESSION=$(nanopnl | awk '/Session PnL:/ {print $3" "$4; exit}' || echo "N/A")
 
 echo "SUMMARY → Total: \$$TOTAL | Session: $SESSION | USDC: \$$USDC_RT | USDT: \$$USDT_RT"
 echo ""
-echo "NOTE: 'Since baseline' shows performance since last manual reset."
-echo "      Baseline was reset at 07:01 today (after top-up settled)."
+echo "NOTE: Session PnL is clean since last manual reset (07:01 today)."
 echo ""
 
 echo "───────────────────────────────────────────────────────────────"
@@ -23,12 +21,12 @@ nanohealth
 echo ""
 
 echo "───────────────────────────────────────────────────────────────"
-echo "2. PnL + Lookback (last 1h)"
-nanodaily --lookback 1h | head -30
+echo "2. PnL + Lookback"
+nanodaily --lookback 1h | head -25
 echo ""
 
 echo "───────────────────────────────────────────────────────────────"
-echo "3. On-chain vs Runtime Reconciliation"
+echo "3. On-chain Reconciliation + Risk"
 ./nanoreconcile
 echo ""
 
