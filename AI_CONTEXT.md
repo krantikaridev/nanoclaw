@@ -601,3 +601,8 @@ v2.8.1 ACCEPTED - Session PnL >=0 achieved
 - Compare vs nanoclaw COPY_TRADE_PCT / dynamic sizing / wallet_performance.json
 - Add leader-style metrics (win-rate, max-drawdown filter) to copy module
 
+
+### v2.9 first operator-grade accounting task
+- Add simple Polygonscan reconciliation command to nanohealth or a new `nanoreconcile` script (wallet MTM vs on-chain)
+- Run once per day to verify runtime truth matches blockchain
+
