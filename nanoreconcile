@@ -1,82 +1,108 @@
-#!/bin/bash
-echo "=== NanoReconcile v2.9 (Polygon-only, automatic) ==="
-WALLET=$(grep '^WALLET=' .env | cut -d= -f2)
+#!/usr/bin/env bash
+set -euo pipefail
 
-USDT_TH=$(grep '^PROTECTION_FLUCTUATION_USDT_THRESHOLD=' .env | cut -d= -f2 || echo "12")
-WMATIC_TH=$(grep '^PROTECTION_FLUCTUATION_MIN_WMATIC=' .env | cut -d= -f2 || echo "200")
+echo "=== NanoReconcile v3.0 (Polygon) ==="
 
-ANKR_KEY=$(grep '^ANKR_RPC_KEY=' .env | cut -d= -f2- | tr -d '"')
-RPC="https://rpc.ankr.com/polygon/${ANKR_KEY}"
+if [[ ! -f ".env" ]]; then
+  echo "ERROR: .env not found (expected in repo root)."
+  exit 2
+fi
+
+# Load .env into environment (repo controls the file; keep it simple).
+set -a
+# shellcheck disable=SC1091
+source ".env"
+set +a
+
+: "${WALLET:?Missing WALLET in .env}"
+: "${ANKR_RPC_KEY:?Missing ANKR_RPC_KEY in .env}"
+: "${PROTECTION_FLUCTUATION_USDT_THRESHOLD:?Missing PROTECTION_FLUCTUATION_USDT_THRESHOLD in .env}"
+: "${PROTECTION_FLUCTUATION_MIN_WMATIC:?Missing PROTECTION_FLUCTUATION_MIN_WMATIC in .env}"
+
+USDT_TH="${PROTECTION_FLUCTUATION_USDT_THRESHOLD}"
+WMATIC_TH="${PROTECTION_FLUCTUATION_MIN_WMATIC}"
+
+RPC="https://rpc.ankr.com/polygon/${ANKR_RPC_KEY}"
 
 get_balance() {
-    local token=$1
-    local decimals=$2
-    local ADDR_PADDED=$(printf '%064s' "${WALLET#0x}" | tr ' ' '0')
-    local DATA="0x70a08231${ADDR_PADDED}"
-    curl -s -X POST -H "Content-Type: application/json" \
-      --data "{\"jsonrpc\":\"2.0\",\"method\":\"eth_call\",\"params\":[{\"to\":\"$token\",\"data\":\"$DATA\"},\"latest\"],\"id\":1}" \
-      "$RPC" | python3 -c '
-import sys, json
+  local token="$1"        # ERC20 token contract address
+  local decimals="$2"     # token decimals, e.g. 6 or 18
+
+  local addr_padded
+  addr_padded="$(printf '%064s' "${WALLET#0x}" | tr ' ' '0')"
+  local data="0x70a08231${addr_padded}"
+
+  curl -s -X POST -H "Content-Type: application/json" \
+    --data "{\"jsonrpc\":\"2.0\",\"method\":\"eth_call\",\"params\":[{\"to\":\"$token\",\"data\":\"$data\"},\"latest\"],\"id\":1}" \
+    "$RPC" | python3 -c '
+import json, sys
+from decimal import Decimal, InvalidOperation
+
 try:
     r = json.load(sys.stdin)
-    print(int(r.get("result", "0x0"), 16) / '$decimals')
-except:
+    raw = int(r.get("result", "0x0"), 16)
+    dec = int(sys.argv[1])
+    val = (Decimal(raw) / (Decimal(10) ** Decimal(dec)))
+    # Print a stable numeric string; caller formats as needed.
+    print(val)
+except Exception:
     print("ERR")
-'
+' "$decimals"
 }
 
-USDC_ON=$(get_balance "0x2791bca1f2de4661ed88a30c99a7a9449aa84174" 1000000)
-USDT_ON=$(get_balance "0xc2132d05d31c914a87c6611c10748aeb04b58e8f" 1000000)
-WMATIC_ON=$(get_balance "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270" 100000000000im000000)
-POL_ON=$(get_balance "0x0000000000000000000000000000000000001010" 1000000000000000000)
+read_runtime_stable() {
+  # Extract "$12.34" style amount from nanopnl output.
+  local symbol="$1" # USDC or USDT
+  nanopnl 2>/dev/null | awk -v sym="$symbol" '
+    $1 ~ ("^"sym":") {
+      amt=$2
+      gsub(/\$/, "", amt)
+      gsub(/,/, "", amt)
+      print amt
+      exit
+    }
+  ' || true
+}
 
-USDC_RT=$(nanopnl | awk '/USDC:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
-USDT_RT=$(nanopnl | awk '/USDT:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
+# On-chain balances (Polygon)
+USDC_ON="$(get_balance "0x2791bca1f2de4661ed88a30c99a7a9449aa84174" 6)"
+USDT_ON="$(get_balance "0xc2132d05d31c914a87c6611c10748aeb04b58e8f" 6)"
+WMATIC_ON="$(get_balance "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270" 18)"
+POL_ON="$(get_balance "0x0000000000000000000000000000000000001010" 18)"
 
-STABLES_ON=$(echo "$USDC_ON + $USDT_ON" | bc -l 2>/dev/null || echo "0")
+# Runtime (nanopnl)
+USDC_RT="$(read_runtime_stable "USDC")"
+USDT_RT="$(read_runtime_stable "USDT")"
 
-echo ""
-echo "Protection thresholds: USDT < \$$USDT_TH | WMATIC > $WMATIC_TH"
-echo ""
+echo
+echo "Protection thresholds"
+echo "  - USDT_TH:   ${USDT_TH} (trigger when on-chain USDT < USDT_TH)"
+echo "  - WMATIC_TH: ${WMATIC_TH} (MEDIUM risk requires WMATIC > WMATIC_TH)"
+echo
 
-# === Pre-protection risk assessment ===
-RISK="LOW"
-SUGGEST=""
+printf "%-24s %12s   %12s\n" "ASSET" "ON-CHAIN" "RUNTIME"
+printf "%-24s %12s   %12s\n" "USDT (USDT)" "${USDT_ON}" "${USDT_RT:-N/A}"
+printf "%-24s %12s   %12s\n" "USDC (USDC)" "${USDC_ON}" "${USDC_RT:-N/A}"
+echo
+printf "%-24s %12s\n" "WMATIC (qty)" "${WMATIC_ON}"
+printf "%-24s %12s\n" "POL (qty)" "${POL_ON}"
+echo
 
-if (( $(echo "$USDT_ON < $USDT_TH" | bc -l 2>/dev/null || echo 0) )); then
-    RISK="HIGH"
-    SUGGEST="Protection is likely imminent. Consider pausing X-signal buys until USDT recovers."
-elif (( $(echo "$USDT_ON < ($USDT_TH + 6)" | bc -l 2>/dev/null || echo 0) )); then
-    if (( $(echo "$WMATIC_ON > $WMATIC_TH" | bc -l 2>/dev/null || echo 0) )); then
-        RISK="MEDIUM"
-        SUGGEST="USDT is getting close to threshold while WMATIC is high. Consider reducing X-signal size."
-    fi
-fi
+python3 -c '
+import sys
+from decimal import Decimal
 
-if (( $(echo "$STABLES_ON < 25" | bc -l 2>/dev/null || echo 0) )); then
-    if [ "$RISK" = "LOW" ]; then RISK="MEDIUM"; fi
-    if [ -z "$SUGGEST" ]; then SUGGEST="Total stables are low. Top-up may be needed soon."; fi
-fi
+usdt_on = Decimal(sys.argv[1])
+usdt_th = Decimal(sys.argv[2])
+wmatic_on = Decimal(sys.argv[3])
+wmatic_th = Decimal(sys.argv[4])
 
-# Output
-printf "On-chain USDT: %.2f    Runtime: %.2f\n" "$USDT_ON" "$USDT_RT"
-printf "On-chain USDC: %.2f    Runtime: %.2f\n" "$USDC_ON" "$USDC_RT"
-printf "On-chain WMATIC: %.2f qty\n" "$WMATIC_ON"
-printf "On-chain POL:    %.2f qty\n" "$POL_ON"
-
-echo ""
-
-if [ "$RISK" = "HIGH" ]; then
-    echo "🚨 Risk: HIGH — Protection likely soon"
-elif [ "$RISK" = "MEDIUM" ]; then
-    echo "⚠️  Risk: MEDIUM — Elevated protection risk"
-else
-    echo "✅ Risk: Low — Good conditions"
-fi
-
-if [ -n "$SUGGEST" ]; then
-    echo "   → Suggested action: $SUGGEST"
-fi
-
-echo ""
-echo "Done. Run daily."
+if usdt_on < usdt_th:
+    print("🚨 Risk: HIGH — Protection likely soon")
+    print("Suggested action: Top up stables (USDT/USDC) now or pause new buys until USDT recovers above threshold.")
+elif usdt_on < (usdt_th + Decimal("6")) and wmatic_on > wmatic_th:
+    print("⚠️ Risk: MEDIUM — Consider reducing X-signal size or topping up stables")
+    print("Suggested action: Reduce X-signal buy size and/or convert some WMATIC exposure to stables to widen buffer.")
+else:
+    print("✅ Risk: Low — Good conditions for PnL stability")
+' "${USDT_ON}" "${USDT_TH}" "${WMATIC_ON}" "${WMATIC_TH}"
