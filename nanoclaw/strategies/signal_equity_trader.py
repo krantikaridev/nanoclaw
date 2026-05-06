@@ -99,6 +99,8 @@ class EquityBuildPlanParams:
     usdt_balance: float
     wallet_address_for_gas: str
     can_trade_asset: AssetCooldownGetFn
+    trade_size_multiplier: float = 1.0
+    buy_risk_level: Optional[str] = None
     now: Optional[float] = None
     urgent_gas: bool = False
     allow_high_gas_override: bool = False
@@ -115,6 +117,8 @@ class EquityBuildPlanParams:
         wallet_address_for_gas: str,
         can_trade_asset: AssetCooldownGetFn,
         allow_high_gas_override: bool,
+        trade_size_multiplier: float = 1.0,
+        buy_risk_level: Optional[str] = None,
     ) -> EquityBuildPlanParams:
         return cls(
             symbol=str(asset.symbol).strip(),
@@ -130,6 +134,8 @@ class EquityBuildPlanParams:
             can_trade_asset=can_trade_asset,
             allow_high_gas_override=allow_high_gas_override,
             upside_pct=asset.upside_pct,
+            trade_size_multiplier=float(trade_size_multiplier),
+            buy_risk_level=buy_risk_level,
         )
 
 
@@ -538,6 +544,8 @@ class SignalEquityTrader:
             urgent_gas=params.urgent_gas,
             allow_high_gas_override=params.allow_high_gas_override,
             upside_pct=params.upside_pct,
+            trade_size_multiplier=params.trade_size_multiplier,
+            buy_risk_level=params.buy_risk_level,
         )
 
     def build_plan_with_block_reason(
@@ -558,6 +566,8 @@ class SignalEquityTrader:
         urgent_gas: bool = False,
         allow_high_gas_override: bool = False,
         upside_pct: Optional[float] = None,
+        trade_size_multiplier: float = 1.0,
+        buy_risk_level: Optional[str] = None,
     ) -> Tuple[Optional[EquityTradePlan], Optional[str]]:
         """Build a trade plan with detailed block reasons for DEBUG."""
         if not self.config.enabled:
@@ -661,6 +671,17 @@ class SignalEquityTrader:
                 logger.debug("build_plan block sym=%s reason=zero_usdc", sym)
                 return None, "zero_usdc"
             trade_size = self._compute_trade_size(usdc_balance, strength, usdt_balance, symbol=sym)
+            mult = float(trade_size_multiplier)
+            if not math.isfinite(mult) or mult <= 0.0:
+                return None, "invalid_trade_size_multiplier"
+            if mult != 1.0:
+                adjusted = float(trade_size) * mult
+                risk_note = f" | Risk={buy_risk_level}" if buy_risk_level else ""
+                print(
+                    f"[nanoclaw] RISK SIZING{risk_note} | multiplier={mult:.2f} | "
+                    f"base=${float(trade_size):.2f} → adjusted=${adjusted:.2f}"
+                )
+                trade_size = adjusted
             if trade_size <= 0 or trade_size > usdc_balance:
                 print(f"[nanoclaw] BLOCK: {sym} | invalid_trade_size (computed=${trade_size:.2f}, available=${usdc_balance:.2f})")
                 logger.debug("build_plan block sym=%s reason=invalid_trade_size", sym)
@@ -813,6 +834,8 @@ class SignalEquityTrader:
         urgent_gas: bool = False,
         allow_high_gas_override: bool = False,
         upside_pct: Optional[float] = None,
+        trade_size_multiplier: float = 1.0,
+        buy_risk_level: Optional[str] = None,
     ) -> Optional[EquityTradePlan]:
         logger.debug(
             "build_plan entry sym=%s signal=%s usdc=%s equity=%s",
@@ -837,6 +860,8 @@ class SignalEquityTrader:
             urgent_gas=urgent_gas,
             allow_high_gas_override=allow_high_gas_override,
             upside_pct=upside_pct,
+            trade_size_multiplier=trade_size_multiplier,
+            buy_risk_level=buy_risk_level,
         )
         if plan is None:
             logger.debug("build_plan exit None sym=%s reason=%s", symbol, reason)

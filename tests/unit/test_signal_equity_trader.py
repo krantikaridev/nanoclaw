@@ -994,6 +994,45 @@ def test_compute_trade_size_and_addrs_equal_helpers():
     assert s._addrs_equal_case_insensitive("0xAbC", "0xabc") is True
 
 
+def test_buy_trade_size_multiplier_applies_before_guards(monkeypatch):
+    from modules import runtime as rt
+    from nanoclaw.strategies import signal_equity_trader as strat_mod
+
+    # Ensure the scaled size stays above strategy-after-gas guardrails.
+    monkeypatch.setattr(rt, "FIXED_TRADE_USD_MIN", 20.0, raising=False)
+    monkeypatch.setattr(rt, "FIXED_TRADE_USD_MAX", 20.0, raising=False)
+    monkeypatch.setattr(strat_mod, "_HARD_BYPASS_MIN_TRADE_USD", 0.0, raising=False)
+
+    s = (
+        SignalEquityTrader.builder()
+        .with_enabled(True)
+        .with_min_trade_usdc(1.0)
+        .with_max_trade_usdc(100.0)
+        .with_gas_protector(DummyProtector(gas_ok=True, pol_balance=1.0))
+        .with_usdc_address("0x" + "2" * 40)
+        .build()
+    )
+
+    plan, reason = s.build_plan_with_block_reason(
+        symbol="WETH_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.95,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=100.0,
+        equity_balance=0.0,
+        usdt_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+        trade_size_multiplier=0.50,
+        buy_risk_level="MEDIUM",
+    )
+    assert reason is None
+    assert plan is not None
+    assert plan.trade_size == pytest.approx(10.0)
+
+
 def test_builder_fluent_setters_round_trip():
     """Exercise optional builder chain (trade sizing / POL / TP wiring)."""
     s = (

@@ -48,6 +48,27 @@ _AUTO_USDC_FAILURE_STATE = {
 }
 
 
+def _x_signal_buy_risk_level(*, usdt: float, wmatic: float) -> str:
+    """
+    Minimal risk classifier used to protect session PnL by scaling X-Signal BUY sizing.
+
+    Logic (mirrors nanoreconcile operator heuristic):
+    - HIGH: USDT < PROTECTION_FLUCTUATION_USDT_THRESHOLD
+    - MEDIUM: USDT within ~$6 above threshold AND WMATIC > PROTECTION_FLUCTUATION_MIN_WMATIC
+    - LOW: otherwise
+    """
+    th_usdt = float(getattr(cfg, "PROTECTION_FLUCTUATION_USDT_THRESHOLD", 0.0))
+    th_wmatic = float(getattr(cfg, "PROTECTION_FLUCTUATION_MIN_WMATIC", 0.0))
+    usdt_f = float(usdt)
+    wmatic_f = float(wmatic)
+
+    if usdt_f < th_usdt:
+        return "HIGH"
+    if usdt_f < (th_usdt + 6.0) and wmatic_f > th_wmatic:
+        return "MEDIUM"
+    return "LOW"
+
+
 def _reconcile_total_portfolio_usd_with_onchain_usdc(
     total_portfolio_usd: float,
     snapshot_usdc: float,
@@ -547,9 +568,21 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
     if not dry_run:
         balances = fcb.get_balances()
 
-    cfg = fcb._load_followed_equities_json_dict()
-    cfg_enabled = bool(cfg.get("enabled", True)) if isinstance(cfg, dict) else True
-    min_strength = fcb._effective_equity_signal_min(cfg)
+    risk_level = _x_signal_buy_risk_level(usdt=float(balances.usdt), wmatic=float(balances.wmatic))
+    buy_mult = 1.0
+    if risk_level == "MEDIUM":
+        buy_mult = 0.50
+    elif risk_level == "HIGH":
+        buy_mult = 0.0
+    print(
+        f"{runtime._nanolog()}X-SIGNAL BUY RISK | Risk={risk_level} | "
+        f"USDT=${float(balances.usdt):.2f} | WMATIC={float(balances.wmatic):.4f} | "
+        f"buy_size_multiplier={buy_mult:.2f}"
+    )
+
+    fe_cfg = fcb._load_followed_equities_json_dict()
+    cfg_enabled = bool(fe_cfg.get("enabled", True)) if isinstance(fe_cfg, dict) else True
+    min_strength = fcb._effective_equity_signal_min(fe_cfg)
     tuned_trader = fcb._tuned_signal_equity_trader(min_strength)
     snapshot_usdc = float(balances.usdc)
     query_onchain = getattr(tuned_trader, "_query_onchain_usdc_balance", None)
@@ -819,6 +852,13 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
         for a in eligible_ordered:
             equity_balance = fcb.get_token_balance(a.token_address, int(a.decimals))
             sym = str(a.symbol).strip()
+            is_buy = float(a.signal_strength) > 0
+            if is_buy and risk_level == "HIGH":
+                print(
+                    f"{runtime._nanolog()}X-SIGNAL EQUITY BUY skipped (Risk=HIGH) | {sym} | "
+                    f"USDT=${float(balances.usdt):.2f} < threshold=${float(cfg.PROTECTION_FLUCTUATION_USDT_THRESHOLD):.2f}"
+                )
+                continue
             plan, plan_block = _invoke_equity_build_plan(
                 trader,
                 EquityBuildPlanParams.for_eligible_asset(
@@ -829,6 +869,8 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                     wallet_address_for_gas=fcb.WALLET,
                     can_trade_asset=fcb.can_trade_asset,
                     allow_high_gas_override=high_conviction,
+                    trade_size_multiplier=(buy_mult if is_buy else 1.0),
+                    buy_risk_level=(risk_level if is_buy else None),
                 ),
             )
             if plan:
