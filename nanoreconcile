@@ -3,7 +3,6 @@ echo "=== NanoReconcile v2.9 (Polygon-only, automatic) ==="
 WALLET=$(grep '^WALLET=' .env | cut -d= -f2)
 
 USDT_TH=$(grep '^PROTECTION_FLUCTUATION_USDT_THRESHOLD=' .env | cut -d= -f2 || echo "12")
-WMATIC_TH=$(grep '^PROTECTION_FLUCTUATION_MIN_WMATIC=' .env | cut -d= -f2 || echo "200")
 
 ANKR_KEY=$(grep '^ANKR_RPC_KEY=' .env | cut -d= -f2- | tr -d '"')
 RPC="https://rpc.ankr.com/polygon/${ANKR_KEY}"
@@ -34,31 +33,23 @@ USDC_RT=$(nanopnl | awk '/USDC:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo
 USDT_RT=$(nanopnl | awk '/USDT:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
 
 echo ""
-echo "Protection thresholds: USDT < \$$USDT_TH | WMATIC > $WMATIC_TH"
+echo "Protection threshold: USDT < \$$USDT_TH"
 echo ""
 
 USDT_DIFF=$(echo "$USDT_RT - $USDT_ON" | bc -l 2>/dev/null || echo "0")
 
-# Always show significant divergence
-if (( $(echo "$USDT_DIFF > 8" | bc -l 2>/dev/null || echo 0) )); then
-    printf "⚠️  WARNING: Large USDT divergence detected (%.2f)\n" "$USDT_DIFF"
-    echo "   On-chain USDT is significantly lower than runtime value"
+# Divergence (always show if meaningful)
+if (( $(echo "$USDT_DIFF > 5" | bc -l 2>/dev/null || echo 0) )); then
+    printf "⚠️  USDT Divergence: %.2f (Runtime higher than on-chain)\n" "$USDT_DIFF"
 fi
 
-# Critical protection zone
+# Risk level
 if (( $(echo "$USDT_ON < $USDT_TH" | bc -l 2>/dev/null || echo 0) )); then
-    echo "🚨 CRITICAL: On-chain USDT below protection threshold (< \$$USDT_TH)"
-elif (( $(echo "$USDT_ON < ($USDT_TH + 5)" | bc -l 2>/dev/null || echo 0) )); then
-    echo "⚠️  WARNING: On-chain USDT approaching protection threshold"
-fi
-
-# Overall risk assessment
-if (( $(echo "$USDT_ON < $USDT_TH" | bc -l 2>/dev/null || echo 0) )); then
-    echo "🚨 Overall Risk: High — protection likely soon"
-elif (( $(echo "$USDT_DIFF > 10" | bc -l 2>/dev/null || echo 0) )); then
-    echo "⚠️  Overall Risk: Medium-High — elevated protection risk"
+    echo "🚨 Risk: HIGH — On-chain USDT below protection threshold"
+elif (( $(echo "$USDT_ON < ($USDT_TH + 4)" | bc -l 2>/dev/null || echo 0) )); then
+    echo "⚠️  Risk: MEDIUM — On-chain USDT approaching threshold"
 else
-    echo "✅ Risk level: Low"
+    echo "✅ Risk: Low"
 fi
 
 echo ""
