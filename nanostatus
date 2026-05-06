@@ -12,7 +12,7 @@ SESSION=$(nanopnl | awk '/Session PnL:/ {print $3" "$4; exit}' || echo "N/A")
 
 echo "SUMMARY → Total: \$$TOTAL | Session: $SESSION | USDC: \$$USDC_RT | USDT: \$$USDT_RT"
 echo ""
-echo "NOTE: Session PnL is clean since last manual reset (07:01 today)."
+echo "NOTE: Session is clean since 07:01 reset. Goal = keep Session PnL > 0"
 echo ""
 
 echo "───────────────────────────────────────────────────────────────"
@@ -22,11 +22,11 @@ echo ""
 
 echo "───────────────────────────────────────────────────────────────"
 echo "2. PnL + Lookback"
-nanodaily --lookback 1h | head -25
+nanodaily --lookback 1h | head -20
 echo ""
 
 echo "───────────────────────────────────────────────────────────────"
-echo "3. On-chain Reconciliation + Risk"
+echo "3. On-chain + Risk (helps protect PnL)"
 ./nanoreconcile
 echo ""
 

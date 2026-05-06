@@ -2,6 +2,11 @@
 echo "=== NanoReconcile v2.9 (Polygon-only, automatic) ==="
 WALLET=$(grep '^WALLET=' .env | cut -d= -f2)
 
+# Read real protection values from .env
+USDT_TH=$(grep '^PROTECTION_FLUCTUATION_USDT_THRESHOLD=' .env | cut -d= -f2 || echo "12")
+WMATIC_TH=$(grep '^PROTECTION_FLUCTUATION_MIN_WMATIC=' .env | cut -d= -f2 || echo "200")
+SELL_FR=$(grep '^PROTECTION_FLUCTUATION_SELL_FRACTION=' .env | cut -d= -f2 || echo "0.40")
+
 ANKR_KEY=$(grep '^ANKR_RPC_KEY=' .env | cut -d= -f2- | tr -d '"')
 RPC="https://rpc.ankr.com/polygon/${ANKR_KEY}"
 
@@ -33,31 +38,26 @@ USDT_RT=$(nanopnl | awk '/USDT:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo
 STABLES_ON=$(echo "$USDC_ON + $USDT_ON" | bc -l 2>/dev/null || echo "0")
 
 echo ""
-echo "Protection thresholds: USDT < $12 | WMATIC > 200 | Sell fraction: 40%"
+echo "Protection thresholds (live from .env): USDT < \$$USDT_TH | WMATIC > $WMATIC_TH | Sell: ${SELL_FR}%"
 echo ""
 
-# Smarter warnings (helps reduce protection triggers → better PnL)
+# Warnings focused on protecting PnL
 WARN=0
-if (( $(echo "$USDT_ON < 8" | bc -l 2>/dev/null || echo 0) )); then
-    echo "🚨 HIGH RISK: On-chain USDT very low (< $8) → protection likely soon"
-    WARN=1
-elif (( $(echo "$USDT_ON < 12" | bc -l 2>/dev/null || echo 0) )); then
-    echo "⚠️  WARNING: On-chain USDT getting low (< $12)"
+if (( $(echo "$USDT_ON < $USDT_TH" | bc -l 2>/dev/null || echo 0) )); then
+    echo "🚨 HIGH RISK: On-chain USDT low (< \$$USDT_TH) → protection may trigger soon"
     WARN=1
 fi
-
 if (( $(echo "$STABLES_ON < 25" | bc -l 2>/dev/null || echo 0) )); then
-    echo "⚠️  WARNING: Total stables low (< $25) while holding high WMATIC"
+    echo "⚠️  WARNING: Total stables low while holding significant WMATIC"
     WARN=1
 fi
-
 if (( $(echo "$POL_ON < 0.8" | bc -l 2>/dev/null || echo 0) )); then
-    echo "⚠️  WARNING: POL low (< 0.8) → top-up recommended soon"
+    echo "⚠️  WARNING: POL balance low (< 0.8) — consider top-up"
     WARN=1
 fi
 
 if [ "$WARN" -eq 0 ]; then
-    echo "✅ Risk level: Low"
+    echo "✅ Risk level: Low — good for PnL stability"
 fi
 
 echo ""
