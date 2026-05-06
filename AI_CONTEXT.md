@@ -582,3 +582,4 @@ Grok may never say “task complete / loop closed” until BOTH sides have:
 
 5. **Status output polish**
    - Investigate `nanodaily` "Small trades bypassed: 0" duplicate line (`0` echoed twice in some runs) and normalize output formatting for operator clarity.
+v2.8.1 ACCEPTED - Session PnL >=0 achieved
