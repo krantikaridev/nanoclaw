@@ -43,11 +43,9 @@ printf "On-chain POL:    %.2f qty\n" "$POL_ON"
 
 echo ""
 
-# Simple direct risk check
+# Simple direct check
 if (( $(echo "$USDT_ON < $USDT_TH" | bc -l 2>/dev/null || echo 0) )); then
     echo "🚨 Risk: HIGH — Protection likely soon"
-elif (( $(echo "$USDT_ON < ($USDT_TH + 4)" | bc -l 2>/dev/null || echo 0) )); then
-    echo "⚠️  Risk: MEDIUM — USDT getting close to threshold"
 else
     echo "✅ Risk: Low"
 fi
