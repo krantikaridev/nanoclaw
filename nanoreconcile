@@ -41,14 +41,23 @@ printf "On-chain WMATIC: %12.4f qty\n" "$WMATIC_ON"
 printf "On-chain POL:    %12.4f qty\n" "$POL_ON"
 
 echo ""
+# Warnings
+WARN=0
 if (( $(echo "$USDC_ON < 8" | bc -l 2>/dev/null || echo 0) )); then
     echo "⚠️  WARNING: On-chain USDC is low (< 8)"
+    WARN=1
 fi
 if (( $(echo "$USDT_ON < 15" | bc -l 2>/dev/null || echo 0) )); then
     echo "⚠️  WARNING: On-chain USDT is low (< 15)"
+    WARN=1
 fi
-if (( $(echo "$POL_ON < 0.5" | bc -l 2>/dev/null || echo 0) )); then
-    echo "⚠️  WARNING: POL balance is low (< 0.5) — gas risk"
+if (( $(echo "$POL_ON < 0.8" | bc -l 2>/dev/null || echo 0) )); then
+    echo "⚠️  WARNING: POL balance is LOW (< 0.8) → consider top-up soon"
+    WARN=1
+fi
+
+if [ "$WARN" -eq 0 ]; then
+    echo "✅ All balances look healthy"
 fi
 
 echo ""
