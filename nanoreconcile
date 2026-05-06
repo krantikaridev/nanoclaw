@@ -8,6 +8,7 @@ RPC="https://rpc.ankr.com/polygon/${ANKR_KEY}"
 
 get_balance() {
     local token=$1
+    local decimals=$2
     local ADDR_PADDED=$(printf '%064s' "${WALLET#0x}" | tr ' ' '0')
     local DATA="0x70a08231${ADDR_PADDED}"
     curl -s -X POST -H "Content-Type: application/json" \
@@ -16,15 +17,15 @@ get_balance() {
 import sys, json
 try:
     r = json.load(sys.stdin)
-    print(int(r.get("result", "0x0"), 16) / 1_000_000)
+    print(int(r.get("result", "0x0"), 16) / '$decimals')
 except:
     print("ERR")
 '
 }
 
-USDC_ON=$(get_balance "0x2791bca1f2de4661ed88a30c99a7a9449aa84174")
-USDT_ON=$(get_balance "0xc2132d05d31c914a87c6611c10748aeb04b58e8f")
-WMATIC_ON=$(get_balance "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270")
+USDC_ON=$(get_balance "0x2791bca1f2de4661ed88a30c99a7a9449aa84174" 1000000)
+USDT_ON=$(get_balance "0xc2132d05d31c914a87c6611c10748aeb04b58e8f" 1000000)
+WMATIC_ON=$(get_balance "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270" 1000000000000000000)
 
 USDC_RT=$(nanopnl | awk '/USDC:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
 USDT_RT=$(nanopnl | awk '/USDT:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
@@ -35,7 +36,7 @@ DELTA_USDT=$(awk -v a="$USDT_ON" -v b="$USDT_RT" 'BEGIN {printf "%.2f", a-b}')
 
 printf "On-chain USDC:   %8.2f    Runtime: %8.2f    Δ: %+7.2f\n" "$USDC_ON" "$USDC_RT" "$DELTA_USDC"
 printf "On-chain USDT:   %8.2f    Runtime: %8.2f    Δ: %+7.2f\n" "$USDT_ON" "$USDT_RT" "$DELTA_USDT"
-printf "On-chain WMATIC: %8.2f qty (runtime qty shown in nanodaily)\n" "$WMATIC_ON"
+printf "On-chain WMATIC: %12.4f qty (runtime qty in nanodaily)\n" "$WMATIC_ON"
 
 echo ""
 if (( $(echo "$USDC_ON < 8" | bc -l 2>/dev/null || echo 0) )); then
