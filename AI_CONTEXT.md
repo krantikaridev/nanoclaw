@@ -589,3 +589,9 @@ v2.8.1 ACCEPTED - Session PnL >=0 achieved
 - Behaviour: pull latest code + new .env.example keys, but **preserve existing local .env values** unless .env.example marks a key with `# OVERRIDE_REQUIRED`
 - This makes rapid iteration safe without forcing every tweak into .env.example
 - Priority: #1 after v2.8.1 acceptance
+
+### v2.9 starter tasks (now open)
+1. nanoup improvement (already in TODO)
+2. Operator-grade accounting: single numéraire, verified snapshots, wallet MTM vs Polygonscan reconcile
+3. Event-store foundations + POL auto top-up logic
+4. Monitoring playbook: run `watch -n 300 "nanodaily --lookback 1h && nanopnl"` during office hours
