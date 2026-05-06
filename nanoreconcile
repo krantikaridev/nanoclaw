@@ -3,35 +3,37 @@ echo "=== NanoReconcile v2.9 (Polygon-only, automatic) ==="
 WALLET=$(grep '^WALLET=' .env | cut -d= -f2)
 echo "Wallet: $WALLET"
 
-# ANKR RPC
 ANKR_KEY=$(grep '^ANKR_RPC_KEY=' .env | cut -d= -f2- | tr -d '"')
 RPC="https://rpc.ankr.com/polygon/${ANKR_KEY}"
 
-# Correct balanceOf data encoding (address as 32-byte hex string)
-ADDR_PADDED=$(printf '%064s' "${WALLET#0x}" | tr ' ' '0')
-DATA="0x70a08231${ADDR_PADDED}"
-
-RESULT=$(curl -s -X POST -H "Content-Type: application/json" \
-  --data "{\"jsonrpc\":\"2.0\",\"method\":\"eth_call\",\"params\":[{\"to\":\"0x2791bca1f2de4661ed88a30c99a7a9449aa84174\",\"data\":\"$DATA\"},\"latest\"],\"id\":1}" \
-  "$RPC")
-
-ONCHAIN=$(echo "$RESULT" | python3 -c '
+get_balance() {
+    local token=$1
+    local ADDR_PADDED=$(printf '%064s' "${WALLET#0x}" | tr ' ' '0')
+    local DATA="0x70a08231${ADDR_PADDED}"
+    curl -s -X POST -H "Content-Type: application/json" \
+      --data "{\"jsonrpc\":\"2.0\",\"method\":\"eth_call\",\"params\":[{\"to\":\"$token\",\"data\":\"$DATA\"},\"latest\"],\"id\":1}" \
+      "$RPC" | python3 -c '
 import sys, json
 try:
     r = json.load(sys.stdin)
-    if "result" in r:
-        bal = int(r["result"], 16) / 1_000_000
-        print(f"On-chain USDC: {bal:.2f}")
-    else:
-        print("On-chain USDC: error -", r.get("error", r))
-except Exception as e:
-    print("On-chain USDC: parse error", e)
-')
+    print(int(r.get("result", "0x0"), 16) / 1_000_000)
+except:
+    print("ERR")
+'
+}
 
-echo "$ONCHAIN"
+USDC=$(get_balance "0x2791bca1f2de4661ed88a30c99a7a9449aa84174")
+USDT=$(get_balance "0xc2132d05d31c914a87c6611c10748aeb04b58e8f")
+
+echo "On-chain USDC: $USDC"
+echo "On-chain USDT: $USDT"
 
 echo ""
-echo "Runtime USDC from nanopnl:"
-nanopnl | grep -oE "USDC: ?\$?[0-9.]+" | head -1
+echo "Runtime from nanopnl:"
+nanopnl | grep -E "(USDC|USDT):" | head -2
+
 echo ""
+if (( $(echo "$USDC < 5" | bc -l 2>/dev/null || echo 0) )); then
+    echo "⚠️  WARNING: On-chain USDC is very low (< $5)"
+fi
 echo "Done. Run daily."
