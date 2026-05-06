@@ -9,10 +9,9 @@ USDC_RT=$(nanopnl | awk '/USDC:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo
 USDT_RT=$(nanopnl | awk '/USDT:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
 TOTAL=$(nanopnl | awk '/TOTAL:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
 SESSION=$(nanopnl | awk '/Session PnL:/ {print $3" "$4; exit}' || echo "N/A")
-POL_RT=$(nanoreconcile 2>/dev/null | grep -oP "POL: K[0-9.]+" | head -1 || echo "N/A")
 
 echo "SESSION PnL: $SESSION     |     Total: \$$TOTAL"
-echo "USDC: \$$USDC_RT     |     USDT: \$$USDT_RT     |     POL: $POL_RT"
+echo "USDC: \$$USDC_RT     |     USDT: \$$USDT_RT"
 echo ""
 echo "BASELINE: Clean performance tracking since 07:01 reset (does NOT include the $50 top-up)."
 echo ""
