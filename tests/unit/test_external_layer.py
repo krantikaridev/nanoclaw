@@ -1,4 +1,6 @@
+import importlib.util
 import json
+import sys
 from pathlib import Path
 
 from external_layer import control
@@ -46,6 +48,60 @@ def test_risk_checker_skeleton():
     assert risk_checker.get_current_risk_state() == "MEDIUM"
     assert risk_checker.should_pause() is False
     assert risk_checker.get_recommended_max_size() == 0.08
+
+
+def test_evaluate_risk_placeholder_balances_not_paused():
+    assert risk_checker.evaluate_risk() == {"paused": False}
+
+
+def test_evaluate_risk_low_usdt():
+    assert risk_checker.evaluate_risk(usdt_balance=49.0, wmatic_balance=100.0) == {
+        "paused": True,
+        "reason": "Low balance",
+    }
+
+
+def test_evaluate_risk_low_wmatic():
+    assert risk_checker.evaluate_risk(usdt_balance=100.0, wmatic_balance=49.0) == {
+        "paused": True,
+        "reason": "Low balance",
+    }
+
+
+def test_control_py_imports_when_loaded_as_filepath():
+    """Same entrypoint as ``python external_layer/control.py`` — no ``__package__``."""
+    root = Path(__file__).resolve().parents[2]
+    path = root / "external_layer" / "control.py"
+    name = "_nanoclaw_ext_control_standalone"
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
+    try:
+        spec.loader.exec_module(mod)
+        assert hasattr(mod, "update_control")
+        assert hasattr(mod, "_run_control_loop")
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_update_control_writes_json_from_evaluate_risk(tmp_path: Path, monkeypatch):
+    out = tmp_path / "control.json"
+    monkeypatch.setattr(control, "CONTROL_JSON_PATH", out)
+
+    def fake_evaluate_risk():
+        return {"paused": True, "reason": "Low balance"}
+
+    monkeypatch.setattr(control, "evaluate_risk", fake_evaluate_risk)
+    risk_back = control.update_control()
+    assert risk_back == {"paused": True, "reason": "Low balance"}
+
+    written = json.loads(out.read_text(encoding="utf-8"))
+    assert written["paused"] is True
+    assert written["reason"] == "Low balance"
+    assert written["max_copy_trade_pct"] == 0.08
+    assert written["force_defensive"] is False
+    assert written["last_updated"].endswith("Z")
 
 
 def test_load_cycle_control_missing_invalid_and_ok(tmp_path):
