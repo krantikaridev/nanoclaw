@@ -1,14 +1,32 @@
 #!/bin/bash
-echo "=== NanoReconcile v2.9 (Polygon-only) ==="
+echo "=== NanoReconcile v2.9 (Polygon-only, automatic) ==="
 WALLET=$(grep '^WALLET=' .env | cut -d= -f2)
 echo "Wallet: $WALLET"
 
+# ANKR RPC
+ANKR_KEY=$(grep '^ANKR_RPC_KEY=' .env | cut -d= -f2- | tr -d '"')
+RPC="https://rpc.ankr.com/polygon/${ANKR_KEY}"
+
+# balanceOf(USDC) via JSON-RPC eth_call
+USDC="0x2791bca1f2de4661ed88a30c99a7a9449aa84174"
+DATA="0x70a08231$(printf '%064x' 0x${WALLET#0x})"
+
+RESULT=$(curl -s -X POST -H "Content-Type: application/json" \
+  --data "{\"jsonrpc\":\"2.0\",\"method\":\"eth_call\",\"params\":[{\"to\":\"$USDC\",\"data\":\"$DATA\"},\"latest\"],\"id\":1}" \
+  "$RPC" | python3 -c '
+import sys, json
+try:
+    r = json.load(sys.stdin)
+    bal = int(r.get("result", "0x0"), 16) / 1_000_000
+    print(f"On-chain USDC: {bal:.2f}")
+except:
+    print("On-chain USDC: fetch failed (check key/RPC)")
+')
+
+echo "$RESULT"
+
+echo ""
 echo "Runtime USDC from nanopnl:"
 nanopnl | grep -oE "USDC: ?\$?[0-9.]+" | head -1
-
 echo ""
-echo "Manual on-chain check (open this link in browser):"
-echo "https://polygonscan.com/token/0x2791bca1f2de4661ed88a30c99a7a9449aa84174?a=$WALLET"
-
-echo ""
-echo "Done. Run daily (or add to nanohealth later)."
+echo "Done. Run daily."
