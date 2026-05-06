@@ -22,18 +22,23 @@ except:
 '
 }
 
-USDC=$(get_balance "0x2791bca1f2de4661ed88a30c99a7a9449aa84174")
-USDT=$(get_balance "0xc2132d05d31c914a87c6611c10748aeb04b58e8f")
+USDC_ON=$(get_balance "0x2791bca1f2de4661ed88a30c99a7a9449aa84174")
+USDT_ON=$(get_balance "0xc2132d05d31c914a87c6611c10748aeb04b58e8f")
 
-echo "On-chain USDC: $USDC"
-echo "On-chain USDT: $USDT"
-
-echo ""
-echo "Runtime from nanopnl:"
-nanopnl | grep -E "(USDC|USDT):" | head -2
+USDC_RT=$(nanopnl | grep -oE "USDC: ?\$?[0-9.]+" | head -1 | grep -oE "[0-9.]+$" || echo "0")
+USDT_RT=$(nanopnl | grep -oE "USDT: ?\$?[0-9.]+" | head -1 | grep -oE "[0-9.]+$" || echo "0")
 
 echo ""
-if (( $(echo "$USDC < 5" | bc -l 2>/dev/null || echo 0) )); then
-    echo "⚠️  WARNING: On-chain USDC is very low (< $5)"
+printf "On-chain USDC: %8.2f    Runtime: %8.2f    Δ: %+7.2f\n" "$USDC_ON" "$USDC_RT" "$(echo "$USDC_ON - $USDC_RT" | bc -l 2>/dev/null || echo 0)"
+printf "On-chain USDT: %8.2f    Runtime: %8.2f    Δ: %+7.2f\n" "$USDT_ON" "$USDT_RT" "$(echo "$USDT_ON - $USDT_RT" | bc -l 2>/dev/null || echo 0)"
+
+echo ""
+if (( $(echo "$USDC_ON < 8" | bc -l 2>/dev/null || echo 0) )); then
+    echo "⚠️  WARNING: On-chain USDC is low (< 8)"
 fi
+if (( $(echo "$USDT_ON < 15" | bc -l 2>/dev/null || echo 0) )); then
+    echo "⚠️  WARNING: On-chain USDT is low (< 15)"
+fi
+
+echo ""
 echo "Done. Run daily."
