@@ -1,17 +1,28 @@
 #!/bin/bash
-echo "=== NanoReconcile v2.9 (Polygon-only on-chain vs Runtime Truth) ==="
+echo "=== NanoReconcile v2.9 (Polygon-only) ==="
 WALLET=$(grep '^WALLET=' .env | cut -d= -f2)
-RPC=$(grep '^RPC=' .env | cut -d= -f2 || echo "https://rpc.ankr.com/polygon")
 echo "Wallet: $WALLET"
-echo "RPC: $RPC"
+
+# Robust RPC fallback
+RPC=$(grep '^RPC=' .env | cut -d= -f2- | tr -d '"' | head -1)
+if [ -z "$RPC" ]; then
+  RPC=$(grep '^RPC_ENDPOINTS=' .env | cut -d= -f2- | tr -d '"' | cut -d',' -f1 | head -1)
+fi
+if [ -z "$RPC" ]; then
+  ANKR_KEY=$(grep '^ANKR_RPC_KEY=' .env | cut -d= -f2)
+  RPC="https://rpc.ankr.com/polygon/${ANKR_KEY}"
+fi
+echo "Using RPC: $RPC"
+
 python3 -c '
 from web3 import Web3
 w3 = Web3(Web3.HTTPProvider("'$RPC'"))
 wallet = "'$WALLET'"
-usdc = "0x2791bca1f2de4661ed88a30c99a7a9449aa84174"  # USDC.e on Polygon
+usdc = "0x2791bca1f2de4661ed88a30c99a7a9449aa84174"
 balance = w3.eth.call({"to": usdc, "data": "0x70a08231" + "0"*24 + wallet[2:]})
-print("On-chain USDC:", int.from_bytes(balance, "big") / 1e6)
-' 2>/dev/null || echo "web3 call failed — check RPC"
+print("On-chain USDC:", round(int.from_bytes(balance, "big") / 1e6, 2))
+' 2>/dev/null || echo "web3 call failed"
+
 echo "Runtime USDC from nanopnl:"
-nanopnl | grep -o "USDC: \$[0-9.]*" | head -1
-echo "Done. Run daily (or add to nanohealth)."
+nanopnl | grep -oE "USDC: ?\$?[0-9.]+"
+echo "Done. Run daily."
