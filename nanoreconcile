@@ -2,7 +2,6 @@
 echo "=== NanoReconcile v2.9 (Polygon-only, automatic) ==="
 WALLET=$(grep '^WALLET=' .env | cut -d= -f2)
 
-# Read current protection settings
 USDT_TH=$(grep '^PROTECTION_FLUCTUATION_USDT_THRESHOLD=' .env | cut -d= -f2 || echo "12")
 WMATIC_TH=$(grep '^PROTECTION_FLUCTUATION_MIN_WMATIC=' .env | cut -d= -f2 || echo "200")
 
@@ -40,41 +39,39 @@ echo ""
 echo "Protection thresholds: USDT < \$$USDT_TH | WMATIC > $WMATIC_TH"
 echo ""
 
-# === Smarter Risk Warnings (pre-protection) ===
+# === More proactive pre-protection warnings ===
 WARN=0
+SUGGEST=""
 
-# Critical: Already in danger zone
+# Critical zone
 if (( $(echo "$USDT_ON < $USDT_TH" | bc -l 2>/dev/null || echo 0) )); then
-    echo "🚨 CRITICAL: On-chain USDT is below threshold (< \$$USDT_TH)"
-    echo "   → Protection is likely to trigger soon if not already"
+    echo "🚨 CRITICAL: USDT below protection threshold"
+    SUGGEST="Strongly consider pausing X-signal buys until USDT recovers"
     WARN=2
-# Warning: Approaching danger (USDT getting low while WMATIC is high)
-elif (( $(echo "$USDT_ON < ($USDT_TH + 6)" | bc -l 2>/dev/null || echo 0) )); then
+# Early warning zone (more sensitive now)
+elif (( $(echo "$USDT_ON < ($USDT_TH * 1.5)" | bc -l 2>/dev/null || echo 0) )); then
     if (( $(echo "$WMATIC_ON > $WMATIC_TH" | bc -l 2>/dev/null || echo 0) )); then
-        echo "⚠️  WARNING: USDT approaching protection threshold + high WMATIC exposure"
-        echo "   → Consider: Pause X-signal buys or top-up stables"
+        echo "⚠️  WARNING: USDT getting low while WMATIC exposure is high"
+        SUGGEST="Consider: Reduce X-signal size or top-up stables"
         WARN=1
     fi
 fi
 
-# General low stables warning
-if (( $(echo "$STABLES_ON < 25" | bc -l 2>/dev/null || echo 0) )); then
-    echo "⚠️  WARNING: Total stables (USDC+USDT) are low (< \$25)"
+if (( $(echo "$STABLES_ON < 30" | bc -l 2>/dev/null || echo 0) )); then
+    echo "⚠️  WARNING: Total stables are getting low"
     WARN=1
 fi
 
-# POL warning
-if (( $(echo "$POL_ON < 1.0" | bc -l 2>/dev/null || echo 0) )); then
-    echo "⚠️  WARNING: POL balance is low (< 1.0) → gas risk"
-    WARN=1
+if [ "$WARN" -ge 1 ] && [ -n "$SUGGEST" ]; then
+    echo "   → Suggested action: $SUGGEST"
 fi
 
 if [ "$WARN" -eq 0 ]; then
     echo "✅ Risk level: Low — good conditions for PnL stability"
 elif [ "$WARN" -eq 1 ]; then
-    echo "⚠️  Overall Risk: Medium — monitor closely"
+    echo "⚠️  Overall Risk: Medium — watch closely to protect PnL"
 else
-    echo "🚨 Overall Risk: High — action recommended to protect PnL"
+    echo "🚨 Overall Risk: High — action recommended"
 fi
 
 echo ""
