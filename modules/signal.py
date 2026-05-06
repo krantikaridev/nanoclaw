@@ -570,15 +570,19 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
 
     risk_level = _x_signal_buy_risk_level(usdt=float(balances.usdt), wmatic=float(balances.wmatic))
     buy_mult = 1.0
+    skip_buys = False
     if risk_level == "MEDIUM":
         buy_mult = 0.50
     elif risk_level == "HIGH":
         buy_mult = 0.0
+        skip_buys = True
     print(
         f"{runtime._nanolog()}X-SIGNAL BUY RISK | Risk={risk_level} | "
         f"USDT=${float(balances.usdt):.2f} | WMATIC={float(balances.wmatic):.4f} | "
         f"buy_size_multiplier={buy_mult:.2f}"
     )
+    if skip_buys:
+        print(f"{runtime._nanolog()}Risk: HIGH → Skipping X-signal buy this cycle to protect PnL")
 
     fe_cfg = fcb._load_followed_equities_json_dict()
     cfg_enabled = bool(fe_cfg.get("enabled", True)) if isinstance(fe_cfg, dict) else True
@@ -853,11 +857,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
             equity_balance = fcb.get_token_balance(a.token_address, int(a.decimals))
             sym = str(a.symbol).strip()
             is_buy = float(a.signal_strength) > 0
-            if is_buy and risk_level == "HIGH":
-                print(
-                    f"{runtime._nanolog()}X-SIGNAL EQUITY BUY skipped (Risk=HIGH) | {sym} | "
-                    f"USDT=${float(balances.usdt):.2f} < threshold=${float(cfg.PROTECTION_FLUCTUATION_USDT_THRESHOLD):.2f}"
-                )
+            if is_buy and skip_buys:
                 continue
             plan, plan_block = _invoke_equity_build_plan(
                 trader,
