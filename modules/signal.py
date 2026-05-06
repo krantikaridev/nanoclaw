@@ -696,6 +696,11 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                 f"{runtime._nanolog()}ACTION RECOMMENDED | Risk=HIGH | Consider top-up USDT / rebalance WMATIC→stable, "
                 "or pause X-signal strategy until balances recover"
             )
+        # Make it very explicit (and grep-friendly) that BUY plans will be ignored for this cycle.
+        print(
+            f"{runtime._nanolog()}X-SIGNAL BUY DEFENSE ACTIVE | risk={risk_level} | "
+            f"buy_plans_paused=True | reasons={reasons or 'N/A'}"
+        )
 
     fe_cfg = fcb._load_followed_equities_json_dict()
     cfg_enabled = bool(fe_cfg.get("enabled", True)) if isinstance(fe_cfg, dict) else True
@@ -971,6 +976,11 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
             sym = str(a.symbol).strip()
             is_buy = float(a.signal_strength) > 0
             if is_buy and skip_buys:
+                reasons = ",".join(list(risk_ctx.get("reasons") or []))
+                print(
+                    f"{runtime._nanolog()}X-SIGNAL BUY SKIPPED | symbol={sym} | risk={risk_level} | "
+                    f"reason={reasons or 'N/A'}"
+                )
                 continue
             plan, plan_block = _invoke_equity_build_plan(
                 trader,

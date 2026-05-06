@@ -1092,7 +1092,7 @@ def test_try_x_signal_equity_decision_skips_buys_when_risk_high(monkeypatch, cap
     assert "Risk: HIGH → Skipping X-signal buy this cycle to protect PnL" in out
 
 
-def test_try_x_signal_equity_decision_triggers_high_at_threshold_plus_2(monkeypatch, capsys):
+def test_try_x_signal_equity_decision_triggers_high_at_threshold_plus_3(monkeypatch, capsys):
     from modules import signal as signal_module
 
     class _Plan:
@@ -1140,9 +1140,9 @@ def test_try_x_signal_equity_decision_triggers_high_at_threshold_plus_2(monkeypa
     monkeypatch.setattr(signal_module.cfg, "PROTECTION_FLUCTUATION_USDT_THRESHOLD", 30.0, raising=False)
     monkeypatch.setattr(signal_module.cfg, "PROTECTION_FLUCTUATION_MIN_WMATIC", 0.0, raising=False)
 
-    # New HIGH rule: trigger when USDT < (USDT_TH + 2) = 32.0
+    # HIGH rule: trigger when USDT < (USDT_TH + 3) = 33.0
     decision = clean_swap.try_x_signal_equity_decision(
-        clean_swap.Balances(usdt=31.0, wmatic=10.0, pol=1.0, usdc=20.0),
+        clean_swap.Balances(usdt=32.5, wmatic=10.0, pol=1.0, usdc=20.0),
         dry_run=True,
     )
     out = capsys.readouterr().out
@@ -1199,7 +1199,7 @@ def test_try_x_signal_equity_decision_pauses_buys_when_risk_medium(monkeypatch, 
     monkeypatch.setattr(signal_module.cfg, "PROTECTION_FLUCTUATION_USDT_THRESHOLD", 30.0, raising=False)
     monkeypatch.setattr(signal_module.cfg, "PROTECTION_FLUCTUATION_MIN_WMATIC", 5.0, raising=False)
 
-    # MEDIUM rule: USDT < (USDT_TH + 8) = 38.0 AND WMATIC > WMATIC_TH
+    # MEDIUM rule: USDT < (USDT_TH + 9) = 39.0 AND WMATIC > WMATIC_TH
     decision = clean_swap.try_x_signal_equity_decision(
         clean_swap.Balances(usdt=37.5, wmatic=10.0, pol=1.0, usdc=20.0),
         dry_run=True,
