@@ -38,28 +38,22 @@ echo ""
 
 USDT_DIFF=$(echo "$USDT_RT - $USDT_ON" | bc -l 2>/dev/null || echo "0")
 
-# Divergence (always show if meaningful)
-if (( $(echo "$USDT_DIFF > 5" | bc -l 2>/dev/null || echo 0) )); then
-    printf "⚠️  USDT Divergence: %.2f (Runtime higher than on-chain)\n" "$USDT_DIFF"
-fi
+# Always show key numbers
+printf "On-chain USDT: %.2f    Runtime: %.2f    Diff: %.2f\n" "$USDT_ON" "$USDT_RT" "$USDT_DIFF"
+printf "On-chain USDC: %.2f    Runtime: %.2f\n" "$USDC_ON" "$USDC_RT"
+printf "On-chain WMATIC: %.2f qty\n" "$WMATIC_ON"
+printf "On-chain POL:    %.2f qty\n" "$POL_ON"
 
-# Risk level
+echo ""
+
+# Simple risk assessment
 if (( $(echo "$USDT_ON < $USDT_TH" | bc -l 2>/dev/null || echo 0) )); then
     echo "🚨 Risk: HIGH — On-chain USDT below protection threshold"
-elif (( $(echo "$USDT_ON < ($USDT_TH + 4)" | bc -l 2>/dev/null || echo 0) )); then
-    echo "⚠️  Risk: MEDIUM — On-chain USDT approaching threshold"
+elif (( $(echo "$USDT_DIFF > 8" | bc -l 2>/dev/null || echo 0) )); then
+    echo "⚠️  Risk: MEDIUM-HIGH — Large USDT divergence detected"
 else
     echo "✅ Risk: Low"
 fi
-
-echo ""
-DELTA_USDC=$(awk -v a="$USDC_ON" -v b="$USDC_RT" 'BEGIN {printf "%.2f", a-b}')
-DELTA_USDT=$(awk -v a="$USDT_ON" -v b="$USDT_RT" 'BEGIN {printf "%.2f", a-b}')
-
-printf "On-chain USDC:   %8.2f    Runtime: %8.2f    Δ: %+7.2f\n" "$USDC_ON" "$USDC_RT" "$DELTA_USDC"
-printf "On-chain USDT:   %8.2f    Runtime: %8.2f    Δ: %+7.2f\n" "$USDT_ON" "$USDT_RT" "$DELTA_USDT"
-printf "On-chain WMATIC: %12.4f qty\n" "$WMATIC_ON"
-printf "On-chain POL:    %12.4f qty\n" "$POL_ON"
 
 echo ""
 echo "Done. Run daily."
