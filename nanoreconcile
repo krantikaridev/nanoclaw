@@ -3,15 +3,9 @@ echo "=== NanoReconcile v2.9 (Polygon-only) ==="
 WALLET=$(grep '^WALLET=' .env | cut -d= -f2)
 echo "Wallet: $WALLET"
 
-# Robust RPC fallback
-RPC=$(grep '^RPC=' .env | cut -d= -f2- | tr -d '"' | head -1)
-if [ -z "$RPC" ]; then
-  RPC=$(grep '^RPC_ENDPOINTS=' .env | cut -d= -f2- | tr -d '"' | cut -d',' -f1 | head -1)
-fi
-if [ -z "$RPC" ]; then
-  ANKR_KEY=$(grep '^ANKR_RPC_KEY=' .env | cut -d= -f2)
-  RPC="https://rpc.ankr.com/polygon/${ANKR_KEY}"
-fi
+# Extract ANKR key and build RPC
+ANKR_KEY=$(grep '^ANKR_RPC_KEY=' .env | cut -d= -f2- | tr -d '"')
+RPC="https://rpc.ankr.com/polygon/${ANKR_KEY}"
 echo "Using RPC: $RPC"
 
 python3 -c '
@@ -21,8 +15,8 @@ wallet = "'$WALLET'"
 usdc = "0x2791bca1f2de4661ed88a30c99a7a9449aa84174"
 balance = w3.eth.call({"to": usdc, "data": "0x70a08231" + "0"*24 + wallet[2:]})
 print("On-chain USDC:", round(int.from_bytes(balance, "big") / 1e6, 2))
-' 2>/dev/null || echo "web3 call failed"
+' 2>/dev/null || echo "web3 call failed — check ANKR key or internet"
 
 echo "Runtime USDC from nanopnl:"
-nanopnl | grep -oE "USDC: ?\$?[0-9.]+"
+nanopnl | grep -oE "USDC: ?\$?[0-9.]+" | head -1
 echo "Done. Run daily."
