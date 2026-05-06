@@ -606,3 +606,15 @@ v2.8.1 ACCEPTED - Session PnL >=0 achieved
 - Add simple Polygonscan reconciliation command to nanohealth or a new `nanoreconcile` script (wallet MTM vs on-chain)
 - Run once per day to verify runtime truth matches blockchain
 
+
+### v2.9 high-ROI items (PnL > 0 + Production Readiness)
+
+- **Smarter pre-protection warnings + suggested actions** (High ROI)
+  - Add checks before protection triggers (e.g. "USDT approaching threshold while WMATIC exposure is high").
+  - Surface suggested actions (pause buys, reduce size, top-up stables, etc.).
+  - Goal: Reduce frequency and severity of protection sells that hurt Session PnL.
+
+- **Stables vs WMATIC exposure ratio check** (High ROI)
+  - Add a simple ratio or risk score (e.g. Total Stables / WMATIC value).
+  - Warn early when the ratio becomes unhealthy (prevents repeated protection cycles).
+  - Can be shown in nanoreconcile and nanostatus.
