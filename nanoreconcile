@@ -25,8 +25,9 @@ except:
 USDC_ON=$(get_balance "0x2791bca1f2de4661ed88a30c99a7a9449aa84174")
 USDT_ON=$(get_balance "0xc2132d05d31c914a87c6611c10748aeb04b58e8f")
 
-USDC_RT=$(nanopnl | grep -oE "USDC: ?\$?[0-9.]+" | head -1 | grep -oE "[0-9.]+$" || echo "0")
-USDT_RT=$(nanopnl | grep -oE "USDT: ?\$?[0-9.]+" | head -1 | grep -oE "[0-9.]+$" || echo "0")
+# Robust runtime parsing
+USDC_RT=$(nanopnl | awk '/USDC:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
+USDT_RT=$(nanopnl | awk '/USDT:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
 
 echo ""
 printf "On-chain USDC: %8.2f    Runtime: %8.2f    Δ: %+7.2f\n" "$USDC_ON" "$USDC_RT" "$(echo "$USDC_ON - $USDC_RT" | bc -l 2>/dev/null || echo 0)"
