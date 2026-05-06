@@ -4,4 +4,4 @@
 
 ## Operator loop
 
-Run `python external_layer/control.py` from the repo root to overwrite **`control.json` every 30 seconds** with the latest risk evaluation (`paused`, optional `reason`, plus defaults nanoclaw already reads). Stop with Ctrl+C.
+Run `python external_layer/control.py` from the repo root to overwrite **`control.json` about every 25 seconds** (20–30s) with the latest risk evaluation: live Polygon **USDT** and **WMATIC** balances, `paused` / optional `reason` (low-balance protection), plus defaults nanoclaw already reads. Uses the same RPC resolution as the bot (`RPC` / `RPC_ENDPOINTS` / `connect_web3` fallbacks). If a balance read fails, the process keeps the last good pause state and logs a warning. Stop with Ctrl+C.

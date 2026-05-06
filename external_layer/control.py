@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import sys
 import time
 from dataclasses import asdict, dataclass
@@ -114,18 +115,14 @@ def write_control(command: dict) -> None:
     )
 
 
-def update_control() -> dict[str, bool | str]:
-    """Refresh ``control.json`` from live risk evaluation.
+# Last successful ``evaluate_risk`` result so we can keep ``control.json`` stable if RPC fails.
+_last_successful_risk: dict[str, bool | str | float] | None = None
 
-    Calls ``evaluate_risk()`` then overwrites the repo-root JSON file so
-    nanoclaw's trading loop (via ``load_cycle_control``) picks up ``paused``
-    and optional ``reason`` on the next cycle. Keeps other knobs at defaults so
-    the file stays valid for existing parsers.
-    """
-    risk = evaluate_risk()
+
+def _risk_to_control_payload(risk: dict[str, bool | str | float]) -> dict[str, object]:
+    """Build the JSON payload for ``control.json`` (balances are not persisted)."""
     payload: dict[str, object] = {
         "paused": bool(risk["paused"]),
-        # Preserve defaults nanoclaw already understands when the file is rewritten.
         "max_copy_trade_pct": ControlCommand.max_copy_trade_pct,
         "force_defensive": False,
         "last_updated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -133,16 +130,78 @@ def update_control() -> dict[str, bool | str]:
     reason = risk.get("reason")
     if isinstance(reason, str) and reason:
         payload["reason"] = reason
-    write_control(payload)
-    return risk
+    return payload
 
 
-def _run_control_loop(interval_seconds: float = 30.0) -> None:
-    """Poll ``update_control()`` forever for standalone operator processes."""
+def update_control() -> dict[str, bool | str | float]:
+    """Refresh ``control.json`` from live risk evaluation.
+
+    Calls ``evaluate_risk()`` then overwrites the repo-root JSON file so
+    nanoclaw's trading loop (via ``load_cycle_control``) picks up ``paused``
+    and optional ``reason`` on the next cycle. Keeps other knobs at defaults so
+    the file stays valid for existing parsers.
+
+    If balance reads fail, logs a warning and keeps the previous paused/reason
+    (and rewrites ``control.json`` from the last good evaluation when available).
+    """
+    global _last_successful_risk
+
+    try:
+        risk = evaluate_risk()
+        _last_successful_risk = dict(risk)
+        write_control(_risk_to_control_payload(risk))
+        return risk
+
+    except Exception as exc:  # noqa: BLE001 — RPC / contract errors should not kill the loop
+        print(
+            f"[EXTERNAL] WARNING: Balance check failed ({exc!s}). "
+            "Keeping previous trading pause state.",
+            flush=True,
+        )
+        if _last_successful_risk is not None:
+            risk = dict(_last_successful_risk)
+            write_control(_risk_to_control_payload(risk))
+            return risk
+
+        snap = load_cycle_control()
+        # Omit balances — operator line prints "(unknown)" until the next good RPC read.
+        out: dict[str, bool | str | float] = {"paused": snap.paused}
+        return out
+
+
+def _format_balance_line(risk: dict[str, bool | str | float]) -> str:
+    usdt = risk.get("usdt_balance")
+    wmatic = risk.get("wmatic_balance")
+    if (
+        isinstance(usdt, (int, float))
+        and isinstance(wmatic, (int, float))
+        and not math.isnan(float(usdt))
+        and not math.isnan(float(wmatic))
+    ):
+        return f"USDT: {float(usdt):.2f} | WMATIC: {float(wmatic):.4f}"
+    return "USDT: (unknown) | WMATIC: (unknown)"
+
+
+def _run_control_loop(interval_seconds: float = 25.0) -> None:
+    """Poll ``update_control()`` forever for standalone operator processes.
+
+    Default interval is 25 seconds (within the 20–30s operator window).
+    """
     while True:
         risk = update_control()
-        paused = risk["paused"]
-        print(f"[EXTERNAL] Control updated | Paused: {paused}")
+        paused = bool(risk.get("paused"))
+        bal = _format_balance_line(risk)
+        trading = "PAUSED" if paused else "ACTIVE"
+        reason = risk.get("reason")
+        reason_txt = (
+            f" | Reason: {reason}"
+            if paused and isinstance(reason, str) and reason
+            else ""
+        )
+        print(
+            f"[EXTERNAL] {bal} | Trading: {trading}{reason_txt}",
+            flush=True,
+        )
         time.sleep(interval_seconds)
 
 
