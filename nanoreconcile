@@ -39,28 +39,26 @@ echo ""
 
 USDT_DIFF=$(echo "$USDT_RT - $USDT_ON" | bc -l 2>/dev/null || echo "0")
 
-# Divergence warning (always show if significant)
-if (( $(echo "$USDT_DIFF > 10" | bc -l 2>/dev/null || echo 0) )); then
-    printf "⚠️  WARNING: Large USDT divergence (%.2f). On-chain is lower than runtime.\n" "$USDT_DIFF"
-    echo "   → Protection risk is elevated"
+# Always show significant divergence
+if (( $(echo "$USDT_DIFF > 8" | bc -l 2>/dev/null || echo 0) )); then
+    printf "⚠️  WARNING: Large USDT divergence detected (%.2f)\n" "$USDT_DIFF"
+    echo "   On-chain USDT is significantly lower than runtime value"
 fi
 
-# Critical
+# Critical protection zone
 if (( $(echo "$USDT_ON < $USDT_TH" | bc -l 2>/dev/null || echo 0) )); then
     echo "🚨 CRITICAL: On-chain USDT below protection threshold (< \$$USDT_TH)"
-elif (( $(echo "$USDT_ON < ($USDT_TH + 6)" | bc -l 2>/dev/null || echo 0) )); then
-    if (( $(echo "$WMATIC_ON > $WMATIC_TH" | bc -l 2>/dev/null || echo 0) )); then
-        echo "⚠️  WARNING: USDT getting close to protection threshold while WMATIC is high"
-    fi
+elif (( $(echo "$USDT_ON < ($USDT_TH + 5)" | bc -l 2>/dev/null || echo 0) )); then
+    echo "⚠️  WARNING: On-chain USDT approaching protection threshold"
 fi
 
-# Overall risk level
+# Overall risk assessment
 if (( $(echo "$USDT_ON < $USDT_TH" | bc -l 2>/dev/null || echo 0) )); then
     echo "🚨 Overall Risk: High — protection likely soon"
 elif (( $(echo "$USDT_DIFF > 10" | bc -l 2>/dev/null || echo 0) )); then
-    echo "⚠️  Overall Risk: Medium-High — monitor closely"
+    echo "⚠️  Overall Risk: Medium-High — elevated protection risk"
 else
-    echo "✅ Risk level: Low — good conditions for PnL stability"
+    echo "✅ Risk level: Low"
 fi
 
 echo ""
