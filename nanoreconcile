@@ -1,12 +1,17 @@
 #!/bin/bash
-echo "=== NanoReconcile v2.9 (Polygonscan vs Runtime Truth) ==="
+echo "=== NanoReconcile v2.9 (Polygon-only on-chain vs Runtime Truth) ==="
 WALLET=$(grep '^WALLET=' .env | cut -d= -f2)
+RPC=$(grep '^RPC=' .env | cut -d= -f2 || echo "https://rpc.ankr.com/polygon")
 echo "Wallet: $WALLET"
-curl -s "https://api.polygonscan.com/api?module=account&action=tokenbalance&contractaddress=0x2791bca1f2de4661ed88a30c99a7a9449aa84174&address=$WALLET&tag=latest&apikey=YourFreeKey" | python3 -c '
-import sys, json
-data = json.load(sys.stdin)
-print("On-chain USDC:", int(data.get("result", 0)) / 1e6)
-'
+echo "RPC: $RPC"
+python3 -c '
+from web3 import Web3
+w3 = Web3(Web3.HTTPProvider("'$RPC'"))
+wallet = "'$WALLET'"
+usdc = "0x2791bca1f2de4661ed88a30c99a7a9449aa84174"  # USDC.e on Polygon
+balance = w3.eth.call({"to": usdc, "data": "0x70a08231" + "0"*24 + wallet[2:]})
+print("On-chain USDC:", int.from_bytes(balance, "big") / 1e6)
+' 2>/dev/null || echo "web3 call failed — check RPC"
 echo "Runtime USDC from nanopnl:"
-nanopnl | grep -o 'USDC: \$[0-9.]*' | head -1
-echo "Done. Run daily."
+nanopnl | grep -o "USDC: \$[0-9.]*" | head -1
+echo "Done. Run daily (or add to nanohealth)."
