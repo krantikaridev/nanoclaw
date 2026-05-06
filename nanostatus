@@ -5,13 +5,13 @@ echo "════════════════════════�
 echo "Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo ""
 
-# === Clean Top Summary (most important for PnL > 0) ===
-SESSION_PNL=$(nanopnl | awk '/Session PnL:/ {print $3" "$4; exit}' || echo "N/A")
-TOTAL=$(nanopnl | awk '/TOTAL:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
+# Clean top summary (most important for PnL > 0)
 USDC_RT=$(nanopnl | awk '/USDC:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
 USDT_RT=$(nanopnl | awk '/USDT:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
+TOTAL=$(nanopnl | awk '/TOTAL:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
+SESSION=$(nanopnl | awk '/Session PnL:/ {print $3" "$4; exit}' || echo "N/A")
 
-echo "SESSION PnL: $SESSION_PNL     |     Total: \$$TOTAL"
+echo "SESSION PnL: $SESSION     |     Total: \$$TOTAL"
 echo "USDC: \$$USDC_RT     |     USDT: \$$USDT_RT"
 echo ""
 echo "BASELINE: Clean performance tracking since 07:01 reset (does NOT include the $50 top-up)."
@@ -28,9 +28,9 @@ nanodaily --lookback 1h | grep -E "(Stables USD|TOTAL:|Session PnL:|1h ref)" | h
 echo ""
 
 echo "───────────────────────────────────────────────────────────────"
-echo "3. On-chain vs Runtime (Risk & Divergence)"
+echo "3. On-chain Reconciliation + Risk"
 ./nanoreconcile
 echo ""
 
 echo "═══════════════════════════════════════════════════════════════"
-echo "Goal: Keep Session PnL > 0 | Run daily"
+echo "Goal: Keep Session PnL > 0 | Run daily during office hours."
