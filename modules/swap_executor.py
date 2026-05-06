@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import importlib
 import time
+from dataclasses import replace
 from typing import Optional
 
 import config as cfg
@@ -19,6 +20,8 @@ from config import (
 )
 from nanoclaw.strategies.usdc_copy import USDCopyStrategy
 from swap_executor import approve_and_swap
+
+from external_layer.control import CycleControlSnapshot, load_cycle_control
 
 from modules import attribution
 from modules import wallet_performance
@@ -35,6 +38,26 @@ from .runtime import (
 )
 
 _DEFENSIVE_PAUSE_CYCLES = 3
+
+# Entry directions blocked when ``control.json`` has ``paused: true`` (protection exits still run).
+_CONTROL_PAUSE_BLOCK_ENTRIES = frozenset({"USDT_TO_WMATIC", "USDC_TO_WMATIC", "USDC_TO_EQUITY"})
+
+
+def _usdc_copy_strategy_with_pct(strategy: USDCopyStrategy, pct: float) -> USDCopyStrategy:
+    """Clone USDC-copy strategy with an alternate ``copy_trade_pct`` for this cycle only."""
+    pf = float(pct)
+    cfg_obj = getattr(strategy, "config", None)
+    try:
+        cur = float(getattr(cfg_obj, "copy_trade_pct", pf)) if cfg_obj is not None else pf
+    except (TypeError, ValueError):
+        cur = pf
+    if abs(cur - pf) < 1e-12:
+        return strategy
+    # Only real ``USDCopyStrategy`` instances expose a frozen ``USDCopyConfig`` + gas_protector.
+    return USDCopyStrategy(
+        config=replace(strategy.config, copy_trade_pct=pf),
+        gas_protector=strategy.gas_protector,
+    )
 
 
 def _cycle_risk_level(balances: Balances) -> str:
@@ -144,7 +167,12 @@ def cs_get_latest_open_trade(trade_log_file: str | None = None):
     return clean_swap.get_latest_open_trade(trade_log_file)
 
 
-def select_copy_trade(balances: Balances, wallets: list[str]) -> TradeDecision:
+def select_copy_trade(
+    balances: Balances,
+    wallets: list[str],
+    *,
+    copy_trade_pct: float | None = None,
+) -> TradeDecision:
     cs = _facade()
     active_wallets = [wallet for wallet in wallets if cs.can_trade_wallet(wallet)]
     if not active_wallets:
@@ -152,7 +180,8 @@ def select_copy_trade(balances: Balances, wallets: list[str]) -> TradeDecision:
         return TradeDecision(message=f"TRADE SKIPPED: cooldown (all wallets in {cs.PER_WALLET_COOLDOWN}s window)")
 
     # FIXED SIZING: $12–$20 per signal (bug fix 2026-05-03); spend USDT leg only
-    trade_size = cs.fixed_copy_trade_usd(balances.usdc, balances.usdt, cs.COPY_TRADE_PCT)
+    pct = float(cs.COPY_TRADE_PCT) if copy_trade_pct is None else float(copy_trade_pct)
+    trade_size = cs.fixed_copy_trade_usd(balances.usdc, balances.usdt, pct)
     trade_size = min(trade_size, balances.usdt)
     return TradeDecision(
         direction="USDT_TO_WMATIC",
@@ -300,8 +329,25 @@ def determine_trade_decision(
     current_price: float,
     *,
     dry_run: bool = False,
+    cycle_control: CycleControlSnapshot | None = None,
 ) -> TradeDecision:
     cs = _facade()
+    # Operator/agent knobs from repo-root ``control.json``. Production loads via ``load_cycle_control()`` in
+    # ``main()`` each cron cycle; unit tests omit ``cycle_control`` → neutral defaults (no disk read).
+    ctrl = cycle_control if cycle_control is not None else CycleControlSnapshot()
+    entries_paused = bool(ctrl.paused)
+    # Copy-trade sizing only (USDT polycopy + USDC copy). Main-strategy buys keep ``COPY_TRADE_PCT`` from env.
+    effective_copy_pct = (
+        float(ctrl.max_copy_trade_pct)
+        if ctrl.max_copy_trade_pct is not None
+        else float(cs.COPY_TRADE_PCT)
+    )
+    if ctrl.max_copy_trade_pct is not None:
+        print(f"[CONTROL] Using reduced max size: {effective_copy_pct:.2f}")
+    if entries_paused:
+        print("[CONTROL] Paused = True → Skipping new trades")
+    # ``ctrl.force_defensive`` is parsed in ``load_cycle_control`` for future wiring — does not alter protection yet.
+
     risk_level = _cycle_risk_level(balances)
     pause_active, pause_remaining = _defensive_pause_state(state, risk_level=risk_level)
     print(
@@ -324,8 +370,8 @@ def determine_trade_decision(
         f"PER_ASSET_COOLDOWN_MINUTES={cs.PER_ASSET_COOLDOWN_MINUTES}"
     )
 
-    if cs.COPY_TRADE_PCT >= COPY_TRADE_AGGRESSIVE_THRESHOLD:
-        print(f"🔥 AGGRESSIVE MODE ACTIVE | COPY_TRADE_PCT={cs.COPY_TRADE_PCT:.2f}")
+    if effective_copy_pct >= COPY_TRADE_AGGRESSIVE_THRESHOLD:
+        print(f"🔥 AGGRESSIVE MODE ACTIVE | COPY_TRADE_PCT={effective_copy_pct:.2f}")
 
     should_force_sell, reason = cs_check_exit_conditions()
     if should_force_sell:
@@ -369,6 +415,15 @@ def determine_trade_decision(
                 f"defensive_pause (risk=HIGH, remaining_cycles={pause_remaining}) — pausing X-signal BUY entries"
             )
             xd = None
+        xd_dir = str(xd.direction or "").strip().upper() if xd else ""
+        if (
+            entries_paused
+            and xd
+            and xd.should_execute
+            and xd_dir in _CONTROL_PAUSE_BLOCK_ENTRIES
+        ):
+            cs._log_trade_skipped("control.json paused=True — skipping X-signal entry trade")
+            xd = None
         if xd and xd.should_execute:
             print("🔍 DECISION PATH: X_SIGNAL_EQUITY")
             if not _defer_if_dust(
@@ -380,7 +435,9 @@ def determine_trade_decision(
 
     target_wallets = target_wallets_prelude or cs.get_target_wallets()
     if is_copy_trading_enabled() and target_wallets:
-        if pause_active:
+        if entries_paused:
+            cs._log_trade_skipped("control.json paused=True — skipping copy-trade entries")
+        elif pause_active:
             cs._log_trade_skipped(
                 f"defensive_pause (risk=HIGH, remaining_cycles={pause_remaining}) — pausing copy-trade entries"
             )
@@ -389,7 +446,8 @@ def determine_trade_decision(
             )
         else:
             if cs.ENABLE_USDC_COPY:
-                plan = USDC_COPY_STRATEGY.build_plan(
+                usdc_strategy = _usdc_copy_strategy_with_pct(USDC_COPY_STRATEGY, effective_copy_pct)
+                plan = usdc_strategy.build_plan(
                     usdc_balance=balances.usdc,
                     wallets=target_wallets,
                     wallet_address_for_gas=cs.WALLET,
@@ -401,7 +459,7 @@ def determine_trade_decision(
                     print(f"🟦 USDC COPY ACTIVE | Size: ${plan.trade_size:.2f}")
                     cw_usdc = (
                         str(plan.wallet).strip(),
-                        int(USDC_COPY_STRATEGY.config.per_wallet_cooldown_seconds),
+                        int(usdc_strategy.config.per_wallet_cooldown_seconds),
                     ) if plan.wallet else None
                     copy_decision = TradeDecision(
                         direction="USDC_TO_WMATIC",
@@ -421,7 +479,11 @@ def determine_trade_decision(
                     print("🟦 USDC COPY ACTIVE | No eligible copy-trade this cycle")
             else:
                 print("🔍 DECISION PATH: POLYCOPY_TARGET_WALLETS")
-                polycopy_decision = select_copy_trade(balances, target_wallets)
+                polycopy_decision = select_copy_trade(
+                    balances,
+                    target_wallets,
+                    copy_trade_pct=effective_copy_pct,
+                )
                 if not _defer_if_dust(
                     polycopy_decision,
                     branch_name="POLYCOPY",
@@ -431,6 +493,10 @@ def determine_trade_decision(
 
     print(f"🔍 DECISION PATH: MAIN_STRATEGY (WMATIC≈${current_price:.4f})")
     main_decision = select_main_strategy_trade(balances, current_price)
+    main_dir = str(main_decision.direction or "").strip().upper()
+    if entries_paused and main_dir in _CONTROL_PAUSE_BLOCK_ENTRIES:
+        cs._log_trade_skipped("control.json paused=True — skipping main-strategy entry trade")
+        return TradeDecision(message="ℹ️ Paused via control.json (no new entries this cycle)")
     if _defer_if_dust(
         main_decision,
         branch_name="MAIN_STRATEGY",
@@ -486,8 +552,15 @@ async def main(*, dry_run: bool = False) -> None:
             cs._log_trade_skipped(f"cooldown (global, ~{remain_s:.0f}s left)")
             return
 
+        cycle_snapshot = load_cycle_control()
         decision = await asyncio.to_thread(
-            lambda: determine_trade_decision(state, balances, current_price, dry_run=dry_run)
+            lambda snap=cycle_snapshot: determine_trade_decision(
+                state,
+                balances,
+                current_price,
+                dry_run=dry_run,
+                cycle_control=snap,
+            )
         )
         cs.save_state(state)
 
