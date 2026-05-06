@@ -7,23 +7,28 @@ echo "Wallet: $WALLET"
 ANKR_KEY=$(grep '^ANKR_RPC_KEY=' .env | cut -d= -f2- | tr -d '"')
 RPC="https://rpc.ankr.com/polygon/${ANKR_KEY}"
 
-# balanceOf(USDC) via JSON-RPC eth_call
-USDC="0x2791bca1f2de4661ed88a30c99a7a9449aa84174"
-DATA="0x70a08231$(printf '%064x' 0x${WALLET#0x})"
+# Correct balanceOf data encoding (address as 32-byte hex string)
+ADDR_PADDED=$(printf '%064s' "${WALLET#0x}" | tr ' ' '0')
+DATA="0x70a08231${ADDR_PADDED}"
 
 RESULT=$(curl -s -X POST -H "Content-Type: application/json" \
-  --data "{\"jsonrpc\":\"2.0\",\"method\":\"eth_call\",\"params\":[{\"to\":\"$USDC\",\"data\":\"$DATA\"},\"latest\"],\"id\":1}" \
-  "$RPC" | python3 -c '
+  --data "{\"jsonrpc\":\"2.0\",\"method\":\"eth_call\",\"params\":[{\"to\":\"0x2791bca1f2de4661ed88a30c99a7a9449aa84174\",\"data\":\"$DATA\"},\"latest\"],\"id\":1}" \
+  "$RPC")
+
+ONCHAIN=$(echo "$RESULT" | python3 -c '
 import sys, json
 try:
     r = json.load(sys.stdin)
-    bal = int(r.get("result", "0x0"), 16) / 1_000_000
-    print(f"On-chain USDC: {bal:.2f}")
-except:
-    print("On-chain USDC: fetch failed (check key/RPC)")
+    if "result" in r:
+        bal = int(r["result"], 16) / 1_000_000
+        print(f"On-chain USDC: {bal:.2f}")
+    else:
+        print("On-chain USDC: error -", r.get("error", r))
+except Exception as e:
+    print("On-chain USDC: parse error", e)
 ')
 
-echo "$RESULT"
+echo "$ONCHAIN"
 
 echo ""
 echo "Runtime USDC from nanopnl:"
