@@ -22,6 +22,7 @@ from swap_executor import approve_and_swap
 
 from modules import attribution
 from modules import wallet_performance
+from modules import signal as signal_module
 from protection import record_buy
 
 from . import runtime
@@ -32,6 +33,69 @@ from .runtime import (
     is_copy_trading_enabled,
     w3,
 )
+
+_DEFENSIVE_PAUSE_CYCLES = 3
+
+
+def _cycle_risk_level(balances: Balances) -> str:
+    """
+    Single-cycle risk classification used for defensive entry gating.
+
+    Keep consistent with X-signal risk heuristics (USDT/WMATIC liquidity risk).
+    """
+    try:
+        return str(
+            signal_module._x_signal_buy_risk_level(
+                usdt=float(balances.usdt),
+                wmatic=float(balances.wmatic),
+            )
+        ).strip().upper()
+    except Exception:
+        return "LOW"
+
+
+def _defensive_pause_state(state: dict, *, risk_level: str) -> tuple[bool, int]:
+    """
+    Track sustained HIGH risk and trigger a temporary pause for new entries.
+
+    Rules:
+    - Count consecutive cycles at HIGH.
+    - When HIGH persists for 2+ cycles, enter a short defensive pause window.
+    - Clear immediately when risk drops to MEDIUM/LOW.
+    """
+    d = state.setdefault("defensive_pause", {})
+    high_streak = int(d.get("high_streak", 0) or 0)
+    remaining = int(d.get("remaining_cycles", 0) or 0)
+
+    rl = str(risk_level or "").strip().upper()
+    if rl != "HIGH":
+        if remaining > 0 or high_streak > 0:
+            print(f"{runtime._nanolog()}Defensive pause cleared (risk={rl})")
+        d["high_streak"] = 0
+        d["remaining_cycles"] = 0
+        return False, 0
+
+    # HIGH risk
+    high_streak += 1
+    d["high_streak"] = high_streak
+
+    entered = False
+    if high_streak >= 2 and remaining <= 0:
+        remaining = int(_DEFENSIVE_PAUSE_CYCLES)
+        entered = True
+
+    active = bool(remaining > 0 and high_streak >= 2)
+    if active:
+        if entered:
+            print(
+                f"{runtime._nanolog()}🚨 HIGH RISK sustained → Entering temporary defensive pause to protect PnL"
+            )
+        d["remaining_cycles"] = max(0, remaining - 1)
+        return True, int(d["remaining_cycles"])
+
+    d["remaining_cycles"] = 0
+    return False, 0
+
 
 def _facade():
     """Tests monkeypatch attrs on ``clean_swap`` — always read knobs from that module."""
@@ -238,6 +302,8 @@ def determine_trade_decision(
     dry_run: bool = False,
 ) -> TradeDecision:
     cs = _facade()
+    risk_level = _cycle_risk_level(balances)
+    pause_active, pause_remaining = _defensive_pause_state(state, risk_level=risk_level)
     print(
         f"\n{runtime._nanolog()}=== CYCLE {int(time.time())} | BALANCES: USDT=${balances.usdt:.2f} "
         f"USDC=${balances.usdc:.2f} WMATIC=${balances.wmatic:.2f} ==="
@@ -293,6 +359,16 @@ def determine_trade_decision(
 
     if cs.ENABLE_X_SIGNAL_EQUITY:
         xd = cs_try_x_signal_equity_decision(balances, dry_run=dry_run)
+        if (
+            pause_active
+            and xd
+            and xd.should_execute
+            and str(xd.direction or "").strip().upper() in {"USDC_TO_EQUITY"}
+        ):
+            cs._log_trade_skipped(
+                f"defensive_pause (risk=HIGH, remaining_cycles={pause_remaining}) — pausing X-signal BUY entries"
+            )
+            xd = None
         if xd and xd.should_execute:
             print("🔍 DECISION PATH: X_SIGNAL_EQUITY")
             if not _defer_if_dust(
@@ -304,46 +380,54 @@ def determine_trade_decision(
 
     target_wallets = target_wallets_prelude or cs.get_target_wallets()
     if is_copy_trading_enabled() and target_wallets:
-        if cs.ENABLE_USDC_COPY:
-            plan = USDC_COPY_STRATEGY.build_plan(
-                usdc_balance=balances.usdc,
-                wallets=target_wallets,
-                wallet_address_for_gas=cs.WALLET,
-                can_trade_wallet=cs.can_trade_wallet,
-                usdt_balance=balances.usdt,
+        if pause_active:
+            cs._log_trade_skipped(
+                f"defensive_pause (risk=HIGH, remaining_cycles={pause_remaining}) — pausing copy-trade entries"
             )
-            if plan:  # try all eligible assets
-                print(f"🔍 DECISION PATH: USDC_COPY | Size ~${plan.trade_size:.2f}")
-                print(f"🟦 USDC COPY ACTIVE | Size: ${plan.trade_size:.2f}")
-                cw_usdc = (
-                    str(plan.wallet).strip(),
-                    int(USDC_COPY_STRATEGY.config.per_wallet_cooldown_seconds),
-                ) if plan.wallet else None
-                copy_decision = TradeDecision(
-                    direction="USDC_TO_WMATIC",
-                    amount_in=plan.amount_in,
-                    trade_size=plan.trade_size,
-                    message=plan.message,
-                    cooldown_wallet=cw_usdc,
+            print(
+                f"{runtime._nanolog()}DEFENSIVE PAUSE | blocking copy-trade entries | remaining_cycles={pause_remaining}"
+            )
+        else:
+            if cs.ENABLE_USDC_COPY:
+                plan = USDC_COPY_STRATEGY.build_plan(
+                    usdc_balance=balances.usdc,
+                    wallets=target_wallets,
+                    wallet_address_for_gas=cs.WALLET,
+                    can_trade_wallet=cs.can_trade_wallet,
+                    usdt_balance=balances.usdt,
                 )
+                if plan:  # try all eligible assets
+                    print(f"🔍 DECISION PATH: USDC_COPY | Size ~${plan.trade_size:.2f}")
+                    print(f"🟦 USDC COPY ACTIVE | Size: ${plan.trade_size:.2f}")
+                    cw_usdc = (
+                        str(plan.wallet).strip(),
+                        int(USDC_COPY_STRATEGY.config.per_wallet_cooldown_seconds),
+                    ) if plan.wallet else None
+                    copy_decision = TradeDecision(
+                        direction="USDC_TO_WMATIC",
+                        amount_in=plan.amount_in,
+                        trade_size=plan.trade_size,
+                        message=plan.message,
+                        cooldown_wallet=cw_usdc,
+                    )
+                    if not _defer_if_dust(
+                        copy_decision,
+                        branch_name="USDC_COPY",
+                        current_price_usd=current_price,
+                    ):
+                        return copy_decision
+                    print("🟦 USDC COPY DEFERRED | dust-sized notional, falling through")
+                else:
+                    print("🟦 USDC COPY ACTIVE | No eligible copy-trade this cycle")
+            else:
+                print("🔍 DECISION PATH: POLYCOPY_TARGET_WALLETS")
+                polycopy_decision = select_copy_trade(balances, target_wallets)
                 if not _defer_if_dust(
-                    copy_decision,
-                    branch_name="USDC_COPY",
+                    polycopy_decision,
+                    branch_name="POLYCOPY",
                     current_price_usd=current_price,
                 ):
-                    return copy_decision
-                print("🟦 USDC COPY DEFERRED | dust-sized notional, falling through")
-            else:
-                print("🟦 USDC COPY ACTIVE | No eligible copy-trade this cycle")
-        else:
-            print("🔍 DECISION PATH: POLYCOPY_TARGET_WALLETS")
-            polycopy_decision = select_copy_trade(balances, target_wallets)
-            if not _defer_if_dust(
-                polycopy_decision,
-                branch_name="POLYCOPY",
-                current_price_usd=current_price,
-            ):
-                return polycopy_decision
+                    return polycopy_decision
 
     print(f"🔍 DECISION PATH: MAIN_STRATEGY (WMATIC≈${current_price:.4f})")
     main_decision = select_main_strategy_trade(balances, current_price)
