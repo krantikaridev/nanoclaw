@@ -2,14 +2,18 @@
 echo "=== NanoStatus v2.9 (daily operator snapshot) ==="
 echo "Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo ""
+
 echo "1. Health"
 nanohealth
 echo ""
-echo "2. 1h PnL + reconciliation"
+
+echo "2. 1h PnL + Lookback"
 nanodaily --lookback 1h
 nanopnl
 echo ""
-echo "3. On-chain vs runtime (manual check)"
+
+echo "3. On-chain vs Runtime Reconciliation"
 ./nanoreconcile
 echo ""
+
 echo "Done. Run daily during office hours."
