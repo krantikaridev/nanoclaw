@@ -1,34 +1,48 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 echo "═══════════════════════════════════════════════════════════════"
-echo "           NANOSTATUS v2.9 — Daily Operator Snapshot"
+echo "           NANOSTATUS v3.0 — Daily Operator Snapshot"
 echo "═══════════════════════════════════════════════════════════════"
-echo "Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+echo "Time (UTC): $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo ""
 
-USDC_RT=$(nanopnl | awk '/USDC:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
-USDT_RT=$(nanopnl | awk '/USDT:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
-TOTAL=$(nanopnl | awk '/TOTAL:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
-SESSION=$(nanopnl | awk '/Session PnL:/ {print $3" "$4; exit}' || echo "N/A")
+PNL_OUT="$(nanopnl 2>/dev/null || true)"
+USDC_RT="$(echo "$PNL_OUT" | awk '/USDC:/ {gsub(/[$, ]/, "", $2); print $2; exit}' || true)"
+USDT_RT="$(echo "$PNL_OUT" | awk '/USDT:/ {gsub(/[$, ]/, "", $2); print $2; exit}' || true)"
+TOTAL="$(echo "$PNL_OUT" | awk '/TOTAL:/ {gsub(/[$, ]/, "", $2); print $2; exit}' || true)"
+SESSION="$(echo "$PNL_OUT" | awk '/Session PnL:/ {print $3" "$4; exit}' || true)"
 
-echo "SESSION PnL: $SESSION     |     Total: \$$TOTAL"
-echo "USDC: \$$USDC_RT     |     USDT: \$$USDT_RT"
-echo ""
-echo "BASELINE: Clean performance tracking since 07:01 reset (does NOT include the $50 top-up)."
+USDC_RT="${USDC_RT:-0}"
+USDT_RT="${USDT_RT:-0}"
+TOTAL="${TOTAL:-0}"
+SESSION="${SESSION:-N/A}"
+
+# Always use the latest reconcile script in-repo.
+RECON_OUT="$("$SCRIPT_DIR/nanoreconcile" 2>&1 || true)"
+RISK_LINE="$(echo "$RECON_OUT" | grep -E "Risk:" | head -n 1 || true)"
+RISK_LINE="${RISK_LINE:-Risk: N/A (nanoreconcile output missing Risk line)}"
+
+echo "$RISK_LINE"
+echo "SUMMARY | Session PnL: $SESSION | Total: \$$TOTAL | USDC: \$$USDC_RT | USDT: \$$USDT_RT"
+echo "BASELINE NOTE | Clean performance tracking since 07:01 reset (does NOT include the \$50 top-up)."
 echo ""
 
 echo "───────────────────────────────────────────────────────────────"
-echo "1. Health"
+echo "Health"
 nanohealth
 echo ""
 
 echo "───────────────────────────────────────────────────────────────"
-echo "2. Recent Performance (1h lookback)"
-nanodaily --lookback 1h | grep -E "(Stables USD|TOTAL:|Session PnL:|1h ref)" | head -6
+echo "PnL lookback (1h)"
+nanodaily --lookback 1h 2>/dev/null | grep -E "(Stables USD|TOTAL:|Session PnL:|1h ref)" | head -6 || true
 echo ""
 
 echo "───────────────────────────────────────────────────────────────"
-echo "3. On-chain Reconciliation + Risk"
-./nanoreconcile
+echo "Reconciliation"
+echo "$RECON_OUT"
 echo ""
 
 echo "═══════════════════════════════════════════════════════════════"

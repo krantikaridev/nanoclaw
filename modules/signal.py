@@ -53,15 +53,15 @@ def _x_signal_buy_risk_level(*, usdt: float, wmatic: float) -> str:
     Minimal risk classifier used to protect session PnL by scaling X-Signal BUY sizing.
 
     Logic (mirrors nanoreconcile operator heuristic):
-    - HIGH: USDT < (PROTECTION_FLUCTUATION_USDT_THRESHOLD + 2)
-    - MEDIUM: USDT < (PROTECTION_FLUCTUATION_USDT_THRESHOLD + 8) AND WMATIC > PROTECTION_FLUCTUATION_MIN_WMATIC
+    - HIGH: USDT < (PROTECTION_FLUCTUATION_USDT_THRESHOLD + 3)
+    - MEDIUM: USDT < (PROTECTION_FLUCTUATION_USDT_THRESHOLD + 9) AND WMATIC > PROTECTION_FLUCTUATION_MIN_WMATIC
     - LOW: otherwise
     """
     th_usdt = float(getattr(cfg, "PROTECTION_FLUCTUATION_USDT_THRESHOLD", 0.0))
     th_wmatic = float(getattr(cfg, "PROTECTION_FLUCTUATION_MIN_WMATIC", 0.0))
     # Keep this focused on USDT + WMATIC (current damage area) with operator-intuitive constants.
-    high_usdt_buffer = 2.0
-    medium_usdt_buffer = 8.0
+    high_usdt_buffer = 3.0
+    medium_usdt_buffer = 9.0
     usdt_f = float(usdt)
     wmatic_f = float(wmatic)
 
@@ -93,8 +93,8 @@ def _assess_x_signal_buy_risk(
     """
     th_usdt = float(getattr(cfg, "PROTECTION_FLUCTUATION_USDT_THRESHOLD", 0.0))
     th_wmatic = float(getattr(cfg, "PROTECTION_FLUCTUATION_MIN_WMATIC", 0.0))
-    high_usdt_buffer = 2.0
-    medium_usdt_buffer = 8.0
+    high_usdt_buffer = 3.0
+    medium_usdt_buffer = 9.0
     high_usdt_divergence_usd = float(cfg.env_float("X_SIGNAL_BUY_RISK_HIGH_USDT_DIVERGENCE_USD", 20.0))
 
     usdt_f = float(onchain_usdt)
@@ -670,6 +670,20 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
         f"reasons={','.join(list(risk_ctx.get('reasons') or []))}"
     )
     if skip_buys:
+        reasons = ",".join(list(risk_ctx.get("reasons") or []))
+        high_trigger = float(risk_ctx.get("usdt_th", 0.0)) + float(risk_ctx.get("high_usdt_buffer", 0.0))
+        medium_trigger = float(risk_ctx.get("usdt_th", 0.0)) + float(risk_ctx.get("medium_usdt_buffer", 0.0))
+        usdt_div = risk_ctx.get("usdt_divergence")
+        usdt_div_s = _format_money(float(usdt_div)) if usdt_div is not None else "N/A"
+        div_hi = float(risk_ctx.get("high_usdt_divergence_usd", 0.0))
+        print(
+            f"{runtime._nanolog()}X-SIGNAL BUY DEFENSE | action={'skip_buys'} | risk={risk_level} | "
+            f"reasons={reasons or 'N/A'} | "
+            f"usdt={_format_money(float(risk_ctx.get('onchain_usdt', 0.0)))} "
+            f"(high<{_format_money(high_trigger)}, medium<{_format_money(medium_trigger)}) | "
+            f"wmatic={float(risk_ctx.get('onchain_wmatic', 0.0)):.4f} (th>{float(risk_ctx.get('wmatic_th', 0.0)):.4f}) | "
+            f"usdt_div={usdt_div_s} (high>={_format_money(div_hi)})"
+        )
         if risk_level == "MEDIUM":
             print(
                 f"{runtime._nanolog()}Risk: MEDIUM → Pausing X-signal BUYs this cycle "
