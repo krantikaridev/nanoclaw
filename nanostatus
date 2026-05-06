@@ -2,12 +2,8 @@
 echo "=== NanoStatus v2.9 (daily operator snapshot) ==="
 echo "Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo ""
-
-# Quick one-line summary
-USDC_RT=$(nanopnl | awk '/USDC:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
-USDT_RT=$(nanopnl | awk '/USDT:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
-TOTAL=$(nanopnl | awk '/TOTAL:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
-SESSION_PNL=$(nanopnl | awk '/Session PnL:/ {print $3, $4; exit}' || echo "N/A")
+echo "NOTE: 'Since baseline' includes deposits/top-ups. Only reset baseline manually when you want clean performance tracking."
+echo ""
 
 echo "SUMMARY: Total $TOTAL | Session $SESSION_PNL | USDC $USDC_RT | USDT $USDT_RT"
 echo ""
