@@ -1,31 +1,36 @@
 #!/bin/bash
-echo "=== NanoStatus v2.9 (daily operator snapshot) ==="
+echo "═══════════════════════════════════════════════════════════════"
+echo "           NANOSTATUS v2.9 — Daily Operator Snapshot"
+echo "═══════════════════════════════════════════════════════════════"
 echo "Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo ""
-echo "NOTE: Current baseline includes the recent $50 top-up (05:38 reset)."
-echo "      Only run 'nanopnl --reset-session' manually when you want a clean performance period."
-echo ""
 
-# One-line summary (fixed variable order)
+# Clean one-line summary
 USDC_RT=$(nanopnl | awk '/USDC:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
 USDT_RT=$(nanopnl | awk '/USDT:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
 TOTAL=$(nanopnl | awk '/TOTAL:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
 SESSION=$(nanopnl | awk '/Session PnL:/ {print $3" "$4; exit}' || echo "N/A")
 
-echo "SUMMARY → Total: $TOTAL | Session: $SESSION | USDC: $USDC_RT | USDT: $USDT_RT"
+echo "SUMMARY → Total: \$$TOTAL | Session: $SESSION | USDC: \$$USDC_RT | USDT: \$$USDT_RT"
+echo ""
+echo "NOTE: 'Since baseline' shows performance since last manual reset."
+echo "      Baseline was reset at 07:01 today (after top-up settled)."
 echo ""
 
+echo "───────────────────────────────────────────────────────────────"
 echo "1. Health"
 nanohealth
 echo ""
 
-echo "2. 1h PnL + Lookback"
-nanodaily --lookback 1h
-nanopnl
+echo "───────────────────────────────────────────────────────────────"
+echo "2. PnL + Lookback (last 1h)"
+nanodaily --lookback 1h | head -30
 echo ""
 
+echo "───────────────────────────────────────────────────────────────"
 echo "3. On-chain vs Runtime Reconciliation"
 ./nanoreconcile
 echo ""
 
+echo "═══════════════════════════════════════════════════════════════"
 echo "Done. Run daily during office hours."
