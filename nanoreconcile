@@ -2,7 +2,7 @@
 echo "=== NanoReconcile v2.9 (Polygon-only, automatic) ==="
 WALLET=$(grep '^WALLET=' .env | cut -d= -f2)
 
-# Read real protection values from .env
+# Read protection thresholds
 USDT_TH=$(grep '^PROTECTION_FLUCTUATION_USDT_THRESHOLD=' .env | cut -d= -f2 || echo "12")
 WMATIC_TH=$(grep '^PROTECTION_FLUCTUATION_MIN_WMATIC=' .env | cut -d= -f2 || echo "200")
 SELL_FR=$(grep '^PROTECTION_FLUCTUATION_SELL_FRACTION=' .env | cut -d= -f2 || echo "0.40")
@@ -38,21 +38,22 @@ USDT_RT=$(nanopnl | awk '/USDT:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo
 STABLES_ON=$(echo "$USDC_ON + $USDT_ON" | bc -l 2>/dev/null || echo "0")
 
 echo ""
-echo "Protection thresholds (live from .env): USDT < \$$USDT_TH | WMATIC > $WMATIC_TH | Sell: ${SELL_FR}%"
+echo "Protection thresholds: USDT < \$$USDT_TH | WMATIC > $WMATIC_TH | Sell: ${SELL_FR}%"
 echo ""
 
-# Warnings focused on protecting PnL
+# Warnings + POL top-up suggestion
 WARN=0
 if (( $(echo "$USDT_ON < $USDT_TH" | bc -l 2>/dev/null || echo 0) )); then
-    echo "🚨 HIGH RISK: On-chain USDT low (< \$$USDT_TH) → protection may trigger soon"
+    echo "🚨 HIGH RISK: On-chain USDT low (< \$$USDT_TH) → protection may trigger"
     WARN=1
 fi
 if (( $(echo "$STABLES_ON < 25" | bc -l 2>/dev/null || echo 0) )); then
-    echo "⚠️  WARNING: Total stables low while holding significant WMATIC"
+    echo "⚠️  WARNING: Total stables low while holding high WMATIC"
     WARN=1
 fi
-if (( $(echo "$POL_ON < 0.8" | bc -l 2>/dev/null || echo 0) )); then
-    echo "⚠️  WARNING: POL balance low (< 0.8) — consider top-up"
+if (( $(echo "$POL_ON < 1.0" | bc -l 2>/dev/null || echo 0) )); then
+    SUGGEST=$(echo "2 - $POL_ON" | bc -l 2>/dev/null || echo "1.0")
+    echo "⚠️  WARNING: POL is low (< 1.0). Suggested top-up: ~${SUGGEST} POL"
     WARN=1
 fi
 
