@@ -1,53 +1,126 @@
-#!/bin/bash
-echo "=== NanoReconcile v2.9 (Polygon-only, automatic) ==="
-WALLET=$(grep '^WALLET=' .env | cut -d= -f2)
+#!/usr/bin/env bash
+set -euo pipefail
 
-USDT_TH=$(grep '^PROTECTION_FLUCTUATION_USDT_THRESHOLD=' .env | cut -d= -f2 || echo "12")
+_nanoreconcile_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "${_nanoreconcile_root}"
 
-ANKR_KEY=$(grep '^ANKR_RPC_KEY=' .env | cut -d= -f2- | tr -d '"')
-RPC="https://rpc.ankr.com/polygon/${ANKR_KEY}"
+if [[ ! -f ".env" ]]; then
+  echo "❌ .env not found in ${_nanoreconcile_root}"
+  exit 1
+fi
 
+set -a
+# shellcheck source=/dev/null
+source ".env"
+set +a
+
+WALLET="${WALLET:-}"
+USDT_TH="${PROTECTION_FLUCTUATION_USDT_THRESHOLD:-12}"
+ANKR_RPC_KEY="${ANKR_RPC_KEY:-}"
+
+if [[ -z "${WALLET}" ]]; then
+  echo "❌ WALLET is missing in .env"
+  exit 1
+fi
+if [[ -z "${ANKR_RPC_KEY}" ]]; then
+  echo "❌ ANKR_RPC_KEY is missing in .env"
+  exit 1
+fi
+
+RPC="https://rpc.ankr.com/polygon/${ANKR_RPC_KEY}"
+
+is_number() {
+  local v="${1:-}"
+  [[ "${v}" =~ ^-?[0-9]+([.][0-9]+)?$ ]]
+}
+
+fmt_money_2() {
+  local v="${1:-}"
+  if is_number "${v}"; then
+    awk -v x="${v}" 'BEGIN { printf "%.2f", x }'
+  else
+    printf "%s" "${v}"
+  fi
+}
+
+fmt_qty_4() {
+  local v="${1:-}"
+  if is_number "${v}"; then
+    awk -v x="${v}" 'BEGIN { printf "%.4f", x }'
+  else
+    printf "%s" "${v}"
+  fi
+}
+
+# Existing get_balance function retained (eth_call / balanceOf).
 get_balance() {
-    local token=$1
-    local decimals=$2
-    local ADDR_PADDED=$(printf '%064s' "${WALLET#0x}" | tr ' ' '0')
-    local DATA="0x70a08231${ADDR_PADDED}"
-    curl -s -X POST -H "Content-Type: application/json" \
-      --data "{\"jsonrpc\":\"2.0\",\"method\":\"eth_call\",\"params\":[{\"to\":\"$token\",\"data\":\"$DATA\"},\"latest\"],\"id\":1}" \
-      "$RPC" | python3 -c '
+  local token=$1
+  local decimals=$2
+  local ADDR_PADDED
+  ADDR_PADDED="$(printf '%064s' "${WALLET#0x}" | tr ' ' '0')"
+  local DATA="0x70a08231${ADDR_PADDED}"
+
+  curl -sS --max-time 15 -X POST -H "Content-Type: application/json" \
+    --data "{\"jsonrpc\":\"2.0\",\"method\":\"eth_call\",\"params\":[{\"to\":\"$token\",\"data\":\"$DATA\"},\"latest\"],\"id\":1}" \
+    "${RPC}" | python3 -c '
 import sys, json
 try:
     r = json.load(sys.stdin)
-    print(int(r.get("result", "0x0"), 16) / '$decimals')
-except:
+    print(int(r.get("result", "0x0"), 16) / '"$decimals"')
+except Exception:
     print("ERR")
 '
 }
 
-USDC_ON=$(get_balance "0x2791bca1f2de4661ed88a30c99a7a9449aa84174" 1000000)
-USDT_ON=$(get_balance "0xc2132d05d31c914a87c6611c10748aeb04b58e8f" 1000000)
-WMATIC_ON=$(get_balance "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270" 1000000000000000000)
-POL_ON=$(get_balance "0x0000000000000000000000000000000000001010" 1000000000000000000)
+USDC_ON="$(get_balance "0x2791bca1f2de4661ed88a30c99a7a9449aa84174" 1000000)"
+USDT_ON="$(get_balance "0xc2132d05d31c914a87c6611c10748aeb04b58e8f" 1000000)"
+WMATIC_ON="$(get_balance "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270" 1000000000000000000)"
+POL_ON="$(get_balance "0x0000000000000000000000000000000000001010" 1000000000000000000)"
 
-USDC_RT=$(nanopnl | awk '/USDC:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
-USDT_RT=$(nanopnl | awk '/USDT:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
+PNL_OUT=""
+if command -v nanopnl >/dev/null 2>&1; then
+  PNL_OUT="$(nanopnl 2>/dev/null || true)"
+fi
 
+extract_runtime_stable() {
+  local sym="$1"
+  if [[ -z "${PNL_OUT}" ]]; then
+    printf "0"
+    return 0
+  fi
+  awk -v sym="${sym}" '
+    BEGIN { IGNORECASE=1 }
+    $0 ~ sym ":" {
+      if (match($0, /-?[0-9]+(\.[0-9]+)?/)) {
+        print substr($0, RSTART, RLENGTH)
+        exit
+      }
+    }
+    END { print "0" }
+  ' <<<"${PNL_OUT}"
+}
+
+USDC_RT="$(extract_runtime_stable "USDC")"
+USDT_RT="$(extract_runtime_stable "USDT")"
+
+echo "=== NanoReconcile (Polygon) ==="
+echo "Protection threshold: on-chain USDT < \$$(fmt_money_2 "${USDT_TH}")"
 echo ""
-echo "Protection threshold: USDT < \$$USDT_TH"
+
+echo "On-chain USDT: $(fmt_money_2 "${USDT_ON}")    | Runtime USDT: $(fmt_money_2 "${USDT_RT}")"
+echo "On-chain USDC: $(fmt_money_2 "${USDC_ON}")    | Runtime USDC: $(fmt_money_2 "${USDC_RT}")"
+echo "On-chain WMATIC: $(fmt_qty_4 "${WMATIC_ON}")"
+echo "On-chain POL:    $(fmt_qty_4 "${POL_ON}")"
 echo ""
 
-printf "On-chain USDT: %.2f    Runtime: %.2f\n" "$USDT_ON" "$USDT_RT"
-printf "On-chain USDC: %.2f    Runtime: %.2f\n" "$USDC_ON" "$USDC_RT"
-printf "On-chain WMATIC: %.2f qty\n" "$WMATIC_ON"
-printf "On-chain POL:    %.2f qty\n" "$POL_ON"
-
-echo ""
-
-# Direct simple risk message (no if/bc)
-if [ "$(echo "$USDT_ON < $USDT_TH" | bc -l 2>/dev/null || echo "0")" = "1" ]; then
-    echo "🚨 Risk: HIGH — On-chain USDT below protection threshold"
+if ! is_number "${USDT_ON}" || ! is_number "${USDT_TH}"; then
+  echo "🚨 Risk: HIGH — Protection likely soon"
+elif awk -v u="${USDT_ON}" -v t="${USDT_TH}" 'BEGIN { exit !(u < t) }'; then
+  echo "🚨 Risk: HIGH — Protection likely soon"
+elif awk -v u="${USDT_ON}" -v t="${USDT_TH}" 'BEGIN { exit !(u < (t + 4)) }'; then
+  echo "⚠️ Risk: MEDIUM"
 else
-    echo "✅ Risk: Low"
+  echo "✅ Risk: Low"
 fi
 
 echo ""

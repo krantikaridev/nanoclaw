@@ -61,6 +61,16 @@ def test_nanodaily_script_does_not_depend_on_shell_function_aliases():
     assert "nanopnl |" not in content
 
 
+def test_nanoreconcile_exists_and_avoids_bc_dependency():
+    script_path = REPO_ROOT / "nanoreconcile"
+    assert script_path.is_file()
+    content = script_path.read_text(encoding="utf-8")
+    assert content.startswith("#!/usr/bin/env bash\n")
+    assert "get_balance()" in content
+    assert "PROTECTION_FLUCTUATION_USDT_THRESHOLD" in content
+    assert "bc -l" not in content
+
+
 def _require_bash() -> None:
     if shutil.which("bash") is None:
         pytest.skip("bash not available on this environment")
