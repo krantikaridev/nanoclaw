@@ -54,17 +54,19 @@ def _x_signal_buy_risk_level(*, usdt: float, wmatic: float) -> str:
 
     Logic (mirrors nanoreconcile operator heuristic):
     - HIGH: USDT < PROTECTION_FLUCTUATION_USDT_THRESHOLD
-    - MEDIUM: USDT within ~$6 above threshold AND WMATIC > PROTECTION_FLUCTUATION_MIN_WMATIC
+    - MEDIUM: USDT within buffer above threshold AND WMATIC > PROTECTION_FLUCTUATION_MIN_WMATIC
     - LOW: otherwise
     """
     th_usdt = float(getattr(cfg, "PROTECTION_FLUCTUATION_USDT_THRESHOLD", 0.0))
     th_wmatic = float(getattr(cfg, "PROTECTION_FLUCTUATION_MIN_WMATIC", 0.0))
+    # Trigger MEDIUM earlier (higher USDT) to reduce/stop BUYs before we reach HIGH-risk.
+    medium_usdt_buffer = float(cfg.env_float("X_SIGNAL_BUY_RISK_MEDIUM_USDT_BUFFER", 15.0))
     usdt_f = float(usdt)
     wmatic_f = float(wmatic)
 
     if usdt_f < th_usdt:
         return "HIGH"
-    if usdt_f < (th_usdt + 6.0) and wmatic_f > th_wmatic:
+    if usdt_f < (th_usdt + medium_usdt_buffer) and wmatic_f > th_wmatic:
         return "MEDIUM"
     return "LOW"
 
@@ -572,7 +574,9 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
     buy_mult = 1.0
     skip_buys = False
     if risk_level == "MEDIUM":
-        buy_mult = 0.50
+        # Stronger/earlier defense: pause new BUYs for this cycle when liquidity is trending toward HIGH risk.
+        buy_mult = 0.0
+        skip_buys = True
     elif risk_level == "HIGH":
         buy_mult = 0.0
         skip_buys = True
@@ -582,7 +586,18 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
         f"buy_size_multiplier={buy_mult:.2f}"
     )
     if skip_buys:
-        print(f"{runtime._nanolog()}Risk: HIGH → Skipping X-signal buy this cycle to protect PnL")
+        if risk_level == "MEDIUM":
+            print(
+                f"{runtime._nanolog()}Risk: MEDIUM → Pausing X-signal BUYs this cycle "
+                "(early defense to protect Session PnL; USDT/WMATIC liquidity risk)"
+            )
+        else:
+            # Keep legacy line for log matching + add stronger operator guidance.
+            print(f"{runtime._nanolog()}Risk: HIGH → Skipping X-signal buy this cycle to protect PnL")
+            print(
+                f"{runtime._nanolog()}ACTION RECOMMENDED | Risk=HIGH | Consider top-up USDT / rebalance WMATIC→stable, "
+                "or pause X-signal strategy until balances recover"
+            )
 
     fe_cfg = fcb._load_followed_equities_json_dict()
     cfg_enabled = bool(fe_cfg.get("enabled", True)) if isinstance(fe_cfg, dict) else True
