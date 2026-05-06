@@ -2,10 +2,17 @@
 echo "=== NanoStatus v2.9 (daily operator snapshot) ==="
 echo "Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo ""
-echo "NOTE: 'Since baseline' includes deposits/top-ups. Only reset baseline manually when you want clean performance tracking."
+echo "NOTE: Current baseline includes the recent $50 top-up (05:38 reset)."
+echo "      Only run 'nanopnl --reset-session' manually when you want a clean performance period."
 echo ""
 
-echo "SUMMARY: Total $TOTAL | Session $SESSION_PNL | USDC $USDC_RT | USDT $USDT_RT"
+# One-line summary (fixed variable order)
+USDC_RT=$(nanopnl | awk '/USDC:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
+USDT_RT=$(nanopnl | awk '/USDT:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
+TOTAL=$(nanopnl | awk '/TOTAL:/ {gsub(/[$ ]/, "", $2); print $2; exit}' || echo "0")
+SESSION=$(nanopnl | awk '/Session PnL:/ {print $3" "$4; exit}' || echo "N/A")
+
+echo "SUMMARY → Total: $TOTAL | Session: $SESSION | USDC: $USDC_RT | USDT: $USDT_RT"
 echo ""
 
 echo "1. Health"
