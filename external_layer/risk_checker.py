@@ -7,10 +7,10 @@ from collections import deque
 from typing import Any
 
 # Tier thresholds (USDT / WMATIC human balances from Polygon).
-_CRITICAL_USDT = 70.0
-_CRITICAL_WMATIC = 55.0
-_MODERATE_USDT = 100.0
-_MODERATE_WMATIC = 75.0
+_CRITICAL_USDT = 60.0
+_CRITICAL_WMATIC = 50.0
+_MODERATE_USDT = 85.0
+_MODERATE_WMATIC = 65.0
 
 # Copy-trade cap bounds written to ``control.json`` (fraction of portfolio logic).
 _MIN_COPY_PCT = 0.02
@@ -80,8 +80,8 @@ def evaluate_risk(
     ``usdt_balance`` / ``wmatic_balance`` for logging.
 
     Rules:
-    - USDT < 70 or WMATIC < 55 → paused, cap 0.02
-    - Else USDT < 100 or WMATIC < 75 → not paused, cap 0.03
+    - USDT < 60 or WMATIC < 50 → paused, cap 0.02
+    - Else USDT < 85 or WMATIC < 65 → not paused, cap 0.03
     - Else → not paused, cap 0.06
     """
     if usdt_balance is not None and wmatic_balance is not None:

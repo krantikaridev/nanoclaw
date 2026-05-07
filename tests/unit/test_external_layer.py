@@ -76,41 +76,41 @@ def test_evaluate_risk_healthy_balances(monkeypatch):
 
 
 def test_evaluate_risk_low_usdt():
-    out = risk_checker.evaluate_risk(usdt_balance=69.0, wmatic_balance=100.0)
+    out = risk_checker.evaluate_risk(usdt_balance=59.0, wmatic_balance=100.0)
     assert out["paused"] is True
     assert out["max_copy_trade_pct"] == 0.02
-    assert out["usdt_balance"] == 69.0
+    assert out["usdt_balance"] == 59.0
     assert out["wmatic_balance"] == 100.0
     assert "Critical low balance" in str(out.get("reason", ""))
 
 
 def test_evaluate_risk_low_wmatic():
-    out = risk_checker.evaluate_risk(usdt_balance=100.0, wmatic_balance=54.0)
+    out = risk_checker.evaluate_risk(usdt_balance=100.0, wmatic_balance=49.0)
     assert out["paused"] is True
     assert out["max_copy_trade_pct"] == 0.02
     assert out["usdt_balance"] == 100.0
-    assert out["wmatic_balance"] == 54.0
+    assert out["wmatic_balance"] == 49.0
 
 
 def test_evaluate_risk_at_critical_floor_is_moderate_not_critical():
-    """Exactly 70 USDT / 55 WMATIC clears the critical tier (not <)."""
-    out = risk_checker.evaluate_risk(usdt_balance=70.0, wmatic_balance=55.0)
+    """Exactly 60 USDT / 50 WMATIC clears the critical tier (not <)."""
+    out = risk_checker.evaluate_risk(usdt_balance=60.0, wmatic_balance=50.0)
     assert out["paused"] is False
     assert out["max_copy_trade_pct"] == 0.03
-    assert out["usdt_balance"] == 70.0
-    assert out["wmatic_balance"] == 55.0
+    assert out["usdt_balance"] == 60.0
+    assert out["wmatic_balance"] == 50.0
     assert "Moderate low balance" in str(out.get("reason", ""))
 
 
 def test_evaluate_risk_moderate_tier():
-    out = risk_checker.evaluate_risk(usdt_balance=99.0, wmatic_balance=100.0)
+    out = risk_checker.evaluate_risk(usdt_balance=84.0, wmatic_balance=100.0)
     assert out["paused"] is False
     assert out["max_copy_trade_pct"] == 0.03
 
 
 def test_evaluate_risk_full_health_threshold():
-    """At least 100 USDT and 75 WMATIC → top tier."""
-    out = risk_checker.evaluate_risk(usdt_balance=100.0, wmatic_balance=75.0)
+    """At least 85 USDT and 65 WMATIC → top tier."""
+    out = risk_checker.evaluate_risk(usdt_balance=85.0, wmatic_balance=65.0)
     assert out["paused"] is False
     assert out["max_copy_trade_pct"] == 0.06
 
@@ -124,15 +124,15 @@ def test_evaluate_risk_recent_streak_forces_min_for_10_minutes(monkeypatch):
     monkeypatch.setattr(risk_checker.time, "time", fake_time)
 
     # Three consecutive protected evaluations (critical/moderate) triggers clamp.
-    out1 = risk_checker.evaluate_risk(usdt_balance=69.0, wmatic_balance=100.0)  # critical
+    out1 = risk_checker.evaluate_risk(usdt_balance=59.0, wmatic_balance=100.0)  # critical
     assert out1["max_copy_trade_pct"] == 0.02
     t["now"] += 1
 
-    out2 = risk_checker.evaluate_risk(usdt_balance=99.0, wmatic_balance=100.0)  # moderate
+    out2 = risk_checker.evaluate_risk(usdt_balance=84.0, wmatic_balance=100.0)  # moderate
     assert out2["max_copy_trade_pct"] == 0.03
     t["now"] += 1
 
-    out3 = risk_checker.evaluate_risk(usdt_balance=100.0, wmatic_balance=74.0)  # moderate
+    out3 = risk_checker.evaluate_risk(usdt_balance=100.0, wmatic_balance=64.0)  # moderate
     assert out3["max_copy_trade_pct"] == 0.02
     t["now"] += 1
 
