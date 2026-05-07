@@ -66,13 +66,27 @@ def test_risk_checker_skeleton():
 
 
 def test_evaluate_risk_healthy_balances(monkeypatch):
-    monkeypatch.setattr(risk_checker, "get_wallet_balances", lambda: (100.0, 100.0))
+    monkeypatch.setattr(
+        risk_checker, "get_wallet_balances", lambda: (100.0, 0.0, 100.0)
+    )
     out = risk_checker.evaluate_risk()
     assert out["paused"] is False
     assert out["max_copy_trade_pct"] == 0.06
     assert out["usdt_balance"] == 100.0
+    assert out["usdc_balance"] == 0.0
+    assert out["stable_usd"] == pytest.approx(100.0)
     assert out["wmatic_balance"] == 100.0
     assert "Healthy balance" in str(out.get("reason", ""))
+
+
+def test_evaluate_risk_stable_usdt_plus_usdc_does_not_pause_at_zero_usdt():
+    """Regression: wallet can spend down USDT while USDC still funds USDC-copy paths."""
+    out = risk_checker.evaluate_risk(
+        usdt_balance=0.0, usdc_balance=82.81, wmatic_balance=100.0
+    )
+    assert out["paused"] is False
+    assert out["stable_usd"] == pytest.approx(82.81)
+    assert out["max_copy_trade_pct"] == 0.03  # moderate: stables < 85
 
 
 def test_evaluate_risk_low_usdt():
@@ -89,11 +103,12 @@ def test_evaluate_risk_low_wmatic():
     assert out["paused"] is True
     assert out["max_copy_trade_pct"] == 0.02
     assert out["usdt_balance"] == 100.0
+    assert out["stable_usd"] == pytest.approx(100.0)
     assert out["wmatic_balance"] == 49.0
 
 
 def test_evaluate_risk_at_critical_floor_is_moderate_not_critical():
-    """Exactly 60 USDT / 50 WMATIC clears the critical tier (not <)."""
+    """Exactly 60 USDT-only / 50 WMATIC clears critical tier (not < stable threshold)."""
     out = risk_checker.evaluate_risk(usdt_balance=60.0, wmatic_balance=50.0)
     assert out["paused"] is False
     assert out["max_copy_trade_pct"] == 0.03
@@ -180,6 +195,8 @@ def test_update_control_writes_json_from_evaluate_risk(tmp_path: Path, monkeypat
             "max_copy_trade_pct": 0.02,
             "reason": "Critical low balance (test)",
             "usdt_balance": 1.0,
+            "usdc_balance": 55.5,
+            "stable_usd": 56.5,
             "wmatic_balance": 1.0,
         }
 
@@ -192,6 +209,8 @@ def test_update_control_writes_json_from_evaluate_risk(tmp_path: Path, monkeypat
     assert written["paused"] is True
     assert written["reason"] == "Critical low balance (test)"
     assert written["usdt_balance"] == 1.0
+    assert written["usdc_balance"] == 55.5
+    assert written["stable_usd"] == 56.5
     assert written["wmatic_balance"] == 1.0
     assert written["max_copy_trade_pct"] == 0.02
     assert written["force_defensive"] is False

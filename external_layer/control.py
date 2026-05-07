@@ -156,9 +156,15 @@ def _risk_to_control_payload(risk: dict[str, bool | str | float]) -> dict[str, o
     if isinstance(reason, str) and reason.strip():
         payload["reason"] = reason.strip()
     u = _optional_json_balance(risk.get("usdt_balance"))
+    uc = _optional_json_balance(risk.get("usdc_balance"))
+    s = _optional_json_balance(risk.get("stable_usd"))
     w = _optional_json_balance(risk.get("wmatic_balance"))
     if u is not None:
         payload["usdt_balance"] = u
+    if uc is not None:
+        payload["usdc_balance"] = uc
+    if s is not None:
+        payload["stable_usd"] = s
     if w is not None:
         payload["wmatic_balance"] = w
     return payload
@@ -195,9 +201,15 @@ def _heartbeat_payload_after_failure(*, snap: CycleControlSnapshot) -> dict[str,
         payload["reason"] = reason
     # Keep last known on-chain balances visible while RPC is down.
     u = _optional_json_balance(existing.get("usdt_balance"))
+    uc = _optional_json_balance(existing.get("usdc_balance"))
+    s = _optional_json_balance(existing.get("stable_usd"))
     w = _optional_json_balance(existing.get("wmatic_balance"))
     if u is not None:
         payload["usdt_balance"] = u
+    if uc is not None:
+        payload["usdc_balance"] = uc
+    if s is not None:
+        payload["stable_usd"] = s
     if w is not None:
         payload["wmatic_balance"] = w
     return payload
@@ -253,9 +265,15 @@ def update_control() -> dict[str, bool | str | float]:
         if isinstance(r, str) and r:
             out["reason"] = r
         u = _optional_json_balance(payload.get("usdt_balance"))
+        uc = _optional_json_balance(payload.get("usdc_balance"))
+        s = _optional_json_balance(payload.get("stable_usd"))
         w = _optional_json_balance(payload.get("wmatic_balance"))
         if u is not None:
             out["usdt_balance"] = u
+        if uc is not None:
+            out["usdc_balance"] = uc
+        if s is not None:
+            out["stable_usd"] = s
         if w is not None:
             out["wmatic_balance"] = w
         return out
@@ -276,16 +294,24 @@ def _log_external_risk_line(risk: dict[str, bool | str | float], *, tag: str = "
 
 
 def _format_balance_line(risk: dict[str, bool | str | float]) -> str:
+    """One-line balances for `[EXTERNAL]` logs (matches risk tier inputs)."""
+
+    def _nf(x: object) -> bool:
+        return isinstance(x, (int, float)) and not math.isnan(float(x))
+
     usdt = risk.get("usdt_balance")
+    stable = risk.get("stable_usd")
     wmatic = risk.get("wmatic_balance")
-    if (
-        isinstance(usdt, (int, float))
-        and isinstance(wmatic, (int, float))
-        and not math.isnan(float(usdt))
-        and not math.isnan(float(wmatic))
-    ):
-        return f"USDT: {float(usdt):.2f} | WMATIC: {float(wmatic):.4f}"
-    return "USDT: (unknown) | WMATIC: (unknown)"
+    usdc = risk.get("usdc_balance")
+    bits: list[str] = [
+        f"USDT: {float(usdt):.2f}" if _nf(usdt) else "USDT: ?",
+    ]
+    if _nf(usdc):
+        bits.append(f"USDCΣ: {float(usdc):.2f}")
+    if _nf(stable):
+        bits.append(f"stables: {float(stable):.2f}")
+    bits.append(f"WMATIC: {float(wmatic):.4f}" if _nf(wmatic) else "WMATIC: ?")
+    return " | ".join(bits)
 
 
 def _run_control_loop(interval_seconds: float = 30.0) -> None:
