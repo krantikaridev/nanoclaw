@@ -14,8 +14,12 @@ from external_layer import risk_checker
 def _reset_control_last_successful_risk():
     """Isolate module-level cache between tests."""
     control._last_successful_risk = None
+    risk_checker._RECENT_PROTECTION_EVALS.clear()
+    risk_checker._FORCE_MIN_UNTIL_TS = 0.0
     yield
     control._last_successful_risk = None
+    risk_checker._RECENT_PROTECTION_EVALS.clear()
+    risk_checker._FORCE_MIN_UNTIL_TS = 0.0
 
 
 def test_control_command_defaults():
@@ -65,50 +69,83 @@ def test_evaluate_risk_healthy_balances(monkeypatch):
     monkeypatch.setattr(risk_checker, "get_wallet_balances", lambda: (100.0, 100.0))
     out = risk_checker.evaluate_risk()
     assert out["paused"] is False
-    assert out["max_copy_trade_pct"] == 0.08
+    assert out["max_copy_trade_pct"] == 0.06
     assert out["usdt_balance"] == 100.0
     assert out["wmatic_balance"] == 100.0
     assert "Healthy balance" in str(out.get("reason", ""))
 
 
 def test_evaluate_risk_low_usdt():
-    out = risk_checker.evaluate_risk(usdt_balance=49.0, wmatic_balance=100.0)
+    out = risk_checker.evaluate_risk(usdt_balance=69.0, wmatic_balance=100.0)
     assert out["paused"] is True
     assert out["max_copy_trade_pct"] == 0.02
-    assert out["usdt_balance"] == 49.0
+    assert out["usdt_balance"] == 69.0
     assert out["wmatic_balance"] == 100.0
     assert "Critical low balance" in str(out.get("reason", ""))
 
 
 def test_evaluate_risk_low_wmatic():
-    out = risk_checker.evaluate_risk(usdt_balance=100.0, wmatic_balance=39.0)
+    out = risk_checker.evaluate_risk(usdt_balance=100.0, wmatic_balance=54.0)
     assert out["paused"] is True
     assert out["max_copy_trade_pct"] == 0.02
     assert out["usdt_balance"] == 100.0
-    assert out["wmatic_balance"] == 39.0
+    assert out["wmatic_balance"] == 54.0
 
 
 def test_evaluate_risk_at_critical_floor_is_moderate_not_critical():
-    """Exactly 50 USDT / 40 WMATIC clears the critical tier (not <)."""
-    out = risk_checker.evaluate_risk(usdt_balance=50.0, wmatic_balance=40.0)
+    """Exactly 70 USDT / 55 WMATIC clears the critical tier (not <)."""
+    out = risk_checker.evaluate_risk(usdt_balance=70.0, wmatic_balance=55.0)
     assert out["paused"] is False
-    assert out["max_copy_trade_pct"] == 0.04
-    assert out["usdt_balance"] == 50.0
-    assert out["wmatic_balance"] == 40.0
-    assert "Moderate balance" in str(out.get("reason", ""))
+    assert out["max_copy_trade_pct"] == 0.03
+    assert out["usdt_balance"] == 70.0
+    assert out["wmatic_balance"] == 55.0
+    assert "Moderate low balance" in str(out.get("reason", ""))
 
 
 def test_evaluate_risk_moderate_tier():
-    out = risk_checker.evaluate_risk(usdt_balance=79.0, wmatic_balance=100.0)
+    out = risk_checker.evaluate_risk(usdt_balance=99.0, wmatic_balance=100.0)
     assert out["paused"] is False
-    assert out["max_copy_trade_pct"] == 0.04
+    assert out["max_copy_trade_pct"] == 0.03
 
 
 def test_evaluate_risk_full_health_threshold():
-    """At least 80 USDT and 60 WMATIC → top tier."""
-    out = risk_checker.evaluate_risk(usdt_balance=80.0, wmatic_balance=60.0)
+    """At least 100 USDT and 75 WMATIC → top tier."""
+    out = risk_checker.evaluate_risk(usdt_balance=100.0, wmatic_balance=75.0)
     assert out["paused"] is False
-    assert out["max_copy_trade_pct"] == 0.08
+    assert out["max_copy_trade_pct"] == 0.06
+
+
+def test_evaluate_risk_recent_streak_forces_min_for_10_minutes(monkeypatch):
+    t = {"now": 1_000_000.0}
+
+    def fake_time():
+        return t["now"]
+
+    monkeypatch.setattr(risk_checker.time, "time", fake_time)
+
+    # Three consecutive protected evaluations (critical/moderate) triggers clamp.
+    out1 = risk_checker.evaluate_risk(usdt_balance=69.0, wmatic_balance=100.0)  # critical
+    assert out1["max_copy_trade_pct"] == 0.02
+    t["now"] += 1
+
+    out2 = risk_checker.evaluate_risk(usdt_balance=99.0, wmatic_balance=100.0)  # moderate
+    assert out2["max_copy_trade_pct"] == 0.03
+    t["now"] += 1
+
+    out3 = risk_checker.evaluate_risk(usdt_balance=100.0, wmatic_balance=74.0)  # moderate
+    assert out3["max_copy_trade_pct"] == 0.02
+    t["now"] += 1
+
+    # Even if balances recover, clamp should apply for the next 10 minutes.
+    healthy = risk_checker.evaluate_risk(usdt_balance=1_000.0, wmatic_balance=1_000.0)
+    assert healthy["paused"] is False
+    assert healthy["max_copy_trade_pct"] == 0.02
+
+    # After 10 minutes, healthy should return to normal 6% cap.
+    t["now"] += 10 * 60 + 1
+    recovered = risk_checker.evaluate_risk(usdt_balance=1_000.0, wmatic_balance=1_000.0)
+    assert recovered["paused"] is False
+    assert recovered["max_copy_trade_pct"] == 0.06
 
 
 def test_run_control_loop_default_interval_30s():

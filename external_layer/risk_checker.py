@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import time
+from collections import deque
 from typing import Any
 
 # Tier thresholds (USDT / WMATIC human balances from Polygon).
-_CRITICAL_USDT = 50.0
-_CRITICAL_WMATIC = 40.0
-_MODERATE_USDT = 80.0
-_MODERATE_WMATIC = 60.0
+_CRITICAL_USDT = 70.0
+_CRITICAL_WMATIC = 55.0
+_MODERATE_USDT = 100.0
+_MODERATE_WMATIC = 75.0
 
 # Copy-trade cap bounds written to ``control.json`` (fraction of portfolio logic).
 _MIN_COPY_PCT = 0.02
@@ -17,6 +19,11 @@ _MAX_COPY_PCT = 0.10
 
 def _clamp_copy_pct(pct: float) -> float:
     return max(_MIN_COPY_PCT, min(_MAX_COPY_PCT, float(pct)))
+
+
+# In-memory guardrail: if we see repeated low-balance protection, temporarily clamp size.
+_RECENT_PROTECTION_EVALS: deque[tuple[float, bool]] = deque(maxlen=5)
+_FORCE_MIN_UNTIL_TS: float = 0.0
 
 # Minimal ERC-20 ``balanceOf`` ABI for USDT / WMATIC reads.
 _ERC20_BALANCE_ABI: list[dict[str, Any]] = [
@@ -73,9 +80,9 @@ def evaluate_risk(
     ``usdt_balance`` / ``wmatic_balance`` for logging.
 
     Rules:
-    - USDT < 50 or WMATIC < 40 → paused, cap 0.02
-    - Else USDT < 80 or WMATIC < 60 → not paused, cap 0.04
-    - Else → not paused, cap 0.08
+    - USDT < 70 or WMATIC < 55 → paused, cap 0.02
+    - Else USDT < 100 or WMATIC < 75 → not paused, cap 0.03
+    - Else → not paused, cap 0.06
     """
     if usdt_balance is not None and wmatic_balance is not None:
         usdt = float(usdt_balance)
@@ -83,8 +90,19 @@ def evaluate_risk(
     else:
         usdt, wmatic = get_wallet_balances()
 
+    global _FORCE_MIN_UNTIL_TS
     critical = usdt < _CRITICAL_USDT or wmatic < _CRITICAL_WMATIC
     moderate = usdt < _MODERATE_USDT or wmatic < _MODERATE_WMATIC
+    now = time.time()
+
+    # Extra defensive rule: if the last 3 evaluations were in a protected tier
+    # (Critical or Moderate), clamp copy size to 2% for the next 10 minutes.
+    protected = critical or moderate
+    _RECENT_PROTECTION_EVALS.append((now, protected))
+    recent = list(_RECENT_PROTECTION_EVALS)[-3:]
+    if len(recent) == 3 and all(is_protected for _, is_protected in recent):
+        _FORCE_MIN_UNTIL_TS = max(_FORCE_MIN_UNTIL_TS, now + 10 * 60)
+    force_min = now < _FORCE_MIN_UNTIL_TS
 
     if critical:
         paused = True
@@ -95,15 +113,19 @@ def evaluate_risk(
         )
     elif moderate:
         paused = False
-        max_pct = _clamp_copy_pct(0.04)
+        max_pct = _clamp_copy_pct(0.03)
         reason = (
-            "Moderate balance: copy trades capped at 4% "
+            "Moderate low balance: trading allowed; copy trades capped at 3% "
             f"(USDT<{_MODERATE_USDT} or WMATIC<{_MODERATE_WMATIC})"
         )
     else:
         paused = False
-        max_pct = _clamp_copy_pct(0.08)
-        reason = "Healthy balance: copy trades capped at 8%"
+        max_pct = _clamp_copy_pct(0.06)
+        reason = "Healthy balance: copy trades capped at 6%"
+
+    if force_min and max_pct > _MIN_COPY_PCT:
+        max_pct = _clamp_copy_pct(0.02)
+        reason = f"{reason}; defensive clamp active (recent low-balance streak)"
 
     return {
         "paused": paused,
