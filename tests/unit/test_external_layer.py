@@ -1,4 +1,5 @@
 import importlib.util
+import inspect
 import json
 import sys
 from pathlib import Path
@@ -108,6 +109,11 @@ def test_evaluate_risk_full_health_threshold():
     out = risk_checker.evaluate_risk(usdt_balance=80.0, wmatic_balance=60.0)
     assert out["paused"] is False
     assert out["max_copy_trade_pct"] == 0.08
+
+
+def test_run_control_loop_default_interval_30s():
+    sig = inspect.signature(control._run_control_loop)
+    assert sig.parameters["interval_seconds"].default == 30.0
 
 
 def test_control_py_imports_when_loaded_as_filepath():

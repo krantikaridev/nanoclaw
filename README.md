@@ -140,7 +140,7 @@ For ROI-first iteration, review deltas in:
 - **Template**: `.env.example` (committed; sanitized defaults and comments)
 - **Runtime**: `.env` (not committed; secrets and machine values)
 - **`nanoup`** merges `.env.example` → `.env`, preserving secrets and RPC-related keys only (see `nanoclaw/env_sync.py`). Other keys take template values on each deploy—**promote VM tuning by updating `.env.example`**, then pull/`nanoup`, or edit `.env` after `nanoup` knowing the next `nanoup` may reset non-preserved keys.
-- **External layer**: operator/agent control JSON is **`control.json`** at the repo root (written via `external_layer/control.py`). Each live bot cycle loads it in **`modules/swap_executor.main`** and passes overrides into **`determine_trade_decision`** (`paused`, tiered **`max_copy_trade_pct`**, optional **`reason`**); copy trades use **`max_copy_trade_pct`** from the file when present, otherwise **`COPY_TRADE_PCT`** from `.env`. See **`external_layer/README.md`**.
+- **External layer**: operator/agent control JSON is **`control.json`** at the repo root (written via `external_layer/control.py`, or VM helper **`./start_external.sh`**). Each live bot cycle loads it in **`modules/swap_executor.main`** and passes overrides into **`determine_trade_decision`** (`paused`, tiered **`max_copy_trade_pct`**, optional **`reason`**); copy trades use **`max_copy_trade_pct`** from the file when present, otherwise **`COPY_TRADE_PCT`** from `.env`. See **`external_layer/README.md`**.
 - VM steps (RPC placeholders, **`MAX_GWEI`**, probe snippet): **`docs/readme-vm-update.md`**. Send USDC on Polygon to the bot (**beginner**): **`docs/OPERATOR_SEND_USDC_POLYGON.md`**.
 
 ### Required addresses (Polygon)

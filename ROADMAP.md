@@ -108,3 +108,12 @@
 5. Commit changes
 
 This file is the single source of truth.
+
+---
+
+## Current Deployment State (as of May 2026)
+
+- Basic **External Risk Layer v1** is implemented and pushed (repo-root **`control.json`**, **`external_layer/control.py`**).
+- Layer drives **`paused`** and **`max_copy_trade_pct`** from live **USDT** + **WMATIC** balance tiers (`external_layer/risk_checker.py`).
+- **`nanoclaw`** loads **`control.json`** each cycle and **gracefully falls back** to **`.env`** values when the file is missing or unreadable.
+- Hybrid setup (**bot + external layer**) is ready for a first deployment on **stage/VM** using **`nanoup`** plus **`./start_external.sh`** (or **`python external_layer/control.py`**) in a separate session/service.

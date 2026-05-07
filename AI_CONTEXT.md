@@ -40,7 +40,7 @@
 ## **Developer environments (shell + machine)**
 
 - **Local / Cursor**: Often **Windows + PowerShell** — do not assume **`&&`** (use **`;`** / **`$LASTEXITCODE`** on PS 5.x, or **PowerShell 7+**). See **`docs/DEV_WORKFLOW.md`** § *Shell: Windows vs Linux*.
-- **Stage VM**: **Ubuntu + bash** — `nanoup`, `grep`, and **`docs/readme-vm-update.md`** snippets are written for **POSIX**.
+- **Stage VM**: **Ubuntu + bash** — `nanoup`, `grep`, and **`docs/readme-vm-update.md`** snippets are written for **POSIX**. Optional **External Risk Layer**: **`./start_external.sh`** (or **`python external_layer/control.py`**) refreshes repo-root **`control.json`** ~every 30s; **`nanoclaw`** reads it each cycle—details in **`external_layer/README.md`**.
 - **Agents**: When giving copy/paste commands, **name the environment** or provide both forms so instructions match where they run.
 
 ## **Systematic Learning & History**

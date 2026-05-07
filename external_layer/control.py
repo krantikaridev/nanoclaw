@@ -288,10 +288,10 @@ def _format_balance_line(risk: dict[str, bool | str | float]) -> str:
     return "USDT: (unknown) | WMATIC: (unknown)"
 
 
-def _run_control_loop(interval_seconds: float = 25.0) -> None:
+def _run_control_loop(interval_seconds: float = 30.0) -> None:
     """Poll ``update_control()`` forever for standalone operator processes.
 
-    Default interval is 25 seconds (within the 20–30s operator window).
+    Default interval is 30 seconds (operator-visible cadence for ``control.json`` updates).
     """
     while True:
         update_control()
@@ -300,4 +300,14 @@ def _run_control_loop(interval_seconds: float = 25.0) -> None:
 
 if __name__ == "__main__":
     # Runnable as: ``python external_layer/control.py`` — writes ``control.json`` periodically.
-    _run_control_loop()
+    print(
+        "External Risk Layer started. Updating control.json every 30s...",
+        flush=True,
+    )
+    try:
+        _run_control_loop()
+    except KeyboardInterrupt:
+        print(
+            "\nExternal Risk Layer stopped (keyboard interrupt). Exiting.",
+            flush=True,
+        )
