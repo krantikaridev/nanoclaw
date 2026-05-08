@@ -23,9 +23,20 @@ def _clamp_copy_pct(pct: float) -> float:
     return max(_MIN_COPY_PCT, min(_MAX_COPY_PCT, float(pct)))
 
 
+def _stable_runway_tier_rank(stable_usd: float) -> int:
+    """Discrete stable-runway tier for clamp hysteresis (0=critical, 1=moderate, 2=healthy)."""
+    if stable_usd < _CRITICAL_STABLE_USD:
+        return 0
+    if stable_usd < _MODERATE_STABLE_USD:
+        return 1
+    return 2
+
+
 # In-memory guardrail: if we see repeated low-balance protection, temporarily clamp size.
-_RECENT_PROTECTION_EVALS: deque[tuple[float, bool]] = deque(maxlen=5)
+_RECENT_PROTECTION_EVALS: deque[tuple[float, bool, float]] = deque(maxlen=5)
 _FORCE_MIN_UNTIL_TS: float = 0.0
+# Worst ``stable_usd`` seen while the streak clamp timer is active (for early release vs tier).
+_CLAMP_STREAK_MIN_STABLE_USD: float | None = None
 
 # Minimal ERC-20 ``balanceOf`` ABI for USDT / WMATIC reads.
 _ERC20_BALANCE_ABI: list[dict[str, Any]] = [
@@ -114,7 +125,7 @@ def evaluate_risk(
 
     stable_usd = usdt + usdc
 
-    global _FORCE_MIN_UNTIL_TS
+    global _FORCE_MIN_UNTIL_TS, _CLAMP_STREAK_MIN_STABLE_USD
     critical = stable_usd < _CRITICAL_STABLE_USD or wmatic < _CRITICAL_WMATIC
     moderate = stable_usd < _MODERATE_STABLE_USD or wmatic < _MODERATE_WMATIC
     now = time.time()
@@ -122,17 +133,27 @@ def evaluate_risk(
     # Extra defensive rule: if the last 3 evaluations were in a protected tier
     # (Critical or Moderate), clamp copy size to 2% for the next 10 minutes.
     protected = critical or moderate
-    _RECENT_PROTECTION_EVALS.append((now, protected))
+    _RECENT_PROTECTION_EVALS.append((now, protected, stable_usd))
     recent = list(_RECENT_PROTECTION_EVALS)[-3:]
     # Arm the streak clamp only while stable runway is still below the Moderate USD
     # threshold; once stable_usd >= _MODERATE_STABLE_USD, drop the timer so we do not
     # keep a 2% cap (and misleading "clamp" reason) after total stables have recovered.
-    if len(recent) == 3 and all(is_protected for _, is_protected in recent):
+    if len(recent) == 3 and all(is_protected for _, is_protected, _ in recent):
         if stable_usd < _MODERATE_STABLE_USD:
             _FORCE_MIN_UNTIL_TS = max(_FORCE_MIN_UNTIL_TS, now + 10 * 60)
+            streak_cand = min(s for _, _, s in recent)
+            # Keep the worst stable seen for this cooldown so rolling the deque cannot
+            # erase a prior critical dip and re-trigger the full 2% clamp spuriously.
+            if _CLAMP_STREAK_MIN_STABLE_USD is None:
+                _CLAMP_STREAK_MIN_STABLE_USD = streak_cand
+            else:
+                _CLAMP_STREAK_MIN_STABLE_USD = min(_CLAMP_STREAK_MIN_STABLE_USD, streak_cand)
     if stable_usd >= _MODERATE_STABLE_USD:
         _FORCE_MIN_UNTIL_TS = 0.0
+        _CLAMP_STREAK_MIN_STABLE_USD = None
     force_min = now < _FORCE_MIN_UNTIL_TS
+    if not force_min:
+        _CLAMP_STREAK_MIN_STABLE_USD = None
 
     if critical:
         paused = True
@@ -153,9 +174,18 @@ def evaluate_risk(
         max_pct = _clamp_copy_pct(0.06)
         reason = "Healthy balance: copy trades capped at 6%"
 
+    # Full 2% streak clamp still prevents whiplash after repeated protected reads, but if
+    # total stables have recovered into a strictly better runway tier than the worst
+    # stable level in that arming streak (e.g. critical → moderate), keep the tier cap
+    # (3% / 6%) instead of forcing 2% until stable_usd hits 85 or the timer expires.
     if force_min and max_pct > _MIN_COPY_PCT:
-        max_pct = _clamp_copy_pct(0.02)
-        reason = f"{reason}; defensive clamp active (recent low-balance streak)"
+        streak_min = _CLAMP_STREAK_MIN_STABLE_USD
+        early_release = streak_min is not None and _stable_runway_tier_rank(
+            stable_usd
+        ) > _stable_runway_tier_rank(streak_min)
+        if not early_release:
+            max_pct = _clamp_copy_pct(0.02)
+            reason = f"{reason}; defensive clamp active (recent low-balance streak)"
 
     return {
         "paused": paused,

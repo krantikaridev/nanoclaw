@@ -39,7 +39,7 @@ Risk tier is determined by **either** **`stable_usd` (USDT + combined USDC)** **
 ### Additional defensive clamp logic
 - The layer tracks the last several risk evaluations (using a short rolling window).
 - If the **last 3 evaluations** were in a protected tier (Critical or Moderate), it activates a **temporary defensive clamp**: forces `max_copy_trade_pct = 2%` for approximately **10 minutes**, even if the current balances would otherwise allow 3% or 6%.
-- **Clamp adjustment:** when **`stable_usd` recovers to ≥ 85**, the timer clears and the 2% streak clamp stops immediately (no need to wait the full ~10 minutes).
+- **Clamp adjustment:** when **`stable_usd` recovers to ≥ 85**, the timer clears and the 2% streak clamp stops immediately (no need to wait the full ~10 minutes); if combined stables are still below **85** but the **stable-runway tier** (critical vs moderate bands on total stables) is **strictly better** than the worst stable level in the arming streak, the layer keeps the **tier** copy cap (e.g. 3% in moderate) instead of forcing 2%.
 - Reason string includes: `"defensive clamp active (recent low-balance streak)"`.
 - This adds a form of hysteresis to avoid rapid toggling when balances hover near thresholds.
 

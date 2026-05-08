@@ -16,10 +16,12 @@ def _reset_control_last_successful_risk():
     control._last_successful_risk = None
     risk_checker._RECENT_PROTECTION_EVALS.clear()
     risk_checker._FORCE_MIN_UNTIL_TS = 0.0
+    risk_checker._CLAMP_STREAK_MIN_STABLE_USD = None
     yield
     control._last_successful_risk = None
     risk_checker._RECENT_PROTECTION_EVALS.clear()
     risk_checker._FORCE_MIN_UNTIL_TS = 0.0
+    risk_checker._CLAMP_STREAK_MIN_STABLE_USD = None
 
 
 def test_control_command_defaults():
@@ -147,12 +149,20 @@ def test_evaluate_risk_recent_streak_forces_min_for_10_minutes(monkeypatch):
     assert out2["max_copy_trade_pct"] == 0.03
     t["now"] += 1
 
-    # Third protected read must still have stable_usd < 85 to arm the clamp streak.
+    # Third protected read arms the timer, but stable runway already beat the streak worst
+    # (59 → 84), so the 2% streak clamp does not override the Moderate 3% cap.
     out3 = risk_checker.evaluate_risk(usdt_balance=84.0, wmatic_balance=100.0)  # moderate
-    assert out3["max_copy_trade_pct"] == 0.02
+    assert out3["max_copy_trade_pct"] == 0.03
+    assert "defensive clamp" not in str(out3.get("reason", "")).lower()
     t["now"] += 1
 
-    # Total stables recovered to Healthy tier: clamp releases immediately (no 10m wait).
+    # Timer may still be armed; staying moderate-on-stables keeps early release vs streak min 59.
+    out3b = risk_checker.evaluate_risk(usdt_balance=84.0, wmatic_balance=100.0)
+    assert out3b["max_copy_trade_pct"] == 0.03
+    assert "defensive clamp" not in str(out3b.get("reason", "")).lower()
+    t["now"] += 1
+
+    # Total stables recovered to Healthy tier: timer clears immediately (no 10m wait).
     healthy = risk_checker.evaluate_risk(usdt_balance=1_000.0, wmatic_balance=1_000.0)
     assert healthy["paused"] is False
     assert healthy["max_copy_trade_pct"] == 0.06
@@ -162,6 +172,41 @@ def test_evaluate_risk_recent_streak_forces_min_for_10_minutes(monkeypatch):
     recovered = risk_checker.evaluate_risk(usdt_balance=1_000.0, wmatic_balance=1_000.0)
     assert recovered["paused"] is False
     assert recovered["max_copy_trade_pct"] == 0.06
+
+
+def test_evaluate_risk_streak_all_moderate_stable_still_clamps_to_two_pct(monkeypatch):
+    """When every read in the arming window had moderate stable runway, the 2% clamp still applies."""
+    t = {"now": 2_000_000.0}
+
+    def fake_time():
+        return t["now"]
+
+    monkeypatch.setattr(risk_checker.time, "time", fake_time)
+    risk_checker.evaluate_risk(usdt_balance=84.0, wmatic_balance=100.0)
+    t["now"] += 1
+    risk_checker.evaluate_risk(usdt_balance=84.0, wmatic_balance=100.0)
+    t["now"] += 1
+    out3 = risk_checker.evaluate_risk(usdt_balance=84.0, wmatic_balance=100.0)
+    assert out3["max_copy_trade_pct"] == 0.02
+    assert "defensive clamp" in str(out3.get("reason", "")).lower()
+
+
+def test_evaluate_risk_streak_clamp_releases_when_stable_tier_beats_streak_worst(monkeypatch):
+    """Stable runway tier above the worst stable in the arming streak → tier cap, not 2%."""
+    t = {"now": 3_000_000.0}
+
+    def fake_time():
+        return t["now"]
+
+    monkeypatch.setattr(risk_checker.time, "time", fake_time)
+    risk_checker.evaluate_risk(usdt_balance=55.0, wmatic_balance=100.0)
+    t["now"] += 1
+    risk_checker.evaluate_risk(usdt_balance=55.0, wmatic_balance=100.0)
+    t["now"] += 1
+    out = risk_checker.evaluate_risk(usdt_balance=81.73, wmatic_balance=100.0)
+    assert out["stable_usd"] == pytest.approx(81.73)
+    assert out["max_copy_trade_pct"] == 0.03
+    assert "defensive clamp" not in str(out.get("reason", "")).lower()
 
 
 def test_run_control_loop_default_interval_30s():
