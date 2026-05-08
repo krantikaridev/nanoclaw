@@ -659,7 +659,6 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
             # Strict defense only for WMATIC
             print(f"{runtime._nanolog()}X-SIGNAL BUY SKIPPED | symbol={sym} | risk=MEDIUM | reason=usdt_below_medium_buffer_and_wmatic_high")
             continue
-
         # For WETH_ALPHA, WBTC_ALPHA, LINK_ALPHA etc. → they continue normally even in MEDIUM
 
     # This print runs for everything that was not skipped above
