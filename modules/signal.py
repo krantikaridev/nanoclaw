@@ -646,11 +646,11 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
     )
     buy_mult = 1.0
     skip_buys = False
-    if risk_level == "MEDIUM":
-        # Stronger/earlier defense: pause new BUYs for this cycle when liquidity is trending toward HIGH risk.
-        buy_mult = 0.0
-        skip_buys = True
-    elif risk_level == "HIGH":
+    risk_reasons = set(str(x) for x in (risk_ctx.get("reasons") or []))
+    medium_usdt_wmatic_guard = (
+        risk_level == "MEDIUM" and "usdt_below_medium_buffer_and_wmatic_high" in risk_reasons
+    )
+    if risk_level == "HIGH":
         buy_mult = 0.0
         skip_buys = True
     print(
@@ -700,6 +700,12 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
         print(
             f"{runtime._nanolog()}X-SIGNAL BUY DEFENSE ACTIVE | risk={risk_level} | "
             f"buy_plans_paused=True | reasons={reasons or 'N/A'}"
+        )
+    elif medium_usdt_wmatic_guard:
+        # Asset-specific: keep strict defense for WMATIC; allow higher-liquidity equities to proceed.
+        print(
+            f"{runtime._nanolog()}Risk: MEDIUM → Pausing WMATIC BUYs this cycle "
+            "(early defense; USDT/WMATIC liquidity risk)"
         )
 
     fe_cfg = fcb._load_followed_equities_json_dict()
@@ -982,6 +988,14 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                     f"reason={reasons or 'N/A'}"
                 )
                 continue
+            if is_buy and medium_usdt_wmatic_guard and sym in ("WMATIC", "WMATIC_ALPHA"):
+                reasons = ",".join(list(risk_ctx.get("reasons") or []))
+                print(
+                    f"{runtime._nanolog()}X-SIGNAL BUY SKIPPED | symbol={sym} | risk={risk_level} | "
+                    f"reason={reasons or 'N/A'}"
+                )
+                continue
+            asset_buy_mult = 0.0 if (is_buy and medium_usdt_wmatic_guard and sym in ("WMATIC", "WMATIC_ALPHA")) else buy_mult
             plan, plan_block = _invoke_equity_build_plan(
                 trader,
                 EquityBuildPlanParams.for_eligible_asset(
@@ -992,7 +1006,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                     wallet_address_for_gas=fcb.WALLET,
                     can_trade_asset=fcb.can_trade_asset,
                     allow_high_gas_override=high_conviction,
-                    trade_size_multiplier=(buy_mult if is_buy else 1.0),
+                    trade_size_multiplier=(asset_buy_mult if is_buy else 1.0),
                     buy_risk_level=(risk_level if is_buy else None),
                 ),
             )
