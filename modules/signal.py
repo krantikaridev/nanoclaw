@@ -646,18 +646,23 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
     )
     buy_mult = 1.0
     skip_buys = False
+
     if risk_level == "HIGH":
         buy_mult = 0.0
         skip_buys = True
+
     elif risk_level == "MEDIUM":
         risk_reasons = set(str(x) for x in (risk_ctx.get("reasons") or []))
         medium_usdt_wmatic_guard = "usdt_below_medium_buffer_and_wmatic_high" in risk_reasons
-    
+
         if medium_usdt_wmatic_guard and sym in ("WMATIC", "WMATIC_ALPHA"):
             # Strict defense only for WMATIC
             print(f"{runtime._nanolog()}X-SIGNAL BUY SKIPPED | symbol={sym} | risk=MEDIUM | reason=usdt_below_medium_buffer_and_wmatic_high")
             continue
-        # WETH_ALPHA, WBTC_ALPHA, LINK_ALPHA etc. are allowed to proceed even in MEDIUM state
+
+        # For WETH_ALPHA, WBTC_ALPHA, LINK_ALPHA etc. → they continue normally even in MEDIUM
+
+    # This print runs for everything that was not skipped above
     print(
         f"{runtime._nanolog()}X-SIGNAL BUY RISK | Risk={risk_level} | "
         f"USDT=${float(balances.usdt):.2f} | WMATIC={float(balances.wmatic):.4f} | "
