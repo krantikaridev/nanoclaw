@@ -11,7 +11,7 @@ from typing import Any
 # USDT alone hit $0 while USDC stayed healthy blocked trading unnecessarily (2026-05-07).
 _CRITICAL_STABLE_USD = 60.0
 _CRITICAL_WMATIC = 50.0
-_MODERATE_STABLE_USD = 85.0
+_MODERATE_STABLE_USD = 100.0
 _MODERATE_WMATIC = 65.0
 
 # Copy-trade cap bounds written to ``control.json`` (fraction of portfolio logic).
@@ -113,7 +113,7 @@ def evaluate_risk(
 
     Rules (stable runway = USDT + USDC; unchanged WMATIC gas runway):
     - stable_usd < 60 or WMATIC < 50 → paused, cap 0.02
-    - Else stable_usd < 85 or WMATIC < 65 → not paused, cap 0.03
+    - Else stable_usd < 100 or WMATIC < 65 → not paused, cap 0.03
     - Else → not paused, cap 0.06
     """
     if usdt_balance is not None and wmatic_balance is not None:
