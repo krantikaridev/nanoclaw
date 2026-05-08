@@ -39,6 +39,7 @@ Risk tier is determined by **either** **`stable_usd` (USDT + combined USDC)** **
 ### Additional defensive clamp logic
 - The layer tracks the last several risk evaluations (using a short rolling window).
 - If the **last 3 evaluations** were in a protected tier (Critical or Moderate), it activates a **temporary defensive clamp**: forces `max_copy_trade_pct = 2%` for approximately **10 minutes**, even if the current balances would otherwise allow 3% or 6%.
+- **Clamp adjustment:** when **`stable_usd` recovers to ≥ 85**, the timer clears and the 2% streak clamp stops immediately (no need to wait the full ~10 minutes).
 - Reason string includes: `"defensive clamp active (recent low-balance streak)"`.
 - This adds a form of hysteresis to avoid rapid toggling when balances hover near thresholds.
 
@@ -151,7 +152,7 @@ You can extend with additional helpers (e.g. `nc-ext-restart`) following the `nc
 |--------------------------------|---------------------------------------------|--------------------|
 | `paused: true` + reason mentions Critical | Total stables (USDT+USDC) or WMATIC below critical threshold | Monitor recovery; top up stables or WMATIC on-chain if prolonged. |
 | `max_copy_trade_pct: 0.03`     | Moderate tier active                        | Normal during mild stress; watch for improvement. |
-| `reason` contains "defensive clamp" | Recent streak of low-balance readings      | Temporary; will relax after ~10 min if balances stay healthy. |
+| `reason` contains "defensive clamp" | Recent streak of low-balance readings      | Temporary; relaxes after ~10 min, or immediately once **`stable_usd` ≥ 85**. |
 | `last_updated` not advancing   | External layer stopped or RPC failure      | Restart with `nc-ext-start`; check logs and `nanohealth`. |
 
 ## Current known limitations

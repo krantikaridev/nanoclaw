@@ -147,16 +147,17 @@ def test_evaluate_risk_recent_streak_forces_min_for_10_minutes(monkeypatch):
     assert out2["max_copy_trade_pct"] == 0.03
     t["now"] += 1
 
-    out3 = risk_checker.evaluate_risk(usdt_balance=100.0, wmatic_balance=64.0)  # moderate
+    # Third protected read must still have stable_usd < 85 to arm the clamp streak.
+    out3 = risk_checker.evaluate_risk(usdt_balance=84.0, wmatic_balance=100.0)  # moderate
     assert out3["max_copy_trade_pct"] == 0.02
     t["now"] += 1
 
-    # Even if balances recover, clamp should apply for the next 10 minutes.
+    # Total stables recovered to Healthy tier: clamp releases immediately (no 10m wait).
     healthy = risk_checker.evaluate_risk(usdt_balance=1_000.0, wmatic_balance=1_000.0)
     assert healthy["paused"] is False
-    assert healthy["max_copy_trade_pct"] == 0.02
+    assert healthy["max_copy_trade_pct"] == 0.06
 
-    # After 10 minutes, healthy should return to normal 6% cap.
+    # Still healthy after the old clamp window — unchanged 6% cap.
     t["now"] += 10 * 60 + 1
     recovered = risk_checker.evaluate_risk(usdt_balance=1_000.0, wmatic_balance=1_000.0)
     assert recovered["paused"] is False

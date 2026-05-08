@@ -124,8 +124,14 @@ def evaluate_risk(
     protected = critical or moderate
     _RECENT_PROTECTION_EVALS.append((now, protected))
     recent = list(_RECENT_PROTECTION_EVALS)[-3:]
+    # Arm the streak clamp only while stable runway is still below the Moderate USD
+    # threshold; once stable_usd >= _MODERATE_STABLE_USD, drop the timer so we do not
+    # keep a 2% cap (and misleading "clamp" reason) after total stables have recovered.
     if len(recent) == 3 and all(is_protected for _, is_protected in recent):
-        _FORCE_MIN_UNTIL_TS = max(_FORCE_MIN_UNTIL_TS, now + 10 * 60)
+        if stable_usd < _MODERATE_STABLE_USD:
+            _FORCE_MIN_UNTIL_TS = max(_FORCE_MIN_UNTIL_TS, now + 10 * 60)
+    if stable_usd >= _MODERATE_STABLE_USD:
+        _FORCE_MIN_UNTIL_TS = 0.0
     force_min = now < _FORCE_MIN_UNTIL_TS
 
     if critical:
