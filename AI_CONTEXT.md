@@ -187,7 +187,7 @@ Operational focus: correctness of this precedence, USDC liquidity for equity **b
 - **Logs**: `[nanoclaw]` prefix via env `LOG_PREFIX`; cycle banner; path tags (`🔍 DECISION PATH`). X-Signal emits threshold line, ACTIVE lines, SUMMARY line, and (when a plan exists) checksum `token_in` / `token_out` before swap.
 - **Balance logger**: integrated into `clean_swap.py` (`Source=BotLogger`) reading `balance_config.txt` every 600s; no separate `scripts/auto_balance_logger.sh` process needed.
 - **Balance logger guardrail**: skips writing snapshots when `balance_config.txt` is missing/empty/invalid to avoid zero-value noise in `real_cron.log`.
-- **Fluctuation protection**: `FLUCTUATION` now emits rich trigger context, honors `PROTECTION_FLUCTUATION_COOLDOWN_SECONDS` to suppress repeated force-sell triggers in short windows, and applies `PROTECTION_FLUCTUATION_MIN_SELL_USD` to ignore low-notional noise triggers.
+- **Fluctuation protection**: `FLUCTUATION` now emits rich trigger context, honors `PROTECTION_FLUCTUATION_COOLDOWN_SECONDS` to suppress repeated force-sell triggers in short windows, and applies `PROTECTION_FLUCTUATION_MIN_SELL_USD` to ignore low-notional noise triggers. Force-sell is **skipped** when **USDT+USDC** (both USDC contracts) is still **≥ `FLUCTUATION_HEALTHY_TOTAL_STABLES_USD`** (~$77.5) even if USDT alone is below `PROTECTION_FLUCTUATION_USDT_THRESHOLD`.
 - **Cooldowns**: per-asset and per-wallet marks run **after a successful on-chain swap** (`approve_and_swap` returns tx hash), not when a plan is merely built (`SignalEquityTrader.build_plan`, `USDCopyStrategy.build_plan`).
 - **Global cooldown**: skips full cycle until `COOLDOWN_MINUTES` since `last_run`; log prints approximate seconds remaining.
 

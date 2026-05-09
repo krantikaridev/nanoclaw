@@ -5,6 +5,7 @@ import protection
 
 def test_check_exit_conditions_suppresses_fluctuation_within_cooldown(monkeypatch, tmp_path):
     monkeypatch.setattr(protection, "TRADE_LOG_FILE", str(tmp_path / "missing_trade_exits.json"))
+    monkeypatch.setattr(protection, "_usdc_balance_usd", lambda: 0.0)
     monkeypatch.setattr(protection, "get_balances", lambda: (20.0, 80.0))
     monkeypatch.setattr(protection, "get_live_wmatic_price", lambda: 1.0)
     monkeypatch.setattr(protection, "FLUCTUATION_MIN_SELL_USD", 0.0)
@@ -24,6 +25,7 @@ def test_check_exit_conditions_suppresses_fluctuation_within_cooldown(monkeypatc
 
 
 def test_check_exit_conditions_triggers_fluctuation(monkeypatch):
+    monkeypatch.setattr(protection, "_usdc_balance_usd", lambda: 0.0)
     monkeypatch.setattr(protection, "get_balances", lambda: (20.0, 80.0))
     monkeypatch.setattr(protection, "get_live_wmatic_price", lambda: 1.0)
     monkeypatch.setattr(protection, "FLUCTUATION_MIN_SELL_USD", 0.0)
@@ -34,6 +36,20 @@ def test_check_exit_conditions_triggers_fluctuation(monkeypatch):
 
     assert should_exit is True
     assert reason == "FLUCTUATION"
+
+
+def test_check_exit_conditions_suppresses_fluctuation_when_total_stables_healthy(monkeypatch, tmp_path):
+    monkeypatch.setattr(protection, "TRADE_LOG_FILE", str(tmp_path / "missing_trade_exits.json"))
+    monkeypatch.setattr(protection, "FLUCTUATION_USDT_THRESHOLD", 12.0)
+    monkeypatch.setattr(protection, "get_balances", lambda: (10.0, 100.0))
+    monkeypatch.setattr(protection, "_usdc_balance_usd", lambda: 75.0)
+    monkeypatch.setattr(protection, "_last_fluctuation_trigger_ts", None)
+    monkeypatch.setattr(protection, "_last_fluctuation_context", {})
+
+    should_exit, reason = protection.check_exit_conditions()
+
+    assert should_exit is False
+    assert reason is None
 
 
 def test_check_exit_conditions_returns_false_when_no_trade_log(monkeypatch):
@@ -50,6 +66,7 @@ def test_check_exit_conditions_returns_false_when_no_trade_log(monkeypatch):
 
 def test_check_exit_conditions_suppresses_small_notional_fluctuation(monkeypatch, tmp_path):
     monkeypatch.setattr(protection, "TRADE_LOG_FILE", str(tmp_path / "missing_trade_exits.json"))
+    monkeypatch.setattr(protection, "_usdc_balance_usd", lambda: 0.0)
     monkeypatch.setattr(protection, "get_balances", lambda: (20.0, 52.0))
     monkeypatch.setattr(protection, "get_live_wmatic_price", lambda: 0.50)
     monkeypatch.setattr(protection, "FLUCTUATION_MIN_SELL_USD", 10.0)
@@ -104,6 +121,7 @@ def test_check_exit_conditions_allows_per_trade_exit_when_fluctuation_suppressed
         encoding="utf-8",
     )
     monkeypatch.setattr(protection, "TRADE_LOG_FILE", str(trade_log))
+    monkeypatch.setattr(protection, "_usdc_balance_usd", lambda: 0.0)
     monkeypatch.setattr(protection, "get_balances", lambda: (20.0, 80.0))
     monkeypatch.setattr(protection, "get_live_wmatic_price", lambda: 1.10)
     monkeypatch.setattr(protection, "FLUCTUATION_MIN_SELL_USD", 999.0)
@@ -161,6 +179,7 @@ def test_record_buy_writes_open_trade_with_target_price(monkeypatch, tmp_path):
 
 
 def test_check_exit_conditions_tracks_notional_in_fluctuation_context(monkeypatch):
+    monkeypatch.setattr(protection, "_usdc_balance_usd", lambda: 0.0)
     monkeypatch.setattr(protection, "get_balances", lambda: (20.0, 80.0))
     monkeypatch.setattr(protection, "get_live_wmatic_price", lambda: 0.9)
     monkeypatch.setattr(protection, "FLUCTUATION_MIN_SELL_USD", 8.0)
