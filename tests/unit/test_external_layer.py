@@ -101,12 +101,22 @@ def test_evaluate_risk_low_usdt():
 
 
 def test_evaluate_risk_low_wmatic():
-    out = risk_checker.evaluate_risk(usdt_balance=100.0, wmatic_balance=49.0)
+    out = risk_checker.evaluate_risk(
+        usdt_balance=40.0, usdc_balance=50.0, wmatic_balance=49.0
+    )
     assert out["paused"] is True
     assert out["max_copy_trade_pct"] == 0.02
-    assert out["usdt_balance"] == 100.0
-    assert out["stable_usd"] == pytest.approx(100.0)
+    assert out["usdt_balance"] == 40.0
+    assert out["stable_usd"] == pytest.approx(90.0)
     assert out["wmatic_balance"] == 49.0
+
+
+def test_evaluate_risk_high_stables_relaxes_wmatic_pause_threshold():
+    """When USDT+USDC ≥ $95, WMATIC must dip below $45 (not $50) to pause."""
+    out = risk_checker.evaluate_risk(usdt_balance=100.0, usdc_balance=0.0, wmatic_balance=48.0)
+    assert out["paused"] is False
+    assert out["stable_usd"] == pytest.approx(100.0)
+    assert out["max_copy_trade_pct"] == pytest.approx(0.045)
 
 
 def test_evaluate_risk_at_critical_floor_is_moderate_not_critical():
@@ -122,7 +132,7 @@ def test_evaluate_risk_at_critical_floor_is_moderate_not_critical():
 def test_evaluate_risk_moderate_tier():
     out = risk_checker.evaluate_risk(usdt_balance=99.0, wmatic_balance=100.0)
     assert out["paused"] is False
-    assert out["max_copy_trade_pct"] == 0.03
+    assert out["max_copy_trade_pct"] == 0.045
 
 
 def test_evaluate_risk_full_health_threshold():
@@ -145,19 +155,19 @@ def test_evaluate_risk_recent_streak_forces_min_for_10_minutes(monkeypatch):
     assert out1["max_copy_trade_pct"] == 0.02
     t["now"] += 1
 
-    out2 = risk_checker.evaluate_risk(usdt_balance=99.0, wmatic_balance=100.0)  # moderate
+    out2 = risk_checker.evaluate_risk(usdt_balance=94.0, wmatic_balance=100.0)  # moderate; stables < $95 travel floor
     assert out2["max_copy_trade_pct"] == 0.03
     t["now"] += 1
 
     # Third protected read arms the timer, but stable runway already beat the streak worst
     # (59 → 84), so the 2% streak clamp does not override the Moderate 3% cap.
-    out3 = risk_checker.evaluate_risk(usdt_balance=99.0, wmatic_balance=100.0)  # moderate
+    out3 = risk_checker.evaluate_risk(usdt_balance=94.0, wmatic_balance=100.0)  # moderate
     assert out3["max_copy_trade_pct"] == 0.03
     assert "defensive clamp" not in str(out3.get("reason", "")).lower()
     t["now"] += 1
 
     # Timer may still be armed; staying moderate-on-stables keeps early release vs streak min 59.
-    out3b = risk_checker.evaluate_risk(usdt_balance=99.0, wmatic_balance=100.0)
+    out3b = risk_checker.evaluate_risk(usdt_balance=94.0, wmatic_balance=100.0)
     assert out3b["max_copy_trade_pct"] == 0.03
     assert "defensive clamp" not in str(out3b.get("reason", "")).lower()
     t["now"] += 1
@@ -175,8 +185,24 @@ def test_evaluate_risk_recent_streak_forces_min_for_10_minutes(monkeypatch):
 
 
 def test_evaluate_risk_streak_all_moderate_stable_still_clamps_to_two_pct(monkeypatch):
-    """When every read in the arming window had moderate stable runway, the 2% clamp still applies."""
+    """Below $95 combined stables, three protected reads still tighten to the 2% streak floor."""
     t = {"now": 2_000_000.0}
+
+    def fake_time():
+        return t["now"]
+
+    monkeypatch.setattr(risk_checker.time, "time", fake_time)
+    risk_checker.evaluate_risk(usdt_balance=94.0, wmatic_balance=100.0)
+    t["now"] += 1
+    risk_checker.evaluate_risk(usdt_balance=94.0, wmatic_balance=100.0)
+    t["now"] += 1
+    out3 = risk_checker.evaluate_risk(usdt_balance=94.0, wmatic_balance=100.0)
+    assert out3["max_copy_trade_pct"] == 0.02
+    assert "defensive clamp" in str(out3.get("reason", "")).lower()
+
+
+def test_evaluate_risk_streak_at_high_stables_uses_four_point_five_floor(monkeypatch):
+    t = {"now": 2_100_000.0}
 
     def fake_time():
         return t["now"]
@@ -187,7 +213,7 @@ def test_evaluate_risk_streak_all_moderate_stable_still_clamps_to_two_pct(monkey
     risk_checker.evaluate_risk(usdt_balance=99.0, wmatic_balance=100.0)
     t["now"] += 1
     out3 = risk_checker.evaluate_risk(usdt_balance=99.0, wmatic_balance=100.0)
-    assert out3["max_copy_trade_pct"] == 0.02
+    assert out3["max_copy_trade_pct"] == 0.045
     assert "defensive clamp" in str(out3.get("reason", "")).lower()
 
 

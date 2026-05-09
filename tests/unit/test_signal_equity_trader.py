@@ -96,7 +96,8 @@ def test_build_plan_bypasses_pol_when_high_conviction_signal_over_085():
         now=1000.0,
     )
 
-    assert plan is None
+    assert plan is not None
+    assert plan.direction == "USDC_TO_EQUITY"
 
 
 def test_build_plan_uses_fresh_guard_pol_and_builds_buy_when_sufficient():
@@ -116,7 +117,8 @@ def test_build_plan_uses_fresh_guard_pol_and_builds_buy_when_sufficient():
         now=1000.0,
     )
 
-    assert plan is None
+    assert plan is not None
+    assert plan.direction == "USDC_TO_EQUITY"
 
 
 def test_build_plan_allows_high_gas_when_override_enabled():
@@ -137,7 +139,8 @@ def test_build_plan_allows_high_gas_when_override_enabled():
         allow_high_gas_override=True,
     )
 
-    assert plan is None
+    assert plan is not None
+    assert plan.direction == "USDC_TO_EQUITY"
 
 
 def test_load_followed_equities_keeps_per_asset_min_signal_strength(tmp_path):
@@ -148,9 +151,9 @@ def test_load_followed_equities_keeps_per_asset_min_signal_strength(tmp_path):
                 "enabled": True,
                 "assets": [
                     {
-                        "symbol": "USDC",
-                        "address": "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
-                        "decimals": 6,
+                        "symbol": "LINK",
+                        "address": "0x53E0bca35eC356BD5ddDFebBD1Fc0fF03FaBad39",
+                        "decimals": 18,
                         "signal_strength": 0.80,
                         "min_signal_strength": 0.75,
                     },
@@ -178,10 +181,48 @@ def test_load_followed_equities_keeps_per_asset_min_signal_strength(tmp_path):
     assets = strategy.load_followed_equities()
 
     assert len(assets) == 2
-    assert assets[0].symbol == "USDC"
+    assert assets[0].symbol == "LINK"
     assert assets[0].min_signal_strength == 0.75
     assert assets[1].symbol == "WETH"
     assert assets[1].min_signal_strength == 0.70
+
+
+def test_load_followed_equities_skips_reserve_usdc_row(tmp_path):
+    """Reserve USDC is not an equity leg; loading must drop it to avoid noop churn."""
+    followed_path = tmp_path / "followed_equities.json"
+    usdc_polygon = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"
+    followed_path.write_text(
+        json.dumps(
+            {
+                "enabled": True,
+                "assets": [
+                    {
+                        "symbol": "USDC",
+                        "address": usdc_polygon,
+                        "decimals": 6,
+                        "signal_strength": 0.9,
+                    },
+                    {
+                        "symbol": "WETH",
+                        "address": "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+                        "decimals": 18,
+                        "signal_strength": 0.8,
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    strategy = (
+        SignalEquityTrader.builder()
+        .with_enabled(True)
+        .with_followed_equities_path(str(followed_path))
+        .with_gas_protector(DummyProtector(gas_ok=True, pol_balance=1.0))
+        .with_usdc_address(usdc_polygon)
+        .build()
+    )
+    assets = strategy.load_followed_equities()
+    assert [a.symbol for a in assets] == ["WETH"]
 
 
 def test_buy_usdc_same_as_reserve_is_usdc_identity_noop():

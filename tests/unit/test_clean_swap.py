@@ -667,7 +667,33 @@ def test_determine_trade_decision_defers_dust_x_signal_and_falls_through_to_main
     assert "DECISION PATH: MAIN_STRATEGY" in captured
 
 
-def test_determine_trade_decision_defers_dust_usdc_copy_and_falls_through_to_main(monkeypatch, capsys):
+def test_determine_trade_decision_x_signal_uses_lower_dust_floor_when_stables_healthy(monkeypatch, capsys):
+    """Reversible travel tune: X-SIGNAL branch can defer at min(MIN_TRADE_USD, X_SIGNAL_EQUITY_DUST_MIN_USD)."""
+    monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))
+    monkeypatch.setattr(clean_swap, "evaluate_take_profit", lambda *_args, **_kwargs: (False, None))
+    monkeypatch.setattr(clean_swap, "MIN_TRADE_USD", 15.0)
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_EQUITY_DUST_MIN_USD", 7.5)
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
+
+    x_small = clean_swap.TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=int(8.0 * 1_000_000),
+        trade_size=8.0,
+        message="x buy",
+        token_in="0x" + "2" * 40,
+        token_out="0x" + "1" * 40,
+    )
+    monkeypatch.setattr(clean_swap, "try_x_signal_equity_decision", lambda *_args, **_kwargs: x_small)
+
+    out = clean_swap.determine_trade_decision(
+        state={},
+        balances=clean_swap.Balances(usdt=50.0, wmatic=5.0, pol=1.0, usdc=50.0),
+        current_price=1.0,
+    )
+
+    assert out is x_small
+    assert "X_SIGNAL_EQUITY DUST DEFER" not in capsys.readouterr().out
     class _CopyPlan:
         amount_in = int(4.0 * 1_000_000)
         trade_size = 4.0

@@ -36,6 +36,11 @@ Risk tier is determined by **either** **`stable_usd` (USDT + combined USDC)** **
 | **Moderate** | (`USDT` + combined `USDC`) < **85** **or** WMATIC < **65** | Not paused                           | **3%** (`0.03`)                               | Reduced sizing to conserve capital while still allowing some activity. |
 | **Healthy**  | Total stables ≥ **85** **and** WMATIC ≥ **65** | Not paused                    | **6%** (`0.06`)                               | Normal / full sizing allowed (subject to other strategy rules). |
 
+### Travel / high-stables adjustments (reversible, 2026-05-09)
+
+- When **`stable_usd` ≥ 95** and **not Critical**: `evaluate_risk` raises **`max_copy_trade_pct` to at least `0.045` (4.5%)**, including during the “defensive clamp” window after three protected-tier reads (that window uses **2%** only when **`stable_usd` < 95**).
+- **WMATIC critical pause** uses a **$45** floor (instead of **$50**) when **`stable_usd` ≥ 95**, so brief MATIC dips do not pause entries while dollar stables are ample.
+
 ### Additional defensive clamp logic
 - The layer tracks the last several risk evaluations (using a short rolling window).
 - If the **last 3 evaluations** were in a protected tier (Critical or Moderate), it activates a **temporary defensive clamp**: forces `max_copy_trade_pct = 2%` for approximately **10 minutes**, even if the current balances would otherwise allow 3% or 6%.

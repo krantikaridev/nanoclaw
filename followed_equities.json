@@ -15,24 +15,16 @@
       "symbol": "WETH_ALPHA",
       "address": "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
       "decimals": 18,
-      "min_signal_strength": 0.6,
+      "min_signal_strength": 0.55,
       "signal_strength": 0.87,
       "upside_pct": 16,
-      "earnings_days": null
-    },
-    {
-      "symbol": "USDC",
-      "address": "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
-      "decimals": 6,
-      "min_signal_strength": 0.6,
-      "signal_strength": 0.8,
-      "upside_pct": 8,
       "earnings_days": null
     },
     {
       "symbol": "WBTC_ALPHA",
       "address": "0x1BFD67037B42Cf73acf204706795bF64736C834e",
       "decimals": 8,
+      "min_signal_strength": 0.55,
       "signal_strength": 0.83,
       "upside_pct": 14,
       "earnings_days": null
@@ -41,6 +33,7 @@
       "symbol": "LINK_ALPHA",
       "address": "0x53E0bca35eC356BD5ddDFebBD1Fc0fF03FaBad39",
       "decimals": 18,
+      "min_signal_strength": 0.55,
       "signal_strength": 0.81,
       "upside_pct": 13,
       "earnings_days": null

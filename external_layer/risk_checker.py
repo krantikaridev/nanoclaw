@@ -13,6 +13,11 @@ _CRITICAL_STABLE_USD = 60.0
 _CRITICAL_WMATIC = 50.0
 _MODERATE_STABLE_USD = 100.0
 _MODERATE_WMATIC = 65.0
+# REVERSIBLE travel tune (2026-05-09): when USDT+USDC ≥ this, ease pause frequency (WMATIC floor)
+# and keep copy caps ≥ ~4.5% instead of falling to the 2% streak clamp so often.
+_TRAVEL_HIGH_STABLE_USD = 95.0
+_CRITICAL_WMATIC_WHEN_STABLE_HIGH = 45.0
+_TRAVEL_RELAX_MIN_COPY_PCT = 0.045
 
 # Copy-trade cap bounds written to ``control.json`` (fraction of portfolio logic).
 _MIN_COPY_PCT = 0.02
@@ -111,10 +116,11 @@ def evaluate_risk(
     ``usdt_balance``, ``usdc_balance`` (combined USDC contracts),
     ``stable_usd`` (USDT + that USDC), and ``wmatic_balance`` for logging.
 
-    Rules (stable runway = USDT + USDC; unchanged WMATIC gas runway):
-    - stable_usd < 60 or WMATIC < 50 → paused, cap 0.02
-    - Else stable_usd < 100 or WMATIC < 65 → not paused, cap 0.03
-    - Else → not paused, cap 0.06
+    Rules (stable runway = USDT + USDC; WMATIC gas runway):
+    - stable_usd < 60 or WMATIC below tier threshold → paused, cap 0.02
+      (threshold is 50 when stable_usd < $95, else 45 — reversible travel tune 2026-05-09).
+    - Else stable_usd < 100 or WMATIC < 65 → not paused, cap 0.03 (raised to ≥4.5% if stables ≥ $95)
+    - Else → not paused, cap 0.06 (same ≥4.5% floor when stables ≥ $95)
     """
     if usdt_balance is not None and wmatic_balance is not None:
         usdt = float(usdt_balance)
@@ -126,12 +132,17 @@ def evaluate_risk(
     stable_usd = usdt + usdc
 
     global _FORCE_MIN_UNTIL_TS, _CLAMP_STREAK_MIN_STABLE_USD
-    critical = stable_usd < _CRITICAL_STABLE_USD or wmatic < _CRITICAL_WMATIC
+    wmatic_pause_threshold = (
+        _CRITICAL_WMATIC
+        if stable_usd < _TRAVEL_HIGH_STABLE_USD
+        else _CRITICAL_WMATIC_WHEN_STABLE_HIGH
+    )
+    critical = stable_usd < _CRITICAL_STABLE_USD or wmatic < wmatic_pause_threshold
     moderate = stable_usd < _MODERATE_STABLE_USD or wmatic < _MODERATE_WMATIC
     now = time.time()
 
     # Extra defensive rule: if the last 3 evaluations were in a protected tier
-    # (Critical or Moderate), clamp copy size to 2% for the next 10 minutes.
+    # (Critical or Moderate), temporarily clamp copy size (2% legacy; 4.5% when stables ≥ $95).
     protected = critical or moderate
     _RECENT_PROTECTION_EVALS.append((now, protected, stable_usd))
     recent = list(_RECENT_PROTECTION_EVALS)[-3:]
@@ -160,7 +171,7 @@ def evaluate_risk(
         max_pct = _clamp_copy_pct(0.02)
         reason = (
             "Critical low balance: trading paused; copy trades capped at 2% "
-            f"(USDT+USDC<{_CRITICAL_STABLE_USD} or WMATIC<{_CRITICAL_WMATIC})"
+            f"(USDT+USDC<{_CRITICAL_STABLE_USD} or WMATIC<{wmatic_pause_threshold})"
         )
     elif moderate:
         paused = False
@@ -184,8 +195,18 @@ def evaluate_risk(
             stable_usd
         ) > _stable_runway_tier_rank(streak_min)
         if not early_release:
-            max_pct = _clamp_copy_pct(0.02)
+            # REVERSIBLE: below $95 stables, keep legacy 2% streak clamp; at/above, floor at 4.5%.
+            streak_floor = (
+                _TRAVEL_RELAX_MIN_COPY_PCT
+                if stable_usd >= _TRAVEL_HIGH_STABLE_USD
+                else _MIN_COPY_PCT
+            )
+            max_pct = _clamp_copy_pct(streak_floor)
             reason = f"{reason}; defensive clamp active (recent low-balance streak)"
+
+    # Healthy runway: never write a copy cap below 4.5% unless we are in true critical pause.
+    if stable_usd >= _TRAVEL_HIGH_STABLE_USD and not critical:
+        max_pct = _clamp_copy_pct(max(float(max_pct), _TRAVEL_RELAX_MIN_COPY_PCT))
 
     return {
         "paused": paused,

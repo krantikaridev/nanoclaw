@@ -300,27 +300,49 @@ def _defer_if_dust(
     *,
     branch_name: str,
     current_price_usd: float,
+    min_trade_usd: float | None = None,
 ) -> bool:
-    """Return True when branch decision is below MIN_TRADE_USD and should fall through."""
+    """Return True when branch decision is below the effective min notional and should fall through.
+
+    ``min_trade_usd`` overrides ``clean_swap.MIN_TRADE_USD`` when set (used for X-SIGNAL-only dust).
+    """
     cs = _facade()
-    min_trade_usd = float(getattr(cs, "MIN_TRADE_USD", 0.0) or 0.0)
-    if min_trade_usd <= 0:
+    eff_min = (
+        float(min_trade_usd)
+        if min_trade_usd is not None
+        else float(getattr(cs, "MIN_TRADE_USD", 0.0) or 0.0)
+    )
+    if eff_min <= 0:
         return False
     notional_usd = _decision_notional_usd(decision, current_price_usd=current_price_usd)
-    if notional_usd is None or notional_usd + 1e-9 >= min_trade_usd:
+    if notional_usd is None or notional_usd + 1e-9 >= eff_min:
         return False
 
     reason_txt = (
         f"{branch_name.lower()}_dust_deferred "
-        f"({decision.direction}: ${notional_usd:.2f} < MIN_TRADE_USD ${min_trade_usd:.2f})"
+        f"({decision.direction}: ${notional_usd:.2f} < min_notional_usd ${eff_min:.2f})"
     )
     cs._log_trade_skipped(reason_txt)
     print(
         f"{runtime._nanolog()}{branch_name} DUST DEFER | "
-        f"direction={decision.direction} | size=${notional_usd:.2f} | min=${min_trade_usd:.2f} | "
+        f"direction={decision.direction} | size=${notional_usd:.2f} | min=${eff_min:.2f} | "
         "continuing to next strategy"
     )
     return True
+
+
+def _x_signal_equity_effective_dust_min(balances: Balances) -> float | None:
+    """X-SIGNAL-only lower floor when combined stables are healthy; ``None`` → use global ``MIN_TRADE_USD``."""
+    cs = _facade()
+    base = float(getattr(cs, "MIN_TRADE_USD", 0.0) or 0.0)
+    x_floor = float(getattr(cs, "X_SIGNAL_EQUITY_DUST_MIN_USD", 0.0) or 0.0)
+    if base <= 0 or x_floor <= 0:
+        return None
+    stable = float(balances.usdt) + float(balances.usdc)
+    # Align with protection / external layer: keep conservative sizing when stables < ~$80.
+    if stable < 80.0:
+        return None
+    return min(base, x_floor)
 
 
 def determine_trade_decision(
@@ -431,10 +453,12 @@ def determine_trade_decision(
             xd = None
         if xd and xd.should_execute:
             print("🔍 DECISION PATH: X_SIGNAL_EQUITY")
+            x_dust_min = _x_signal_equity_effective_dust_min(balances)
             if not _defer_if_dust(
                 xd,
                 branch_name="X_SIGNAL_EQUITY",
                 current_price_usd=current_price,
+                min_trade_usd=x_dust_min,
             ):
                 return xd
 

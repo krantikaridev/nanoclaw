@@ -40,7 +40,11 @@ FLUCTUATION_COOLDOWN_SECONDS = PROTECTION_FLUCTUATION_COOLDOWN_SECONDS
 FLUCTUATION_MIN_SELL_USD = PROTECTION_FLUCTUATION_MIN_SELL_USD
 
 # If USDT is thin but USDT+USDC together is still ample, avoid force-selling WMATIC into USDT.
-FLUCTUATION_HEALTHY_TOTAL_STABLES_USD = 90.0
+# REVERSIBLE travel tune (2026-05-09): was $90 — slightly lower so USDT-only “panic” sells stop
+# sooner when combined runway is still fine (strong protection remains when stables < ~$80).
+FLUCTUATION_HEALTHY_TOTAL_STABLES_USD = 85.0
+# When spot quote fails, do not trigger a sell if combined stables already backstop gas/spend.
+FLUCTUATION_PRICE_FAIL_MIN_STABLES_USD = 80.0
 
 _ERC20_BALANCE_OF_ABI = [
     {
@@ -171,7 +175,16 @@ def check_exit_conditions():
                 except Exception as exc:
                     print(f"⚠️ FLUCTUATION PRICE CHECK UNAVAILABLE | using balance-only guard | err={exc}")
 
-                if (
+                # REVERSIBLE (2026-05-09): flaky RPC/router quotes used to fall through to a forced sell
+                # (sell_notional None → trigger). With healthy combined stables, skip instead.
+                if sell_notional_usd is None and total_stables_usd >= FLUCTUATION_PRICE_FAIL_MIN_STABLES_USD:
+                    print(
+                        "🛡️ FLUCTUATION PROTECTION SUPPRESSED | "
+                        f"price unavailable but total stables=${total_stables_usd:.2f} "
+                        f"(≥${FLUCTUATION_PRICE_FAIL_MIN_STABLES_USD:.0f}) | "
+                        f"USDT=${usdt:.2f} WMATIC={wmatic:.4f}"
+                    )
+                elif (
                     sell_notional_usd is not None
                     and sell_notional_usd < FLUCTUATION_MIN_SELL_USD
                 ):

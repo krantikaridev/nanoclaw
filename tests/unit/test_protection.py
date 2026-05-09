@@ -12,8 +12,13 @@ def test_check_exit_conditions_suppresses_fluctuation_within_cooldown(monkeypatc
     monkeypatch.setattr(protection, "FLUCTUATION_COOLDOWN_SECONDS", 1800)
     monkeypatch.setattr(protection, "_last_fluctuation_trigger_ts", None)
     monkeypatch.setattr(protection, "_last_fluctuation_context", {})
-    fake_times = iter([1_000.0, 1_001.0])
-    monkeypatch.setattr(protection.time, "time", lambda: next(fake_times))
+    tick = {"t": 1_000_000.0}
+
+    def fake_time():
+        tick["t"] += 1.0
+        return tick["t"]
+
+    monkeypatch.setattr(protection.time, "time", fake_time)
 
     should_exit, reason = protection.check_exit_conditions()
     assert should_exit is True
@@ -176,6 +181,21 @@ def test_record_buy_writes_open_trade_with_target_price(monkeypatch, tmp_path):
     assert payload[0]["status"] == "OPEN"
     assert payload[0]["buy_price"] == 1.0
     assert payload[0]["target_price"] == 1.08
+
+
+def test_check_exit_conditions_suppresses_fluctuation_when_price_unavailable_but_stables_ok(monkeypatch, tmp_path):
+    monkeypatch.setattr(protection, "TRADE_LOG_FILE", str(tmp_path / "missing_trade_exits.json"))
+    monkeypatch.setattr(protection, "FLUCTUATION_USDT_THRESHOLD", 50.0)
+    monkeypatch.setattr(protection, "get_balances", lambda: (10.0, 100.0))
+    monkeypatch.setattr(protection, "_usdc_balance_usd", lambda: 75.0)
+    monkeypatch.setattr(protection, "get_live_wmatic_price", lambda: (_ for _ in ()).throw(RuntimeError("rpc")))
+    monkeypatch.setattr(protection, "_last_fluctuation_trigger_ts", None)
+    monkeypatch.setattr(protection, "_last_fluctuation_context", {})
+
+    should_exit, reason = protection.check_exit_conditions()
+
+    assert should_exit is False
+    assert reason is None
 
 
 def test_check_exit_conditions_tracks_notional_in_fluctuation_context(monkeypatch):

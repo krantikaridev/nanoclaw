@@ -319,6 +319,13 @@ class SignalEquityTrader:
             if not SignalEquityTraderBuilder._is_valid_polygon_address(token_address):
                 print(f"[nanoclaw] TRADE SKIPPED: invalid asset config ({symbol}: bad Polygon address '{token_address}')")
                 continue
+            # Skip synthetic USDC→USDC rows (identity noop); avoids burning cycles / logs on `usdc_identity_noop`.
+            if self._addrs_equal_case_insensitive(token_address, str(self.usdc_address)):
+                logger.info(
+                    "followed_equities skip symbol=%s: token is reserve USDC (not a tradeable equity leg)",
+                    symbol,
+                )
+                continue
             decimals = int(item.get("decimals", 18) or 18)
             signal_strength = float(item.get("signal_strength", 0.0) or 0.0)
             min_signal_strength = item.get("min_signal_strength", None)
@@ -695,11 +702,16 @@ class SignalEquityTrader:
                 logger.debug("build_plan block sym=%s reason=below_min_trade_usdc", sym)
                 return None, "below_min_trade_usdc"
             trade_amount_usd = trade_size
-            if _HARD_BYPASS_ENABLED and trade_amount_usd < float(_HARD_BYPASS_MIN_TRADE_USD):
+            hard_min = float(_HARD_BYPASS_MIN_TRADE_USD)
+            soft_dust = float(cfg.X_SIGNAL_EQUITY_DUST_MIN_USD)
+            # REVERSIBLE (2026-05-09): align with swap_executor X-SIGNAL dust defer (stables ≥ ~$80).
+            if soft_dust > 0 and (float(usdt_balance) + float(usdc_balance)) >= 80.0:
+                hard_min = min(hard_min, soft_dust)
+            if _HARD_BYPASS_ENABLED and trade_amount_usd < hard_min:
                 logger.warning(
                     "[HARD BYPASS] Small trade $%.2f < $%.2f — skipped",
                     trade_amount_usd,
-                    float(_HARD_BYPASS_MIN_TRADE_USD),
+                    hard_min,
                 )
                 return None, "small_trade_bypass"
             gas_cost_usd = self._estimate_gas_cost_usd(gas_gwei)
