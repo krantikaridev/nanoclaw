@@ -203,6 +203,7 @@ def check_exit_conditions():
                         f"notional=${(sell_notional_usd or 0.0):.2f} (min=${FLUCTUATION_MIN_SELL_USD:.2f}) | "
                         f"cooldown={FLUCTUATION_COOLDOWN_SECONDS}s"
                     )
+                    _maybe_send_telegram_alerts(usdt, 0.0, True)  # usdc fetched inside if needed
                     return True, "FLUCTUATION"
     
     # 2. Check open trades for per-trade exit
@@ -252,3 +253,53 @@ def get_safe_trade_size(usdt_balance):
     return min(MAX_TRADE_SIZE_USD, usdt_balance * COPY_TRADE_PCT)
 
 print("✅ V2.5.1 Protection Module loaded successfully")
+
+# ============================================================
+# Telegram Alerts (reusing existing _telegram_send_html)
+# Added: 2026-05-09 - Event driven, low spam
+# ============================================================
+try:
+    from modules.agent_layer import _telegram_send_html
+except Exception:
+    def _telegram_send_html(text: str):
+        pass  # fallback if import fails
+
+_protection_trigger_window = []   # store recent trigger timestamps
+_last_high_protection_alert = 0
+_last_low_stable_alert = 0
+
+def _maybe_send_telegram_alerts(usdt: float, usdc: float, protection_triggered: bool):
+    """Send Telegram alert only on important events."""
+    import time
+    global _protection_trigger_window, _last_high_protection_alert, _last_low_stable_alert
+
+    now = time.time()
+    total_stables = usdt + usdc
+
+    # Track protection triggers in last 6 hours
+    if protection_triggered:
+        _protection_trigger_window.append(now)
+        # keep only last 6 hours
+        _protection_trigger_window = [t for t in _protection_trigger_window if now - t < 21600]
+
+    # Alert 1: High protection activity (>25 triggers in last 6h)
+    if len(_protection_trigger_window) > 25 and (now - _last_high_protection_alert) > 21600:
+        msg = (
+            f"⚠️ High Protection Activity\n"
+            f"Triggers (last 6h): {len(_protection_trigger_window)}\n"
+            f"Total Stables: ${total_stables:.2f}\n"
+            f"USDT: ${usdt:.2f} | USDC: ${usdc:.2f}"
+        )
+        _telegram_send_html(msg)
+        _last_high_protection_alert = now
+        _protection_trigger_window = []  # reset after alert
+
+    # Alert 2: Total Stables getting low
+    if total_stables < 65 and (now - _last_low_stable_alert) > 3600:  # max once per hour
+        msg = (
+            f"🛡️ Warning: Total Stables Low\n"
+            f"Total Stables: ${total_stables:.2f}\n"
+            f"USDT: ${usdt:.2f} | USDC: ${usdc:.2f}"
+        )
+        _telegram_send_html(msg)
+        _last_low_stable_alert = now
