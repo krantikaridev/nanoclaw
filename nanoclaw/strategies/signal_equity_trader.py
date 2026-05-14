@@ -637,7 +637,7 @@ class SignalEquityTrader:
                 trade_size = self._compute_trade_size(signal_strength, usdc_balance)
             except Exception as e:
                 print(f"[nanoclaw-av] BALANCE READ FAILED (skipped token) | {sym} | {e}")
-                return None, "balance_read_failed"
+                continue
 
         high_conviction_pol_bypass = abs(float(strength)) > 0.85
         if effective_pol < float(self.config.min_pol_for_gas) and not high_conviction_pol_bypass:
