@@ -982,37 +982,41 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
         print(f"{runtime._nanolog()}=== BUILDING TRADE PLANS ===")
         plans = []
         for a in eligible_ordered:
-            equity_balance = fcb.get_token_balance(a.token_address, int(a.decimals))
             sym = str(a.symbol).strip()
-            is_buy = float(a.signal_strength) > 0
-            if is_buy and skip_buys:
-                reasons = ",".join(list(risk_ctx.get("reasons") or []))
-                print(
-                    f"{runtime._nanolog()}X-SIGNAL BUY SKIPPED | symbol={sym} | risk={risk_level} | "
-                    f"reason={reasons or 'N/A'}"
+            try:
+                equity_balance = fcb.get_token_balance(a.token_address, int(a.decimals))
+                is_buy = float(a.signal_strength) > 0
+                if is_buy and skip_buys:
+                    reasons = ",".join(list(risk_ctx.get("reasons") or []))
+                    print(
+                        f"{runtime._nanolog()}X-SIGNAL BUY SKIPPED | symbol={sym} | risk={risk_level} | "
+                        f"reason={reasons or 'N/A'}"
+                    )
+                    continue
+                if is_buy and medium_usdt_wmatic_guard and sym in ("WMATIC", "WMATIC_ALPHA"):
+                    print(
+                        f"{runtime._nanolog()}X-SIGNAL BUY SKIPPED | symbol={sym} | risk={risk_level} | "
+                        "reason=usdt_below_medium_buffer_and_wmatic_high"
+                    )
+                    continue
+                asset_buy_mult = 0.0 if (is_buy and medium_usdt_wmatic_guard and sym in ("WMATIC", "WMATIC_ALPHA")) else buy_mult
+                plan, plan_block = _invoke_equity_build_plan(
+                    trader,
+                    EquityBuildPlanParams.for_eligible_asset(
+                        a,
+                        usdc_balance=balances.usdc,
+                        usdt_balance=balances.usdt,
+                        equity_balance=equity_balance,
+                        wallet_address_for_gas=fcb.WALLET,
+                        can_trade_asset=fcb.can_trade_asset,
+                        allow_high_gas_override=high_conviction,
+                        trade_size_multiplier=(asset_buy_mult if is_buy else 1.0),
+                        buy_risk_level=(risk_level if is_buy else None),
+                    ),
                 )
+            except Exception as e:
+                print(f"[nanoclaw-av] BALANCE READ FAILED (skipped asset) | {sym} | {e}")
                 continue
-            if is_buy and medium_usdt_wmatic_guard and sym in ("WMATIC", "WMATIC_ALPHA"):
-                print(
-                    f"{runtime._nanolog()}X-SIGNAL BUY SKIPPED | symbol={sym} | risk={risk_level} | "
-                    "reason=usdt_below_medium_buffer_and_wmatic_high"
-                )
-                continue
-            asset_buy_mult = 0.0 if (is_buy and medium_usdt_wmatic_guard and sym in ("WMATIC", "WMATIC_ALPHA")) else buy_mult
-            plan, plan_block = _invoke_equity_build_plan(
-                trader,
-                EquityBuildPlanParams.for_eligible_asset(
-                    a,
-                    usdc_balance=balances.usdc,
-                    usdt_balance=balances.usdt,
-                    equity_balance=equity_balance,
-                    wallet_address_for_gas=fcb.WALLET,
-                    can_trade_asset=fcb.can_trade_asset,
-                    allow_high_gas_override=high_conviction,
-                    trade_size_multiplier=(asset_buy_mult if is_buy else 1.0),
-                    buy_risk_level=(risk_level if is_buy else None),
-                ),
-            )
             if plan:
                 # Plan trade_size already uses FIXED SIZING $12–$20 (signal_equity_trader); never re-expand to full USDC.
                 dynamic_trade_size_usdc = float(plan.trade_size)

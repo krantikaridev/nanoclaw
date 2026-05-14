@@ -1762,6 +1762,79 @@ def test_try_x_signal_equity_prioritizes_ready_asset_sorted_before_build_plan(mo
     assert build_order[0] == "WETH_ALPHA"
 
 
+def test_try_x_signal_equity_skips_asset_when_balance_read_fails(monkeypatch, capsys):
+    class _Plan:
+        direction = "USDC_TO_EQUITY"
+        amount_in = 8_000_000
+        trade_size = 8.0
+        message = "buy"
+        token_in = "0x" + "2" * 40
+        token_out = "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619"
+
+    class _TunedConfig:
+        min_trade_usdc = 5.0
+        per_asset_cooldown_seconds = 1800
+        min_pol_for_gas = 0.005
+
+    build_order: list[str] = []
+    wbtc_token = "0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6"
+
+    class _TunedTrader:
+        config = _TunedConfig()
+        gas_protector = _DummyGasProtector()
+
+        def build_plan_with_block_reason(self, **kwargs):
+            build_order.append(str(kwargs.get("symbol", "")).strip())
+            return _Plan(), None
+
+        def build_plan(self, **kwargs):
+            plan, _ = self.build_plan_with_block_reason(**kwargs)
+            return plan
+
+    class _BaseTrader:
+        def load_followed_equities(self):
+            return [
+                clean_swap.FollowedEquity(
+                    symbol="WBTC_ALPHA",
+                    token_address=wbtc_token,
+                    decimals=8,
+                    signal_strength=0.92,
+                ),
+                clean_swap.FollowedEquity(
+                    symbol="WETH_ALPHA",
+                    token_address="0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+                    decimals=18,
+                    signal_strength=0.87,
+                ),
+            ]
+
+    def fake_get_token_balance(token_address, decimals):
+        _ = decimals
+        if str(token_address).lower() == wbtc_token.lower():
+            raise RuntimeError("BadFunctionCallOutput")
+        return 0.0
+
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(clean_swap, "AUTO_TOPUP_POL", False)
+    monkeypatch.setattr(clean_swap, "_load_followed_equities_json_dict", lambda: {"enabled": True, "min_signal_strength": 0.60})
+    monkeypatch.setattr(clean_swap, "_effective_equity_signal_min", lambda cfg: 0.60)
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_EQUITY_TRADER", _BaseTrader())
+    monkeypatch.setattr(clean_swap, "_tuned_signal_equity_trader", lambda min_strength: _TunedTrader())
+    monkeypatch.setattr(clean_swap, "can_trade_asset", lambda symbol, now=None, cooldown_seconds=0: True)
+    monkeypatch.setattr(clean_swap, "get_token_balance", fake_get_token_balance)
+
+    decision = clean_swap.try_x_signal_equity_decision(
+        clean_swap.Balances(usdt=40.0, wmatic=10.0, pol=1.0, usdc=20.0),
+        dry_run=True,
+    )
+
+    out = capsys.readouterr().out
+    assert decision is not None
+    assert decision.direction == "USDC_TO_EQUITY"
+    assert build_order == ["WETH_ALPHA"]
+    assert "[nanoclaw-av] BALANCE READ FAILED (skipped asset) | WBTC_ALPHA | BadFunctionCallOutput" in out
+
+
 def test_try_x_signal_high_conviction_bypasses_high_gas_and_forces_usdc_topup(monkeypatch, capsys):
     _reset_auto_usdc_failure_state()
     class _Plan:
