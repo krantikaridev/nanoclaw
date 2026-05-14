@@ -631,12 +631,13 @@ class SignalEquityTrader:
 
         # === POL check + Balance resilience for X-SIGNAL ===
         effective_pol = float(gas_status.get("pol_balance", 0.0) or 0.0)
-        try:
-            # Dynamic sizing (this is where WBTC/LINK balance reads often fail)
-            trade_size = self._compute_trade_size(signal_strength, usdc_balance)
-        except Exception as e:
-            print(f"[nanoclaw-av] BALANCE READ FAILED (skipped token) | {sym} | {e}")
-            return None, "balance_read_failed"
+        for sym in ["WMATIC_ALPHA", "WETH_ALPHA", "WBTC_ALPHA", "LINK_ALPHA"]:
+            try:
+                # Dynamic sizing (this is where WBTC/LINK balance reads often fail)
+                trade_size = self._compute_trade_size(signal_strength, usdc_balance)
+            except Exception as e:
+                print(f"[nanoclaw-av] BALANCE READ FAILED (skipped token) | {sym} | {e}")
+                return None, "balance_read_failed"
 
         high_conviction_pol_bypass = abs(float(strength)) > 0.85
         if effective_pol < float(self.config.min_pol_for_gas) and not high_conviction_pol_bypass:
