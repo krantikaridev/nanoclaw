@@ -1059,6 +1059,53 @@ def test_build_plan_skips_asset_when_dynamic_sizing_raises(capfd, monkeypatch):
     assert "[nanoclaw-av] BALANCE READ FAILED (skipped asset) | WBTC_ALPHA | BadFunctionCallOutput" in captured.out
 
 
+def test_build_plan_and_from_params_catch_block_reason_exceptions(capfd, monkeypatch):
+    """Orchestration entry points must not propagate per-asset RPC/Web3 failures."""
+    from nanoclaw.strategies.signal_equity_trader import EquityBuildPlanParams, FollowedEquity
+
+    s = _build_strategy_tuned()
+    monkeypatch.setattr(
+        s,
+        "build_plan_with_block_reason",
+        lambda **_k: (_ for _ in ()).throw(RuntimeError("BadFunctionCallOutput")),
+    )
+    plan = s.build_plan(
+        symbol="LINK_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.92,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=50.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+    )
+    out1 = capfd.readouterr().out
+    assert plan is None
+    assert "[nanoclaw-av] BALANCE READ FAILED (skipped asset) | LINK_ALPHA | BadFunctionCallOutput" in out1
+
+    fe = FollowedEquity(
+        symbol="WETH_ALPHA",
+        token_address="0x" + "a" * 40,
+        decimals=18,
+        signal_strength=0.91,
+    )
+    params = EquityBuildPlanParams.for_eligible_asset(
+        fe,
+        usdc_balance=50.0,
+        usdt_balance=0.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+        allow_high_gas_override=False,
+    )
+    plan2, reason2 = s.build_plan_from_params(params)
+    out2 = capfd.readouterr().out
+    assert plan2 is None and reason2 == "balance_read_failed"
+    assert "[nanoclaw-av] BALANCE READ FAILED (skipped asset) | WETH_ALPHA | BadFunctionCallOutput" in out2
+
+
 def test_buy_trade_size_multiplier_applies_before_guards(monkeypatch):
     from modules import runtime as rt
     from nanoclaw.strategies import signal_equity_trader as strat_mod

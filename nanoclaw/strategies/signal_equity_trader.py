@@ -532,27 +532,43 @@ class SignalEquityTrader:
     def _addrs_equal_case_insensitive(a: str, b: str) -> bool:
         return str(a).strip().lower() == str(b).strip().lower()
 
+    def _catch_plan_build_rpc(
+        self,
+        sym: str,
+        build: Callable[[], Tuple[Optional[EquityTradePlan], Optional[str]]],
+    ) -> Tuple[Optional[EquityTradePlan], Optional[str]]:
+        """So one symbol's RPC/Web3 failure cannot abort the multi-asset X-SIGNAL cycle."""
+        try:
+            return build()
+        except Exception as e:
+            print(f"[nanoclaw-av] BALANCE READ FAILED (skipped asset) | {sym} | {e}")
+            return None, "balance_read_failed"
+
     def build_plan_from_params(
         self, params: EquityBuildPlanParams
     ) -> Tuple[Optional[EquityTradePlan], Optional[str]]:
-        return self.build_plan_with_block_reason(
-            symbol=params.symbol,
-            token_address=params.token_address,
-            token_decimals=params.token_decimals,
-            signal_strength=params.signal_strength,
-            earnings_proximity_days=params.earnings_proximity_days,
-            current_price_usd=params.current_price_usd,
-            usdc_balance=params.usdc_balance,
-            equity_balance=params.equity_balance,
-            usdt_balance=params.usdt_balance,
-            wallet_address_for_gas=params.wallet_address_for_gas,
-            can_trade_asset=params.can_trade_asset,
-            now=params.now,
-            urgent_gas=params.urgent_gas,
-            allow_high_gas_override=params.allow_high_gas_override,
-            upside_pct=params.upside_pct,
-            trade_size_multiplier=params.trade_size_multiplier,
-            buy_risk_level=params.buy_risk_level,
+        sym = str(params.symbol).strip()
+        return self._catch_plan_build_rpc(
+            sym,
+            lambda: self.build_plan_with_block_reason(
+                symbol=params.symbol,
+                token_address=params.token_address,
+                token_decimals=params.token_decimals,
+                signal_strength=params.signal_strength,
+                earnings_proximity_days=params.earnings_proximity_days,
+                current_price_usd=params.current_price_usd,
+                usdc_balance=params.usdc_balance,
+                equity_balance=params.equity_balance,
+                usdt_balance=params.usdt_balance,
+                wallet_address_for_gas=params.wallet_address_for_gas,
+                can_trade_asset=params.can_trade_asset,
+                now=params.now,
+                urgent_gas=params.urgent_gas,
+                allow_high_gas_override=params.allow_high_gas_override,
+                upside_pct=params.upside_pct,
+                trade_size_multiplier=params.trade_size_multiplier,
+                buy_risk_level=params.buy_risk_level,
+            ),
         )
 
     def build_plan_with_block_reason(
@@ -861,24 +877,28 @@ class SignalEquityTrader:
             usdc_balance,
             equity_balance,
         )
-        plan, reason = self.build_plan_with_block_reason(
-            symbol=symbol,
-            token_address=token_address,
-            token_decimals=token_decimals,
-            signal_strength=signal_strength,
-            earnings_proximity_days=earnings_proximity_days,
-            current_price_usd=current_price_usd,
-            usdc_balance=usdc_balance,
-            equity_balance=equity_balance,
-            usdt_balance=usdt_balance,
-            wallet_address_for_gas=wallet_address_for_gas,
-            can_trade_asset=can_trade_asset,
-            now=now,
-            urgent_gas=urgent_gas,
-            allow_high_gas_override=allow_high_gas_override,
-            upside_pct=upside_pct,
-            trade_size_multiplier=trade_size_multiplier,
-            buy_risk_level=buy_risk_level,
+        sym = str(symbol).strip()
+        plan, reason = self._catch_plan_build_rpc(
+            sym,
+            lambda: self.build_plan_with_block_reason(
+                symbol=symbol,
+                token_address=token_address,
+                token_decimals=token_decimals,
+                signal_strength=signal_strength,
+                earnings_proximity_days=earnings_proximity_days,
+                current_price_usd=current_price_usd,
+                usdc_balance=usdc_balance,
+                equity_balance=equity_balance,
+                usdt_balance=usdt_balance,
+                wallet_address_for_gas=wallet_address_for_gas,
+                can_trade_asset=can_trade_asset,
+                now=now,
+                urgent_gas=urgent_gas,
+                allow_high_gas_override=allow_high_gas_override,
+                upside_pct=upside_pct,
+                trade_size_multiplier=trade_size_multiplier,
+                buy_risk_level=buy_risk_level,
+            ),
         )
         if plan is None:
             logger.debug("build_plan exit None sym=%s reason=%s", symbol, reason)
