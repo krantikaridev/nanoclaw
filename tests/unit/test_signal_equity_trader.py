@@ -295,7 +295,7 @@ def test_below_threshold_is_allowed_when_force_high_conviction_true():
         symbol="WETH_ALPHA",
         token_address="0x" + "1" * 40,
         token_decimals=18,
-        signal_strength=0.85,
+        signal_strength=0.84,
         earnings_proximity_days=None,
         current_price_usd=1.0,
         usdc_balance=50.0,
@@ -416,7 +416,7 @@ def test_force_eligible_bypasses_outside_earnings_window():
         symbol="WETH",
         token_address="0x" + "1" * 40,
         token_decimals=18,
-        signal_strength=0.88,
+        signal_strength=0.84,
         earnings_proximity_days=90.0,
         current_price_usd=2.0,
         usdc_balance=50.0,
@@ -456,7 +456,7 @@ def test_force_eligible_bypasses_high_gas_without_override():
         symbol="WETH",
         token_address="0x" + "1" * 40,
         token_decimals=18,
-        signal_strength=0.91,
+        signal_strength=0.84,
         earnings_proximity_days=None,
         current_price_usd=1.0,
         usdc_balance=50.0,
@@ -500,7 +500,7 @@ def test_force_eligible_bypasses_cooldown_and_builds_buy():
         symbol="WETH",
         token_address="0x" + "1" * 40,
         token_decimals=18,
-        signal_strength=0.91,
+        signal_strength=0.84,
         earnings_proximity_days=None,
         current_price_usd=1.0,
         usdc_balance=50.0,
@@ -556,7 +556,7 @@ def test_buy_fixed_size_is_now_stopped_by_hard_bypass_when_under_15():
         symbol="WETH",
         token_address="0x" + "1" * 40,
         token_decimals=18,
-        signal_strength=0.92,
+        signal_strength=0.84,
         earnings_proximity_days=None,
         current_price_usd=1.0,
         usdc_balance=40.0,
@@ -575,7 +575,7 @@ def test_buy_no_longer_uses_legacy_high_conviction_cap():
         symbol="WETH_ALPHA",
         token_address="0x" + "1" * 40,
         token_decimals=8,
-        signal_strength=0.92,
+        signal_strength=0.84,
         earnings_proximity_days=None,
         current_price_usd=1.0,
         usdc_balance=40.0,
@@ -610,7 +610,7 @@ def test_hard_bypass_blocks_micro_trade_under_15_usd():
         symbol="WETH_ALPHA",
         token_address="0x" + "1" * 40,
         token_decimals=18,
-        signal_strength=0.92,
+        signal_strength=0.84,
         earnings_proximity_days=None,
         current_price_usd=1.0,
         usdc_balance=40.0,
@@ -619,6 +619,56 @@ def test_hard_bypass_blocks_micro_trade_under_15_usd():
         can_trade_asset=lambda *_a, **_k: True,
     )
     assert plan is None
+    assert reason == "small_trade_bypass"
+
+
+def test_x_signal_equity_high_conviction_allows_buy_below_hard_min_trade_usd(monkeypatch, capsys):
+    """TEMPORARY: abs(signal)>=0.85 and size in [_X_SIGNAL_MIN_SIZE_OVERRIDE, hard_min) skips small_trade_bypass."""
+    s = _build_strategy_tuned(min_trade_usdc=4.0)
+    monkeypatch.setattr(
+        SignalEquityTrader,
+        "_compute_trade_size",
+        lambda self, usdc_balance, signal_strength, usdt_balance=0.0, *, symbol="": 8.5,
+    )
+    plan, reason = s.build_plan_with_block_reason(
+        symbol="WMATIC_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.90,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=40.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+        upside_pct=25.0,
+    )
+    assert plan is not None
+    assert plan.direction == "USDC_TO_EQUITY"
+    assert reason is None
+    assert "X-SIGNAL small size allowed (high conviction bypass)" in capsys.readouterr().out
+
+
+def test_x_signal_equity_small_trade_still_blocked_below_override_floor(monkeypatch):
+    s = _build_strategy_tuned(min_trade_usdc=4.0)
+    monkeypatch.setattr(
+        SignalEquityTrader,
+        "_compute_trade_size",
+        lambda self, usdc_balance, signal_strength, usdt_balance=0.0, *, symbol="": 7.4,
+    )
+    _, reason = s.build_plan_with_block_reason(
+        symbol="WETH_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.92,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=40.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+        upside_pct=25.0,
+    )
     assert reason == "small_trade_bypass"
 
 

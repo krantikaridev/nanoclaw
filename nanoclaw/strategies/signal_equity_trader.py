@@ -37,6 +37,9 @@ _HARD_BYPASS_ENABLED = cfg.env_bool("HARD_BYPASS_ENABLED", True)
 # Hard execution floor for BUY notional; configured from .env (MIN_TRADE_USD).
 _HARD_BYPASS_MIN_TRADE_USD = cfg.env_float("MIN_TRADE_USD", 15.0)
 
+# TEMPORARY: Allow slightly smaller X-SIGNAL trades for high-conviction signals
+_X_SIGNAL_MIN_SIZE_OVERRIDE = 7.5
+
 # TEMPORARY WORKAROUND - Remove after balance issues on WBTC/LINK are fixed
 _X_SIGNAL_EQUITY_TEMP_SKIP_SYMBOLS = frozenset({"WBTC_ALPHA", "LINK_ALPHA"})
 
@@ -743,12 +746,23 @@ class SignalEquityTrader:
                 if soft_dust > 0 and (float(usdt_balance) + float(usdc_balance)) >= 80.0:
                     hard_min = min(hard_min, soft_dust)
                 if _HARD_BYPASS_ENABLED and trade_amount_usd < hard_min:
-                    logger.warning(
-                        "[HARD BYPASS] Small trade $%.2f < $%.2f — skipped",
-                        trade_amount_usd,
-                        hard_min,
+                    # USDC→equity BUY path only (strength > 0); narrow high-conviction exception under hard MIN_TRADE_USD.
+                    x_signal_equity_high_conviction_small_ok = (
+                        strength > 0
+                        and abs(float(strength)) >= 0.85
+                        and float(trade_amount_usd) >= float(_X_SIGNAL_MIN_SIZE_OVERRIDE)
+                        and float(trade_amount_usd) < float(hard_min)
                     )
-                    return None, "small_trade_bypass"
+                    if x_signal_equity_high_conviction_small_ok:
+                        print("[nanoclaw-av] X-SIGNAL small size allowed (high conviction bypass)")
+                        logger.info("[nanoclaw-av] X-SIGNAL small size allowed (high conviction bypass)")
+                    else:
+                        logger.warning(
+                            "[HARD BYPASS] Small trade $%.2f < $%.2f — skipped",
+                            trade_amount_usd,
+                            hard_min,
+                        )
+                        return None, "small_trade_bypass"
                 gas_cost_usd = self._estimate_gas_cost_usd(gas_gwei)
                 expected_profit_usd = self._expected_profit_usd(trade_size, upside_pct)
                 min_expected_profit_usd = gas_cost_usd * float(self._PROFIT_TO_GAS_MULTIPLIER)
