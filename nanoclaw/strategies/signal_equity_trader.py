@@ -40,6 +40,9 @@ _HARD_BYPASS_MIN_TRADE_USD = cfg.env_float("MIN_TRADE_USD", 15.0)
 # TEMPORARY: Allow slightly smaller X-SIGNAL trades for high-conviction signals
 _X_SIGNAL_MIN_SIZE_OVERRIDE = 7.5
 
+# TEMPORARY: Allow slightly smaller effective size for high-conviction X-SIGNAL
+_X_SIGNAL_MIN_EFFECTIVE_OVERRIDE = 7.0
+
 # TEMPORARY WORKAROUND - Remove after balance issues on WBTC/LINK are fixed
 _X_SIGNAL_EQUITY_TEMP_SKIP_SYMBOLS = frozenset({"WBTC_ALPHA", "LINK_ALPHA"})
 
@@ -786,17 +789,29 @@ class SignalEquityTrader:
                     )
                     return None, "expected_profit_below_gas"
                 if effective_trade_size_after_gas < float(self._MIN_EFFECTIVE_TRADE_AFTER_GAS_USD):
-                    print(
-                        f"[nanoclaw] BLOCK: {sym} | low_effective_trade_after_gas "
-                        f"(effective=${effective_trade_size_after_gas:.2f} < ${self._MIN_EFFECTIVE_TRADE_AFTER_GAS_USD:.2f})"
+                    # USDC→equity BUY; allow marginally thin effective notional for high-conviction X-SIGNAL only.
+                    x_signal_equity_high_conviction_effective_ok = (
+                        strength > 0
+                        and abs(float(strength)) >= 0.85
+                        and float(effective_trade_size_after_gas) >= float(_X_SIGNAL_MIN_EFFECTIVE_OVERRIDE)
+                        and float(effective_trade_size_after_gas)
+                        < float(self._MIN_EFFECTIVE_TRADE_AFTER_GAS_USD)
                     )
-                    logger.debug(
-                        "build_plan block sym=%s reason=low_effective_trade_after_gas effective=%s gas=%s",
-                        sym,
-                        effective_trade_size_after_gas,
-                        gas_cost_usd,
-                    )
-                    return None, "low_effective_trade_after_gas"
+                    if x_signal_equity_high_conviction_effective_ok:
+                        print("[nanoclaw-av] X-SIGNAL effective size allowed (high conviction bypass)")
+                        logger.info("[nanoclaw-av] X-SIGNAL effective size allowed (high conviction bypass)")
+                    else:
+                        print(
+                            f"[nanoclaw] BLOCK: {sym} | low_effective_trade_after_gas "
+                            f"(effective=${effective_trade_size_after_gas:.2f} < ${self._MIN_EFFECTIVE_TRADE_AFTER_GAS_USD:.2f})"
+                        )
+                        logger.debug(
+                            "build_plan block sym=%s reason=low_effective_trade_after_gas effective=%s gas=%s",
+                            sym,
+                            effective_trade_size_after_gas,
+                            gas_cost_usd,
+                        )
+                        return None, "low_effective_trade_after_gas"
                 tp = float(self.config.strong_take_profit_pct)
                 price_note = f" @ ${current_price_usd:.2f}" if isinstance(current_price_usd, (int, float)) else ""
                 earn_note = (
