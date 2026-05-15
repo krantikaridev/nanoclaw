@@ -1035,6 +1035,30 @@ def test_compute_trade_size_and_addrs_equal_helpers():
     assert s._addrs_equal_case_insensitive("0xAbC", "0xabc") is True
 
 
+def test_build_plan_skips_asset_when_dynamic_sizing_raises(capfd, monkeypatch):
+    s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
+    monkeypatch.setattr(s, "_compute_trade_size", lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("BadFunctionCallOutput")))
+
+    plan, reason = s.build_plan_with_block_reason(
+        symbol="WBTC_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=8,
+        signal_strength=0.92,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=50.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+        upside_pct=20.0,
+    )
+
+    captured = capfd.readouterr()
+    assert plan is None
+    assert reason == "balance_read_failed"
+    assert "[nanoclaw-av] BALANCE READ FAILED (skipped asset) | WBTC_ALPHA | BadFunctionCallOutput" in captured.out
+
+
 def test_buy_trade_size_multiplier_applies_before_guards(monkeypatch):
     from modules import runtime as rt
     from nanoclaw.strategies import signal_equity_trader as strat_mod

@@ -629,15 +629,8 @@ class SignalEquityTrader:
         if not gas_ok and is_force_eligible and bool(allow_high_gas_override):
             print(f"[nanoclaw] GAS OVERRIDE | {sym} | high_conviction bypass (gas {gas_gwei:.1f} > {max_gwei:.1f}, allow_high_gas_override=True)")
 
-        # === POL check + Balance resilience for X-SIGNAL ===
+        # === POL check ===
         effective_pol = float(gas_status.get("pol_balance", 0.0) or 0.0)
-        for sym in ["WMATIC_ALPHA", "WETH_ALPHA", "WBTC_ALPHA", "LINK_ALPHA"]:
-            try:
-                # Dynamic sizing (this is where WBTC/LINK balance reads often fail)
-                trade_size = self._compute_trade_size(signal_strength, usdc_balance)
-            except Exception as e:
-                print(f"[nanoclaw-av] BALANCE READ FAILED (skipped token) | {sym} | {e}")
-                continue
 
         high_conviction_pol_bypass = abs(float(strength)) > 0.85
         if effective_pol < float(self.config.min_pol_for_gas) and not high_conviction_pol_bypass:
@@ -685,7 +678,11 @@ class SignalEquityTrader:
                 )
                 logger.debug("build_plan block sym=%s reason=zero_usdc", sym)
                 return None, "zero_usdc"
-            trade_size = self._compute_trade_size(usdc_balance, strength, usdt_balance, symbol=sym)
+            try:
+                trade_size = self._compute_trade_size(usdc_balance, strength, usdt_balance, symbol=sym)
+            except Exception as e:
+                print(f"[nanoclaw-av] BALANCE READ FAILED (skipped asset) | {sym} | {e}")
+                return None, "balance_read_failed"
             mult = float(trade_size_multiplier)
             if not math.isfinite(mult) or mult <= 0.0:
                 return None, "invalid_trade_size_multiplier"
