@@ -37,6 +37,9 @@ _HARD_BYPASS_ENABLED = cfg.env_bool("HARD_BYPASS_ENABLED", True)
 # Hard execution floor for BUY notional; configured from .env (MIN_TRADE_USD).
 _HARD_BYPASS_MIN_TRADE_USD = cfg.env_float("MIN_TRADE_USD", 15.0)
 
+# TEMPORARY: Skipping WBTC_ALPHA and LINK_ALPHA due to persistent balance read failures
+_X_SIGNAL_EQUITY_TEMP_SKIP_SYMBOLS = frozenset({"WBTC_ALPHA", "LINK_ALPHA"})
+
 
 @dataclass(frozen=True)
 class FollowedEquity:
@@ -308,6 +311,8 @@ class SignalEquityTrader:
             if not isinstance(item, dict):
                 continue
             symbol = str(item.get("symbol", "")).strip()
+            if symbol in _X_SIGNAL_EQUITY_TEMP_SKIP_SYMBOLS:
+                continue
             env_key = str(item.get("env_token_address", symbol)).strip() or symbol
             explicit_address = item.get("address")
             explicit = str(explicit_address).strip() if explicit_address is not None else ""

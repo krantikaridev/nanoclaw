@@ -1009,6 +1009,34 @@ def test_load_followed_equities_skips_bad_rows(tmp_path):
     assert out[0].symbol == "OK"
 
 
+def test_load_followed_equities_temporary_skip_wbtc_link_alpha(tmp_path):
+    """WBTC_ALPHA / LINK_ALPHA are temporarily omitted from the followed-equities load list."""
+    p = tmp_path / "fe.json"
+    p.write_text(
+        json.dumps(
+            {
+                "assets": [
+                    {"symbol": "WBTC_ALPHA", "address": "0x" + "1" * 40, "decimals": 8, "signal_strength": 0.92},
+                    {"symbol": "LINK_ALPHA", "address": "0x" + "2" * 40, "decimals": 18, "signal_strength": 0.91},
+                    {"symbol": "WMATIC_ALPHA", "address": "0x" + "3" * 40, "decimals": 18, "signal_strength": 0.85},
+                    {"symbol": "WETH_ALPHA", "address": "0x" + "4" * 40, "decimals": 18, "signal_strength": 0.88},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    s = (
+        SignalEquityTrader.builder()
+        .with_enabled(True)
+        .with_followed_equities_path(str(p))
+        .with_gas_protector(DummyProtector(gas_ok=True, pol_balance=1.0))
+        .with_usdc_address("0x" + "5" * 40)
+        .build()
+    )
+    out = s.load_followed_equities()
+    assert [a.symbol for a in out] == ["WMATIC_ALPHA", "WETH_ALPHA"]
+
+
 def test_gas_override_branch_when_force_eligible_and_allow_high_gas_override(capfd):
     """Logs GAS OVERRIDE line when gas hot but sprint override is on."""
     s = _build_strategy_tuned(gas_ok=False)
