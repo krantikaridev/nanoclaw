@@ -627,6 +627,71 @@ def test_determine_trade_decision_defers_dust_profit_take_and_falls_through(monk
     assert "continuing to next strategy" in captured
 
 
+def test_determine_trade_decision_profit_take_balance_relief_allows_small_wm_to_usdt(monkeypatch, capsys):
+    """TEMPORARY: large WMATIC USD stack + notional in $6–$10 allows PROFIT_TAKE despite global min."""
+    monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))
+    monkeypatch.setattr(
+        clean_swap,
+        "evaluate_take_profit",
+        lambda *_args, **_kwargs: (True, {"reason": "TP_HIT", "message": "tp", "sell_fraction": 0.12}),
+    )
+    monkeypatch.setattr(clean_swap, "MIN_TRADE_USD", 10.0)
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
+
+    profit_small = clean_swap.TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(8 * 1_000_000_000_000_000_000),
+        message="small tp",
+    )
+    monkeypatch.setattr(clean_swap, "build_profit_exit_decision", lambda *_args, **_kwargs: profit_small)
+
+    out = clean_swap.determine_trade_decision(
+        state={},
+        balances=clean_swap.Balances(usdt=10.0, wmatic=200.0, pol=1.0, usdc=30.0),
+        current_price=1.0,
+    )
+    captured = capsys.readouterr().out
+    assert out is profit_small
+    assert "[nanoclaw] Main strategy small profit take allowed (balance relief)" in captured
+
+
+def test_determine_trade_decision_profit_take_balance_relief_skipped_when_wm_stack_small(monkeypatch, capsys):
+    """TEMPORARY: balance-relief bypass does not apply when WMATIC USD equiv is below floor."""
+    monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))
+    monkeypatch.setattr(
+        clean_swap,
+        "evaluate_take_profit",
+        lambda *_args, **_kwargs: (True, {"reason": "TP_HIT", "message": "tp", "sell_fraction": 0.12}),
+    )
+    monkeypatch.setattr(clean_swap, "MIN_TRADE_USD", 10.0)
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
+
+    profit_small = clean_swap.TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(8 * 1_000_000_000_000_000_000),
+        message="small tp",
+    )
+    sentinel = clean_swap.TradeDecision(direction="USDC_TO_EQUITY", amount_in=25_000_000, message="x-signal")
+    monkeypatch.setattr(clean_swap, "build_profit_exit_decision", lambda *_args, **_kwargs: profit_small)
+    monkeypatch.setattr(clean_swap, "try_x_signal_equity_decision", lambda *_args, **_kwargs: sentinel)
+
+    skipped: list[str] = []
+    monkeypatch.setattr(clean_swap, "_log_trade_skipped", lambda reason: skipped.append(reason))
+
+    out = clean_swap.determine_trade_decision(
+        state={},
+        balances=clean_swap.Balances(usdt=10.0, wmatic=50.0, pol=1.0, usdc=30.0),
+        current_price=1.0,
+    )
+    captured = capsys.readouterr().out
+    assert out is sentinel
+    assert any("profit_take_dust_deferred" in reason for reason in skipped)
+    assert "PROFIT_TAKE DUST DEFER" in captured
+    assert "Main strategy small profit take allowed (balance relief)" not in captured
+
+
 def test_determine_trade_decision_defers_dust_x_signal_and_falls_through_to_main(monkeypatch, capsys):
     monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))
     monkeypatch.setattr(clean_swap, "evaluate_take_profit", lambda *_args, **_kwargs: (False, None))

@@ -332,6 +332,40 @@ def _defer_if_dust(
     return True
 
 
+# TEMPORARY (2026-05): PROFIT_TAKE WM→stable dust defer bypass when WMATIC stack is heavy — easy revert.
+_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 175.0  # midpoint of ~$150–$200 equiv band
+_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_MIN_USD = 6.0
+_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_MAX_USD = 10.0
+
+
+def _profit_take_balance_relief_bypass_allowed(
+    decision: TradeDecision,
+    *,
+    balances: Balances,
+    current_price_usd: float,
+    min_trade_usd: float,
+) -> bool:
+    """TEMPORARY: allow small WMATIC_TO_USDT profit exits when holdings are large vs floor (feeds stable generation)."""
+    if str(decision.direction or "").strip().upper() not in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:
+        return False
+    eff_min = float(min_trade_usd)
+    if eff_min <= 0.0:
+        return False
+    notional_usd = _decision_notional_usd(decision, current_price_usd=current_price_usd)
+    if notional_usd is None:
+        return False
+    if notional_usd + 1e-9 >= eff_min:
+        return False
+    lo = float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_MIN_USD)
+    hi = float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_MAX_USD)
+    if notional_usd + 1e-9 < lo or notional_usd > hi + 1e-9:
+        return False
+    wm_equiv_usd = float(balances.wmatic) * float(current_price_usd)
+    if wm_equiv_usd + 1e-9 <= float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN):
+        return False
+    return True
+
+
 _X_SIGNAL_HIGH_CONVICTION_STRENGTH = 0.85
 
 
@@ -447,6 +481,15 @@ def determine_trade_decision(
     if should_take_profit and profit_signal and balances.wmatic > 0:
         print(f"🔍 DECISION PATH: PROFIT_TAKE ({profit_signal.get('reason','')})")
         profit_decision = cs_build_profit_exit_decision(profit_signal, balances.wmatic)
+        eff_pt_min_usd = float(getattr(cs, "MIN_TRADE_USD", 0.0) or 0.0)
+        if _profit_take_balance_relief_bypass_allowed(
+            profit_decision,
+            balances=balances,
+            current_price_usd=current_price,
+            min_trade_usd=eff_pt_min_usd,
+        ):
+            print("[nanoclaw] Main strategy small profit take allowed (balance relief)")
+            return profit_decision
         if not _defer_if_dust(
             profit_decision,
             branch_name="PROFIT_TAKE",
