@@ -42,6 +42,10 @@ _X_SIGNAL_HIGH_CONVICTION_STRENGTH = 0.85
 _X_SIGNAL_HIGH_CONVICTION_COOLDOWN_FACTOR = 0.5  # halve per-asset wait for BUY >= strength above
 _X_SIGNAL_HIGH_CONVICTION_COOLDOWN_MIN_SECONDS = 300
 
+# TEMPORARY: Very-strong X-SIGNAL USDC→equity cooldown (more aggressive than 0.85 tier; reversible)
+_X_SIGNAL_VERY_STRONG_COOLDOWN_FACTOR = 0.35  # ~35% of base per-asset wait for BUY >= 0.90
+_X_SIGNAL_VERY_STRONG_COOLDOWN_MIN_SECONDS = 180  # 3-minute floor
+
 # TEMPORARY: Allow slightly smaller X-SIGNAL trades for high-conviction signals
 _X_SIGNAL_MIN_SIZE_OVERRIDE = 7.5
 
@@ -400,15 +404,24 @@ class SignalEquityTrader:
         """USDC→equity BUY only; does not affect sells or other strategies."""
         return float(signal_strength) > 0 and abs(float(signal_strength)) >= float(_X_SIGNAL_HIGH_CONVICTION_STRENGTH)
 
+    @staticmethod
+    def _x_signal_very_strong_buy(signal_strength: float) -> bool:
+        """TEMPORARY: USDC→equity BUY at very strong signal strength (aggressive cooldown tier)."""
+        return float(signal_strength) > 0 and abs(float(signal_strength)) >= float(_X_SIGNAL_VERY_STRONG_STRENGTH)
+
     def _high_conviction_cooldown_seconds(self, signal_strength: float) -> int:
         """TEMPORARY: shorter effective per-asset cooldown for high-conviction X-SIGNAL equity BUYs."""
         base = int(self.config.per_asset_cooldown_seconds)
         if not self._x_signal_high_conviction_buy(signal_strength):
             return base
-        reduced = max(
-            int(_X_SIGNAL_HIGH_CONVICTION_COOLDOWN_MIN_SECONDS),
-            int(base * float(_X_SIGNAL_HIGH_CONVICTION_COOLDOWN_FACTOR)),
-        )
+        if self._x_signal_very_strong_buy(signal_strength):
+            # TEMPORARY: more aggressive relief than the 0.85 tier (30–40% of base, 3-min floor).
+            factor = float(_X_SIGNAL_VERY_STRONG_COOLDOWN_FACTOR)
+            floor_secs = int(_X_SIGNAL_VERY_STRONG_COOLDOWN_MIN_SECONDS)
+        else:
+            factor = float(_X_SIGNAL_HIGH_CONVICTION_COOLDOWN_FACTOR)
+            floor_secs = int(_X_SIGNAL_HIGH_CONVICTION_COOLDOWN_MIN_SECONDS)
+        reduced = max(floor_secs, int(base * factor))
         return min(base, reduced)
 
     @staticmethod
@@ -769,8 +782,12 @@ class SignalEquityTrader:
                 and not cooldown_ok_full
                 and cooldown_ok_effective
             ):
-                print("[nanoclaw-av] X-SIGNAL high-conviction cooldown bypass")
-                logger.info("[nanoclaw-av] X-SIGNAL high-conviction cooldown bypass")
+                if self._x_signal_very_strong_buy(strength):
+                    print("[nanoclaw-av] X-SIGNAL very strong signal cooldown relief")
+                    logger.info("[nanoclaw-av] X-SIGNAL very strong signal cooldown relief")
+                else:
+                    print("[nanoclaw-av] X-SIGNAL high-conviction cooldown bypass")
+                    logger.info("[nanoclaw-av] X-SIGNAL high-conviction cooldown bypass")
             if is_force_eligible and not cooldown_ok_full:
                 print(f"[nanoclaw] COOLDOWN OVERRIDE | {sym} | force_eligible bypass ({full_cooldown_secs}s)")
 

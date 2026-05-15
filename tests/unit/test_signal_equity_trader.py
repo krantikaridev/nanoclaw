@@ -570,6 +570,58 @@ def test_x_signal_high_conviction_cooldown_still_blocks_when_reduced_not_ready()
     assert reason == "per_asset_cooldown"
 
 
+def test_x_signal_very_strong_cooldown_more_aggressive_than_high_conviction():
+    """TEMPORARY: BUY abs(signal)>=0.90 uses ~35% of base cooldown with 180s floor."""
+    s = (
+        SignalEquityTrader.builder()
+        .with_enabled(True)
+        .with_per_asset_cooldown_seconds(1800)
+        .with_gas_protector(DummyProtector(gas_ok=True, pol_balance=1.0))
+        .with_usdc_address("0x" + "2" * 40)
+        .build()
+    )
+    assert s._high_conviction_cooldown_seconds(0.88) == 900
+    assert s._high_conviction_cooldown_seconds(0.92) == 630
+
+
+def test_x_signal_very_strong_cooldown_bypass_before_full_cooldown(capsys):
+    """TEMPORARY: BUY abs(signal)>=0.90 may pass at reduced cooldown before full window expires."""
+    s = (
+        SignalEquityTrader.builder()
+        .with_enabled(True)
+        .with_force_eligible_threshold(0.95)
+        .with_strong_signal_threshold(0.70)
+        .with_min_trade_usdc(4.0)
+        .with_per_asset_cooldown_seconds(1800)
+        .with_gas_protector(DummyProtector(gas_ok=True, pol_balance=1.0))
+        .with_usdc_address("0x" + "2" * 40)
+        .build()
+    )
+    reduced_cd = s._high_conviction_cooldown_seconds(0.92)
+    assert reduced_cd == 630
+
+    def _only_reduced_cooldown_ready(sym: str, now: float | None, cd: int) -> bool:
+        return int(cd) == reduced_cd
+
+    plan, reason = s.build_plan_with_block_reason(
+        symbol="WETH_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.92,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=50.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=_only_reduced_cooldown_ready,
+        upside_pct=25.0,
+    )
+    assert plan is not None
+    assert reason is None
+    assert plan.direction == "USDC_TO_EQUITY"
+    assert "X-SIGNAL very strong signal cooldown relief" in capsys.readouterr().out
+
+
 def test_x_signal_very_strong_boosts_usdc_to_equity_trade_size(monkeypatch, capsys):
     """TEMPORARY: abs(signal)>=0.90 lifts dynamic BUY size toward ~$9.25 when band would be lower."""
     from modules import runtime as rt
