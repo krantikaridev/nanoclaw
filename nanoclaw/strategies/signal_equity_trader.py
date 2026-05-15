@@ -37,7 +37,7 @@ _HARD_BYPASS_ENABLED = cfg.env_bool("HARD_BYPASS_ENABLED", True)
 # Hard execution floor for BUY notional; configured from .env (MIN_TRADE_USD).
 _HARD_BYPASS_MIN_TRADE_USD = cfg.env_float("MIN_TRADE_USD", 15.0)
 
-# TEMPORARY: Skipping WBTC_ALPHA and LINK_ALPHA due to persistent balance read failures
+# TEMPORARY WORKAROUND - Remove after balance issues on WBTC/LINK are fixed
 _X_SIGNAL_EQUITY_TEMP_SKIP_SYMBOLS = frozenset({"WBTC_ALPHA", "LINK_ALPHA"})
 
 
@@ -311,6 +311,7 @@ class SignalEquityTrader:
             if not isinstance(item, dict):
                 continue
             symbol = str(item.get("symbol", "")).strip()
+            # TEMPORARY WORKAROUND - Remove after balance issues on WBTC/LINK are fixed
             if symbol in _X_SIGNAL_EQUITY_TEMP_SKIP_SYMBOLS:
                 continue
             env_key = str(item.get("env_token_address", symbol)).strip() or symbol
@@ -609,172 +610,226 @@ class SignalEquityTrader:
             logger.debug("build_plan block reason=invalid_symbol_or_token sym=%r token=%r", symbol, token_address)
             return None, "invalid_symbol_or_token"
 
-        strength = float(signal_strength)
-        effective_usdc_balance = float(usdc_balance)
-        # For BUY eligibility, use fresh on-chain USDC so force-eligible threshold reflects real liquidity.
-        if strength > 0 and not self._addrs_equal_case_insensitive(token_address, self.usdc_address):
-            effective_usdc_balance = self._to_float(self._query_onchain_usdc_balance(usdc_balance), usdc_balance)
-        fe_thr = self._effective_force_eligible_threshold(effective_usdc_balance)
-        is_force_eligible = abs(strength) >= fe_thr
+        # TEMPORARY WORKAROUND - Remove after balance issues on WBTC/LINK are fixed
+        if sym in _X_SIGNAL_EQUITY_TEMP_SKIP_SYMBOLS:
+            print(f"[nanoclaw] BLOCK: {sym} | temporary_skip_balance_workaround")
+            logger.debug("build_plan block sym=%s reason=temporary_skip_balance_workaround", sym)
+            return None, "temporary_skip_balance_workaround"
 
-        logger.debug(
-            "build_plan_with_block_reason entry sym=%s signal=%s fe_thr=%s is_force_eligible=%s usdc_for_eligibility=%s",
-            sym,
-            strength,
-            fe_thr,
-            is_force_eligible,
-            effective_usdc_balance,
-        )
+        def _per_asset_plan() -> Tuple[Optional[EquityTradePlan], Optional[str]]:
+            nonlocal usdc_balance
+            strength = float(signal_strength)
+            effective_usdc_balance = float(usdc_balance)
+            # For BUY eligibility, use fresh on-chain USDC so force-eligible threshold reflects real liquidity.
+            if strength > 0 and not self._addrs_equal_case_insensitive(token_address, self.usdc_address):
+                effective_usdc_balance = self._to_float(self._query_onchain_usdc_balance(usdc_balance), usdc_balance)
+            fe_thr = self._effective_force_eligible_threshold(effective_usdc_balance)
+            is_force_eligible = abs(strength) >= fe_thr
 
-        # === Earnings window check (bypass if force-eligible) ===
-        if not is_force_eligible and not self._in_earnings_window(earnings_proximity_days):
-            print(f"[nanoclaw] BLOCK: {sym} | outside_earnings_window (earnings_days={earnings_proximity_days})")
-            logger.debug("build_plan block sym=%s reason=outside_earnings_window", sym)
-            return None, "outside_earnings_window"
-
-        # === Gas check (bypass if force-eligible) ===
-        gas_status = self.gas_protector.get_safe_status(
-            address=wallet_address_for_gas,
-            urgent=urgent_gas,
-            min_pol=self.config.min_pol_for_gas,
-        )
-        gas_ok = bool(gas_status.get("gas_ok", False))
-        gas_gwei = float(gas_status.get("gas_gwei", 0))
-        max_gwei = float(gas_status.get("max_gwei", 0))
-
-        if not gas_ok and not is_force_eligible and not bool(allow_high_gas_override):
-            print(f"[nanoclaw] BLOCK: {sym} | gas_above_limit ({gas_gwei:.1f} gwei > {max_gwei:.1f} gwei, no override)")
-            logger.debug("build_plan block sym=%s reason=gas_above_limit", sym)
-            return None, "gas_above_limit"
-
-        if not gas_ok and is_force_eligible and bool(allow_high_gas_override):
-            print(f"[nanoclaw] GAS OVERRIDE | {sym} | high_conviction bypass (gas {gas_gwei:.1f} > {max_gwei:.1f}, allow_high_gas_override=True)")
-
-        # === POL check ===
-        effective_pol = float(gas_status.get("pol_balance", 0.0) or 0.0)
-
-        high_conviction_pol_bypass = abs(float(strength)) > 0.85
-        if effective_pol < float(self.config.min_pol_for_gas) and not high_conviction_pol_bypass:
-            print(f"[nanoclaw] BLOCK: {sym} | pol_below_min ({effective_pol:.4f} < {self.config.min_pol_for_gas:.4f})")
-            logger.debug("build_plan block sym=%s reason=pol_below_min", sym)
-            return None, "pol_below_min"
-
-        # === Per-asset cooldown (bypass if force-eligible) ===
-        if not is_force_eligible and not self._cooldown_ok(sym, can_trade_asset=can_trade_asset, now=now):
-            print(f"[nanoclaw] BLOCK: {sym} | per_asset_cooldown ({self.config.per_asset_cooldown_seconds}s)")
-            logger.debug("build_plan block sym=%s reason=per_asset_cooldown", sym)
-            return None, "per_asset_cooldown"
-        if is_force_eligible and not self._cooldown_ok(sym, can_trade_asset=can_trade_asset, now=now):
-            print(f"[nanoclaw] COOLDOWN OVERRIDE | {sym} | force_eligible bypass ({self.config.per_asset_cooldown_seconds}s)")
-
-        # === STRENGTH FILTER (bypass if force-eligible) ===
-        if not is_force_eligible:
-            if abs(strength) < float(self.config.strong_signal_threshold):
-                print(
-                    f"[nanoclaw] BLOCK: {sym} | below_strong_threshold "
-                    f"({strength:.3f} < {self.config.strong_signal_threshold:.3f})"
-                )
-                logger.debug("build_plan block sym=%s reason=below_strong_threshold", sym)
-                return (
-                    None,
-                    f"below_strong_threshold (need >={float(self.config.strong_signal_threshold):.3f})",
-                )
-        else:
-            print(
-                f"[nanoclaw] STRENGTH FILTER BYPASSED | {sym} | "
-                f"abs(signal)>={fe_thr:.3f} (force-eligible)"
+            logger.debug(
+                "build_plan_with_block_reason entry sym=%s signal=%s fe_thr=%s is_force_eligible=%s usdc_for_eligibility=%s",
+                sym,
+                strength,
+                fe_thr,
+                is_force_eligible,
+                effective_usdc_balance,
             )
 
-        # === BUY PATH ===
-        if strength > 0:
-            if self._addrs_equal_case_insensitive(token_address, self.usdc_address):
-                print(f"[nanoclaw] BLOCK: {sym} | usdc_identity_noop")
-                logger.debug("build_plan block sym=%s reason=usdc_identity_noop", sym)
-                return None, "usdc_identity_noop"
-            usdc_balance = self._to_float(effective_usdc_balance, 0.0)
-            if usdc_balance <= 0:
-                print(
-                    f"[nanoclaw] BLOCK: {sym} | zero_usdc (balance=${usdc_balance:.2f}, "
-                    f"source={self.last_usdc_balance_source})"
-                )
-                logger.debug("build_plan block sym=%s reason=zero_usdc", sym)
-                return None, "zero_usdc"
-            try:
-                trade_size = self._compute_trade_size(usdc_balance, strength, usdt_balance, symbol=sym)
-            except Exception as e:
-                print(f"[nanoclaw-av] BALANCE READ FAILED (skipped asset) | {sym} | {e}")
-                return None, "balance_read_failed"
-            mult = float(trade_size_multiplier)
-            if not math.isfinite(mult) or mult <= 0.0:
-                return None, "invalid_trade_size_multiplier"
-            if mult != 1.0:
-                adjusted = float(trade_size) * mult
-                risk_note = f" | Risk={buy_risk_level}" if buy_risk_level else ""
-                print(
-                    f"[nanoclaw] RISK SIZING{risk_note} | multiplier={mult:.2f} | "
-                    f"base=${float(trade_size):.2f} → adjusted=${adjusted:.2f}"
-                )
-                trade_size = adjusted
-            if trade_size <= 0 or trade_size > usdc_balance:
-                print(f"[nanoclaw] BLOCK: {sym} | invalid_trade_size (computed=${trade_size:.2f}, available=${usdc_balance:.2f})")
-                logger.debug("build_plan block sym=%s reason=invalid_trade_size", sym)
-                return None, "invalid_trade_size"
-            min_sz = float(self.config.min_trade_usdc)
-            if trade_size < min_sz:
-                print(
-                    f"[nanoclaw] BLOCK: {sym} | below_min_trade_usdc "
-                    f"(computed=${trade_size:.2f} < min=${min_sz:.2f})"
-                )
-                logger.debug("build_plan block sym=%s reason=below_min_trade_usdc", sym)
-                return None, "below_min_trade_usdc"
-            trade_amount_usd = trade_size
-            hard_min = float(_HARD_BYPASS_MIN_TRADE_USD)
-            soft_dust = float(cfg.X_SIGNAL_EQUITY_DUST_MIN_USD)
-            # REVERSIBLE (2026-05-09): align with swap_executor X-SIGNAL dust defer (stables ≥ ~$80).
-            if soft_dust > 0 and (float(usdt_balance) + float(usdc_balance)) >= 80.0:
-                hard_min = min(hard_min, soft_dust)
-            if _HARD_BYPASS_ENABLED and trade_amount_usd < hard_min:
-                logger.warning(
-                    "[HARD BYPASS] Small trade $%.2f < $%.2f — skipped",
-                    trade_amount_usd,
-                    hard_min,
-                )
-                return None, "small_trade_bypass"
-            gas_cost_usd = self._estimate_gas_cost_usd(gas_gwei)
-            expected_profit_usd = self._expected_profit_usd(trade_size, upside_pct)
-            min_expected_profit_usd = gas_cost_usd * float(self._PROFIT_TO_GAS_MULTIPLIER)
-            effective_trade_size_after_gas = trade_size - gas_cost_usd
-            print(
-                f"[nanoclaw] SIZING DECISION | {sym} | signal={strength:.2f} | size=${trade_size:.2f} | "
-                f"gas=${gas_cost_usd:.2f} | expected=${expected_profit_usd:.2f} | "
-                f"required_expected>${min_expected_profit_usd:.2f} | effective_after_gas=${effective_trade_size_after_gas:.2f}"
+            # === Earnings window check (bypass if force-eligible) ===
+            if not is_force_eligible and not self._in_earnings_window(earnings_proximity_days):
+                print(f"[nanoclaw] BLOCK: {sym} | outside_earnings_window (earnings_days={earnings_proximity_days})")
+                logger.debug("build_plan block sym=%s reason=outside_earnings_window", sym)
+                return None, "outside_earnings_window"
+
+            # === Gas check (bypass if force-eligible) ===
+            gas_status = self.gas_protector.get_safe_status(
+                address=wallet_address_for_gas,
+                urgent=urgent_gas,
+                min_pol=self.config.min_pol_for_gas,
             )
-            if expected_profit_usd <= min_expected_profit_usd:
+            gas_ok = bool(gas_status.get("gas_ok", False))
+            gas_gwei = float(gas_status.get("gas_gwei", 0))
+            max_gwei = float(gas_status.get("max_gwei", 0))
+
+            if not gas_ok and not is_force_eligible and not bool(allow_high_gas_override):
+                print(f"[nanoclaw] BLOCK: {sym} | gas_above_limit ({gas_gwei:.1f} gwei > {max_gwei:.1f} gwei, no override)")
+                logger.debug("build_plan block sym=%s reason=gas_above_limit", sym)
+                return None, "gas_above_limit"
+
+            if not gas_ok and is_force_eligible and bool(allow_high_gas_override):
+                print(f"[nanoclaw] GAS OVERRIDE | {sym} | high_conviction bypass (gas {gas_gwei:.1f} > {max_gwei:.1f}, allow_high_gas_override=True)")
+
+            # === POL check ===
+            effective_pol = float(gas_status.get("pol_balance", 0.0) or 0.0)
+
+            high_conviction_pol_bypass = abs(float(strength)) > 0.85
+            if effective_pol < float(self.config.min_pol_for_gas) and not high_conviction_pol_bypass:
+                print(f"[nanoclaw] BLOCK: {sym} | pol_below_min ({effective_pol:.4f} < {self.config.min_pol_for_gas:.4f})")
+                logger.debug("build_plan block sym=%s reason=pol_below_min", sym)
+                return None, "pol_below_min"
+
+            # === Per-asset cooldown (bypass if force-eligible) ===
+            if not is_force_eligible and not self._cooldown_ok(sym, can_trade_asset=can_trade_asset, now=now):
+                print(f"[nanoclaw] BLOCK: {sym} | per_asset_cooldown ({self.config.per_asset_cooldown_seconds}s)")
+                logger.debug("build_plan block sym=%s reason=per_asset_cooldown", sym)
+                return None, "per_asset_cooldown"
+            if is_force_eligible and not self._cooldown_ok(sym, can_trade_asset=can_trade_asset, now=now):
+                print(f"[nanoclaw] COOLDOWN OVERRIDE | {sym} | force_eligible bypass ({self.config.per_asset_cooldown_seconds}s)")
+
+            # === STRENGTH FILTER (bypass if force-eligible) ===
+            if not is_force_eligible:
+                if abs(strength) < float(self.config.strong_signal_threshold):
+                    print(
+                        f"[nanoclaw] BLOCK: {sym} | below_strong_threshold "
+                        f"({strength:.3f} < {self.config.strong_signal_threshold:.3f})"
+                    )
+                    logger.debug("build_plan block sym=%s reason=below_strong_threshold", sym)
+                    return (
+                        None,
+                        f"below_strong_threshold (need >={float(self.config.strong_signal_threshold):.3f})",
+                    )
+            else:
                 print(
-                    f"[nanoclaw] BLOCK: {sym} | expected_profit_below_gas "
-                    f"(expected=${expected_profit_usd:.2f} <= required=${min_expected_profit_usd:.2f}, gas=${gas_cost_usd:.2f})"
+                    f"[nanoclaw] STRENGTH FILTER BYPASSED | {sym} | "
+                    f"abs(signal)>={fe_thr:.3f} (force-eligible)"
                 )
-                logger.debug(
-                    "build_plan block sym=%s reason=expected_profit_below_gas expected=%s required=%s gas=%s",
-                    sym,
-                    expected_profit_usd,
-                    min_expected_profit_usd,
-                    gas_cost_usd,
-                )
-                return None, "expected_profit_below_gas"
-            if effective_trade_size_after_gas < float(self._MIN_EFFECTIVE_TRADE_AFTER_GAS_USD):
+
+            # === BUY PATH ===
+            if strength > 0:
+                if self._addrs_equal_case_insensitive(token_address, self.usdc_address):
+                    print(f"[nanoclaw] BLOCK: {sym} | usdc_identity_noop")
+                    logger.debug("build_plan block sym=%s reason=usdc_identity_noop", sym)
+                    return None, "usdc_identity_noop"
+                usdc_balance = self._to_float(effective_usdc_balance, 0.0)
+                if usdc_balance <= 0:
+                    print(
+                        f"[nanoclaw] BLOCK: {sym} | zero_usdc (balance=${usdc_balance:.2f}, "
+                        f"source={self.last_usdc_balance_source})"
+                    )
+                    logger.debug("build_plan block sym=%s reason=zero_usdc", sym)
+                    return None, "zero_usdc"
+                try:
+                    trade_size = self._compute_trade_size(usdc_balance, strength, usdt_balance, symbol=sym)
+                except Exception as e:
+                    print(f"[nanoclaw-av] BALANCE READ FAILED (skipped asset) | {sym} | {e}")
+                    return None, "balance_read_failed"
+                mult = float(trade_size_multiplier)
+                if not math.isfinite(mult) or mult <= 0.0:
+                    return None, "invalid_trade_size_multiplier"
+                if mult != 1.0:
+                    adjusted = float(trade_size) * mult
+                    risk_note = f" | Risk={buy_risk_level}" if buy_risk_level else ""
+                    print(
+                        f"[nanoclaw] RISK SIZING{risk_note} | multiplier={mult:.2f} | "
+                        f"base=${float(trade_size):.2f} → adjusted=${adjusted:.2f}"
+                    )
+                    trade_size = adjusted
+                if trade_size <= 0 or trade_size > usdc_balance:
+                    print(f"[nanoclaw] BLOCK: {sym} | invalid_trade_size (computed=${trade_size:.2f}, available=${usdc_balance:.2f})")
+                    logger.debug("build_plan block sym=%s reason=invalid_trade_size", sym)
+                    return None, "invalid_trade_size"
+                min_sz = float(self.config.min_trade_usdc)
+                if trade_size < min_sz:
+                    print(
+                        f"[nanoclaw] BLOCK: {sym} | below_min_trade_usdc "
+                        f"(computed=${trade_size:.2f} < min=${min_sz:.2f})"
+                    )
+                    logger.debug("build_plan block sym=%s reason=below_min_trade_usdc", sym)
+                    return None, "below_min_trade_usdc"
+                trade_amount_usd = trade_size
+                hard_min = float(_HARD_BYPASS_MIN_TRADE_USD)
+                soft_dust = float(cfg.X_SIGNAL_EQUITY_DUST_MIN_USD)
+                # REVERSIBLE (2026-05-09): align with swap_executor X-SIGNAL dust defer (stables ≥ ~$80).
+                if soft_dust > 0 and (float(usdt_balance) + float(usdc_balance)) >= 80.0:
+                    hard_min = min(hard_min, soft_dust)
+                if _HARD_BYPASS_ENABLED and trade_amount_usd < hard_min:
+                    logger.warning(
+                        "[HARD BYPASS] Small trade $%.2f < $%.2f — skipped",
+                        trade_amount_usd,
+                        hard_min,
+                    )
+                    return None, "small_trade_bypass"
+                gas_cost_usd = self._estimate_gas_cost_usd(gas_gwei)
+                expected_profit_usd = self._expected_profit_usd(trade_size, upside_pct)
+                min_expected_profit_usd = gas_cost_usd * float(self._PROFIT_TO_GAS_MULTIPLIER)
+                effective_trade_size_after_gas = trade_size - gas_cost_usd
                 print(
-                    f"[nanoclaw] BLOCK: {sym} | low_effective_trade_after_gas "
-                    f"(effective=${effective_trade_size_after_gas:.2f} < ${self._MIN_EFFECTIVE_TRADE_AFTER_GAS_USD:.2f})"
+                    f"[nanoclaw] SIZING DECISION | {sym} | signal={strength:.2f} | size=${trade_size:.2f} | "
+                    f"gas=${gas_cost_usd:.2f} | expected=${expected_profit_usd:.2f} | "
+                    f"required_expected>${min_expected_profit_usd:.2f} | effective_after_gas=${effective_trade_size_after_gas:.2f}"
                 )
-                logger.debug(
-                    "build_plan block sym=%s reason=low_effective_trade_after_gas effective=%s gas=%s",
-                    sym,
-                    effective_trade_size_after_gas,
-                    gas_cost_usd,
+                if expected_profit_usd <= min_expected_profit_usd:
+                    print(
+                        f"[nanoclaw] BLOCK: {sym} | expected_profit_below_gas "
+                        f"(expected=${expected_profit_usd:.2f} <= required=${min_expected_profit_usd:.2f}, gas=${gas_cost_usd:.2f})"
+                    )
+                    logger.debug(
+                        "build_plan block sym=%s reason=expected_profit_below_gas expected=%s required=%s gas=%s",
+                        sym,
+                        expected_profit_usd,
+                        min_expected_profit_usd,
+                        gas_cost_usd,
+                    )
+                    return None, "expected_profit_below_gas"
+                if effective_trade_size_after_gas < float(self._MIN_EFFECTIVE_TRADE_AFTER_GAS_USD):
+                    print(
+                        f"[nanoclaw] BLOCK: {sym} | low_effective_trade_after_gas "
+                        f"(effective=${effective_trade_size_after_gas:.2f} < ${self._MIN_EFFECTIVE_TRADE_AFTER_GAS_USD:.2f})"
+                    )
+                    logger.debug(
+                        "build_plan block sym=%s reason=low_effective_trade_after_gas effective=%s gas=%s",
+                        sym,
+                        effective_trade_size_after_gas,
+                        gas_cost_usd,
+                    )
+                    return None, "low_effective_trade_after_gas"
+                tp = float(self.config.strong_take_profit_pct)
+                price_note = f" @ ${current_price_usd:.2f}" if isinstance(current_price_usd, (int, float)) else ""
+                earn_note = (
+                    f" | Earnings in ~{earnings_proximity_days:.1f}d"
+                    if isinstance(earnings_proximity_days, (int, float))
+                    else ""
                 )
-                return None, "low_effective_trade_after_gas"
-            tp = float(self.config.strong_take_profit_pct)
+                plan = EquityTradePlan(
+                    direction="USDC_TO_EQUITY",
+                    symbol=sym,
+                    token_in=self.usdc_address,
+                    token_out=token_address,
+                    amount_in=int(trade_size * 1_000_000),
+                    trade_size=trade_size,
+                    signal_strength=strength,
+                    message=(
+                        f"🟪 X-SIGNAL EQUITY BUY: {sym}{price_note} | Strength {strength:.2f}{earn_note} | "
+                        f"TP {tp:.0f}% | Size: ${trade_size:.2f} (USDC→{sym})"
+                    ),
+                )
+                print(f"[nanoclaw] PLAN_BUILD_SUCCESS | {sym} | BUY | ${trade_size:.2f}")
+                exp_pnl = (
+                    float(trade_size) * (float(upside_pct) / 100.0)
+                    if isinstance(upside_pct, (int, float))
+                    else 0.0
+                )
+                print(
+                    f"TRADE_ATTRIBUTION | Asset={sym} | Size=${trade_size:.2f} | Signal={strength:.2f} | "
+                    f"Wallet=X-SIGNAL | Expected_PnL={exp_pnl:.2f}"
+                )
+                logger.debug("build_plan success sym=%s direction=BUY trade_size=%s", sym, trade_size)
+                return plan, None
+
+            # === SELL PATH ===
+            if equity_balance <= 0:
+                print(f"[nanoclaw] BLOCK: {sym} | zero_equity_balance (balance={equity_balance:.2f})")
+                logger.debug("build_plan block sym=%s reason=zero_equity_balance", sym)
+                return None, "zero_equity_balance"
+
+            sell_fraction = float(X_SIGNAL_EQUITY_SELL_FRACTION)
+            sell_fraction = min(1.0, max(0.05, sell_fraction))
+            amount_in_units = int(equity_balance * sell_fraction * (10**int(token_decimals)))
+            if amount_in_units <= 0:
+                print(f"[nanoclaw] BLOCK: {sym} | sell_amount_below_min_units (fraction={sell_fraction:.2f}, equity={equity_balance:.2f})")
+                logger.debug("build_plan block sym=%s reason=sell_amount_below_min_units", sym)
+                return None, "sell_amount_below_min_units"
+
             price_note = f" @ ${current_price_usd:.2f}" if isinstance(current_price_usd, (int, float)) else ""
             earn_note = (
                 f" | Earnings in ~{earnings_proximity_days:.1f}d"
@@ -782,77 +837,37 @@ class SignalEquityTrader:
                 else ""
             )
             plan = EquityTradePlan(
-                direction="USDC_TO_EQUITY",
+                direction="EQUITY_TO_USDC",
                 symbol=sym,
-                token_in=self.usdc_address,
-                token_out=token_address,
-                amount_in=int(trade_size * 1_000_000),
-                trade_size=trade_size,
+                token_in=token_address,
+                token_out=self.usdc_address,
+                amount_in=amount_in_units,
+                trade_size=0.0,
                 signal_strength=strength,
                 message=(
-                    f"🟪 X-SIGNAL EQUITY BUY: {sym}{price_note} | Strength {strength:.2f}{earn_note} | "
-                    f"TP {tp:.0f}% | Size: ${trade_size:.2f} (USDC→{sym})"
+                    f"🟪 X-SIGNAL EQUITY SELL: {sym}{price_note} | Strength {strength:.2f}{earn_note} | "
+                    f"Selling {sell_fraction * 100:.0f}% ( {sym}→USDC )"
                 ),
             )
-            print(f"[nanoclaw] PLAN_BUILD_SUCCESS | {sym} | BUY | ${trade_size:.2f}")
-            exp_pnl = (
-                float(trade_size) * (float(upside_pct) / 100.0)
-                if isinstance(upside_pct, (int, float))
+            print(f"[nanoclaw] PLAN_BUILD_SUCCESS | {sym} | SELL | {sell_fraction*100:.0f}%")
+            sell_sz = (
+                float(equity_balance) * float(sell_fraction) * float(current_price_usd)
+                if isinstance(current_price_usd, (int, float))
                 else 0.0
             )
+            exp_pnl = sell_sz * (float(upside_pct) / 100.0) if isinstance(upside_pct, (int, float)) else 0.0
             print(
-                f"TRADE_ATTRIBUTION | Asset={sym} | Size=${trade_size:.2f} | Signal={strength:.2f} | "
+                f"TRADE_ATTRIBUTION | Asset={sym} | Size=${sell_sz:.2f} | Signal={strength:.2f} | "
                 f"Wallet=X-SIGNAL | Expected_PnL={exp_pnl:.2f}"
             )
-            logger.debug("build_plan success sym=%s direction=BUY trade_size=%s", sym, trade_size)
+            logger.debug("build_plan success sym=%s direction=SELL fraction=%s", sym, sell_fraction)
             return plan, None
 
-        # === SELL PATH ===
-        if equity_balance <= 0:
-            print(f"[nanoclaw] BLOCK: {sym} | zero_equity_balance (balance={equity_balance:.2f})")
-            logger.debug("build_plan block sym=%s reason=zero_equity_balance", sym)
-            return None, "zero_equity_balance"
-
-        sell_fraction = float(X_SIGNAL_EQUITY_SELL_FRACTION)
-        sell_fraction = min(1.0, max(0.05, sell_fraction))
-        amount_in_units = int(equity_balance * sell_fraction * (10**int(token_decimals)))
-        if amount_in_units <= 0:
-            print(f"[nanoclaw] BLOCK: {sym} | sell_amount_below_min_units (fraction={sell_fraction:.2f}, equity={equity_balance:.2f})")
-            logger.debug("build_plan block sym=%s reason=sell_amount_below_min_units", sym)
-            return None, "sell_amount_below_min_units"
-
-        price_note = f" @ ${current_price_usd:.2f}" if isinstance(current_price_usd, (int, float)) else ""
-        earn_note = (
-            f" | Earnings in ~{earnings_proximity_days:.1f}d"
-            if isinstance(earnings_proximity_days, (int, float))
-            else ""
-        )
-        plan = EquityTradePlan(
-            direction="EQUITY_TO_USDC",
-            symbol=sym,
-            token_in=token_address,
-            token_out=self.usdc_address,
-            amount_in=amount_in_units,
-            trade_size=0.0,
-            signal_strength=strength,
-            message=(
-                f"🟪 X-SIGNAL EQUITY SELL: {sym}{price_note} | Strength {strength:.2f}{earn_note} | "
-                f"Selling {sell_fraction * 100:.0f}% ( {sym}→USDC )"
-            ),
-        )
-        print(f"[nanoclaw] PLAN_BUILD_SUCCESS | {sym} | SELL | {sell_fraction*100:.0f}%")
-        sell_sz = (
-            float(equity_balance) * float(sell_fraction) * float(current_price_usd)
-            if isinstance(current_price_usd, (int, float))
-            else 0.0
-        )
-        exp_pnl = sell_sz * (float(upside_pct) / 100.0) if isinstance(upside_pct, (int, float)) else 0.0
-        print(
-            f"TRADE_ATTRIBUTION | Asset={sym} | Size=${sell_sz:.2f} | Signal={strength:.2f} | "
-            f"Wallet=X-SIGNAL | Expected_PnL={exp_pnl:.2f}"
-        )
-        logger.debug("build_plan success sym=%s direction=SELL fraction=%s", sym, sell_fraction)
-        return plan, None
+        try:
+            return _per_asset_plan()
+        except Exception as e:
+            print(f"[nanoclaw-av] BALANCE READ FAILED (skipped asset) | {sym} | {e}")
+            return None, "balance_read_failed"
 
     def build_plan(
         self,

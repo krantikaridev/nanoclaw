@@ -572,7 +572,7 @@ def test_buy_no_longer_uses_legacy_high_conviction_cap():
     """Regression: old per-asset cap removed; hard bypass remains the active small-trade guard."""
     s = _build_strategy_tuned(min_trade_usdc=5.0)
     _, reason = s.build_plan_with_block_reason(
-        symbol="WBTC_ALPHA",
+        symbol="WETH_ALPHA",
         token_address="0x" + "1" * 40,
         token_decimals=8,
         signal_strength=0.92,
@@ -1068,7 +1068,7 @@ def test_build_plan_skips_asset_when_dynamic_sizing_raises(capfd, monkeypatch):
     monkeypatch.setattr(s, "_compute_trade_size", lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("BadFunctionCallOutput")))
 
     plan, reason = s.build_plan_with_block_reason(
-        symbol="WBTC_ALPHA",
+        symbol="WETH_ALPHA",
         token_address="0x" + "1" * 40,
         token_decimals=8,
         signal_strength=0.92,
@@ -1084,7 +1084,7 @@ def test_build_plan_skips_asset_when_dynamic_sizing_raises(capfd, monkeypatch):
     captured = capfd.readouterr()
     assert plan is None
     assert reason == "balance_read_failed"
-    assert "[nanoclaw-av] BALANCE READ FAILED (skipped asset) | WBTC_ALPHA | BadFunctionCallOutput" in captured.out
+    assert "[nanoclaw-av] BALANCE READ FAILED (skipped asset) | WETH_ALPHA | BadFunctionCallOutput" in captured.out
 
 
 def test_build_plan_and_from_params_catch_block_reason_exceptions(capfd, monkeypatch):
