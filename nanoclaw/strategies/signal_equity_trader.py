@@ -427,6 +427,33 @@ class SignalEquityTrader:
                 out.append(normalized)
         return out
 
+    def _usdc_token_addresses_for_balance(self) -> list[str]:
+        """Bridged USDC (``USDC``) plus native Polygon USDC when configured as a distinct contract."""
+        primary = cfg.env_str("USDC", self.usdc_address).strip()
+        if not primary:
+            return []
+        tokens = [primary]
+        native = cfg.env_str("USDC_NATIVE", str(getattr(cfg, "USDC_NATIVE", "") or "")).strip()
+        if native and native.lower() != primary.lower():
+            tokens.append(native)
+        return tokens
+
+    @staticmethod
+    def _read_erc20_usdc_balance_usd(web3_client: Any, wallet: str, token_address: str) -> float:
+        from web3 import Web3
+
+        checksum_wallet = Web3.to_checksum_address(wallet)
+        checksum_token = Web3.to_checksum_address(token_address)
+        contract = web3_client.eth.contract(
+            address=checksum_token,
+            abi=SignalEquityTrader._ERC20_BALANCE_OF_ABI,
+        )
+        raw_balance = contract.functions.balanceOf(checksum_wallet).call()
+        balance_usd = float(raw_balance) / 1_000_000.0
+        if not math.isfinite(balance_usd) or balance_usd < 0.0:
+            raise ValueError(f"invalid on-chain USDC balance {balance_usd!r} for token {token_address}")
+        return balance_usd
+
     def _rpc_endpoints_for_usdc_query(self) -> list[str]:
         configured_raw = cfg.env_str("RPC_ENDPOINTS", "")
         configured = [part.strip() for part in configured_raw.split(",") if part.strip()]
@@ -441,9 +468,9 @@ class SignalEquityTrader:
     def _query_onchain_usdc_balance(self, fallback_balance: float) -> float:
         """Read wallet USDC balance directly from chain with endpoint fallback and retries."""
         wallet = cfg.env_str("WALLET", "")
-        token = cfg.env_str("USDC", self.usdc_address)
+        usdc_tokens = self._usdc_token_addresses_for_balance()
         per_rpc_attempts = max(2, int(cfg.env_int("X_SIGNAL_ONCHAIN_USDC_RETRY_ATTEMPTS", 2)))
-        if not wallet or not token:
+        if not wallet or not usdc_tokens:
             self.last_usdc_balance_source = "fallback_missing_wallet_or_token"
             logger.warning(
                 "on-chain USDC balance query skipped (missing wallet/token); using fallback balance: $%.2f",
@@ -471,16 +498,13 @@ class SignalEquityTrader:
             for attempt in range(1, per_rpc_attempts + 1):
                 try:
                     from nanoclaw.config import connect_web3
-                    from web3 import Web3
 
                     web3_client = connect_web3(urls=[endpoint])
-                    checksum_wallet = Web3.to_checksum_address(wallet)
-                    checksum_token = Web3.to_checksum_address(token)
-                    contract = web3_client.eth.contract(address=checksum_token, abi=self._ERC20_BALANCE_OF_ABI)
-                    raw_balance = contract.functions.balanceOf(checksum_wallet).call()
-                    onchain_balance = float(raw_balance) / 1_000_000.0
-                    if not math.isfinite(onchain_balance) or onchain_balance < 0.0:
-                        raise ValueError(f"invalid on-chain USDC balance {onchain_balance!r}")
+                    # Use total USDC (native + bridged) for X-SIGNAL to avoid false zero_usdc blocks
+                    onchain_balance = sum(
+                        self._read_erc20_usdc_balance_usd(web3_client, wallet, token_addr)
+                        for token_addr in usdc_tokens
+                    )
                     self._last_known_good_usdc_balance = onchain_balance
                     self.last_usdc_balance_source = "onchain"
                     logger.info(

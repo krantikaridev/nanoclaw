@@ -6,6 +6,20 @@ from nanoclaw.strategies import signal_equity_trader as strategy_module
 from nanoclaw.strategies.signal_equity_trader import SignalEquityTrader
 from nanoclaw.utils.gas_protector import GasProtector
 
+USDC_E_TEST = "0x" + "2" * 40
+USDC_NATIVE_TEST = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"
+
+
+def _pin_usdc_env(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    bridged: str = USDC_E_TEST,
+    native: str | None = None,
+) -> None:
+    monkeypatch.setenv("WALLET", "0x" + "3" * 40)
+    monkeypatch.setenv("USDC", bridged)
+    monkeypatch.setenv("USDC_NATIVE", native if native is not None else bridged)
+
 
 class DummyProtector(GasProtector):
     def __init__(self, *, gas_ok: bool, pol_balance: float) -> None:
@@ -758,12 +772,66 @@ def test_query_onchain_usdc_balance_falls_back_to_snapshot_when_wallet_missing(m
     assert s.last_usdc_balance_source == "fallback_missing_wallet_or_token"
 
 
+def test_usdc_token_addresses_for_balance_includes_native_when_distinct(monkeypatch):
+    s = _build_strategy_tuned()
+    _pin_usdc_env(monkeypatch, bridged=USDC_E_TEST, native=USDC_NATIVE_TEST)
+    assert s._usdc_token_addresses_for_balance() == [USDC_E_TEST, USDC_NATIVE_TEST]
+
+
+def test_usdc_token_addresses_for_balance_skips_duplicate_native(monkeypatch):
+    s = _build_strategy_tuned()
+    _pin_usdc_env(monkeypatch, bridged=USDC_E_TEST, native=USDC_E_TEST)
+    assert s._usdc_token_addresses_for_balance() == [USDC_E_TEST]
+
+
+def test_query_onchain_usdc_balance_sums_native_and_bridged(monkeypatch):
+    import nanoclaw.config as nc_cfg
+
+    s = _build_strategy_tuned()
+    _pin_usdc_env(monkeypatch, bridged=USDC_E_TEST, native=USDC_NATIVE_TEST)
+    monkeypatch.setenv("RPC_ENDPOINTS", "https://rpc-one")
+    monkeypatch.setenv("X_SIGNAL_ONCHAIN_USDC_RETRY_ATTEMPTS", "1")
+    monkeypatch.setattr(s, "_rpc_endpoints_for_usdc_query", lambda: ["https://rpc-one"])
+
+    balances = {
+        USDC_E_TEST.lower(): 10_000_000,
+        USDC_NATIVE_TEST.lower(): 47_000_000,
+    }
+
+    class _FakeContract:
+        def __init__(self, token_address: str) -> None:
+            self._token_address = str(token_address).lower()
+
+        @property
+        def functions(self):
+            return self
+
+        def balanceOf(self, _wallet):
+            return self
+
+        def call(self):
+            return balances[self._token_address]
+
+    class _FakeEth:
+        def contract(self, address, abi):
+            _ = abi
+            return _FakeContract(str(address))
+
+    class _FakeWeb3Client:
+        eth = _FakeEth()
+
+    monkeypatch.setattr(nc_cfg, "connect_web3", lambda *args, **kwargs: _FakeWeb3Client())
+
+    out = s._query_onchain_usdc_balance(0.0)
+    assert out == pytest.approx(57.0)
+    assert s.last_usdc_balance_source == "onchain"
+
+
 def test_query_onchain_usdc_balance_retries_and_succeeds(monkeypatch):
     import nanoclaw.config as nc_cfg
 
     s = _build_strategy_tuned()
-    monkeypatch.setenv("WALLET", "0x" + "3" * 40)
-    monkeypatch.setenv("USDC", "0x" + "2" * 40)
+    _pin_usdc_env(monkeypatch)
     monkeypatch.setenv("RPC_ENDPOINTS", "https://rpc-one")
     monkeypatch.setenv("X_SIGNAL_ONCHAIN_USDC_RETRY_ATTEMPTS", "2")
     monkeypatch.setattr(s, "_rpc_endpoints_for_usdc_query", lambda: ["https://rpc-one"])
@@ -804,8 +872,7 @@ def test_query_onchain_usdc_balance_uses_fallback_only_after_retries(monkeypatch
     import nanoclaw.config as nc_cfg
 
     s = _build_strategy_tuned()
-    monkeypatch.setenv("WALLET", "0x" + "3" * 40)
-    monkeypatch.setenv("USDC", "0x" + "2" * 40)
+    _pin_usdc_env(monkeypatch)
     monkeypatch.setenv("RPC_ENDPOINTS", "https://rpc-one")
     monkeypatch.setenv("X_SIGNAL_ONCHAIN_USDC_RETRY_ATTEMPTS", "2")
     monkeypatch.setattr(s, "_rpc_endpoints_for_usdc_query", lambda: ["https://rpc-one"])
@@ -845,8 +912,7 @@ def test_query_onchain_usdc_balance_tries_next_rpc_when_previous_fails(monkeypat
     import nanoclaw.config as nc_cfg
 
     s = _build_strategy_tuned()
-    monkeypatch.setenv("WALLET", "0x" + "3" * 40)
-    monkeypatch.setenv("USDC", "0x" + "2" * 40)
+    _pin_usdc_env(monkeypatch)
     monkeypatch.setenv("RPC_ENDPOINTS", "https://rpc-one,https://rpc-two")
     monkeypatch.setenv("X_SIGNAL_ONCHAIN_USDC_RETRY_ATTEMPTS", "2")
     monkeypatch.setattr(s, "_rpc_endpoints_for_usdc_query", lambda: ["https://rpc-one", "https://rpc-two"])
@@ -907,8 +973,7 @@ def test_query_onchain_usdc_balance_uses_last_known_good_when_all_rpcs_fail(monk
     import nanoclaw.config as nc_cfg
 
     s = _build_strategy_tuned()
-    monkeypatch.setenv("WALLET", "0x" + "3" * 40)
-    monkeypatch.setenv("USDC", "0x" + "2" * 40)
+    _pin_usdc_env(monkeypatch)
     monkeypatch.setenv("RPC_ENDPOINTS", "https://rpc-one,https://rpc-two")
     monkeypatch.setenv("X_SIGNAL_ONCHAIN_USDC_RETRY_ATTEMPTS", "2")
     monkeypatch.setattr(s, "_rpc_endpoints_for_usdc_query", lambda: ["https://rpc-one", "https://rpc-two"])
