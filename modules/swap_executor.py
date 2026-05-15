@@ -18,6 +18,7 @@ from config import (
     MAIN_STRATEGY_RESERVE_SELL_FRACTION,
     MAIN_STRATEGY_TP_TRIGGER_WMATIC_USD,
 )
+from nanoclaw.strategies.signal_equity_trader import _X_SIGNAL_MIN_SIZE_OVERRIDE
 from nanoclaw.strategies.usdc_copy import USDCopyStrategy
 from swap_executor import approve_and_swap
 
@@ -331,6 +332,32 @@ def _defer_if_dust(
     return True
 
 
+_X_SIGNAL_HIGH_CONVICTION_STRENGTH = 0.85
+
+
+def _x_signal_min_trade_guard_bypass(
+    decision: TradeDecision,
+    *,
+    decision_notional_usd: float,
+    min_trade_usd: float,
+) -> bool:
+    """USDC→equity X-SIGNAL: allow notional in [_X_SIGNAL_MIN_SIZE_OVERRIDE, MIN_TRADE_USD) when highly convicted."""
+    if str(decision.direction or "").strip().upper() != "USDC_TO_EQUITY":
+        return False
+    strength = decision.signal_strength
+    if strength is None:
+        return False
+    s = float(strength)
+    if s <= 0 or abs(s) < _X_SIGNAL_HIGH_CONVICTION_STRENGTH:
+        return False
+    floor = float(_X_SIGNAL_MIN_SIZE_OVERRIDE)
+    if decision_notional_usd + 1e-9 < floor:
+        return False
+    if decision_notional_usd + 1e-9 >= min_trade_usd:
+        return False
+    return True
+
+
 def _x_signal_equity_effective_dust_min(balances: Balances) -> float | None:
     """X-SIGNAL-only lower floor when combined stables are healthy; ``None`` → use global ``MIN_TRADE_USD``."""
     cs = _facade()
@@ -608,16 +635,23 @@ async def main(*, dry_run: bool = False) -> None:
             and decision_notional_usd is not None
             and decision_notional_usd + 1e-9 < min_trade_usd
         ):
-            reason = (
-                f"min_trade_guard ({decision.direction}: ${decision_notional_usd:.2f} "
-                f"< MIN_TRADE_USD ${min_trade_usd:.2f})"
-            )
-            cs._log_trade_skipped(reason)
-            print(
-                f"{runtime._nanolog()}TRADE SKIPPED | below minimum size | "
-                f"direction={decision.direction} | size=${decision_notional_usd:.2f} | min=${min_trade_usd:.2f}"
-            )
-            return
+            if _x_signal_min_trade_guard_bypass(
+                decision,
+                decision_notional_usd=decision_notional_usd,
+                min_trade_usd=min_trade_usd,
+            ):
+                print("[nanoclaw-av] X-SIGNAL min_trade_guard bypassed (high conviction)")
+            else:
+                reason = (
+                    f"min_trade_guard ({decision.direction}: ${decision_notional_usd:.2f} "
+                    f"< MIN_TRADE_USD ${min_trade_usd:.2f})"
+                )
+                cs._log_trade_skipped(reason)
+                print(
+                    f"{runtime._nanolog()}TRADE SKIPPED | below minimum size | "
+                    f"direction={decision.direction} | size=${decision_notional_usd:.2f} | min=${min_trade_usd:.2f}"
+                )
+                return
 
         if dry_run:
             print(f"🧪 DRY RUN: would execute {decision.direction} for amount_in={decision.amount_in}")

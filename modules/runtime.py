@@ -183,6 +183,7 @@ class TradeDecision:
     token_out: Optional[str] = None
     cooldown_asset: Optional[Tuple[str, int]] = None
     cooldown_wallet: Optional[Tuple[str, int]] = None
+    signal_strength: Optional[float] = None
 
     @property
     def should_execute(self) -> bool:

@@ -1,5 +1,9 @@
 from modules.runtime import TradeDecision, Balances
-from modules.swap_executor import _decision_notional_usd, _x_signal_equity_effective_dust_min
+from modules.swap_executor import (
+    _decision_notional_usd,
+    _x_signal_equity_effective_dust_min,
+    _x_signal_min_trade_guard_bypass,
+)
 import pytest
 
 
@@ -21,6 +25,46 @@ def test_decision_notional_usd_converts_wmatic_input_amount_in_18_decimals():
 def test_decision_notional_usd_returns_none_for_wmatic_input_when_price_missing():
     d = TradeDecision(direction="WMATIC_TO_USDT", amount_in=int(8 * 1_000_000_000_000_000_000))
     assert _decision_notional_usd(d, current_price_usd=0.0) is None
+
+
+def test_x_signal_min_trade_guard_bypass_high_conviction_usdc_to_equity():
+    d = TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=7_990_000,
+        trade_size=7.99,
+        signal_strength=0.90,
+    )
+    assert _x_signal_min_trade_guard_bypass(d, decision_notional_usd=7.99, min_trade_usd=10.0)
+
+
+def test_x_signal_min_trade_guard_bypass_rejects_below_override_floor():
+    d = TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=7_400_000,
+        trade_size=7.4,
+        signal_strength=0.92,
+    )
+    assert not _x_signal_min_trade_guard_bypass(d, decision_notional_usd=7.4, min_trade_usd=10.0)
+
+
+def test_x_signal_min_trade_guard_bypass_rejects_low_strength():
+    d = TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=7_990_000,
+        trade_size=7.99,
+        signal_strength=0.80,
+    )
+    assert not _x_signal_min_trade_guard_bypass(d, decision_notional_usd=7.99, min_trade_usd=10.0)
+
+
+def test_x_signal_min_trade_guard_bypass_rejects_non_equity_direction():
+    d = TradeDecision(
+        direction="USDC_TO_WMATIC",
+        amount_in=7_990_000,
+        trade_size=7.99,
+        signal_strength=0.92,
+    )
+    assert not _x_signal_min_trade_guard_bypass(d, decision_notional_usd=7.99, min_trade_usd=10.0)
 
 
 def test_x_signal_equity_effective_dust_min_requires_healthy_stables(monkeypatch):

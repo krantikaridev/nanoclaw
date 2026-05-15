@@ -1039,6 +1039,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                     token_in=plan.token_in,
                     token_out=plan.token_out,
                     cooldown_asset=(sym, secs_plan),
+                    signal_strength=float(plan.signal_strength),
                 )
                 plans.append((decision, float(a.signal_strength)))
             else:
