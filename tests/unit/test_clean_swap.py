@@ -682,7 +682,7 @@ def test_determine_trade_decision_profit_take_balance_relief_skipped_when_wm_sta
 
     out = clean_swap.determine_trade_decision(
         state={},
-        balances=clean_swap.Balances(usdt=10.0, wmatic=50.0, pol=1.0, usdc=30.0),
+        balances=clean_swap.Balances(usdt=10.0, wmatic=20.0, pol=1.0, usdc=30.0),
         current_price=1.0,
     )
     captured = capsys.readouterr().out
