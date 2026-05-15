@@ -490,6 +490,84 @@ def test_per_asset_cooldown_when_not_force_eligible():
     assert reason == "per_asset_cooldown"
 
 
+def test_x_signal_high_conviction_cooldown_bypass_before_full_cooldown(capsys):
+    """TEMPORARY: BUY abs(signal)>=0.85 may pass at halved per-asset cooldown before full window expires."""
+    s = (
+        SignalEquityTrader.builder()
+        .with_enabled(True)
+        .with_force_eligible_threshold(0.95)
+        .with_strong_signal_threshold(0.70)
+        .with_min_trade_usdc(4.0)
+        .with_per_asset_cooldown_seconds(1800)
+        .with_gas_protector(DummyProtector(gas_ok=True, pol_balance=1.0))
+        .with_usdc_address("0x" + "2" * 40)
+        .build()
+    )
+    reduced_cd = s._high_conviction_cooldown_seconds(0.88)
+    assert reduced_cd == 900
+
+    def _only_reduced_cooldown_ready(sym: str, now: float | None, cd: int) -> bool:
+        return int(cd) == reduced_cd
+
+    plan, reason = s.build_plan_with_block_reason(
+        symbol="WETH_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.88,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=50.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=_only_reduced_cooldown_ready,
+        upside_pct=25.0,
+    )
+    assert plan is not None
+    assert reason is None
+    assert plan.direction == "USDC_TO_EQUITY"
+    assert "X-SIGNAL high-conviction cooldown bypass" in capsys.readouterr().out
+
+
+def test_x_signal_high_conviction_cooldown_still_blocks_when_reduced_not_ready():
+    s = (
+        SignalEquityTrader.builder()
+        .with_enabled(True)
+        .with_force_eligible_threshold(0.95)
+        .with_strong_signal_threshold(0.70)
+        .with_min_trade_usdc(4.0)
+        .with_per_asset_cooldown_seconds(1800)
+        .with_gas_protector(DummyProtector(gas_ok=True, pol_balance=1.0))
+        .with_usdc_address("0x" + "2" * 40)
+        .build()
+    )
+
+    _, reason = s.build_plan_with_block_reason(
+        symbol="WETH_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.88,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=50.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: False,
+    )
+    assert reason == "per_asset_cooldown"
+
+
+def test_x_signal_very_strong_boosts_usdc_to_equity_trade_size(monkeypatch, capsys):
+    """TEMPORARY: abs(signal)>=0.90 lifts dynamic BUY size toward ~$9.25 when band would be lower."""
+    from modules import runtime as rt
+
+    monkeypatch.setattr(rt, "FIXED_TRADE_USD_MIN", 8.0, raising=False)
+    monkeypatch.setattr(rt, "FIXED_TRADE_USD_MAX", 8.0, raising=False)
+    s = _build_strategy_tuned(strong_signal_threshold=0.90)
+    size = s._compute_trade_size(100.0, 0.90)
+    assert size == pytest.approx(strategy_module._X_SIGNAL_VERY_STRONG_SIZE_TARGET)
+    assert "X-SIGNAL boosted sizing for very strong signal" in capsys.readouterr().out
+
+
 def test_force_eligible_bypasses_cooldown_and_builds_buy():
     s = _build_strategy_tuned(min_trade_usdc=4.0)
 

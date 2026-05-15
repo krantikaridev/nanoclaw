@@ -37,11 +37,20 @@ _HARD_BYPASS_ENABLED = cfg.env_bool("HARD_BYPASS_ENABLED", True)
 # Hard execution floor for BUY notional; configured from .env (MIN_TRADE_USD).
 _HARD_BYPASS_MIN_TRADE_USD = cfg.env_float("MIN_TRADE_USD", 15.0)
 
+# TEMPORARY: High-conviction X-SIGNAL USDC→equity thresholds (reversible)
+_X_SIGNAL_HIGH_CONVICTION_STRENGTH = 0.85
+_X_SIGNAL_HIGH_CONVICTION_COOLDOWN_FACTOR = 0.5  # halve per-asset wait for BUY >= strength above
+_X_SIGNAL_HIGH_CONVICTION_COOLDOWN_MIN_SECONDS = 300
+
 # TEMPORARY: Allow slightly smaller X-SIGNAL trades for high-conviction signals
 _X_SIGNAL_MIN_SIZE_OVERRIDE = 7.5
 
 # TEMPORARY: Allow slightly smaller effective size for high-conviction X-SIGNAL
 _X_SIGNAL_MIN_EFFECTIVE_OVERRIDE = 7.0
+
+# TEMPORARY: Slightly larger USDC→equity sizing for very strong X-SIGNAL (target ~$9–$9.5)
+_X_SIGNAL_VERY_STRONG_STRENGTH = 0.90
+_X_SIGNAL_VERY_STRONG_SIZE_TARGET = 9.25
 
 # TEMPORARY WORKAROUND - Remove after balance issues on WBTC/LINK are fixed
 _X_SIGNAL_EQUITY_TEMP_SKIP_SYMBOLS = frozenset({"WBTC_ALPHA", "LINK_ALPHA"})
@@ -374,9 +383,33 @@ class SignalEquityTrader:
             return True
         return float(earnings_days) <= float(self.config.max_earnings_days)
 
-    def _cooldown_ok(self, symbol: str, *, can_trade_asset: AssetCooldownGetFn, now: Optional[float]) -> bool:
+    def _cooldown_ok(
+        self,
+        symbol: str,
+        *,
+        can_trade_asset: AssetCooldownGetFn,
+        now: Optional[float],
+        cooldown_seconds: Optional[int] = None,
+    ) -> bool:
         current_time = time.time() if now is None else now
-        return can_trade_asset(symbol, current_time, self.config.per_asset_cooldown_seconds)
+        secs = int(self.config.per_asset_cooldown_seconds if cooldown_seconds is None else cooldown_seconds)
+        return can_trade_asset(symbol, current_time, secs)
+
+    @staticmethod
+    def _x_signal_high_conviction_buy(signal_strength: float) -> bool:
+        """USDC→equity BUY only; does not affect sells or other strategies."""
+        return float(signal_strength) > 0 and abs(float(signal_strength)) >= float(_X_SIGNAL_HIGH_CONVICTION_STRENGTH)
+
+    def _high_conviction_cooldown_seconds(self, signal_strength: float) -> int:
+        """TEMPORARY: shorter effective per-asset cooldown for high-conviction X-SIGNAL equity BUYs."""
+        base = int(self.config.per_asset_cooldown_seconds)
+        if not self._x_signal_high_conviction_buy(signal_strength):
+            return base
+        reduced = max(
+            int(_X_SIGNAL_HIGH_CONVICTION_COOLDOWN_MIN_SECONDS),
+            int(base * float(_X_SIGNAL_HIGH_CONVICTION_COOLDOWN_FACTOR)),
+        )
+        return min(base, reduced)
 
     @staticmethod
     def _to_float(value: Any, default: float = 0.0) -> float:
@@ -536,6 +569,21 @@ class SignalEquityTrader:
         t = max(0.0, min(1.0, t))
         raw = lo + (hi - lo) * t
         sized = min(float(raw), float(usdc_balance), float(self.config.max_trade_usdc))
+        # TEMPORARY: USDC→equity very-strong signals — lift toward ~$9–$9.5 without changing global MIN_TRADE_USD.
+        if (
+            float(signal_strength) > 0
+            and abs(float(signal_strength)) >= float(_X_SIGNAL_VERY_STRONG_STRENGTH)
+            and float(sized) < float(_X_SIGNAL_VERY_STRONG_SIZE_TARGET)
+        ):
+            boosted = min(
+                float(_X_SIGNAL_VERY_STRONG_SIZE_TARGET),
+                float(usdc_balance),
+                float(self.config.max_trade_usdc),
+            )
+            if boosted > float(sized):
+                print("[nanoclaw-av] X-SIGNAL boosted sizing for very strong signal")
+                logger.info("[nanoclaw-av] X-SIGNAL boosted sizing for very strong signal")
+                sized = boosted
         _lp = (LOG_PREFIX or "").strip() or "[nanoclaw]"
         print(f"{_lp} DYNAMIC SIZING | Size=${sized:.2f} | Signal={float(signal_strength):.2f}")
         return max(0.0, float(sized))
@@ -668,19 +716,39 @@ class SignalEquityTrader:
             # === POL check ===
             effective_pol = float(gas_status.get("pol_balance", 0.0) or 0.0)
 
-            high_conviction_pol_bypass = abs(float(strength)) > 0.85
+            high_conviction_pol_bypass = abs(float(strength)) >= float(_X_SIGNAL_HIGH_CONVICTION_STRENGTH)
             if effective_pol < float(self.config.min_pol_for_gas) and not high_conviction_pol_bypass:
                 print(f"[nanoclaw] BLOCK: {sym} | pol_below_min ({effective_pol:.4f} < {self.config.min_pol_for_gas:.4f})")
                 logger.debug("build_plan block sym=%s reason=pol_below_min", sym)
                 return None, "pol_below_min"
 
-            # === Per-asset cooldown (bypass if force-eligible) ===
-            if not is_force_eligible and not self._cooldown_ok(sym, can_trade_asset=can_trade_asset, now=now):
-                print(f"[nanoclaw] BLOCK: {sym} | per_asset_cooldown ({self.config.per_asset_cooldown_seconds}s)")
+            # === Per-asset cooldown (bypass if force-eligible; reduced wait for high-conviction BUY) ===
+            full_cooldown_secs = int(self.config.per_asset_cooldown_seconds)
+            effective_cooldown_secs = (
+                self._high_conviction_cooldown_seconds(strength)
+                if self._x_signal_high_conviction_buy(strength)
+                else full_cooldown_secs
+            )
+            cooldown_ok_full = self._cooldown_ok(
+                sym, can_trade_asset=can_trade_asset, now=now, cooldown_seconds=full_cooldown_secs
+            )
+            cooldown_ok_effective = self._cooldown_ok(
+                sym, can_trade_asset=can_trade_asset, now=now, cooldown_seconds=effective_cooldown_secs
+            )
+            if not is_force_eligible and not cooldown_ok_effective:
+                print(f"[nanoclaw] BLOCK: {sym} | per_asset_cooldown ({full_cooldown_secs}s)")
                 logger.debug("build_plan block sym=%s reason=per_asset_cooldown", sym)
                 return None, "per_asset_cooldown"
-            if is_force_eligible and not self._cooldown_ok(sym, can_trade_asset=can_trade_asset, now=now):
-                print(f"[nanoclaw] COOLDOWN OVERRIDE | {sym} | force_eligible bypass ({self.config.per_asset_cooldown_seconds}s)")
+            if (
+                not is_force_eligible
+                and self._x_signal_high_conviction_buy(strength)
+                and not cooldown_ok_full
+                and cooldown_ok_effective
+            ):
+                print("[nanoclaw-av] X-SIGNAL high-conviction cooldown bypass")
+                logger.info("[nanoclaw-av] X-SIGNAL high-conviction cooldown bypass")
+            if is_force_eligible and not cooldown_ok_full:
+                print(f"[nanoclaw] COOLDOWN OVERRIDE | {sym} | force_eligible bypass ({full_cooldown_secs}s)")
 
             # === STRENGTH FILTER (bypass if force-eligible) ===
             if not is_force_eligible:
@@ -752,7 +820,7 @@ class SignalEquityTrader:
                     # USDC→equity BUY path only (strength > 0); narrow high-conviction exception under hard MIN_TRADE_USD.
                     x_signal_equity_high_conviction_small_ok = (
                         strength > 0
-                        and abs(float(strength)) >= 0.85
+                        and abs(float(strength)) >= float(_X_SIGNAL_HIGH_CONVICTION_STRENGTH)
                         and float(trade_amount_usd) >= float(_X_SIGNAL_MIN_SIZE_OVERRIDE)
                         and float(trade_amount_usd) < float(hard_min)
                     )
@@ -792,7 +860,7 @@ class SignalEquityTrader:
                     # USDC→equity BUY; allow marginally thin effective notional for high-conviction X-SIGNAL only.
                     x_signal_equity_high_conviction_effective_ok = (
                         strength > 0
-                        and abs(float(strength)) >= 0.85
+                        and abs(float(strength)) >= float(_X_SIGNAL_HIGH_CONVICTION_STRENGTH)
                         and float(effective_trade_size_after_gas) >= float(_X_SIGNAL_MIN_EFFECTIVE_OVERRIDE)
                         and float(effective_trade_size_after_gas)
                         < float(self._MIN_EFFECTIVE_TRADE_AFTER_GAS_USD)
