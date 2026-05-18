@@ -643,6 +643,7 @@ def test_determine_trade_decision_profit_take_balance_relief_allows_small_wm_to_
         direction="WMATIC_TO_USDT",
         amount_in=int(8 * 1_000_000_000_000_000_000),
         message="small tp",
+        signal_strength=0.75,
     )
     monkeypatch.setattr(clean_swap, "build_profit_exit_decision", lambda *_args, **_kwargs: profit_small)
 
@@ -653,7 +654,7 @@ def test_determine_trade_decision_profit_take_balance_relief_allows_small_wm_to_
     )
     captured = capsys.readouterr().out
     assert out is profit_small
-    assert "[nanoclaw] Main strategy small profit take allowed (balance relief)" in captured
+    assert "[nanoclaw] Main strategy small profit take allowed (balance + quality relief)" in captured
 
 
 def test_determine_trade_decision_profit_take_balance_relief_skipped_when_wm_stack_small(monkeypatch, capsys):
@@ -689,7 +690,7 @@ def test_determine_trade_decision_profit_take_balance_relief_skipped_when_wm_sta
     assert out is sentinel
     assert any("profit_take_dust_deferred" in reason for reason in skipped)
     assert "PROFIT_TAKE DUST DEFER" in captured
-    assert "Main strategy small profit take allowed (balance relief)" not in captured
+    assert "Main strategy small profit take allowed (balance + quality relief)" not in captured
 
 
 def test_determine_trade_decision_defers_dust_x_signal_and_falls_through_to_main(monkeypatch, capsys):

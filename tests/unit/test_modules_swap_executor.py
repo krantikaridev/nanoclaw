@@ -1,6 +1,7 @@
 from modules.runtime import TradeDecision, Balances
 from modules.swap_executor import (
     _decision_notional_usd,
+    _profit_take_balance_relief_bypass_allowed,
     _x_signal_equity_effective_dust_min,
     _x_signal_min_trade_guard_bypass,
 )
@@ -65,6 +66,67 @@ def test_x_signal_min_trade_guard_bypass_rejects_non_equity_direction():
         signal_strength=0.92,
     )
     assert not _x_signal_min_trade_guard_bypass(d, decision_notional_usd=7.99, min_trade_usd=10.0)
+
+
+def test_profit_take_balance_relief_bypass_requires_balance_notional_and_signal():
+    decision = TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(8 * 1_000_000_000_000_000_000),
+        signal_strength=0.75,
+    )
+    balances = Balances(usdt=10.0, usdc=30.0, wmatic=200.0, pol=1.0)
+    assert _profit_take_balance_relief_bypass_allowed(
+        decision,
+        balances=balances,
+        current_price_usd=1.0,
+        min_trade_usd=10.0,
+        profit_signal={"reason": "TP_HIT"},
+    )
+
+
+def test_profit_take_balance_relief_bypass_rejects_sub_floor_notional():
+    decision = TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(6 * 1_000_000_000_000_000_000),
+        signal_strength=0.80,
+    )
+    balances = Balances(usdt=10.0, usdc=30.0, wmatic=200.0, pol=1.0)
+    assert not _profit_take_balance_relief_bypass_allowed(
+        decision,
+        balances=balances,
+        current_price_usd=1.0,
+        min_trade_usd=10.0,
+    )
+
+
+def test_profit_take_balance_relief_bypass_rejects_weak_signal():
+    decision = TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(8 * 1_000_000_000_000_000_000),
+        signal_strength=0.55,
+    )
+    balances = Balances(usdt=10.0, usdc=30.0, wmatic=200.0, pol=1.0)
+    assert not _profit_take_balance_relief_bypass_allowed(
+        decision,
+        balances=balances,
+        current_price_usd=1.0,
+        min_trade_usd=10.0,
+    )
+
+
+def test_profit_take_balance_relief_bypass_rejects_low_wmatic_stack():
+    decision = TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(8 * 1_000_000_000_000_000_000),
+        signal_strength=0.80,
+    )
+    balances = Balances(usdt=10.0, usdc=30.0, wmatic=14.0, pol=1.0)
+    assert not _profit_take_balance_relief_bypass_allowed(
+        decision,
+        balances=balances,
+        current_price_usd=1.0,
+        min_trade_usd=10.0,
+    )
 
 
 def test_x_signal_equity_effective_dust_min_requires_healthy_stables(monkeypatch):

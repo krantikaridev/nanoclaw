@@ -332,10 +332,34 @@ def _defer_if_dust(
     return True
 
 
-# TEMPORARY (2026-05): PROFIT_TAKE WM→stable dust defer bypass when WMATIC stack clears a modest USD floor — easy revert.
-_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 12.0  # lowered further for current low WMATIC holdings (~$14 equiv)
-_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_MIN_USD = 6.0
+# TEMPORARY (2026-05): P2 Main Strategy profit-take dust bypass — balance + notional floor + signal quality; easy revert.
+_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 15.0  # ~$13–14 stacks clear strict > floor
+_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 7.0  # gas guard — skip sub-$7 exits
 _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_MAX_USD = 10.0
+_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH = 0.70
+
+
+def _profit_take_balance_relief_signal_strength(
+    decision: TradeDecision,
+    profit_signal: dict | None,
+) -> float | None:
+    """TEMPORARY: resolve recent signal for bypass (decision field, then profit_signal payload)."""
+    if decision.signal_strength is not None:
+        return float(decision.signal_strength)
+    if profit_signal is not None:
+        raw = profit_signal.get("signal_strength")
+        if raw is not None:
+            return float(raw)
+        # TEMPORARY: exit-reason proxy when explicit signal_strength is absent (easy revert).
+        reason = str(profit_signal.get("reason") or "").strip().upper()
+        proxy = {
+            "STRONG_TP_HIT": 0.90,
+            "TRAILING_STOP_HIT": 0.75,
+            "TP_HIT": 0.72,
+        }
+        if reason in proxy:
+            return proxy[reason]
+    return None
 
 
 def _profit_take_balance_relief_bypass_allowed(
@@ -344,8 +368,9 @@ def _profit_take_balance_relief_bypass_allowed(
     balances: Balances,
     current_price_usd: float,
     min_trade_usd: float,
+    profit_signal: dict | None = None,
 ) -> bool:
-    """TEMPORARY: allow small WMATIC_TO_USDT profit exits when holdings are large vs floor (feeds stable generation)."""
+    """TEMPORARY: allow small WMATIC→stable profit exits when balance, notional, and signal quality pass."""
     if str(decision.direction or "").strip().upper() not in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:
         return False
     eff_min = float(min_trade_usd)
@@ -356,9 +381,14 @@ def _profit_take_balance_relief_bypass_allowed(
         return False
     if notional_usd + 1e-9 >= eff_min:
         return False
-    lo = float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_MIN_USD)
+    floor_usd = float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD)
     hi = float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_MAX_USD)
-    if notional_usd + 1e-9 < lo or notional_usd > hi + 1e-9:
+    if notional_usd + 1e-9 < floor_usd or notional_usd > hi + 1e-9:
+        return False
+    strength = _profit_take_balance_relief_signal_strength(decision, profit_signal)
+    if strength is None:
+        return False
+    if abs(float(strength)) + 1e-9 < float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH):
         return False
     wm_equiv_usd = float(balances.wmatic) * float(current_price_usd)
     if wm_equiv_usd + 1e-9 <= float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN):
@@ -487,8 +517,9 @@ def determine_trade_decision(
             balances=balances,
             current_price_usd=current_price,
             min_trade_usd=eff_pt_min_usd,
+            profit_signal=profit_signal,
         ):
-            print("[nanoclaw] Main strategy small profit take allowed (balance relief)")
+            print("[nanoclaw] Main strategy small profit take allowed (balance + quality relief)")
             return profit_decision
         if not _defer_if_dust(
             profit_decision,
