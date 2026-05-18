@@ -333,7 +333,7 @@ def _defer_if_dust(
 
 
 # TEMPORARY (2026-05): PROFIT_TAKE WM→stable dust defer bypass when WMATIC stack clears a modest USD floor — easy revert.
-_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 25.0  # lowered from ~$175 so typical ~$20–30 stacks can use bypass
+_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 12.0  # lowered further for current low WMATIC holdings (~$14 equiv)
 _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_MIN_USD = 6.0
 _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_MAX_USD = 10.0
 
