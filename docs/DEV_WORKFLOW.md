@@ -62,7 +62,8 @@ When writing agent instructions or runbook steps, **label the shell** if a snipp
   - Dust-sized protection exits (`< MIN_TRADE_USD`) are non-blocking; cycle falls through to the next strategy in precedence.
   - Same non-blocking dust defer applies to downstream branches (`PROFIT_TAKE`, `X_SIGNAL_EQUITY`, `USDC_COPY`/`POLYCOPY`, `MAIN_STRATEGY`) to prevent single-branch dust loops from monopolizing cycles.
   - `MIN_TRADE_USD` remains a global hard execution floor; dust defer only affects branch fallthrough, never execution safety.
-  - **TEMPORARY**: `PROFIT_TAKE` may still run small WMATIC→USDT notionals ($7–$10 below `MIN_TRADE_USD`) when WMATIC USD equivalent exceeds ~$15, notional ≥ $7, and `abs(signal) ≥ 0.70` (see `swap_executor._profit_take_balance_relief_bypass_allowed`); look for `[nanoclaw] Main strategy small profit take allowed (balance + quality relief)` in logs.
+  - **TEMPORARY**: `PROFIT_TAKE` may still run small WMATIC→USDT notionals (≥ $6.50 and below `MIN_TRADE_USD`) when WMATIC USD equivalent exceeds ~$12, `abs(signal) ≥ 0.70`, and `min_trade_guard` is bypassed (see `swap_executor._profit_take_balance_relief_bypass_allowed`); look for `[nanoclaw] Main strategy small profit take fully approved (balance + quality relief)` in logs.
+  - **TEMPORARY**: small high-conviction X-SIGNAL (`USDC_TO_EQUITY`, `abs(signal) ≥ 0.85`, notional ≤ ~$12) may use relaxed fallback-router slippage; look for `[nanoclaw-av] X-SIGNAL using relaxed slippage for small high-conviction trade`.
   - AUTO-USDC prep may run even when per-asset cooldown is not ready if a high-conviction BUY signal is active; this is intentional to pre-fund USDC for the next eligible BUY path.
   - Per-trade protection evaluates the latest valid `OPEN` lock entry only (instead of every historical `OPEN`) to prevent stale lock rows from repeatedly forcing precedence.
 - Before commit:

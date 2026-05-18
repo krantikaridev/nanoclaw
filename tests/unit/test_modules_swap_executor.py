@@ -4,6 +4,7 @@ from modules.swap_executor import (
     _profit_take_balance_relief_bypass_allowed,
     _x_signal_equity_effective_dust_min,
     _x_signal_min_trade_guard_bypass,
+    _x_signal_small_high_conviction_relaxed_slippage,
 )
 import pytest
 
@@ -120,13 +121,66 @@ def test_profit_take_balance_relief_bypass_rejects_low_wmatic_stack():
         amount_in=int(8 * 1_000_000_000_000_000_000),
         signal_strength=0.80,
     )
-    balances = Balances(usdt=10.0, usdc=30.0, wmatic=14.0, pol=1.0)
+    balances = Balances(usdt=10.0, usdc=30.0, wmatic=10.0, pol=1.0)
     assert not _profit_take_balance_relief_bypass_allowed(
         decision,
         balances=balances,
         current_price_usd=1.0,
         min_trade_usd=10.0,
     )
+
+
+def test_profit_take_balance_relief_bypass_accepts_notional_at_relaxed_floor():
+    decision = TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(6.6 * 1_000_000_000_000_000_000),
+        signal_strength=0.80,
+    )
+    balances = Balances(usdt=10.0, usdc=30.0, wmatic=200.0, pol=1.0)
+    assert _profit_take_balance_relief_bypass_allowed(
+        decision,
+        balances=balances,
+        current_price_usd=1.0,
+        min_trade_usd=10.0,
+    )
+
+
+def test_profit_take_balance_relief_bypass_allows_notional_above_old_max_band():
+    """TEMPORARY: no $10 upper cap — any sub-MIN notional >= floor may qualify."""
+    decision = TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(9.5 * 1_000_000_000_000_000_000),
+        signal_strength=0.80,
+    )
+    balances = Balances(usdt=10.0, usdc=30.0, wmatic=200.0, pol=1.0)
+    assert _profit_take_balance_relief_bypass_allowed(
+        decision,
+        balances=balances,
+        current_price_usd=1.0,
+        min_trade_usd=15.0,
+    )
+
+
+def test_x_signal_small_high_conviction_relaxed_slippage_for_usdc_to_equity():
+    decision = TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=11_000_000,
+        trade_size=11.0,
+        signal_strength=0.90,
+    )
+    slip = _x_signal_small_high_conviction_relaxed_slippage(decision, decision_notional_usd=11.0)
+    assert slip is not None
+    assert slip[0] > 0 and slip[1] >= slip[0]
+
+
+def test_x_signal_small_high_conviction_relaxed_slippage_rejects_large_notional():
+    decision = TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=20_000_000,
+        trade_size=20.0,
+        signal_strength=0.90,
+    )
+    assert _x_signal_small_high_conviction_relaxed_slippage(decision, decision_notional_usd=20.0) is None
 
 
 def test_x_signal_equity_effective_dust_min_requires_healthy_stables(monkeypatch):

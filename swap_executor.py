@@ -284,6 +284,8 @@ async def approve_and_swap(
     *,
     token_in: str | None = None,
     token_out: str | None = None,
+    fallback_slippage_bps: int | None = None,
+    fallback_retry_slippage_bps: int | None = None,
 ):
     print(f"{_prefix}swap EXEC | direction={direction} | amount_in={amount_in}")
 
@@ -363,7 +365,17 @@ async def approve_and_swap(
                 )
             fb_primary = _fallback_router_slippage_bps()
             fb_retry = _fallback_router_retry_slippage_bps(fb_primary)
-            if direction == "USDC_TO_WMATIC":
+            # TEMPORARY: caller may pass relaxed fallback slippage (e.g. small high-conviction X-SIGNAL).
+            if fallback_slippage_bps is not None:
+                fb_primary = min(max(int(fallback_slippage_bps), _FALLBACK_ROUTER_SLIPPAGE_FLOOR_BPS), 9999)
+                if fallback_retry_slippage_bps is not None:
+                    fb_retry = min(
+                        max(int(fallback_retry_slippage_bps), fb_primary, _FALLBACK_ROUTER_SLIPPAGE_FLOOR_BPS),
+                        9999,
+                    )
+                else:
+                    fb_retry = _fallback_router_retry_slippage_bps(fb_primary)
+            elif direction == "USDC_TO_WMATIC":
                 fb_primary = min(max(fb_primary, HIGH_CONVICTION_FALLBACK_PRIMARY_BPS), 9999)
                 fb_retry = max(fb_retry, HIGH_CONVICTION_FALLBACK_RETRY_BPS)
                 fb_retry = min(max(fb_retry, fb_primary), 9999)

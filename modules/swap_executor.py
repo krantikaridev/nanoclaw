@@ -333,10 +333,15 @@ def _defer_if_dust(
 
 
 # TEMPORARY (2026-05): P2 Main Strategy profit-take dust bypass — balance + notional floor + signal quality; easy revert.
-_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 15.0  # ~$13–14 stacks clear strict > floor
-_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 7.0  # gas guard — skip sub-$7 exits
-_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_MAX_USD = 10.0
+_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 12.0  # ~$13–14 stacks clear strict > floor
+_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 6.5  # gas guard — skip sub-$6.50 exits
 _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH = 0.70
+_PROFIT_TAKE_FULLY_APPROVED_LOG = (
+    "[nanoclaw] Main strategy small profit take fully approved (balance + quality relief)"
+)
+
+# TEMPORARY (2026-05): small high-conviction X-SIGNAL (~$11) — relaxed fallback slippage only; easy revert.
+_X_SIGNAL_SMALL_HIGH_CONVICTION_MAX_NOTIONAL_USD = 12.0
 
 
 def _profit_take_balance_relief_signal_strength(
@@ -382,8 +387,7 @@ def _profit_take_balance_relief_bypass_allowed(
     if notional_usd + 1e-9 >= eff_min:
         return False
     floor_usd = float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD)
-    hi = float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_MAX_USD)
-    if notional_usd + 1e-9 < floor_usd or notional_usd > hi + 1e-9:
+    if notional_usd + 1e-9 < floor_usd:
         return False
     strength = _profit_take_balance_relief_signal_strength(decision, profit_signal)
     if strength is None:
@@ -397,6 +401,29 @@ def _profit_take_balance_relief_bypass_allowed(
 
 
 _X_SIGNAL_HIGH_CONVICTION_STRENGTH = 0.85
+
+
+def _x_signal_small_high_conviction_relaxed_slippage(
+    decision: TradeDecision,
+    *,
+    decision_notional_usd: float | None,
+) -> tuple[int, int] | None:
+    """TEMPORARY: higher fallback slippage for small USDC→equity X-SIGNAL (>=0.85); easy revert."""
+    if str(decision.direction or "").strip().upper() != "USDC_TO_EQUITY":
+        return None
+    strength = decision.signal_strength
+    if strength is None or float(strength) <= 0:
+        return None
+    if abs(float(strength)) + 1e-9 < _X_SIGNAL_HIGH_CONVICTION_STRENGTH:
+        return None
+    if decision_notional_usd is None:
+        return None
+    if decision_notional_usd + 1e-9 > float(_X_SIGNAL_SMALL_HIGH_CONVICTION_MAX_NOTIONAL_USD):
+        return None
+    return (
+        int(cfg.HIGH_CONVICTION_FALLBACK_PRIMARY_BPS),
+        int(cfg.HIGH_CONVICTION_FALLBACK_RETRY_BPS),
+    )
 
 
 def _x_signal_min_trade_guard_bypass(
@@ -519,7 +546,7 @@ def determine_trade_decision(
             min_trade_usd=eff_pt_min_usd,
             profit_signal=profit_signal,
         ):
-            print("[nanoclaw] Main strategy small profit take allowed (balance + quality relief)")
+            print(_PROFIT_TAKE_FULLY_APPROVED_LOG)
             return profit_decision
         if not _defer_if_dust(
             profit_decision,
@@ -727,7 +754,7 @@ async def main(*, dry_run: bool = False) -> None:
                 min_trade_usd=min_trade_usd,
                 profit_signal=profit_signal_guard,
             ):
-                print("[nanoclaw] Main strategy small profit take allowed (min_trade_guard bypassed)")
+                print(_PROFIT_TAKE_FULLY_APPROVED_LOG)
             else:
                 reason = (
                     f"min_trade_guard ({decision.direction}: ${decision_notional_usd:.2f} "
@@ -782,6 +809,16 @@ async def main(*, dry_run: bool = False) -> None:
         if decision.direction == "USDT_TO_WMATIC":
             record_buy(current_price, decision.trade_size, "pending")
 
+        x_signal_slip = _x_signal_small_high_conviction_relaxed_slippage(
+            decision,
+            decision_notional_usd=decision_notional_usd,
+        )
+        fallback_slip_bps: int | None = None
+        fallback_slip_retry_bps: int | None = None
+        if x_signal_slip is not None:
+            fallback_slip_bps, fallback_slip_retry_bps = x_signal_slip
+            print("[nanoclaw-av] X-SIGNAL using relaxed slippage for small high-conviction trade")
+
         tx_hash = await approve_and_swap(
             w3,
             None,
@@ -789,6 +826,8 @@ async def main(*, dry_run: bool = False) -> None:
             direction=decision.direction,
             token_in=decision.token_in,
             token_out=decision.token_out,
+            fallback_slippage_bps=fallback_slip_bps,
+            fallback_retry_slippage_bps=fallback_slip_retry_bps,
         )
         if tx_hash:
             attribution.notify_swap_success(decision=decision, tx_hash=tx_hash)
