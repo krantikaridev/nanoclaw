@@ -709,12 +709,25 @@ async def main(*, dry_run: bool = False) -> None:
             and decision_notional_usd is not None
             and decision_notional_usd + 1e-9 < min_trade_usd
         ):
+            profit_signal_guard: dict | None = None
+            if str(decision.direction or "").strip().upper() in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:
+                should_tp, profit_signal_guard = cs_evaluate_take_profit(current_price, state)
+                if not should_tp:
+                    profit_signal_guard = None
             if _x_signal_min_trade_guard_bypass(
                 decision,
                 decision_notional_usd=decision_notional_usd,
                 min_trade_usd=min_trade_usd,
             ):
                 print("[nanoclaw-av] X-SIGNAL min_trade_guard bypassed (high conviction)")
+            elif _profit_take_balance_relief_bypass_allowed(
+                decision,
+                balances=balances,
+                current_price_usd=current_price,
+                min_trade_usd=min_trade_usd,
+                profit_signal=profit_signal_guard,
+            ):
+                print("[nanoclaw] Main strategy small profit take allowed (min_trade_guard bypassed)")
             else:
                 reason = (
                     f"min_trade_guard ({decision.direction}: ${decision_notional_usd:.2f} "
