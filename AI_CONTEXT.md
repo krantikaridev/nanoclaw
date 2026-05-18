@@ -205,15 +205,19 @@ Operational focus: correctness of this precedence, USDC liquidity for equity **b
 - **`USDCopyStrategy`**: Mirrors USDC→WMATIC from followed wallets without marking cooldown until swap success.
 - **`evaluate_x_signal_equity_trade`** uses the **same eligibility and sort order** as `try_x_signal_equity_decision` (silent helper for tooling/tests).
 
-## Temporary Safeguards / Known Limitations
+## Temporary Safeguards for +ve PnL Path (May 2026)
 
-### Temporary X-SIGNAL Minimum Size Gate
+- **X-SIGNAL Minimum Size Gate**: `_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD = 15.0`
+  - Only high-conviction X-SIGNAL buys above this effective size are allowed.
+  - Reason: Smaller trades frequently fail with STF on the fallback router → high gas waste.
+  - Temporary until capital rotation improves.
 
-- **Constant**: `_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD = 15.0`
-- **Scope**: Only applies to X-SIGNAL equity **BUY** trades (USDC → EQUITY).
-- **Reason**: Small trades in the $8–12 range were frequently reverting with STF on the fallback Uniswap V3 router, even with very high slippage. This was wasting gas and reducing overall throughput.
-- **Goal**: Prioritize quality over quantity until we have better capital rotation (P2) or improved execution. This gate helps us reach consistent +ve PnL faster by reducing failed attempts.
-- **Status**: Temporary. Should be reviewed/reduced once daily USDC generation from main strategy improves or we increase overall capital.
+- **P2 Profit-Take Relief**: `_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 12.0`
+  - Allows small WMATIC → USDT/USDC profit takes when WMATIC stack is decent.
+  - Minimum notional floor: **$6.50** (`_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD`).
+  - Skips `min_trade_guard` in `determine_trade_decision` and `main()` when bypass qualifies; log: `[nanoclaw] Main strategy small profit take allowed (P2 relief)`.
+  - Goal: Improve USDC recycling from main strategy profits.
+  - Temporary measure to reach consistent positive PnL faster.
 
 ## **Key `.env`** (defaults in `.env.example`; production overrides freely)
 
