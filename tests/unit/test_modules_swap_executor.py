@@ -161,7 +161,15 @@ def test_profit_take_balance_relief_bypass_allows_notional_above_old_max_band():
     )
 
 
-def test_x_signal_small_high_conviction_relaxed_slippage_for_usdc_to_equity():
+def test_x_signal_small_high_conviction_relaxed_slippage_for_usdc_to_equity(monkeypatch):
+    monkeypatch.setattr(
+        "modules.swap_executor.cfg.X_SIGNAL_SMALL_HIGH_CONVICTION_FALLBACK_PRIMARY_BPS",
+        8000,
+    )
+    monkeypatch.setattr(
+        "modules.swap_executor.cfg.X_SIGNAL_SMALL_HIGH_CONVICTION_FALLBACK_RETRY_BPS",
+        10000,
+    )
     decision = TradeDecision(
         direction="USDC_TO_EQUITY",
         amount_in=11_000_000,
@@ -169,8 +177,7 @@ def test_x_signal_small_high_conviction_relaxed_slippage_for_usdc_to_equity():
         signal_strength=0.90,
     )
     slip = _x_signal_small_high_conviction_relaxed_slippage(decision, decision_notional_usd=11.0)
-    assert slip is not None
-    assert slip[0] > 0 and slip[1] >= slip[0]
+    assert slip == (8000, 10000)
 
 
 def test_x_signal_small_high_conviction_relaxed_slippage_rejects_large_notional():

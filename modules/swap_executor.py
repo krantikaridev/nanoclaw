@@ -340,7 +340,7 @@ _PROFIT_TAKE_FULLY_APPROVED_LOG = (
     "[nanoclaw] Main strategy small profit take fully approved (balance + quality relief)"
 )
 
-# TEMPORARY (2026-05): small high-conviction X-SIGNAL (~$11) — relaxed fallback slippage only; easy revert.
+# TEMPORARY (2026-05): small high-conviction X-SIGNAL (~$11) — very high fallback slippage only; easy revert.
 _X_SIGNAL_SMALL_HIGH_CONVICTION_MAX_NOTIONAL_USD = 12.0
 
 
@@ -408,7 +408,7 @@ def _x_signal_small_high_conviction_relaxed_slippage(
     *,
     decision_notional_usd: float | None,
 ) -> tuple[int, int] | None:
-    """TEMPORARY: higher fallback slippage for small USDC→equity X-SIGNAL (>=0.85); easy revert."""
+    """TEMPORARY: very high fallback slippage for small USDC→equity X-SIGNAL (>=0.85); easy revert."""
     if str(decision.direction or "").strip().upper() != "USDC_TO_EQUITY":
         return None
     strength = decision.signal_strength
@@ -421,8 +421,8 @@ def _x_signal_small_high_conviction_relaxed_slippage(
     if decision_notional_usd + 1e-9 > float(_X_SIGNAL_SMALL_HIGH_CONVICTION_MAX_NOTIONAL_USD):
         return None
     return (
-        int(cfg.HIGH_CONVICTION_FALLBACK_PRIMARY_BPS),
-        int(cfg.HIGH_CONVICTION_FALLBACK_RETRY_BPS),
+        int(cfg.X_SIGNAL_SMALL_HIGH_CONVICTION_FALLBACK_PRIMARY_BPS),
+        int(cfg.X_SIGNAL_SMALL_HIGH_CONVICTION_FALLBACK_RETRY_BPS),
     )
 
 
@@ -817,7 +817,7 @@ async def main(*, dry_run: bool = False) -> None:
         fallback_slip_retry_bps: int | None = None
         if x_signal_slip is not None:
             fallback_slip_bps, fallback_slip_retry_bps = x_signal_slip
-            print("[nanoclaw-av] X-SIGNAL using relaxed slippage for small high-conviction trade")
+            print("[nanoclaw-av] X-SIGNAL using very high slippage for small trade (high conviction)")
 
         tx_hash = await approve_and_swap(
             w3,
