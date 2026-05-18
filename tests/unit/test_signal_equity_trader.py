@@ -93,8 +93,13 @@ def test_build_plan_blocks_when_fresh_pol_from_gas_guard_is_low():
     assert plan is None
 
 
-def test_build_plan_bypasses_pol_when_high_conviction_signal_over_085():
+def test_build_plan_bypasses_pol_when_high_conviction_signal_over_085(monkeypatch):
     strategy = _build_strategy(gas_ok=True, pol_balance=0.0)
+    monkeypatch.setattr(
+        SignalEquityTrader,
+        "_compute_trade_size",
+        lambda self, usdc_balance, signal_strength, usdt_balance=0.0, *, symbol="": 18.0,
+    )
 
     plan = strategy.build_plan(
         symbol="WMATIC_ALPHA",
@@ -114,8 +119,13 @@ def test_build_plan_bypasses_pol_when_high_conviction_signal_over_085():
     assert plan.direction == "USDC_TO_EQUITY"
 
 
-def test_build_plan_uses_fresh_guard_pol_and_builds_buy_when_sufficient():
+def test_build_plan_uses_fresh_guard_pol_and_builds_buy_when_sufficient(monkeypatch):
     strategy = _build_strategy(gas_ok=True, pol_balance=1.0)
+    monkeypatch.setattr(
+        SignalEquityTrader,
+        "_compute_trade_size",
+        lambda self, usdc_balance, signal_strength, usdt_balance=0.0, *, symbol="": 18.0,
+    )
 
     plan = strategy.build_plan(
         symbol="WMATIC_ALPHA",
@@ -135,8 +145,13 @@ def test_build_plan_uses_fresh_guard_pol_and_builds_buy_when_sufficient():
     assert plan.direction == "USDC_TO_EQUITY"
 
 
-def test_build_plan_allows_high_gas_when_override_enabled():
+def test_build_plan_allows_high_gas_when_override_enabled(monkeypatch):
     strategy = _build_strategy(gas_ok=False, pol_balance=1.0)
+    monkeypatch.setattr(
+        SignalEquityTrader,
+        "_compute_trade_size",
+        lambda self, usdc_balance, signal_strength, usdt_balance=0.0, *, symbol="": 18.0,
+    )
 
     plan = strategy.build_plan(
         symbol="WMATIC_ALPHA",
@@ -504,8 +519,13 @@ def test_per_asset_cooldown_when_not_force_eligible():
     assert reason == "per_asset_cooldown"
 
 
-def test_x_signal_high_conviction_cooldown_bypass_before_full_cooldown(capsys):
+def test_x_signal_high_conviction_cooldown_bypass_before_full_cooldown(monkeypatch, capsys):
     """TEMPORARY: BUY abs(signal)>=0.85 may pass at halved per-asset cooldown before full window expires."""
+    monkeypatch.setattr(
+        SignalEquityTrader,
+        "_compute_trade_size",
+        lambda self, usdc_balance, signal_strength, usdt_balance=0.0, *, symbol="": 18.0,
+    )
     s = (
         SignalEquityTrader.builder()
         .with_enabled(True)
@@ -584,8 +604,13 @@ def test_x_signal_very_strong_cooldown_more_aggressive_than_high_conviction():
     assert s._high_conviction_cooldown_seconds(0.92) == 630
 
 
-def test_x_signal_very_strong_cooldown_bypass_before_full_cooldown(capsys):
+def test_x_signal_very_strong_cooldown_bypass_before_full_cooldown(monkeypatch, capsys):
     """TEMPORARY: BUY abs(signal)>=0.90 may pass at reduced cooldown before full window expires."""
+    monkeypatch.setattr(
+        SignalEquityTrader,
+        "_compute_trade_size",
+        lambda self, usdc_balance, signal_strength, usdt_balance=0.0, *, symbol="": 18.0,
+    )
     s = (
         SignalEquityTrader.builder()
         .with_enabled(True)
@@ -769,6 +794,7 @@ def test_hard_bypass_blocks_micro_trade_under_15_usd():
 def test_x_signal_equity_high_conviction_allows_buy_below_hard_min_trade_usd(monkeypatch, capsys):
     """TEMPORARY: abs(signal)>=0.85 and size in [_X_SIGNAL_MIN_SIZE_OVERRIDE, hard_min) skips small_trade_bypass."""
     s = _build_strategy_tuned(min_trade_usdc=4.0)
+    monkeypatch.setattr(strategy_module, "_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD", 7.0)
     monkeypatch.setattr(
         SignalEquityTrader,
         "_compute_trade_size",
@@ -1061,6 +1087,11 @@ def test_buy_uses_onchain_balance_override_for_execution(monkeypatch):
     s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
     monkeypatch.setattr(s, "_query_onchain_usdc_balance", lambda _fallback: 40.0)
     monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 8.0)
+    monkeypatch.setattr(
+        SignalEquityTrader,
+        "_compute_trade_size",
+        lambda self, usdc_balance, signal_strength, usdt_balance=0.0, *, symbol="": 18.0,
+    )
 
     plan, reason = s.build_plan_with_block_reason(
         symbol="WETH_ALPHA",
@@ -1083,6 +1114,11 @@ def test_buy_uses_onchain_balance_override_for_execution(monkeypatch):
 def test_buy_blocks_when_expected_profit_is_below_gas(monkeypatch):
     s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
     monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 1.0)
+    monkeypatch.setattr(
+        SignalEquityTrader,
+        "_compute_trade_size",
+        lambda self, usdc_balance, signal_strength, usdt_balance=0.0, *, symbol="": 20.0,
+    )
     monkeypatch.setattr(s, "_estimate_gas_cost_usd", lambda _gas_gwei: 2.0)
 
     _, reason = s.build_plan_with_block_reason(
@@ -1104,6 +1140,12 @@ def test_buy_blocks_when_expected_profit_is_below_gas(monkeypatch):
 def test_buy_blocks_when_effective_trade_after_gas_is_too_small(monkeypatch):
     s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
     monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 1.0)
+    monkeypatch.setattr(strategy_module, "_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD", 0.0)
+    monkeypatch.setattr(
+        SignalEquityTrader,
+        "_compute_trade_size",
+        lambda self, usdc_balance, signal_strength, usdt_balance=0.0, *, symbol="": 15.0,
+    )
     monkeypatch.setattr(s, "_estimate_gas_cost_usd", lambda _gas_gwei: 8.2)
 
     _, reason = s.build_plan_with_block_reason(
@@ -1122,7 +1164,8 @@ def test_buy_blocks_when_effective_trade_after_gas_is_too_small(monkeypatch):
     assert reason == "low_effective_trade_after_gas"
 
 
-def test_x_signal_high_conviction_bypasses_low_effective_after_gas(monkeypatch, capsys):
+def test_x_signal_buy_blocked_by_temporary_min_size_gate(monkeypatch, capsys):
+    """TEMPORARY: effective notional after gas below _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD skips BUY."""
     s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
     monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 1.0)
     monkeypatch.setattr(
@@ -1145,14 +1188,46 @@ def test_x_signal_high_conviction_bypasses_low_effective_after_gas(monkeypatch, 
         can_trade_asset=lambda *_a, **_k: True,
         upside_pct=400.0,
     )
+    assert plan is None
+    assert reason == "temporary_min_size_gate"
+    out = capsys.readouterr().out
+    assert "below temporary min size gate" in out
+    assert f"min=${strategy_module._X_SIGNAL_MIN_EFFECTIVE_TRADE_USD}" in out
+
+
+def test_x_signal_high_conviction_buy_passes_when_effective_meets_temp_min_gate(monkeypatch):
+    """BUY plans need effective_after_gas >= _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD (15)."""
+    s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
+    monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 1.0)
+    monkeypatch.setattr(
+        SignalEquityTrader,
+        "_compute_trade_size",
+        lambda self, usdc_balance, signal_strength, usdt_balance=0.0, *, symbol="": 23.0,
+    )
+    monkeypatch.setattr(s, "_estimate_gas_cost_usd", lambda _gas_gwei: 7.1)
+
+    plan, reason = s.build_plan_with_block_reason(
+        symbol="WMATIC_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.90,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=40.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+        upside_pct=400.0,
+    )
     assert plan is not None
     assert reason is None
-    assert "X-SIGNAL effective size allowed (high conviction bypass)" in capsys.readouterr().out
+    assert plan.trade_size == pytest.approx(23.0)
 
 
 def test_low_effective_after_gas_still_blocks_when_effective_below_override(monkeypatch):
     s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
     monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 1.0)
+    monkeypatch.setattr(strategy_module, "_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD", 0.0)
     monkeypatch.setattr(
         SignalEquityTrader,
         "_compute_trade_size",
@@ -1179,6 +1254,7 @@ def test_low_effective_after_gas_still_blocks_when_effective_below_override(monk
 def test_low_effective_after_gas_not_bypassed_when_signal_below_085(monkeypatch):
     s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
     monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 1.0)
+    monkeypatch.setattr(strategy_module, "_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD", 0.0)
     monkeypatch.setattr(
         SignalEquityTrader,
         "_compute_trade_size",
@@ -1483,8 +1559,8 @@ def test_buy_trade_size_multiplier_applies_before_guards(monkeypatch):
     from nanoclaw.strategies import signal_equity_trader as strat_mod
 
     # Ensure the scaled size stays above strategy-after-gas guardrails.
-    monkeypatch.setattr(rt, "FIXED_TRADE_USD_MIN", 20.0, raising=False)
-    monkeypatch.setattr(rt, "FIXED_TRADE_USD_MAX", 20.0, raising=False)
+    monkeypatch.setattr(rt, "FIXED_TRADE_USD_MIN", 40.0, raising=False)
+    monkeypatch.setattr(rt, "FIXED_TRADE_USD_MAX", 40.0, raising=False)
     monkeypatch.setattr(strat_mod, "_HARD_BYPASS_MIN_TRADE_USD", 0.0, raising=False)
 
     s = (
@@ -1514,7 +1590,7 @@ def test_buy_trade_size_multiplier_applies_before_guards(monkeypatch):
     )
     assert reason is None
     assert plan is not None
-    assert plan.trade_size == pytest.approx(10.0)
+    assert plan.trade_size == pytest.approx(20.0)
 
 
 def test_builder_fluent_setters_round_trip():

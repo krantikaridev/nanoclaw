@@ -205,6 +205,16 @@ Operational focus: correctness of this precedence, USDC liquidity for equity **b
 - **`USDCopyStrategy`**: Mirrors USDC→WMATIC from followed wallets without marking cooldown until swap success.
 - **`evaluate_x_signal_equity_trade`** uses the **same eligibility and sort order** as `try_x_signal_equity_decision` (silent helper for tooling/tests).
 
+## Temporary Safeguards / Known Limitations
+
+### Temporary X-SIGNAL Minimum Size Gate
+
+- **Constant**: `_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD = 15.0`
+- **Scope**: Only applies to X-SIGNAL equity **BUY** trades (USDC → EQUITY).
+- **Reason**: Small trades in the $8–12 range were frequently reverting with STF on the fallback Uniswap V3 router, even with very high slippage. This was wasting gas and reducing overall throughput.
+- **Goal**: Prioritize quality over quantity until we have better capital rotation (P2) or improved execution. This gate helps us reach consistent +ve PnL faster by reducing failed attempts.
+- **Status**: Temporary. Should be reviewed/reduced once daily USDC generation from main strategy improves or we increase overall capital.
+
 ## **Key `.env`** (defaults in `.env.example`; production overrides freely)
 
 Examples: `RPC`, `COOLDOWN_MINUTES`, `ENABLE_X_SIGNAL_EQUITY`, `X_SIGNAL_EQUITY_MIN_STRENGTH` **(default template 0.60; tighten in prod if desired)**,
