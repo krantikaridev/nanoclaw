@@ -332,11 +332,12 @@ def _defer_if_dust(
     return True
 
 
-# TEMPORARY (May 2026): P2 Main Strategy profit-take relief — improve USDC recycling while chasing +ve PnL.
-# Revert once capital rotation and MIN_TRADE_USD sizing are healthy without small-exit bypasses.
-_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 12.0
-_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 6.5  # gas guard — skip sub-$6.50 exits
-_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH = 0.70
+# TEMPORARY: P2 Profit Take Relief thresholds (relaxed to help capital rotation).
+# These thresholds were relaxed to improve USDC generation from main strategy.
+# Goal is to reach consistent +ve PnL faster. Review/revert once capital rotation improves.
+_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 10.0
+_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 6.0  # gas guard — skip sub-$6 exits
+_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH = 0.65
 _PROFIT_TAKE_P2_RELIEF_LOG = "[nanoclaw] Main strategy small profit take allowed (P2 relief)"
 
 # TEMPORARY (2026-05): small high-conviction X-SIGNAL (~$11) — very high fallback slippage only; easy revert.
@@ -347,23 +348,34 @@ def _profit_take_balance_relief_signal_strength(
     decision: TradeDecision,
     profit_signal: dict | None,
 ) -> float:
-    """TEMPORARY: resolve recent signal for bypass (decision field, then profit_signal payload)."""
+    """TEMPORARY: resolve signal strength for P2 relief (decision → profit_signal metrics → floor)."""
     if decision.signal_strength is not None:
         return float(decision.signal_strength)
-    if profit_signal is not None:
-        raw = profit_signal.get("signal_strength")
-        if raw is not None:
-            return float(raw)
-        # TEMPORARY: exit-reason proxy when explicit signal_strength is absent (easy revert).
-        reason = str(profit_signal.get("reason") or "").strip().upper()
-        proxy = {
-            "STRONG_TP_HIT": 0.90,
-            "TRAILING_STOP_HIT": 0.75,
-            "TP_HIT": 0.72,
-        }
-        if reason in proxy:
-            return proxy[reason]
-    # TEMPORARY: default when exit payload omits explicit strength (keeps relief reliable in main + decision paths).
+    if profit_signal is None:
+        return float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH)
+    raw = profit_signal.get("signal_strength")
+    if raw is not None:
+        return float(raw)
+    reason = str(profit_signal.get("reason") or "").strip().upper()
+    if reason == "HOLD":
+        return 0.0
+    try:
+        gain_pct = float(profit_signal.get("gain_pct", 0) or 0)
+        peak_gain_pct = float(profit_signal.get("peak_gain_pct", gain_pct) or gain_pct)
+        pullback_pct = float(profit_signal.get("pullback_pct", 0) or 0)
+    except (TypeError, ValueError):
+        gain_pct = peak_gain_pct = pullback_pct = 0.0
+    # TEMPORARY: derive strength from exit metrics when profit_signal omits explicit strength.
+    if reason == "STRONG_TP_HIT":
+        return min(0.98, 0.88 + max(0.0, gain_pct - 12.0) / 100.0)
+    if reason == "TRAILING_STOP_HIT":
+        return min(
+            0.92,
+            0.72 + min(0.08, peak_gain_pct / 50.0) + min(0.05, pullback_pct / 20.0),
+        )
+    if reason == "TP_HIT":
+        floor = float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH)
+        return min(0.85, max(floor, 0.60 + gain_pct / 40.0))
     return float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH)
 
 

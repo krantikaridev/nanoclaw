@@ -89,7 +89,7 @@ def test_profit_take_balance_relief_bypass_requires_balance_notional_and_signal(
 def test_profit_take_balance_relief_bypass_rejects_sub_floor_notional():
     decision = TradeDecision(
         direction="WMATIC_TO_USDT",
-        amount_in=int(6 * 1_000_000_000_000_000_000),
+        amount_in=int(5.5 * 1_000_000_000_000_000_000),
         signal_strength=0.80,
     )
     balances = Balances(usdt=10.0, usdc=30.0, wmatic=200.0, pol=1.0)
@@ -122,7 +122,7 @@ def test_profit_take_balance_relief_bypass_rejects_low_wmatic_stack():
         amount_in=int(8 * 1_000_000_000_000_000_000),
         signal_strength=0.80,
     )
-    balances = Balances(usdt=10.0, usdc=30.0, wmatic=10.0, pol=1.0)
+    balances = Balances(usdt=10.0, usdc=30.0, wmatic=9.0, pol=1.0)
     assert not _profit_take_balance_relief_bypass_allowed(
         decision,
         balances=balances,
@@ -151,7 +151,34 @@ def test_profit_take_balance_relief_signal_strength_defaults_when_absent():
         direction="WMATIC_TO_USDT",
         amount_in=int(8 * 1_000_000_000_000_000_000),
     )
-    assert _profit_take_balance_relief_signal_strength(decision, None) == 0.70
+    assert _profit_take_balance_relief_signal_strength(decision, None) == 0.65
+
+
+def test_profit_take_balance_relief_signal_strength_from_profit_signal_gain_pct():
+    decision = TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(8 * 1_000_000_000_000_000_000),
+    )
+    strength = _profit_take_balance_relief_signal_strength(
+        decision,
+        {"reason": "TP_HIT", "gain_pct": 8.0, "peak_gain_pct": 8.0, "pullback_pct": 0.0},
+    )
+    assert strength == pytest.approx(0.80)
+
+
+def test_profit_take_balance_relief_bypass_qualifies_via_profit_signal_metrics():
+    decision = TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(7 * 1_000_000_000_000_000_000),
+    )
+    balances = Balances(usdt=10.0, usdc=30.0, wmatic=15.0, pol=1.0)
+    assert _profit_take_balance_relief_bypass_allowed(
+        decision,
+        balances=balances,
+        current_price_usd=1.0,
+        min_trade_usd=10.0,
+        profit_signal={"reason": "TP_HIT", "gain_pct": 7.0, "peak_gain_pct": 7.0},
+    )
 
 
 def test_profit_take_balance_relief_bypass_allows_wmatic_to_usdc():
