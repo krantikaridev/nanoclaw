@@ -344,39 +344,67 @@ _PROFIT_TAKE_P2_RELIEF_LOG = "[nanoclaw] Main strategy small profit take allowed
 _X_SIGNAL_SMALL_HIGH_CONVICTION_MAX_NOTIONAL_USD = 12.0
 
 
+def _clamp_unit_interval(value: float) -> float:
+    """Clamp a numeric score to [0.0, 1.0] for relief signal-strength comparisons."""
+    return max(0.0, min(1.0, float(value)))
+
+
 def _profit_take_balance_relief_signal_strength(
     decision: TradeDecision,
     profit_signal: dict | None,
 ) -> float:
-    """TEMPORARY: resolve signal strength for P2 relief (decision → profit_signal metrics → floor)."""
+    """TEMPORARY: score P2 profit-take relief exit quality on [0.0, 1.0].
+
+    Prefer profit_signal['signal_strength'] when the strategy supplies it.
+    Otherwise derive strength from exit reason and gain/peak/pullback metrics
+    (STRONG_TP_HIT / TRAILING_STOP_HIT rank high, TP_HIT medium, HOLD weak).
+    Falls back to decision.signal_strength, then the relief floor — smarter gating
+    instead of lowering numeric bypass thresholds further.
+    """
+    floor = float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH)
+
+    if profit_signal is not None:
+        explicit = profit_signal.get("signal_strength")
+        if explicit is not None:
+            return _clamp_unit_interval(explicit)
+
+        reason = str(profit_signal.get("reason") or "").strip().upper()
+        if reason == "HOLD":
+            return 0.0
+
+        try:
+            gain_pct = float(profit_signal.get("gain_pct", 0) or 0)
+            peak_gain_pct = float(profit_signal.get("peak_gain_pct", gain_pct) or gain_pct)
+            pullback_pct = float(profit_signal.get("pullback_pct", 0) or 0)
+        except (TypeError, ValueError):
+            gain_pct = peak_gain_pct = pullback_pct = 0.0
+
+        gain_boost = min(0.10, max(0.0, gain_pct) / 100.0)
+        peak_boost = min(0.08, max(0.0, peak_gain_pct) / 62.5)
+
+        # TEMPORARY heuristic tiers when explicit strength is absent.
+        if reason == "STRONG_TP_HIT":
+            # High-quality take-profit: strong base, lifted by realized gain.
+            return _clamp_unit_interval(
+                0.88 + gain_boost + max(0.0, gain_pct - 12.0) / 200.0
+            )
+        if reason == "TRAILING_STOP_HIT":
+            # Trailing exit: strong base, peak history + pullback confirm the move.
+            return _clamp_unit_interval(
+                0.74 + peak_boost + min(0.06, max(0.0, pullback_pct) / 20.0)
+            )
+        if reason == "TP_HIT":
+            # Medium-quality TP: at/above floor, scaled by gain_pct / peak_gain_pct.
+            metric = max(gain_pct, peak_gain_pct)
+            return _clamp_unit_interval(max(floor, 0.60 + metric / 40.0))
+        if gain_pct > 0.0 or peak_gain_pct > 0.0:
+            metric = max(gain_pct, peak_gain_pct)
+            return _clamp_unit_interval(max(0.45, 0.52 + metric / 50.0))
+
     if decision.signal_strength is not None:
-        return float(decision.signal_strength)
-    if profit_signal is None:
-        return float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH)
-    raw = profit_signal.get("signal_strength")
-    if raw is not None:
-        return float(raw)
-    reason = str(profit_signal.get("reason") or "").strip().upper()
-    if reason == "HOLD":
-        return 0.0
-    try:
-        gain_pct = float(profit_signal.get("gain_pct", 0) or 0)
-        peak_gain_pct = float(profit_signal.get("peak_gain_pct", gain_pct) or gain_pct)
-        pullback_pct = float(profit_signal.get("pullback_pct", 0) or 0)
-    except (TypeError, ValueError):
-        gain_pct = peak_gain_pct = pullback_pct = 0.0
-    # TEMPORARY: derive strength from exit metrics when profit_signal omits explicit strength.
-    if reason == "STRONG_TP_HIT":
-        return min(0.98, 0.88 + max(0.0, gain_pct - 12.0) / 100.0)
-    if reason == "TRAILING_STOP_HIT":
-        return min(
-            0.92,
-            0.72 + min(0.08, peak_gain_pct / 50.0) + min(0.05, pullback_pct / 20.0),
-        )
-    if reason == "TP_HIT":
-        floor = float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH)
-        return min(0.85, max(floor, 0.60 + gain_pct / 40.0))
-    return float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH)
+        return _clamp_unit_interval(decision.signal_strength)
+
+    return floor
 
 
 def _profit_take_balance_relief_bypass_allowed(

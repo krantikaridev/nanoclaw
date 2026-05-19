@@ -166,6 +166,63 @@ def test_profit_take_balance_relief_signal_strength_from_profit_signal_gain_pct(
     assert strength == pytest.approx(0.80)
 
 
+def test_profit_take_balance_relief_signal_strength_prefers_profit_signal_explicit():
+    decision = TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(8 * 1_000_000_000_000_000_000),
+        signal_strength=0.55,
+    )
+    strength = _profit_take_balance_relief_signal_strength(
+        decision,
+        {"signal_strength": 0.72, "reason": "HOLD"},
+    )
+    assert strength == pytest.approx(0.72)
+
+
+def test_profit_take_balance_relief_signal_strength_hold_is_weak():
+    decision = TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(8 * 1_000_000_000_000_000_000),
+        signal_strength=0.90,
+    )
+    assert _profit_take_balance_relief_signal_strength(
+        decision, {"reason": "HOLD"}
+    ) == pytest.approx(0.0)
+
+
+def test_profit_take_balance_relief_signal_strength_strong_exit_outranks_tp_hit():
+    decision = TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(8 * 1_000_000_000_000_000_000),
+    )
+    tp = _profit_take_balance_relief_signal_strength(
+        decision,
+        {"reason": "TP_HIT", "gain_pct": 8.0, "peak_gain_pct": 8.0},
+    )
+    strong = _profit_take_balance_relief_signal_strength(
+        decision,
+        {"reason": "STRONG_TP_HIT", "gain_pct": 8.0, "peak_gain_pct": 8.0},
+    )
+    assert strong > tp
+    assert strong >= 0.88
+
+
+def test_profit_take_balance_relief_bypass_rejects_hold_despite_decision_strength():
+    decision = TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(8 * 1_000_000_000_000_000_000),
+        signal_strength=0.90,
+    )
+    balances = Balances(usdt=10.0, usdc=30.0, wmatic=200.0, pol=1.0)
+    assert not _profit_take_balance_relief_bypass_allowed(
+        decision,
+        balances=balances,
+        current_price_usd=1.0,
+        min_trade_usd=10.0,
+        profit_signal={"reason": "HOLD"},
+    )
+
+
 def test_profit_take_balance_relief_bypass_qualifies_via_profit_signal_metrics():
     decision = TradeDecision(
         direction="WMATIC_TO_USDT",

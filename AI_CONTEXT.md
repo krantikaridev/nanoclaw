@@ -215,7 +215,7 @@ Operational focus: correctness of this precedence, USDC liquidity for equity **b
 - **P2 Profit-Take Relief** (further relaxed May 2026 — final relaxation for now; monitor before revert):
   - `_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 8.0` — WMATIC stack must exceed ~$8 USD equiv.
   - `_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 5.5` — gas guard for sub-$5.50 exits.
-  - `_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH = 0.60` — signal from `decision.signal_strength`, `profit_signal.signal_strength`, or gain/peak/pullback metrics.
+  - `_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH = 0.60` — bypass uses `_profit_take_balance_relief_signal_strength()`: prefers `profit_signal['signal_strength']`, else a TEMPORARY reason/gain heuristic (strong exits > TP_HIT > HOLD), then `decision.signal_strength`. Signal-strength detection was improved for smarter gating instead of further lowering thresholds.
   - Allows small WMATIC → USDT/USDC profit takes below `MIN_TRADE_USD`; skips `min_trade_guard` in `determine_trade_decision` and `main()` when bypass qualifies.
   - Log: `[nanoclaw] Main strategy small profit take allowed (P2 relief)`.
   - Further relaxed because P2 relief stopped triggering; goal is to improve USDC generation from main strategy and reach consistent positive PnL faster. Monitor results — no further threshold cuts planned for now.
