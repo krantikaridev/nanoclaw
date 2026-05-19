@@ -213,13 +213,13 @@ Operational focus: correctness of this precedence, USDC liquidity for equity **b
   - Temporary until execution improves or capital rotation increases.
 - **X-SIGNAL gated-trade enhanced execution** (temporary): USDC→equity BUYs that pass the $18 effective gate get higher fallback-router slippage (**9000 / 12000 bps** primary/retry via `X_SIGNAL_GATED_TRADE_*` env) plus an extra `min_out` haircut (`X_SIGNAL_GATED_TRADE_MIN_OUT_EXTRA_BPS`, default **75**). Logs: `[nanoclaw-av] X-SIGNAL gated trade eligible — enhanced execution on swap` (plan build) and `[nanoclaw-av] X-SIGNAL enhanced execution for gated trade` (swap). Goal: fewer STF reverts on Polygon fallback while working toward consistent +ve PnL.
 
-- **P2 Profit-Take Relief** (further relaxed May 2026 — final relaxation for now; monitor before revert):
-  - `_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 8.0` — WMATIC stack must exceed ~$8 USD equiv.
-  - `_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 5.5` — gas guard for sub-$5.50 exits.
-  - `_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH = 0.60` — bypass uses `_profit_take_balance_relief_signal_strength()`: prefers `profit_signal['signal_strength']`, else a TEMPORARY reason/gain heuristic (strong exits > TP_HIT > HOLD), then `decision.signal_strength`. Signal-strength detection was improved for smarter gating instead of further lowering thresholds.
-  - Allows small WMATIC → USDT/USDC profit takes below `MIN_TRADE_USD`; skips `min_trade_guard` in `determine_trade_decision` and `main()` when bypass qualifies.
+- **P2 Profit-Take Relief** (TEMPORARY — 48-hour sprint May 2026; revert after sprint window):
+  - `_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 7.0` — total WMATIC stack must exceed ~$7 USD equiv (trade notional may still be small).
+  - `_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 5.0` — gas guard for sub-$5 exits.
+  - `_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH = 0.55` — bypass uses `_profit_take_balance_relief_signal_strength()`: prefers `profit_signal['signal_strength']`, else sprint heuristics (STRONG_TP_HIT / TRAILING_STOP_HIT weighted highest; positive `gain_pct` / `peak_gain_pct` boost; healthy WMATIC stack nudges borderline scores), then `decision.signal_strength`. Strengths are rounded to two decimals.
+  - Allows small WMATIC → USDT/USDC profit takes below `MIN_TRADE_USD` when the wallet still holds a decent WMATIC balance; skips `min_trade_guard` in `determine_trade_decision` and `main()` when bypass qualifies.
   - Log: `[nanoclaw] Main strategy small profit take allowed (P2 relief)`.
-  - Further relaxed because P2 relief stopped triggering; goal is to improve USDC generation from main strategy and reach consistent positive PnL faster. Monitor results — no further threshold cuts planned for now.
+  - Sprint goal: improve capital rotation and USDC generation from main strategy to reach positive PnL faster. Monitor fill rate and gas drag before keeping thresholds.
 
 ## **Key `.env`** (defaults in `.env.example`; production overrides freely)
 

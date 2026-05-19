@@ -335,12 +335,12 @@ def _defer_if_dust(
     return True
 
 
-# TEMPORARY: Further relaxed P2 Profit Take Relief thresholds (to improve capital rotation).
-# These thresholds were further relaxed to help reach consistent +ve PnL faster and improve
-# USDC generation from main strategy. Final relaxation for now — monitor results before revert.
-_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 8.0
-_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 5.5  # gas guard — skip sub-$5.50 exits
-_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH = 0.60
+# TEMPORARY (48-hour sprint): More aggressive P2 profit-take relief to improve capital rotation.
+# Goal: convert small WMATIC gains back to USDC/USDT faster and reach positive PnL sooner.
+# Revert after sprint window — monitor fill rate and gas drag before keeping permanently.
+_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 7.0
+_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 5.0  # gas guard — skip sub-$5 exits
+_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH = 0.55
 _PROFIT_TAKE_P2_RELIEF_LOG = "[nanoclaw] Main strategy small profit take allowed (P2 relief)"
 
 # TEMPORARY (2026-05): small high-conviction X-SIGNAL (~$11) — very high fallback slippage only; easy revert.
@@ -352,24 +352,42 @@ def _clamp_unit_interval(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
 
 
+def _round_relief_signal_strength(value: float) -> float:
+    """Return a clamped strength rounded to two decimals for stable comparisons/logging."""
+    return round(_clamp_unit_interval(value), 2)
+
+
+def _profit_take_gain_metric_boost(gain_pct: float, peak_gain_pct: float) -> float:
+    """TEMPORARY (48-hour sprint): lift strength when realized or peak gains are positive."""
+    metric = max(float(gain_pct), float(peak_gain_pct))
+    if metric <= 0.0:
+        return 0.0
+    # +0.04 at ~2% gain, up to +0.12 at ~6%+ (keeps small winners above the relief floor).
+    return min(0.12, 0.02 + metric / 50.0)
+
+
 def _profit_take_balance_relief_signal_strength(
     decision: TradeDecision,
     profit_signal: dict | None,
+    *,
+    wmatic_usd_equiv: float | None = None,
 ) -> float:
-    """TEMPORARY: score P2 profit-take relief exit quality on [0.0, 1.0].
+    """TEMPORARY (48-hour sprint): score P2 profit-take relief exit quality on [0.0, 1.0].
 
     Prefer profit_signal['signal_strength'] when the strategy supplies it.
     Otherwise derive strength from exit reason and gain/peak/pullback metrics
-    (STRONG_TP_HIT / TRAILING_STOP_HIT rank high, TP_HIT medium, HOLD weak).
-    Falls back to decision.signal_strength, then the relief floor — smarter gating
-    instead of lowering numeric bypass thresholds further.
+    (STRONG_TP_HIT / TRAILING_STOP_HIT rank highest, TP_HIT medium, HOLD weak).
+    Falls back to decision.signal_strength, then the relief floor.
+    A healthy WMATIC stack can nudge borderline small sells over the floor even when
+  the exit notional is below MIN_TRADE_USD (capital rotation during the sprint).
     """
     floor = float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH)
+    wm_min = float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN)
 
     if profit_signal is not None:
         explicit = profit_signal.get("signal_strength")
         if explicit is not None:
-            return _clamp_unit_interval(explicit)
+            return _round_relief_signal_strength(explicit)
 
         reason = str(profit_signal.get("reason") or "").strip().upper()
         if reason == "HOLD":
@@ -382,32 +400,38 @@ def _profit_take_balance_relief_signal_strength(
         except (TypeError, ValueError):
             gain_pct = peak_gain_pct = pullback_pct = 0.0
 
-        gain_boost = min(0.10, max(0.0, gain_pct) / 100.0)
-        peak_boost = min(0.08, max(0.0, peak_gain_pct) / 62.5)
+        gain_boost = _profit_take_gain_metric_boost(gain_pct, peak_gain_pct)
 
-        # TEMPORARY heuristic tiers when explicit strength is absent.
+        # TEMPORARY (48-hour sprint) heuristic tiers when explicit strength is absent.
         if reason == "STRONG_TP_HIT":
-            # High-quality take-profit: strong base, lifted by realized gain.
-            return _clamp_unit_interval(
-                0.88 + gain_boost + max(0.0, gain_pct - 12.0) / 200.0
-            )
+            # Highest tier: strong base + gain lift (small sells still qualify when stack is healthy).
+            extra = min(0.06, max(0.0, gain_pct - 8.0) / 40.0)
+            return _round_relief_signal_strength(0.93 + gain_boost + extra)
         if reason == "TRAILING_STOP_HIT":
-            # Trailing exit: strong base, peak history + pullback confirm the move.
-            return _clamp_unit_interval(
-                0.74 + peak_boost + min(0.06, max(0.0, pullback_pct) / 20.0)
-            )
+            # Second tier: peak history + pullback confirm the move was real.
+            peak_boost = min(0.10, max(0.0, peak_gain_pct) / 35.0)
+            trail_boost = min(0.08, max(0.0, pullback_pct) / 12.0)
+            return _round_relief_signal_strength(0.84 + peak_boost + trail_boost + gain_boost * 0.5)
         if reason == "TP_HIT":
-            # Medium-quality TP: at/above floor, scaled by gain_pct / peak_gain_pct.
             metric = max(gain_pct, peak_gain_pct)
-            return _clamp_unit_interval(max(floor, 0.60 + metric / 40.0))
+            return _round_relief_signal_strength(max(floor, 0.62 + metric / 35.0 + gain_boost))
         if gain_pct > 0.0 or peak_gain_pct > 0.0:
             metric = max(gain_pct, peak_gain_pct)
-            return _clamp_unit_interval(max(0.45, 0.52 + metric / 50.0))
+            return _round_relief_signal_strength(max(floor, 0.56 + metric / 45.0 + gain_boost))
 
+    strength: float
     if decision.signal_strength is not None:
-        return _clamp_unit_interval(decision.signal_strength)
+        strength = _clamp_unit_interval(decision.signal_strength)
+    else:
+        strength = floor
 
-    return floor
+    # TEMPORARY (48-hour sprint): decent WMATIC balance → small exit still worth rotating to stables.
+    if wmatic_usd_equiv is not None and float(wmatic_usd_equiv) > wm_min * 1.5:
+        strength = min(1.0, strength + 0.05)
+    elif wmatic_usd_equiv is not None and float(wmatic_usd_equiv) > wm_min + 1e-9:
+        strength = min(1.0, strength + 0.03)
+
+    return _round_relief_signal_strength(strength)
 
 
 def _profit_take_balance_relief_bypass_allowed(
@@ -418,7 +442,11 @@ def _profit_take_balance_relief_bypass_allowed(
     min_trade_usd: float,
     profit_signal: dict | None = None,
 ) -> bool:
-    """TEMPORARY: allow small WMATIC→stable profit exits when balance, notional, and signal quality pass."""
+    """TEMPORARY (48-hour sprint): allow small WMATIC→stable profit exits when stack, notional, and signal pass.
+
+    Trade notional may be below ``MIN_TRADE_USD`` as long as total WMATIC USD equivalent is healthy
+    (capital rotation — lock small gains back into stables without waiting for a large sell).
+    """
     if str(decision.direction or "").strip().upper() not in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:
         return False
     eff_min = float(min_trade_usd)
@@ -432,11 +460,15 @@ def _profit_take_balance_relief_bypass_allowed(
     floor_usd = float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD)
     if notional_usd + 1e-9 < floor_usd:
         return False
-    strength = _profit_take_balance_relief_signal_strength(decision, profit_signal)
-    if abs(float(strength)) + 1e-9 < float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH):
-        return False
     wm_equiv_usd = float(balances.wmatic) * float(current_price_usd)
     if wm_equiv_usd + 1e-9 <= float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN):
+        return False
+    strength = _profit_take_balance_relief_signal_strength(
+        decision,
+        profit_signal,
+        wmatic_usd_equiv=wm_equiv_usd,
+    )
+    if abs(float(strength)) + 1e-9 < float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH):
         return False
     return True
 
