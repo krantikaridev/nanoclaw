@@ -207,10 +207,10 @@ Operational focus: correctness of this precedence, USDC liquidity for equity **b
 
 ## Temporary Safeguards for +ve PnL Path (May 2026)
 
-- **X-SIGNAL Minimum Size Gate**: `_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD = 15.0`
+- **X-SIGNAL Minimum Size Gate** (temporary): `_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD = 18.0`
   - Only high-conviction X-SIGNAL buys above this effective size are allowed.
-  - Reason: Smaller trades frequently fail with STF on the fallback router → high gas waste.
-  - Temporary until capital rotation improves.
+  - Raised from 15.0 → 18.0 because trades around ~$11 were still failing too often with STF on the fallback router → high gas waste.
+  - Temporary until execution improves or capital rotation increases.
 
 - **P2 Profit-Take Relief** (further relaxed May 2026 — final relaxation for now; monitor before revert):
   - `_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 8.0` — WMATIC stack must exceed ~$8 USD equiv.

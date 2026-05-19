@@ -1196,7 +1196,36 @@ def test_x_signal_buy_blocked_by_temporary_min_size_gate(monkeypatch, capsys):
 
 
 def test_x_signal_high_conviction_buy_passes_when_effective_meets_temp_min_gate(monkeypatch):
-    """BUY plans need effective_after_gas >= _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD (15)."""
+    """BUY plans need effective_after_gas >= _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD (18)."""
+    s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
+    monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 1.0)
+    monkeypatch.setattr(
+        SignalEquityTrader,
+        "_compute_trade_size",
+        lambda self, usdc_balance, signal_strength, usdt_balance=0.0, *, symbol="": 26.0,
+    )
+    monkeypatch.setattr(s, "_estimate_gas_cost_usd", lambda _gas_gwei: 7.1)
+
+    plan, reason = s.build_plan_with_block_reason(
+        symbol="WMATIC_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.90,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=40.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+        upside_pct=400.0,
+    )
+    assert plan is not None
+    assert reason is None
+    assert plan.trade_size == pytest.approx(26.0)
+
+
+def test_x_signal_buy_blocked_when_effective_between_old_and_new_min_gate(monkeypatch, capsys):
+    """Effective $15.90 passes old $15 gate but is blocked at $18."""
     s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
     monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 1.0)
     monkeypatch.setattr(
@@ -1219,9 +1248,9 @@ def test_x_signal_high_conviction_buy_passes_when_effective_meets_temp_min_gate(
         can_trade_asset=lambda *_a, **_k: True,
         upside_pct=400.0,
     )
-    assert plan is not None
-    assert reason is None
-    assert plan.trade_size == pytest.approx(23.0)
+    assert plan is None
+    assert reason == "temporary_min_size_gate"
+    assert "below temporary min size gate" in capsys.readouterr().out
 
 
 def test_low_effective_after_gas_still_blocks_when_effective_below_override(monkeypatch):

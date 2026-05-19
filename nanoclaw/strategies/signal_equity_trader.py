@@ -52,10 +52,11 @@ _X_SIGNAL_MIN_SIZE_OVERRIDE = 7.5
 # TEMPORARY: Allow slightly smaller effective size for high-conviction X-SIGNAL
 _X_SIGNAL_MIN_EFFECTIVE_OVERRIDE = 7.0
 
-# TEMPORARY: Minimum effective trade size for X-SIGNAL equity buys to reduce STF failures
-# Reason: Small trades (~$8-11) frequently revert on fallback router even with high slippage.
-# Goal: Reduce gas waste and improve success rate until execution improves or capital increases.
-_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD = 15.0
+# TEMPORARY: Minimum effective trade size for X-SIGNAL equity buys
+# Raised from 15.0 → 18.0 to improve success rate on fallback router.
+# Reason: Even $11 trades were frequently reverting with STF.
+# Goal: Higher success rate → less gas waste → faster path to consistent +ve PnL.
+_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD = 18.0
 
 # TEMPORARY: Slightly larger USDC→equity sizing for very strong X-SIGNAL (target ~$9–$9.5)
 _X_SIGNAL_VERY_STRONG_STRENGTH = 0.90
@@ -889,7 +890,7 @@ class SignalEquityTrader:
                     f"gas=${gas_cost_usd:.2f} | expected=${expected_profit_usd:.2f} | "
                     f"required_expected>${min_expected_profit_usd:.2f} | effective_after_gas=${effective_trade_size_after_gas:.2f}"
                 )
-                # TEMPORARY: USDC→equity BUY only; supersedes high-conviction effective-size bypass below $15.
+                # TEMPORARY: USDC→equity BUY only; supersedes high-conviction effective-size bypass below $18.
                 if float(effective_trade_size_after_gas) < float(_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD):
                     print(
                         f"[nanoclaw] X-SIGNAL skipped | below temporary min size gate | "
