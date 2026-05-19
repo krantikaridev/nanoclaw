@@ -332,12 +332,12 @@ def _defer_if_dust(
     return True
 
 
-# TEMPORARY: P2 Profit Take Relief thresholds (relaxed to help capital rotation).
-# These thresholds were relaxed to improve USDC generation from main strategy.
-# Goal is to reach consistent +ve PnL faster. Review/revert once capital rotation improves.
-_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 10.0
-_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 6.0  # gas guard — skip sub-$6 exits
-_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH = 0.65
+# TEMPORARY: Further relaxed P2 Profit Take Relief thresholds (to improve capital rotation).
+# These thresholds were further relaxed to help reach consistent +ve PnL faster and improve
+# USDC generation from main strategy. Final relaxation for now — monitor results before revert.
+_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 8.0
+_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 5.5  # gas guard — skip sub-$5.50 exits
+_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH = 0.60
 _PROFIT_TAKE_P2_RELIEF_LOG = "[nanoclaw] Main strategy small profit take allowed (P2 relief)"
 
 # TEMPORARY (2026-05): small high-conviction X-SIGNAL (~$11) — very high fallback slippage only; easy revert.

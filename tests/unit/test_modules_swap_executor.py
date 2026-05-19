@@ -89,7 +89,7 @@ def test_profit_take_balance_relief_bypass_requires_balance_notional_and_signal(
 def test_profit_take_balance_relief_bypass_rejects_sub_floor_notional():
     decision = TradeDecision(
         direction="WMATIC_TO_USDT",
-        amount_in=int(5.5 * 1_000_000_000_000_000_000),
+        amount_in=int(5.0 * 1_000_000_000_000_000_000),
         signal_strength=0.80,
     )
     balances = Balances(usdt=10.0, usdc=30.0, wmatic=200.0, pol=1.0)
@@ -105,7 +105,7 @@ def test_profit_take_balance_relief_bypass_rejects_weak_signal():
     decision = TradeDecision(
         direction="WMATIC_TO_USDT",
         amount_in=int(8 * 1_000_000_000_000_000_000),
-        signal_strength=0.55,
+        signal_strength=0.59,
     )
     balances = Balances(usdt=10.0, usdc=30.0, wmatic=200.0, pol=1.0)
     assert not _profit_take_balance_relief_bypass_allowed(
@@ -122,7 +122,7 @@ def test_profit_take_balance_relief_bypass_rejects_low_wmatic_stack():
         amount_in=int(8 * 1_000_000_000_000_000_000),
         signal_strength=0.80,
     )
-    balances = Balances(usdt=10.0, usdc=30.0, wmatic=9.0, pol=1.0)
+    balances = Balances(usdt=10.0, usdc=30.0, wmatic=7.0, pol=1.0)
     assert not _profit_take_balance_relief_bypass_allowed(
         decision,
         balances=balances,
@@ -151,7 +151,7 @@ def test_profit_take_balance_relief_signal_strength_defaults_when_absent():
         direction="WMATIC_TO_USDT",
         amount_in=int(8 * 1_000_000_000_000_000_000),
     )
-    assert _profit_take_balance_relief_signal_strength(decision, None) == 0.65
+    assert _profit_take_balance_relief_signal_strength(decision, None) == 0.60
 
 
 def test_profit_take_balance_relief_signal_strength_from_profit_signal_gain_pct():

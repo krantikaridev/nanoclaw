@@ -212,13 +212,13 @@ Operational focus: correctness of this precedence, USDC liquidity for equity **b
   - Reason: Smaller trades frequently fail with STF on the fallback router → high gas waste.
   - Temporary until capital rotation improves.
 
-- **P2 Profit-Take Relief** (relaxed May 2026 — revert when capital rotation improves):
-  - `_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 10.0` — WMATIC stack must exceed ~$10 USD equiv.
-  - `_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 6.0` — gas guard for sub-$6 exits.
-  - `_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH = 0.65` — signal from `decision.signal_strength`, `profit_signal.signal_strength`, or gain/peak/pullback metrics.
+- **P2 Profit-Take Relief** (further relaxed May 2026 — final relaxation for now; monitor before revert):
+  - `_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 8.0` — WMATIC stack must exceed ~$8 USD equiv.
+  - `_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 5.5` — gas guard for sub-$5.50 exits.
+  - `_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH = 0.60` — signal from `decision.signal_strength`, `profit_signal.signal_strength`, or gain/peak/pullback metrics.
   - Allows small WMATIC → USDT/USDC profit takes below `MIN_TRADE_USD`; skips `min_trade_guard` in `determine_trade_decision` and `main()` when bypass qualifies.
   - Log: `[nanoclaw] Main strategy small profit take allowed (P2 relief)`.
-  - Goal: Improve USDC generation from main strategy and reach consistent positive PnL faster.
+  - Further relaxed because P2 relief stopped triggering; goal is to improve USDC generation from main strategy and reach consistent positive PnL faster. Monitor results — no further threshold cuts planned for now.
 
 ## **Key `.env`** (defaults in `.env.example`; production overrides freely)
 
