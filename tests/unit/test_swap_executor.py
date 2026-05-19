@@ -120,6 +120,12 @@ def test_best_quote_path_accepts_explicit_slippage_bps(monkeypatch):
     assert min_out == 975
 
 
+def test_apply_fallback_min_out_extra_buffer_reduces_min_out():
+    assert swap_executor._apply_fallback_min_out_extra_buffer(10_000, extra_bps=75) == 9925
+    assert swap_executor._apply_fallback_min_out_extra_buffer(10_000, extra_bps=None) == 10_000
+    assert swap_executor._apply_fallback_min_out_extra_buffer(1, extra_bps=500) == 1
+
+
 def test_best_quote_path_caps_slippage_and_enforces_min_out_floor(monkeypatch):
     monkeypatch.setattr(swap_executor, "SWAP_SLIPPAGE_BPS", 15000)
     p1 = [swap_executor.USDC, swap_executor.WMATIC]

@@ -211,6 +211,7 @@ Operational focus: correctness of this precedence, USDC liquidity for equity **b
   - Only high-conviction X-SIGNAL buys above this effective size are allowed.
   - Raised from 15.0 → 18.0 because trades around ~$11 were still failing too often with STF on the fallback router → high gas waste.
   - Temporary until execution improves or capital rotation increases.
+- **X-SIGNAL gated-trade enhanced execution** (temporary): USDC→equity BUYs that pass the $18 effective gate get higher fallback-router slippage (**9000 / 12000 bps** primary/retry via `X_SIGNAL_GATED_TRADE_*` env) plus an extra `min_out` haircut (`X_SIGNAL_GATED_TRADE_MIN_OUT_EXTRA_BPS`, default **75**). Logs: `[nanoclaw-av] X-SIGNAL gated trade eligible — enhanced execution on swap` (plan build) and `[nanoclaw-av] X-SIGNAL enhanced execution for gated trade` (swap). Goal: fewer STF reverts on Polygon fallback while working toward consistent +ve PnL.
 
 - **P2 Profit-Take Relief** (further relaxed May 2026 — final relaxation for now; monitor before revert):
   - `_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 8.0` — WMATIC stack must exceed ~$8 USD equiv.

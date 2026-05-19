@@ -18,7 +18,10 @@ from config import (
     MAIN_STRATEGY_RESERVE_SELL_FRACTION,
     MAIN_STRATEGY_TP_TRIGGER_WMATIC_USD,
 )
-from nanoclaw.strategies.signal_equity_trader import _X_SIGNAL_MIN_SIZE_OVERRIDE
+from nanoclaw.strategies.signal_equity_trader import (
+    _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD,
+    _X_SIGNAL_MIN_SIZE_OVERRIDE,
+)
 from nanoclaw.strategies.usdc_copy import USDCopyStrategy
 from swap_executor import approve_and_swap
 
@@ -464,6 +467,49 @@ def _x_signal_small_high_conviction_relaxed_slippage(
     )
 
 
+def _x_signal_gated_trade_relaxed_slippage(
+    decision: TradeDecision,
+    *,
+    decision_notional_usd: float | None,
+) -> tuple[int, int] | None:
+    """TEMPORARY: high fallback slippage for X-SIGNAL USDC→equity passing $18 effective gate."""
+    if str(decision.direction or "").strip().upper() != "USDC_TO_EQUITY":
+        return None
+    if decision_notional_usd is None:
+        return None
+    if decision_notional_usd + 1e-9 < float(_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD):
+        return None
+    return (
+        int(cfg.X_SIGNAL_GATED_TRADE_FALLBACK_PRIMARY_BPS),
+        int(cfg.X_SIGNAL_GATED_TRADE_FALLBACK_RETRY_BPS),
+    )
+
+
+def _resolve_x_signal_enhanced_fallback_execution(
+    decision: TradeDecision,
+    *,
+    decision_notional_usd: float | None,
+) -> tuple[int, int, int | None] | None:
+    """TEMPORARY: (primary_bps, retry_bps, min_out_extra_bps) for X-SIGNAL fallback router."""
+    small = _x_signal_small_high_conviction_relaxed_slippage(
+        decision,
+        decision_notional_usd=decision_notional_usd,
+    )
+    if small is not None:
+        return small[0], small[1], None
+    gated = _x_signal_gated_trade_relaxed_slippage(
+        decision,
+        decision_notional_usd=decision_notional_usd,
+    )
+    if gated is not None:
+        return (
+            gated[0],
+            gated[1],
+            int(cfg.X_SIGNAL_GATED_TRADE_MIN_OUT_EXTRA_BPS),
+        )
+    return None
+
+
 def _x_signal_min_trade_guard_bypass(
     decision: TradeDecision,
     *,
@@ -847,15 +893,23 @@ async def main(*, dry_run: bool = False) -> None:
         if decision.direction == "USDT_TO_WMATIC":
             record_buy(current_price, decision.trade_size, "pending")
 
-        x_signal_slip = _x_signal_small_high_conviction_relaxed_slippage(
+        x_signal_exec = _resolve_x_signal_enhanced_fallback_execution(
             decision,
             decision_notional_usd=decision_notional_usd,
         )
         fallback_slip_bps: int | None = None
         fallback_slip_retry_bps: int | None = None
-        if x_signal_slip is not None:
-            fallback_slip_bps, fallback_slip_retry_bps = x_signal_slip
-            print("[nanoclaw-av] X-SIGNAL using very high slippage for small trade (high conviction)")
+        fallback_min_out_extra_bps: int | None = None
+        if x_signal_exec is not None:
+            fallback_slip_bps, fallback_slip_retry_bps, fallback_min_out_extra_bps = x_signal_exec
+            if fallback_min_out_extra_bps is not None:
+                print(
+                    "[nanoclaw-av] X-SIGNAL enhanced execution for gated trade "
+                    f"(${decision_notional_usd:.2f} | fallback_slip={fallback_slip_bps}/"
+                    f"{fallback_slip_retry_bps} bps | min_out_extra={fallback_min_out_extra_bps} bps)"
+                )
+            else:
+                print("[nanoclaw-av] X-SIGNAL using very high slippage for small trade (high conviction)")
 
         tx_hash = await approve_and_swap(
             w3,
@@ -866,6 +920,7 @@ async def main(*, dry_run: bool = False) -> None:
             token_out=decision.token_out,
             fallback_slippage_bps=fallback_slip_bps,
             fallback_retry_slippage_bps=fallback_slip_retry_bps,
+            fallback_min_out_extra_bps=fallback_min_out_extra_bps,
         )
         if tx_hash:
             attribution.notify_swap_success(decision=decision, tx_hash=tx_hash)

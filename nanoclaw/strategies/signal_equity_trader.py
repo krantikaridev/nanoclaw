@@ -56,6 +56,7 @@ _X_SIGNAL_MIN_EFFECTIVE_OVERRIDE = 7.0
 # Raised from 15.0 → 18.0 to improve success rate on fallback router.
 # Reason: Even $11 trades were frequently reverting with STF.
 # Goal: Higher success rate → less gas waste → faster path to consistent +ve PnL.
+# Buys that pass this gate use enhanced on-chain execution in modules/swap_executor.py.
 _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD = 18.0
 
 # TEMPORARY: Slightly larger USDC→equity sizing for very strong X-SIGNAL (target ~$9–$9.5)
@@ -903,6 +904,18 @@ class SignalEquityTrader:
                         _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD,
                     )
                     return None, "temporary_min_size_gate"
+                # TEMPORARY: flag gated BUYs for high-slippage fallback + min_out buffer at swap time.
+                print(
+                    "[nanoclaw-av] X-SIGNAL gated trade eligible — enhanced execution on swap "
+                    f"(effective_after_gas=${effective_trade_size_after_gas:.2f} | "
+                    f"min_gate=${_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD:.2f})"
+                )
+                logger.info(
+                    "[nanoclaw-av] X-SIGNAL gated trade eligible — enhanced execution on swap "
+                    "(effective_after_gas=%.2f min_gate=%.2f)",
+                    effective_trade_size_after_gas,
+                    _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD,
+                )
                 if expected_profit_usd <= min_expected_profit_usd:
                     print(
                         f"[nanoclaw] BLOCK: {sym} | expected_profit_below_gas "

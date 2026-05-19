@@ -3,7 +3,9 @@ from modules.swap_executor import (
     _decision_notional_usd,
     _profit_take_balance_relief_bypass_allowed,
     _profit_take_balance_relief_signal_strength,
+    _resolve_x_signal_enhanced_fallback_execution,
     _x_signal_equity_effective_dust_min,
+    _x_signal_gated_trade_relaxed_slippage,
     _x_signal_min_trade_guard_bypass,
     _x_signal_small_high_conviction_relaxed_slippage,
 )
@@ -295,6 +297,77 @@ def test_x_signal_small_high_conviction_relaxed_slippage_rejects_large_notional(
         signal_strength=0.90,
     )
     assert _x_signal_small_high_conviction_relaxed_slippage(decision, decision_notional_usd=20.0) is None
+
+
+def test_x_signal_gated_trade_relaxed_slippage_for_usdc_to_equity_at_min_gate(monkeypatch):
+    monkeypatch.setattr(
+        "modules.swap_executor.cfg.X_SIGNAL_GATED_TRADE_FALLBACK_PRIMARY_BPS",
+        9000,
+    )
+    monkeypatch.setattr(
+        "modules.swap_executor.cfg.X_SIGNAL_GATED_TRADE_FALLBACK_RETRY_BPS",
+        12000,
+    )
+    decision = TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=20_000_000,
+        trade_size=20.0,
+        signal_strength=0.90,
+    )
+    slip = _x_signal_gated_trade_relaxed_slippage(decision, decision_notional_usd=20.0)
+    assert slip == (9000, 12000)
+
+
+def test_x_signal_gated_trade_relaxed_slippage_rejects_below_min_gate():
+    decision = TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=17_000_000,
+        trade_size=17.0,
+        signal_strength=0.90,
+    )
+    assert _x_signal_gated_trade_relaxed_slippage(decision, decision_notional_usd=17.0) is None
+
+
+def test_resolve_x_signal_enhanced_fallback_prefers_small_over_gated(monkeypatch):
+    monkeypatch.setattr(
+        "modules.swap_executor.cfg.X_SIGNAL_SMALL_HIGH_CONVICTION_FALLBACK_PRIMARY_BPS",
+        8000,
+    )
+    monkeypatch.setattr(
+        "modules.swap_executor.cfg.X_SIGNAL_SMALL_HIGH_CONVICTION_FALLBACK_RETRY_BPS",
+        10000,
+    )
+    decision = TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=11_000_000,
+        trade_size=11.0,
+        signal_strength=0.90,
+    )
+    resolved = _resolve_x_signal_enhanced_fallback_execution(decision, decision_notional_usd=11.0)
+    assert resolved == (8000, 10000, None)
+
+
+def test_resolve_x_signal_enhanced_fallback_gated_includes_min_out_extra(monkeypatch):
+    monkeypatch.setattr(
+        "modules.swap_executor.cfg.X_SIGNAL_GATED_TRADE_FALLBACK_PRIMARY_BPS",
+        9000,
+    )
+    monkeypatch.setattr(
+        "modules.swap_executor.cfg.X_SIGNAL_GATED_TRADE_FALLBACK_RETRY_BPS",
+        12000,
+    )
+    monkeypatch.setattr(
+        "modules.swap_executor.cfg.X_SIGNAL_GATED_TRADE_MIN_OUT_EXTRA_BPS",
+        75,
+    )
+    decision = TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=22_000_000,
+        trade_size=22.0,
+        signal_strength=0.75,
+    )
+    resolved = _resolve_x_signal_enhanced_fallback_execution(decision, decision_notional_usd=22.0)
+    assert resolved == (9000, 12000, 75)
 
 
 def test_x_signal_equity_effective_dust_min_requires_healthy_stables(monkeypatch):

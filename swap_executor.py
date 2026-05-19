@@ -91,6 +91,14 @@ def _fallback_router_retry_slippage_bps(primary_bps: int) -> int:
     return min(max(primary_bps + ONCHAIN_SWAP_RETRY_EXTRA_BPS, _FALLBACK_ROUTER_SLIPPAGE_FLOOR_BPS), 9999)
 
 
+def _apply_fallback_min_out_extra_buffer(amount_out_min: int, *, extra_bps: int | None) -> int:
+    """TEMPORARY: extra min_out haircut beyond quoted slippage (X-SIGNAL gated trades)."""
+    if extra_bps is None or int(extra_bps) <= 0:
+        return int(amount_out_min)
+    extra = min(int(extra_bps), 9999)
+    return max(1, (int(amount_out_min) * (10000 - extra)) // 10000)
+
+
 def _try_get_revert_reason(w3, *, tx_for_call: dict) -> str:
     """Best-effort revert extraction from eth_call for logging."""
     try:
@@ -286,6 +294,7 @@ async def approve_and_swap(
     token_out: str | None = None,
     fallback_slippage_bps: int | None = None,
     fallback_retry_slippage_bps: int | None = None,
+    fallback_min_out_extra_bps: int | None = None,
 ):
     print(f"{_prefix}swap EXEC | direction={direction} | amount_in={amount_in}")
 
@@ -396,10 +405,18 @@ async def approve_and_swap(
                 print(f"{_prefix}[FALLBACK ROUTER] Quote failed (pre-flight, {fb_primary} bps): {qex}")
                 return None
             eq, mq = v3_quote_attempt1
+            if fallback_min_out_extra_bps is not None and int(fallback_min_out_extra_bps) > 0:
+                mq_before = mq
+                mq = _apply_fallback_min_out_extra_buffer(mq, extra_bps=fallback_min_out_extra_bps)
+                print(
+                    f"{_prefix}[FALLBACK ROUTER] TEMPORARY min_out buffer applied | "
+                    f"extra_bps={int(fallback_min_out_extra_bps)} | min_out {mq_before}→{mq}"
+                )
             print(
                 f"{_prefix}[FALLBACK ROUTER] Pre-flight quote OK | fee=3000 | "
                 f"expected_out≈{eq} | min_out={mq}"
             )
+            v3_quote_attempt1 = (eq, mq)
 
         approve_contract = w3.eth.contract(address=token_in_cs, abi=[{"constant":True,"inputs":[{"name":"_owner","type":"address"},{"name":"_spender","type":"address"}],"name":"allowance","outputs":[{"name":"","type":"uint256"}],"type":"function"},{"constant":False,"inputs":[{"name":"_spender","type":"address"},{"name":"_value","type":"uint256"}],"name":"approve","outputs":[{"name":"","type":"bool"}],"type":"function"}])
         approve_spender_cs = Web3.to_checksum_address(approve_spender)
@@ -507,6 +524,16 @@ async def approve_and_swap(
                         f"{slip_bps} bps): {qex}"
                     )
                     return None
+                if fallback_min_out_extra_bps is not None and int(fallback_min_out_extra_bps) > 0:
+                    mq_before = amount_out_min
+                    amount_out_min = _apply_fallback_min_out_extra_buffer(
+                        amount_out_min,
+                        extra_bps=fallback_min_out_extra_bps,
+                    )
+                    print(
+                        f"{_prefix}[FALLBACK ROUTER] TEMPORARY min_out buffer applied | "
+                        f"extra_bps={int(fallback_min_out_extra_bps)} | min_out {mq_before}→{amount_out_min}"
+                    )
             print(
                 f"{_prefix}[FALLBACK ROUTER] route attempt={attempt_idx + 1}/{len(slip_attempts)} | "
                 f"fee=3000 | slip_bps={slip_bps} | expected_out≈{expected_out} | "
