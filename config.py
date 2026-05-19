@@ -214,7 +214,7 @@ X_SIGNAL_SMALL_HIGH_CONVICTION_FALLBACK_RETRY_BPS = env_int(
     "X_SIGNAL_SMALL_HIGH_CONVICTION_FALLBACK_RETRY_BPS",
     10000,
 )
-# TEMPORARY: X-SIGNAL USDC→equity passing $18 effective gate — fallback router only.
+# TEMPORARY (48-hour sprint): X-SIGNAL USDC→equity passing $18 effective gate — fallback router only.
 X_SIGNAL_GATED_TRADE_FALLBACK_PRIMARY_BPS = env_int(
     "X_SIGNAL_GATED_TRADE_FALLBACK_PRIMARY_BPS",
     9000,

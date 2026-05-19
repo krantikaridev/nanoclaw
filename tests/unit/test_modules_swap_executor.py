@@ -5,6 +5,7 @@ from modules.swap_executor import (
     _profit_take_balance_relief_signal_strength,
     _resolve_x_signal_enhanced_fallback_execution,
     _x_signal_equity_effective_dust_min,
+    _x_signal_gated_trade_enhanced_execution_eligible,
     _x_signal_gated_trade_relaxed_slippage,
     _x_signal_min_trade_guard_bypass,
     _x_signal_small_high_conviction_relaxed_slippage,
@@ -377,6 +378,23 @@ def test_x_signal_gated_trade_relaxed_slippage_rejects_below_min_gate():
         signal_strength=0.90,
     )
     assert _x_signal_gated_trade_relaxed_slippage(decision, decision_notional_usd=17.0) is None
+
+
+def test_x_signal_gated_trade_relaxed_slippage_uses_plan_flag_without_notional_gate():
+    """TEMPORARY sprint: explicit x_signal_gated_execution scopes enhanced execution."""
+    decision = TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=12_000_000,
+        trade_size=12.0,
+        signal_strength=0.90,
+        x_signal_gated_execution=True,
+    )
+    assert _x_signal_gated_trade_enhanced_execution_eligible(decision, decision_notional_usd=12.0)
+    slip = _x_signal_gated_trade_relaxed_slippage(decision, decision_notional_usd=12.0)
+    assert slip is not None
+    resolved = _resolve_x_signal_enhanced_fallback_execution(decision, decision_notional_usd=12.0)
+    assert resolved is not None
+    assert resolved[2] == 75
 
 
 def test_resolve_x_signal_enhanced_fallback_prefers_small_over_gated(monkeypatch):

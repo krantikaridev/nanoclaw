@@ -52,12 +52,20 @@ _X_SIGNAL_MIN_SIZE_OVERRIDE = 7.5
 # TEMPORARY: Allow slightly smaller effective size for high-conviction X-SIGNAL
 _X_SIGNAL_MIN_EFFECTIVE_OVERRIDE = 7.0
 
-# TEMPORARY: Minimum effective trade size for X-SIGNAL equity buys
+# TEMPORARY (48-hour sprint): Minimum effective trade size for X-SIGNAL equity buys.
 # Raised from 15.0 → 18.0 to improve success rate on fallback router.
-# Reason: Even $11 trades were frequently reverting with STF.
-# Goal: Higher success rate → less gas waste → faster path to consistent +ve PnL.
-# Buys that pass this gate use enhanced on-chain execution in modules/swap_executor.py.
+# Buys that pass this gate use enhanced on-chain execution (9000/12000 bps fallback slippage
+# + min_out buffer) in modules/swap_executor.py — see gated_enhanced_execution on EquityTradePlan.
 _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD = 18.0
+
+
+def x_signal_gated_enhanced_execution_bps() -> tuple[int, int, int]:
+    """TEMPORARY (48-hour sprint): fallback slippage + min_out extra for gated X-SIGNAL BUYs."""
+    return (
+        int(cfg.X_SIGNAL_GATED_TRADE_FALLBACK_PRIMARY_BPS),
+        int(cfg.X_SIGNAL_GATED_TRADE_FALLBACK_RETRY_BPS),
+        int(cfg.X_SIGNAL_GATED_TRADE_MIN_OUT_EXTRA_BPS),
+    )
 
 # TEMPORARY: Slightly larger USDC→equity sizing for very strong X-SIGNAL (target ~$9–$9.5)
 _X_SIGNAL_VERY_STRONG_STRENGTH = 0.90
@@ -108,6 +116,8 @@ class EquityTradePlan:
     trade_size: float
     message: str
     signal_strength: float
+    # TEMPORARY (48-hour sprint): True when BUY passed _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD gate.
+    gated_enhanced_execution: bool = False
 
 
 AssetCooldownGetFn = Callable[[str, Optional[float], int], bool]
@@ -891,8 +901,10 @@ class SignalEquityTrader:
                     f"gas=${gas_cost_usd:.2f} | expected=${expected_profit_usd:.2f} | "
                     f"required_expected>${min_expected_profit_usd:.2f} | effective_after_gas=${effective_trade_size_after_gas:.2f}"
                 )
-                # TEMPORARY: USDC→equity BUY only; supersedes high-conviction effective-size bypass below $18.
-                if float(effective_trade_size_after_gas) < float(_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD):
+                # TEMPORARY (48-hour sprint): USDC→equity BUY only; supersedes high-conviction effective bypass below $18.
+                eff_after_gas = round(float(effective_trade_size_after_gas), 2)
+                min_eff_gate = round(float(_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD), 2)
+                if eff_after_gas < min_eff_gate:
                     print(
                         f"[nanoclaw] X-SIGNAL skipped | below temporary min size gate | "
                         f"size=${effective_trade_size_after_gas:.2f} | min=${_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD}"
@@ -904,17 +916,22 @@ class SignalEquityTrader:
                         _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD,
                     )
                     return None, "temporary_min_size_gate"
-                # TEMPORARY: flag gated BUYs for high-slippage fallback + min_out buffer at swap time.
+                # TEMPORARY (48-hour sprint): flag gated BUYs for high-slippage fallback + min_out buffer.
+                _gate_pri, _gate_retry, _gate_min_out = x_signal_gated_enhanced_execution_bps()
                 print(
                     "[nanoclaw-av] X-SIGNAL gated trade eligible — enhanced execution on swap "
                     f"(effective_after_gas=${effective_trade_size_after_gas:.2f} | "
-                    f"min_gate=${_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD:.2f})"
+                    f"min_gate=${_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD:.2f} | "
+                    f"fallback_slip={_gate_pri}/{_gate_retry} bps | min_out_extra={_gate_min_out} bps)"
                 )
                 logger.info(
                     "[nanoclaw-av] X-SIGNAL gated trade eligible — enhanced execution on swap "
-                    "(effective_after_gas=%.2f min_gate=%.2f)",
+                    "(effective_after_gas=%.2f min_gate=%.2f slip=%s/%s min_out_extra=%s)",
                     effective_trade_size_after_gas,
                     _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD,
+                    _gate_pri,
+                    _gate_retry,
+                    _gate_min_out,
                 )
                 if expected_profit_usd <= min_expected_profit_usd:
                     print(
@@ -972,6 +989,7 @@ class SignalEquityTrader:
                         f"🟪 X-SIGNAL EQUITY BUY: {sym}{price_note} | Strength {strength:.2f}{earn_note} | "
                         f"TP {tp:.0f}% | Size: ${trade_size:.2f} (USDC→{sym})"
                     ),
+                    gated_enhanced_execution=True,
                 )
                 print(f"[nanoclaw] PLAN_BUILD_SUCCESS | {sym} | BUY | ${trade_size:.2f}")
                 exp_pnl = (

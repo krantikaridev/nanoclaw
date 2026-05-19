@@ -92,7 +92,7 @@ def _fallback_router_retry_slippage_bps(primary_bps: int) -> int:
 
 
 def _apply_fallback_min_out_extra_buffer(amount_out_min: int, *, extra_bps: int | None) -> int:
-    """TEMPORARY: extra min_out haircut beyond quoted slippage (X-SIGNAL gated trades)."""
+    """TEMPORARY (48-hour sprint): extra min_out haircut beyond quoted slippage (X-SIGNAL gated trades)."""
     if extra_bps is None or int(extra_bps) <= 0:
         return int(amount_out_min)
     extra = min(int(extra_bps), 9999)
@@ -409,7 +409,7 @@ async def approve_and_swap(
                 mq_before = mq
                 mq = _apply_fallback_min_out_extra_buffer(mq, extra_bps=fallback_min_out_extra_bps)
                 print(
-                    f"{_prefix}[FALLBACK ROUTER] TEMPORARY min_out buffer applied | "
+                    f"{_prefix}[FALLBACK ROUTER] X-SIGNAL gated min_out buffer applied (48h sprint) | "
                     f"extra_bps={int(fallback_min_out_extra_bps)} | min_out {mq_before}→{mq}"
                 )
             print(
@@ -531,7 +531,7 @@ async def approve_and_swap(
                         extra_bps=fallback_min_out_extra_bps,
                     )
                     print(
-                        f"{_prefix}[FALLBACK ROUTER] TEMPORARY min_out buffer applied | "
+                        f"{_prefix}[FALLBACK ROUTER] X-SIGNAL gated min_out buffer applied (48h sprint) | "
                         f"extra_bps={int(fallback_min_out_extra_bps)} | min_out {mq_before}→{amount_out_min}"
                     )
             print(

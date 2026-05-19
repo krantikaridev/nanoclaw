@@ -499,17 +499,31 @@ def _x_signal_small_high_conviction_relaxed_slippage(
     )
 
 
+def _x_signal_gated_trade_enhanced_execution_eligible(
+    decision: TradeDecision,
+    *,
+    decision_notional_usd: float | None,
+) -> bool:
+    """TEMPORARY (48-hour sprint): USDC→equity BUY that passed the $18 effective gate at plan build."""
+    if str(decision.direction or "").strip().upper() != "USDC_TO_EQUITY":
+        return False
+    if bool(getattr(decision, "x_signal_gated_execution", False)):
+        return True
+    if decision_notional_usd is None:
+        return False
+    return decision_notional_usd + 1e-9 >= float(_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD)
+
+
 def _x_signal_gated_trade_relaxed_slippage(
     decision: TradeDecision,
     *,
     decision_notional_usd: float | None,
 ) -> tuple[int, int] | None:
-    """TEMPORARY: high fallback slippage for X-SIGNAL USDC→equity passing $18 effective gate."""
-    if str(decision.direction or "").strip().upper() != "USDC_TO_EQUITY":
-        return None
-    if decision_notional_usd is None:
-        return None
-    if decision_notional_usd + 1e-9 < float(_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD):
+    """TEMPORARY (48-hour sprint): high fallback slippage for gated X-SIGNAL USDC→equity BUYs."""
+    if not _x_signal_gated_trade_enhanced_execution_eligible(
+        decision,
+        decision_notional_usd=decision_notional_usd,
+    ):
         return None
     return (
         int(cfg.X_SIGNAL_GATED_TRADE_FALLBACK_PRIMARY_BPS),
@@ -522,7 +536,7 @@ def _resolve_x_signal_enhanced_fallback_execution(
     *,
     decision_notional_usd: float | None,
 ) -> tuple[int, int, int | None] | None:
-    """TEMPORARY: (primary_bps, retry_bps, min_out_extra_bps) for X-SIGNAL fallback router."""
+    """TEMPORARY (48-hour sprint): (primary_bps, retry_bps, min_out_extra_bps) for X-SIGNAL fallback router."""
     small = _x_signal_small_high_conviction_relaxed_slippage(
         decision,
         decision_notional_usd=decision_notional_usd,
@@ -936,12 +950,17 @@ async def main(*, dry_run: bool = False) -> None:
             fallback_slip_bps, fallback_slip_retry_bps, fallback_min_out_extra_bps = x_signal_exec
             if fallback_min_out_extra_bps is not None:
                 print(
-                    "[nanoclaw-av] X-SIGNAL enhanced execution for gated trade "
-                    f"(${decision_notional_usd:.2f} | fallback_slip={fallback_slip_bps}/"
-                    f"{fallback_slip_retry_bps} bps | min_out_extra={fallback_min_out_extra_bps} bps)"
+                    "[nanoclaw-av] X-SIGNAL enhanced execution active (48h sprint) | gated BUY "
+                    f"| notional=${decision_notional_usd:.2f} "
+                    f"| fallback_slip={fallback_slip_bps}/{fallback_slip_retry_bps} bps "
+                    f"| min_out_extra={fallback_min_out_extra_bps} bps"
                 )
             else:
-                print("[nanoclaw-av] X-SIGNAL using very high slippage for small trade (high conviction)")
+                print(
+                    "[nanoclaw-av] X-SIGNAL enhanced execution active (48h sprint) | small high-conviction "
+                    f"| notional=${decision_notional_usd:.2f} "
+                    f"| fallback_slip={fallback_slip_bps}/{fallback_slip_retry_bps} bps"
+                )
 
         tx_hash = await approve_and_swap(
             w3,

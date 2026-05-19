@@ -1250,7 +1250,11 @@ def test_x_signal_gated_buy_logs_enhanced_execution_eligibility(monkeypatch, cap
     )
     assert plan is not None
     assert reason is None
-    assert "X-SIGNAL gated trade eligible — enhanced execution on swap" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "X-SIGNAL gated trade eligible — enhanced execution on swap" in out
+    assert "fallback_slip=9000/12000 bps" in out
+    assert "min_out_extra=75 bps" in out
+    assert plan.gated_enhanced_execution is True
 
 
 def test_x_signal_buy_blocked_when_effective_between_old_and_new_min_gate(monkeypatch, capsys):
