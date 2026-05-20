@@ -339,9 +339,12 @@ def _defer_if_dust(
 # Goal: convert small WMATIC gains back to USDC/USDT faster and reach positive PnL sooner.
 # Revert after sprint window — monitor fill rate and gas drag before keeping permanently.
 _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 7.0
-_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 5.0  # gas guard — skip sub-$5 exits
+# TEMPORARY (Sprint - 19 May): Lowered notional floor to match current small profit-take sizes (~$2.1).
+# Minimal 48-hour sprint tweak — observed exits were below the prior $5 floor; revert after sprint.
+_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 3.5
 _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH = 0.55
 _PROFIT_TAKE_P2_RELIEF_LOG = "[nanoclaw] Main strategy small profit take allowed (P2 relief)"
+_PROFIT_TAKE_P2_RELIEF_CHECK_LOG = "[nanoclaw] P2 relief check"
 
 # TEMPORARY (2026-05): small high-conviction X-SIGNAL (~$11) — very high fallback slippage only; easy revert.
 _X_SIGNAL_SMALL_HIGH_CONVICTION_MAX_NOTIONAL_USD = 12.0
@@ -434,6 +437,30 @@ def _profit_take_balance_relief_signal_strength(
     return _round_relief_signal_strength(strength)
 
 
+def _log_profit_take_p2_relief_check(
+    *,
+    wm_equiv_usd: float | None,
+    notional_usd: float | None,
+    signal_strength: float | None,
+    allowed: bool,
+    floor_usd: float | None = None,
+    reason: str | None = None,
+) -> None:
+    """TEMPORARY (48-hour sprint): structured P2 relief decision log for ops triage."""
+    wm_s = "n/a" if wm_equiv_usd is None else f"${wm_equiv_usd:.2f}"
+    notional_s = "n/a" if notional_usd is None else f"${notional_usd:.2f}"
+    signal_s = "n/a" if signal_strength is None else f"{signal_strength:.2f}"
+    line = (
+        f"{_PROFIT_TAKE_P2_RELIEF_CHECK_LOG} | wm={wm_s} | notional={notional_s} | "
+        f"signal={signal_s} | allowed={allowed}"
+    )
+    if floor_usd is not None:
+        line += f" | floor=${floor_usd:.2f}"
+    if reason:
+        line += f" | reason={reason}"
+    print(line)
+
+
 def _profit_take_balance_relief_bypass_allowed(
     decision: TradeDecision,
     *,
@@ -446,31 +473,55 @@ def _profit_take_balance_relief_bypass_allowed(
 
     Trade notional may be below ``MIN_TRADE_USD`` as long as total WMATIC USD equivalent is healthy
     (capital rotation — lock small gains back into stables without waiting for a large sell).
+    Emits ``[nanoclaw] P2 relief check`` on every WMATIC→stable evaluation (pass/fail + reason).
     """
-    if str(decision.direction or "").strip().upper() not in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:
+    direction = str(decision.direction or "").strip().upper()
+    if direction not in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:
         return False
     eff_min = float(min_trade_usd)
     if eff_min <= 0.0:
         return False
     notional_usd = _decision_notional_usd(decision, current_price_usd=current_price_usd)
-    if notional_usd is None:
-        return False
-    if notional_usd + 1e-9 >= eff_min:
-        return False
     floor_usd = float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD)
-    if notional_usd + 1e-9 < floor_usd:
+    if notional_usd is None:
+        _log_profit_take_p2_relief_check(
+            wm_equiv_usd=None,
+            notional_usd=None,
+            signal_strength=None,
+            allowed=False,
+            floor_usd=floor_usd,
+            reason="no_notional",
+        )
         return False
     wm_equiv_usd = float(balances.wmatic) * float(current_price_usd)
-    if wm_equiv_usd + 1e-9 <= float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN):
-        return False
     strength = _profit_take_balance_relief_signal_strength(
         decision,
         profit_signal,
         wmatic_usd_equiv=wm_equiv_usd,
     )
-    if abs(float(strength)) + 1e-9 < float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH):
-        return False
-    return True
+    allowed = True
+    reason: str | None = None
+    if notional_usd + 1e-9 >= eff_min:
+        allowed = False
+        reason = "notional_at_or_above_min_trade"
+    elif notional_usd + 1e-9 < floor_usd:
+        allowed = False
+        reason = "notional_below_floor"
+    elif wm_equiv_usd + 1e-9 <= float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN):
+        allowed = False
+        reason = "wmatic_stack_below_min"
+    elif abs(float(strength)) + 1e-9 < float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH):
+        allowed = False
+        reason = "signal_below_min"
+    _log_profit_take_p2_relief_check(
+        wm_equiv_usd=wm_equiv_usd,
+        notional_usd=notional_usd,
+        signal_strength=strength,
+        allowed=allowed,
+        floor_usd=floor_usd,
+        reason=reason,
+    )
+    return allowed
 
 
 _X_SIGNAL_HIGH_CONVICTION_STRENGTH = 0.85

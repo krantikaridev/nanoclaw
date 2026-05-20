@@ -654,6 +654,7 @@ def test_determine_trade_decision_profit_take_balance_relief_allows_small_wm_to_
     )
     captured = capsys.readouterr().out
     assert out is profit_small
+    assert "[nanoclaw] P2 relief check" in captured
     assert "[nanoclaw] Main strategy small profit take allowed (P2 relief)" in captured
 
 
