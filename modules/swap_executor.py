@@ -339,9 +339,10 @@ def _defer_if_dust(
 # Goal: convert small WMATIC gains back to USDC/USDT faster and reach positive PnL sooner.
 # Revert after sprint window — monitor fill rate and gas drag before keeping permanently.
 _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 7.0
-# TEMPORARY (Sprint - 19 May): Lowered notional floor to match current small profit-take sizes (~$2.1).
-# Minimal 48-hour sprint tweak — observed exits were below the prior $5 floor; revert after sprint.
-_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 3.5
+# TEMPORARY (Sprint - 20 May): Lowered notional floor to $3.0
+# Reason: Observed profit-take sizes are consistently landing at ~$3.38–$3.39
+# Previous floor of $3.50 was still rejecting them by a small margin.
+_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 3.0
 _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH = 0.55
 _PROFIT_TAKE_P2_RELIEF_LOG = "[nanoclaw] Main strategy small profit take allowed (P2 relief)"
 _PROFIT_TAKE_P2_RELIEF_CHECK_LOG = "[nanoclaw] P2 relief check"

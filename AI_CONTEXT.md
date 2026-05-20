@@ -215,7 +215,7 @@ Operational focus: correctness of this precedence, USDC liquidity for equity **b
 
 - **P2 Profit-Take Relief** (TEMPORARY — 48-hour sprint May 2026; revert after sprint window):
   - `_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 7.0` — total WMATIC stack must exceed ~$7 USD equiv (trade notional may still be small).
-  - `_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 3.5` — gas guard for sub-$3.50 exits (lowered 19 May from $5.0: logs showed profit-take notionals ~$2.1+ were blocked; minimal sprint tweak, reversible).
+  - `_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 3.0` — gas guard for sub-$3.00 exits (lowered 20 May from $3.50: production profit-take sizes land at ~$3.38–$3.39 and were still blocked; prior 19 May drop from $5.0; minimal sprint tweak, reversible).
   - `_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH = 0.55` — bypass uses `_profit_take_balance_relief_signal_strength()`: prefers `profit_signal['signal_strength']`, else sprint heuristics (STRONG_TP_HIT / TRAILING_STOP_HIT weighted highest; positive `gain_pct` / `peak_gain_pct` boost; healthy WMATIC stack nudges borderline scores), then `decision.signal_strength`. Strengths are rounded to two decimals.
   - Allows small WMATIC → USDT/USDC profit takes below `MIN_TRADE_USD` when the wallet still holds a decent WMATIC balance; skips `min_trade_guard` in `determine_trade_decision` and `main()` when bypass qualifies.
   - Logs: `[nanoclaw] P2 relief check | wm=$X | notional=$Y | signal=$Z | allowed=$bool` (includes `floor` and `reason` on fail, e.g. `notional_below_floor`); on pass also `[nanoclaw] Main strategy small profit take allowed (P2 relief)`.
