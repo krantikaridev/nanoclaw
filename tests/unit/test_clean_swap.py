@@ -655,6 +655,7 @@ def test_determine_trade_decision_profit_take_balance_relief_allows_small_wm_to_
     captured = capsys.readouterr().out
     assert out is profit_small
     assert "[nanoclaw] P2 relief check" in captured
+    assert "[nanoclaw] P2 RELIEF OVERRIDE" in captured
     assert "[nanoclaw] Main strategy small profit take allowed (P2 relief)" in captured
 
 
@@ -921,8 +922,55 @@ def test_determine_trade_decision_main_strategy_balance_relief_before_dust_defer
     assert out is main_small
     assert not any("main_strategy_dust_deferred" in reason for reason in skipped)
     assert "[nanoclaw] P2 relief check" in captured
-    assert "[nanoclaw] P2 relief overriding min_notional for main strategy exit" in captured
+    assert "[nanoclaw] P2 RELIEF OVERRIDE" in captured
+    assert "notional=$4.00" in captured
     assert "[nanoclaw] Main strategy small profit take allowed (P2 relief)" in captured
+
+
+def test_determine_trade_decision_main_strategy_balance_relief_with_hold_snapshot(monkeypatch, capsys):
+    """TEMPORARY SPRINT FIX - May 2026: HOLD must not block P2 when WMATIC stack is healthy."""
+    monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))
+    monkeypatch.setattr(
+        clean_swap,
+        "evaluate_take_profit",
+        lambda *_args, **_kwargs: (
+            False,
+            {
+                "reason": "HOLD",
+                "message": "hold",
+                "gain_pct": 3.0,
+                "peak_gain_pct": 4.0,
+                "pullback_pct": 0.0,
+                "sell_fraction": 0.0,
+            },
+        ),
+    )
+    monkeypatch.setattr(clean_swap, "MIN_TRADE_USD", 10.0)
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", False)
+    monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
+
+    main_small = clean_swap.TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(3.99 * 1_000_000_000_000_000_000),
+        message="small main exit",
+        signal_strength=0.75,
+    )
+    monkeypatch.setattr(swap_exec, "select_main_strategy_trade", lambda *_args, **_kwargs: main_small)
+
+    skipped: list[str] = []
+    monkeypatch.setattr(clean_swap, "_log_trade_skipped", lambda reason: skipped.append(reason))
+
+    out = clean_swap.determine_trade_decision(
+        state={},
+        balances=clean_swap.Balances(usdt=40.0, wmatic=200.0, pol=1.0, usdc=30.0),
+        current_price=1.0,
+    )
+
+    captured = capsys.readouterr().out
+    assert out is main_small
+    assert not any("main_strategy_dust_deferred" in reason for reason in skipped)
+    assert "[nanoclaw] P2 RELIEF OVERRIDE" in captured
+    assert "notional=$3.99" in captured
 
 
 def test_main_skips_cycle_on_global_cooldown_and_logs_reason(monkeypatch):

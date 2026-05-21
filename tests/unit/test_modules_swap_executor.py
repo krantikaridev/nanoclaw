@@ -8,9 +8,8 @@ from modules.swap_executor import (
     _profit_take_record_exit,
     _MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN,
     _MAIN_STRATEGY_FORCE_PROFIT_TAKE_WMATIC_USD_MIN,
+    _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH,
     _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD,
-    _MAIN_STRATEGY_PROFIT_TAKE_HEALTHY_WMATIC_EXIT_SIGNAL_FLOOR,
-    _MAIN_STRATEGY_PROFIT_TAKE_HEALTHY_WMATIC_SIGNAL_FLOOR,
     _resolve_x_signal_enhanced_fallback_execution,
     _x_signal_equity_effective_dust_min,
     _x_signal_gated_trade_enhanced_execution_eligible,
@@ -146,7 +145,7 @@ def test_profit_take_force_small_relief_eligible_requires_cycles_and_floor():
 
 
 def test_profit_take_balance_relief_bypass_force_weak_signal_after_idle_cycles(capsys):
-    """May 2026 sprint: force-allow weak signal when WMATIC ≥ $8 and idle 6+ cycles."""
+    """TEMPORARY SPRINT FIX - May 2026: force-allow weak signal when WMATIC ≥ $8 and idle 5+ cycles."""
     state: dict = {}
     for _ in range(_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN):
         _profit_take_bump_cycle_counter(state)
@@ -164,7 +163,7 @@ def test_profit_take_balance_relief_bypass_force_weak_signal_after_idle_cycles(c
         state=state,
     )
     captured = capsys.readouterr().out
-    assert "FORCE small profit take" in captured
+    assert "FORCE small profit take | WMATIC healthy, forcing exit" in captured
     assert "force_no_exit_cycles" in captured
 
 
@@ -282,7 +281,7 @@ def test_profit_take_balance_relief_signal_strength_boosts_healthy_wmatic_stack(
         None,
         wmatic_usd_equiv=20.0,
     )
-    assert strength >= _MAIN_STRATEGY_PROFIT_TAKE_HEALTHY_WMATIC_SIGNAL_FLOOR
+    assert strength >= _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH
 
 
 def test_profit_take_balance_relief_signal_strength_healthy_wmatic_never_below_half():
@@ -296,10 +295,10 @@ def test_profit_take_balance_relief_signal_strength_healthy_wmatic_never_below_h
         {"reason": "MOMENTUM_FADE", "gain_pct": 0.0, "peak_gain_pct": 0.0},
         wmatic_usd_equiv=8.0,
     )
-    assert strength >= _MAIN_STRATEGY_PROFIT_TAKE_HEALTHY_WMATIC_SIGNAL_FLOOR
+    assert strength >= _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH
 
 
-def test_profit_take_balance_relief_signal_strength_healthy_exit_reason_at_least_sixty():
+def test_profit_take_balance_relief_signal_strength_healthy_exit_reason_at_least_fifty_five():
     decision = TradeDecision(
         direction="WMATIC_TO_USDT",
         amount_in=int(5 * 1_000_000_000_000_000_000),
@@ -310,7 +309,42 @@ def test_profit_take_balance_relief_signal_strength_healthy_exit_reason_at_least
         {"reason": "TP_HIT", "gain_pct": 0.2, "peak_gain_pct": 0.2, "pullback_pct": 0.0},
         wmatic_usd_equiv=10.0,
     )
-    assert strength >= _MAIN_STRATEGY_PROFIT_TAKE_HEALTHY_WMATIC_EXIT_SIGNAL_FLOOR
+    assert strength >= _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH
+
+
+def test_profit_take_balance_relief_signal_strength_ignores_hold_when_wmatic_healthy():
+    """TEMPORARY SPRINT FIX - May 2026: HOLD must not block relief when stack ≥ $7."""
+    decision = TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(3.99 * 1_000_000_000_000_000_000),
+        signal_strength=0.75,
+    )
+    strength = _profit_take_balance_relief_signal_strength(
+        decision,
+        {"reason": "HOLD", "gain_pct": 2.0, "peak_gain_pct": 3.0},
+        wmatic_usd_equiv=12.0,
+    )
+    assert strength >= _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH
+
+
+def test_profit_take_balance_relief_bypass_allows_small_exit_with_hold_and_healthy_stack(capsys):
+    """TEMPORARY SPRINT FIX - May 2026: ~$3.99 main rotation sell with HOLD snapshot."""
+    decision = TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(3.99 * 1_000_000_000_000_000_000),
+        signal_strength=0.75,
+    )
+    balances = Balances(usdt=10.0, usdc=30.0, wmatic=200.0, pol=1.0)
+    assert _profit_take_balance_relief_bypass_allowed(
+        decision,
+        balances=balances,
+        current_price_usd=1.0,
+        min_trade_usd=10.0,
+        profit_signal={"reason": "HOLD", "gain_pct": 2.0, "peak_gain_pct": 3.0},
+    )
+    captured = capsys.readouterr().out
+    assert "notional=$3.99" in captured
+    assert "allowed=True" in captured
 
 
 def test_profit_take_balance_relief_signal_strength_from_profit_signal_gain_pct():
@@ -393,7 +427,7 @@ def test_profit_take_balance_relief_signal_strength_weak_exit_boosted_by_healthy
         {"reason": "OTHER_EXIT", "gain_pct": 0.5, "peak_gain_pct": 0.5},
         wmatic_usd_equiv=12.0,
     )
-    assert strength >= _MAIN_STRATEGY_PROFIT_TAKE_HEALTHY_WMATIC_EXIT_SIGNAL_FLOOR
+    assert strength >= _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH
     assert strength > 0.0
 
 
@@ -435,13 +469,14 @@ def test_profit_take_balance_relief_bypass_small_trade_decent_balance_trailing_s
     )
 
 
-def test_profit_take_balance_relief_bypass_rejects_hold_despite_decision_strength():
+def test_profit_take_balance_relief_bypass_rejects_hold_when_wmatic_stack_small():
+    """HOLD still blocks relief when total WMATIC USD equiv is below the $7 floor."""
     decision = TradeDecision(
         direction="WMATIC_TO_USDT",
         amount_in=int(8 * 1_000_000_000_000_000_000),
         signal_strength=0.90,
     )
-    balances = Balances(usdt=10.0, usdc=30.0, wmatic=200.0, pol=1.0)
+    balances = Balances(usdt=10.0, usdc=30.0, wmatic=6.0, pol=1.0)
     assert not _profit_take_balance_relief_bypass_allowed(
         decision,
         balances=balances,
