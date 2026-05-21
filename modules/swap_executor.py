@@ -349,11 +349,14 @@ _PROFIT_TAKE_P2_RELIEF_OVERRIDE_ACTIVE_LOG = (
     "bypassing min_notional"
 )
 
-# TEMPORARY SPRINT FIX - May 2026: force weak-signal relief when stack ≥ $8 and idle 5+ cycles.
-_MAIN_STRATEGY_FORCE_PROFIT_TAKE_WMATIC_USD_MIN = 8.0
-_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN = 5
+# TEMPORARY SPRINT FIX - May 2026: keep capital rotation active when profit-take sizes stay
+# small and borderline exits would otherwise sit idle for many cycles (revert after sprint).
+_MAIN_STRATEGY_FORCE_PROFIT_TAKE_WMATIC_USD_MIN = 6.5
+_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN = 4
+_MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_FLOOR_USD = 1.8
 _PROFIT_TAKE_FORCE_SMALL_LOG = (
-    "[nanoclaw] FORCE small profit take | WMATIC healthy, forcing exit"
+    "[nanoclaw] FORCE small profit take | WMATIC healthy, no exit for {cycles} cycles | "
+    "notional=${notional:.2f}"
 )
 
 # TEMPORARY (2026-05): small high-conviction X-SIGNAL (~$11) — very high fallback slippage only; easy revert.
@@ -562,16 +565,15 @@ def _profit_take_force_small_relief_eligible(
     notional_usd: float,
     cycles_since_exit: int,
 ) -> bool:
-    """TEMPORARY SPRINT FIX - May 2026: force weak-signal relief when WMATIC ≥ $8 and idle 5+ cycles."""
+    """TEMPORARY SPRINT FIX - May 2026: force small profit take when WMATIC ≥ $6.5, idle 4+ cycles."""
     dir_u = str(direction or "").strip().upper()
     if dir_u not in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:
         return False
     force_wm_min = float(_MAIN_STRATEGY_FORCE_PROFIT_TAKE_WMATIC_USD_MIN)
-    floor_usd = float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD)
+    floor_usd = float(_MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_FLOOR_USD)
     cycles_min = int(_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN)
     if wm_equiv_usd + 1e-9 < force_wm_min:
         return False
-    # TEMPORARY / SPRINT: hard notional floor — never force sub-floor exits.
     if notional_usd + 1e-9 < floor_usd:
         return False
     return cycles_since_exit >= cycles_min
@@ -615,7 +617,8 @@ def _profit_take_balance_relief_bypass_allowed(
     Trade notional may be below ``MIN_TRADE_USD`` as long as total WMATIC USD equivalent is healthy
     (capital rotation — lock small gains back into stables without waiting for a large sell).
     After ``_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN`` cycles without a WMATIC→stable exit, a
-    healthy stack can force-allow a weak-signal small take (still respects the notional floor).
+    healthy stack (≥ $6.5 WMATIC, notional ≥ $1.8) can force-allow a small take and bypass the
+    standard P2 wm/notional/signal gates (still below ``MIN_TRADE_USD``).
     Emits ``[nanoclaw] P2 relief check`` on every WMATIC→stable evaluation (pass/fail + reason).
     """
     direction = str(decision.direction or "").strip().upper()
@@ -654,6 +657,15 @@ def _profit_take_balance_relief_bypass_allowed(
     if notional_usd + 1e-9 >= eff_min:
         allowed = False
         reason = "notional_at_or_above_min_trade"
+    elif force_small:
+        print(
+            _PROFIT_TAKE_FORCE_SMALL_LOG.format(
+                cycles=cycles_since_exit,
+                notional=float(notional_usd),
+            )
+        )
+        allowed = True
+        reason = "force_no_exit_cycles"
     elif notional_usd + 1e-9 < floor_usd:
         allowed = False
         reason = "notional_below_floor"
@@ -661,13 +673,8 @@ def _profit_take_balance_relief_bypass_allowed(
         allowed = False
         reason = "wmatic_stack_below_min"
     elif abs(float(strength)) + 1e-9 < float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH):
-        if force_small:
-            print(_PROFIT_TAKE_FORCE_SMALL_LOG)
-            allowed = True
-            reason = "force_no_exit_cycles"
-        else:
-            allowed = False
-            reason = "signal_below_min"
+        allowed = False
+        reason = "signal_below_min"
     _log_profit_take_p2_relief_check(
         wm_equiv_usd=wm_equiv_usd,
         notional_usd=notional_usd,
