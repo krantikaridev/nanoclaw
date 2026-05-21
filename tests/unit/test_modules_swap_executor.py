@@ -271,6 +271,36 @@ def test_profit_take_balance_relief_signal_strength_hold_is_weak():
     ) == pytest.approx(0.0)
 
 
+def test_profit_take_balance_relief_signal_strength_modest_tp_hit_meets_floor():
+    """May 2026 sprint: modest TP_HIT gains still clear the P2 relief floor."""
+    decision = TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(8 * 1_000_000_000_000_000_000),
+    )
+    strength = _profit_take_balance_relief_signal_strength(
+        decision,
+        {"reason": "TP_HIT", "gain_pct": 1.2, "peak_gain_pct": 1.5, "pullback_pct": 0.0},
+    )
+    assert strength >= 0.58
+    assert strength > 0.0
+
+
+def test_profit_take_balance_relief_signal_strength_weak_exit_boosted_by_healthy_wmatic():
+    """May 2026 sprint: healthy WMATIC stack nudges borderline weak exits over the floor."""
+    decision = TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(5 * 1_000_000_000_000_000_000),
+        signal_strength=0.50,
+    )
+    strength = _profit_take_balance_relief_signal_strength(
+        decision,
+        {"reason": "OTHER_EXIT", "gain_pct": 0.5, "peak_gain_pct": 0.5},
+        wmatic_usd_equiv=12.0,
+    )
+    assert strength >= 0.55
+    assert strength > 0.0
+
+
 def test_profit_take_balance_relief_signal_strength_strong_exit_outranks_tp_hit():
     decision = TradeDecision(
         direction="WMATIC_TO_USDT",

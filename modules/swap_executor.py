@@ -365,12 +365,36 @@ def _round_relief_signal_strength(value: float) -> float:
 
 
 def _profit_take_gain_metric_boost(gain_pct: float, peak_gain_pct: float) -> float:
-    """TEMPORARY (48-hour sprint): lift strength when realized or peak gains are positive."""
+    """May 2026 sprint (capital rotation): lift strength when realized or peak gains are positive."""
     metric = max(float(gain_pct), float(peak_gain_pct))
     if metric <= 0.0:
         return 0.0
     # +0.04 at ~2% gain, up to +0.12 at ~6%+ (keeps small winners above the relief floor).
     return min(0.12, 0.02 + metric / 50.0)
+
+
+# May 2026 sprint: floor for standard profit-take reasons so modest gains still clear P2 relief.
+_MODERATE_EXIT_REASON_MIN_STRENGTH: dict[str, float] = {
+    "STRONG_TP_HIT": 0.65,
+    "TRAILING_STOP_HIT": 0.62,
+    "TP_HIT": 0.58,
+}
+
+
+def _profit_take_wmatic_stack_strength_boost(
+    strength: float,
+    wmatic_usd_equiv: float | None,
+    wm_min: float,
+) -> float:
+    """May 2026 sprint (capital rotation): nudge borderline scores when WMATIC stack is healthy."""
+    if wmatic_usd_equiv is None:
+        return strength
+    wm = float(wmatic_usd_equiv)
+    if wm > wm_min * 1.5:
+        return min(1.0, strength + 0.05)
+    if wm > wm_min + 1e-9:
+        return min(1.0, strength + 0.03)
+    return strength
 
 
 def _profit_take_balance_relief_signal_strength(
@@ -379,27 +403,36 @@ def _profit_take_balance_relief_signal_strength(
     *,
     wmatic_usd_equiv: float | None = None,
 ) -> float:
-    """TEMPORARY (48-hour sprint): score P2 profit-take relief exit quality on [0.0, 1.0].
+    """May 2026 sprint (capital rotation): score P2 profit-take relief exit quality on [0.0, 1.0].
 
     Prefer profit_signal['signal_strength'] when the strategy supplies it.
     Otherwise derive strength from exit reason and gain/peak/pullback metrics
     (STRONG_TP_HIT / TRAILING_STOP_HIT rank highest, TP_HIT medium, HOLD weak).
     Falls back to decision.signal_strength, then the relief floor.
-    A healthy WMATIC stack can nudge borderline small sells over the floor even when
-  the exit notional is below MIN_TRADE_USD (capital rotation during the sprint).
+    Moderate exit reasons (TP / trailing / strong TP) keep a 0.55–0.65 floor even on
+    modest gains; a healthy WMATIC stack (> $7) adds a small boost so weak signals are
+    not discarded as ~0.00 when rotating small sells below MIN_TRADE_USD.
     """
     floor = float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH)
     wm_min = float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN)
 
+    valid_exit_reason = False
+    has_positive_gain = False
+    strength = floor
+
     if profit_signal is not None:
         explicit = profit_signal.get("signal_strength")
         if explicit is not None:
-            return _round_relief_signal_strength(explicit)
+            strength = _clamp_unit_interval(explicit)
+            return _round_relief_signal_strength(
+                _profit_take_wmatic_stack_strength_boost(strength, wmatic_usd_equiv, wm_min)
+            )
 
         reason = str(profit_signal.get("reason") or "").strip().upper()
         if reason == "HOLD":
             return 0.0
 
+        valid_exit_reason = bool(reason)
         try:
             gain_pct = float(profit_signal.get("gain_pct", 0) or 0)
             peak_gain_pct = float(profit_signal.get("peak_gain_pct", gain_pct) or gain_pct)
@@ -407,36 +440,40 @@ def _profit_take_balance_relief_signal_strength(
         except (TypeError, ValueError):
             gain_pct = peak_gain_pct = pullback_pct = 0.0
 
+        has_positive_gain = gain_pct > 0.0 or peak_gain_pct > 0.0
         gain_boost = _profit_take_gain_metric_boost(gain_pct, peak_gain_pct)
 
-        # TEMPORARY (48-hour sprint) heuristic tiers when explicit strength is absent.
+        # May 2026 sprint heuristic tiers when explicit strength is absent.
         if reason == "STRONG_TP_HIT":
-            # Highest tier: strong base + gain lift (small sells still qualify when stack is healthy).
             extra = min(0.06, max(0.0, gain_pct - 8.0) / 40.0)
-            return _round_relief_signal_strength(0.93 + gain_boost + extra)
-        if reason == "TRAILING_STOP_HIT":
-            # Second tier: peak history + pullback confirm the move was real.
+            strength = 0.93 + gain_boost + extra
+        elif reason == "TRAILING_STOP_HIT":
             peak_boost = min(0.10, max(0.0, peak_gain_pct) / 35.0)
             trail_boost = min(0.08, max(0.0, pullback_pct) / 12.0)
-            return _round_relief_signal_strength(0.84 + peak_boost + trail_boost + gain_boost * 0.5)
-        if reason == "TP_HIT":
+            strength = 0.84 + peak_boost + trail_boost + gain_boost * 0.5
+        elif reason == "TP_HIT":
             metric = max(gain_pct, peak_gain_pct)
-            return _round_relief_signal_strength(max(floor, 0.62 + metric / 35.0 + gain_boost))
-        if gain_pct > 0.0 or peak_gain_pct > 0.0:
+            strength = max(floor, 0.62 + metric / 35.0 + gain_boost)
+        elif has_positive_gain:
             metric = max(gain_pct, peak_gain_pct)
-            return _round_relief_signal_strength(max(floor, 0.56 + metric / 45.0 + gain_boost))
+            strength = max(floor, 0.56 + metric / 45.0 + gain_boost)
+        else:
+            # Valid exit reason without gain metrics — still worth rotating when stack is healthy.
+            strength = floor
 
-    strength: float
-    if decision.signal_strength is not None:
+        reason_floor = _MODERATE_EXIT_REASON_MIN_STRENGTH.get(reason)
+        if reason_floor is not None:
+            strength = max(strength, reason_floor)
+    elif decision.signal_strength is not None:
         strength = _clamp_unit_interval(decision.signal_strength)
     else:
         strength = floor
 
-    # TEMPORARY (48-hour sprint): decent WMATIC balance → small exit still worth rotating to stables.
-    if wmatic_usd_equiv is not None and float(wmatic_usd_equiv) > wm_min * 1.5:
-        strength = min(1.0, strength + 0.05)
-    elif wmatic_usd_equiv is not None and float(wmatic_usd_equiv) > wm_min + 1e-9:
-        strength = min(1.0, strength + 0.03)
+    strength = _profit_take_wmatic_stack_strength_boost(strength, wmatic_usd_equiv, wm_min)
+
+    # May 2026 sprint: never round to exactly 0.00 when there is a real exit or positive gain.
+    if valid_exit_reason or has_positive_gain:
+        strength = max(strength, floor if valid_exit_reason else 0.01)
 
     return _round_relief_signal_strength(strength)
 
