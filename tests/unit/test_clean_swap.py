@@ -921,7 +921,7 @@ def test_determine_trade_decision_main_strategy_balance_relief_before_dust_defer
     assert out is main_small
     assert not any("main_strategy_dust_deferred" in reason for reason in skipped)
     assert "[nanoclaw] P2 relief check" in captured
-    assert "[nanoclaw] P2 relief override" in captured
+    assert "[nanoclaw] P2 relief overriding min_notional for main strategy exit" in captured
     assert "[nanoclaw] Main strategy small profit take allowed (P2 relief)" in captured
 
 

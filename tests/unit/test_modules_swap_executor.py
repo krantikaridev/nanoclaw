@@ -7,7 +7,10 @@ from modules.swap_executor import (
     _profit_take_force_small_relief_eligible,
     _profit_take_record_exit,
     _MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN,
+    _MAIN_STRATEGY_FORCE_PROFIT_TAKE_WMATIC_USD_MIN,
     _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD,
+    _MAIN_STRATEGY_PROFIT_TAKE_HEALTHY_WMATIC_EXIT_SIGNAL_FLOOR,
+    _MAIN_STRATEGY_PROFIT_TAKE_HEALTHY_WMATIC_SIGNAL_FLOOR,
     _resolve_x_signal_enhanced_fallback_execution,
     _x_signal_equity_effective_dust_min,
     _x_signal_gated_trade_enhanced_execution_eligible,
@@ -130,6 +133,12 @@ def test_profit_take_force_small_relief_eligible_requires_cycles_and_floor():
     )
     assert not _profit_take_force_small_relief_eligible(
         direction="WMATIC_TO_USDT",
+        wm_equiv_usd=_MAIN_STRATEGY_FORCE_PROFIT_TAKE_WMATIC_USD_MIN - 0.01,
+        notional_usd=3.5,
+        cycles_since_exit=10,
+    )
+    assert not _profit_take_force_small_relief_eligible(
+        direction="WMATIC_TO_USDT",
         wm_equiv_usd=20.0,
         notional_usd=_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD - 0.01,
         cycles_since_exit=10,
@@ -137,7 +146,7 @@ def test_profit_take_force_small_relief_eligible_requires_cycles_and_floor():
 
 
 def test_profit_take_balance_relief_bypass_force_weak_signal_after_idle_cycles(capsys):
-    """May 2026 sprint: force-allow weak signal when WMATIC stack idle 8+ cycles."""
+    """May 2026 sprint: force-allow weak signal when WMATIC ≥ $8 and idle 6+ cycles."""
     state: dict = {}
     for _ in range(_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN):
         _profit_take_bump_cycle_counter(state)
@@ -273,7 +282,35 @@ def test_profit_take_balance_relief_signal_strength_boosts_healthy_wmatic_stack(
         None,
         wmatic_usd_equiv=20.0,
     )
-    assert strength == pytest.approx(0.60)
+    assert strength >= _MAIN_STRATEGY_PROFIT_TAKE_HEALTHY_WMATIC_SIGNAL_FLOOR
+
+
+def test_profit_take_balance_relief_signal_strength_healthy_wmatic_never_below_half():
+    decision = TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(5 * 1_000_000_000_000_000_000),
+        signal_strength=0.05,
+    )
+    strength = _profit_take_balance_relief_signal_strength(
+        decision,
+        {"reason": "MOMENTUM_FADE", "gain_pct": 0.0, "peak_gain_pct": 0.0},
+        wmatic_usd_equiv=8.0,
+    )
+    assert strength >= _MAIN_STRATEGY_PROFIT_TAKE_HEALTHY_WMATIC_SIGNAL_FLOOR
+
+
+def test_profit_take_balance_relief_signal_strength_healthy_exit_reason_at_least_sixty():
+    decision = TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(5 * 1_000_000_000_000_000_000),
+        signal_strength=0.10,
+    )
+    strength = _profit_take_balance_relief_signal_strength(
+        decision,
+        {"reason": "TP_HIT", "gain_pct": 0.2, "peak_gain_pct": 0.2, "pullback_pct": 0.0},
+        wmatic_usd_equiv=10.0,
+    )
+    assert strength >= _MAIN_STRATEGY_PROFIT_TAKE_HEALTHY_WMATIC_EXIT_SIGNAL_FLOOR
 
 
 def test_profit_take_balance_relief_signal_strength_from_profit_signal_gain_pct():
@@ -313,7 +350,8 @@ def test_profit_take_balance_relief_signal_strength_prefers_profit_signal_explic
     )
     strength = _profit_take_balance_relief_signal_strength(
         decision,
-        {"signal_strength": 0.72, "reason": "HOLD"},
+        {"signal_strength": 0.72, "reason": "TP_HIT"},
+        wmatic_usd_equiv=6.0,
     )
     assert strength == pytest.approx(0.72)
 
@@ -355,7 +393,7 @@ def test_profit_take_balance_relief_signal_strength_weak_exit_boosted_by_healthy
         {"reason": "OTHER_EXIT", "gain_pct": 0.5, "peak_gain_pct": 0.5},
         wmatic_usd_equiv=12.0,
     )
-    assert strength >= 0.55
+    assert strength >= _MAIN_STRATEGY_PROFIT_TAKE_HEALTHY_WMATIC_EXIT_SIGNAL_FLOOR
     assert strength > 0.0
 
 

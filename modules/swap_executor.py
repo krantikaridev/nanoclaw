@@ -346,18 +346,20 @@ _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 3.0
 _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH = 0.55
 _PROFIT_TAKE_P2_RELIEF_LOG = "[nanoclaw] Main strategy small profit take allowed (P2 relief)"
 _PROFIT_TAKE_P2_RELIEF_CHECK_LOG = "[nanoclaw] P2 relief check"
-_PROFIT_TAKE_P2_RELIEF_OVERRIDE_LOG = (
-    "[nanoclaw] P2 relief override | Allowing small profit take below min_notional"
+_PROFIT_TAKE_P2_RELIEF_MAIN_OVERRIDE_LOG = (
+    "[nanoclaw] P2 relief overriding min_notional for main strategy exit"
 )
 
-# TEMPORARY (May 2026 sprint — capital rotation): force small WMATIC→stable exits when the stack
-# is healthy but no profit take has executed for many cycles (weak signal still allowed).
-_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN = 8
-_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MAX = 10
-_MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_SOFT_MIN_USD = 2.5
+# TEMPORARY / SPRINT (May 2026 — capital rotation): force small WMATIC→stable exits when the stack
+# is healthy (≥ $8) but no profit take has executed for 6+ cycles (weak signal still allowed).
+_MAIN_STRATEGY_FORCE_PROFIT_TAKE_WMATIC_USD_MIN = 8.0
+_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN = 6
 _PROFIT_TAKE_FORCE_SMALL_LOG = (
-    "[nanoclaw] FORCE small profit take | WMATIC healthy but no exit for {cycles} cycles"
+    "[nanoclaw] FORCE small profit take | WMATIC healthy, no exit for {cycles} cycles"
 )
+# TEMPORARY / SPRINT: lenient signal floors when WMATIC stack is decent (≥ $7) so capital rotates.
+_MAIN_STRATEGY_PROFIT_TAKE_HEALTHY_WMATIC_SIGNAL_FLOOR = 0.50
+_MAIN_STRATEGY_PROFIT_TAKE_HEALTHY_WMATIC_EXIT_SIGNAL_FLOOR = 0.60
 
 # TEMPORARY (2026-05): small high-conviction X-SIGNAL (~$11) — very high fallback slippage only; easy revert.
 _X_SIGNAL_SMALL_HIGH_CONVICTION_MAX_NOTIONAL_USD = 12.0
@@ -406,6 +408,22 @@ def _profit_take_wmatic_stack_strength_boost(
     return strength
 
 
+def _profit_take_apply_healthy_wmatic_signal_floors(
+    strength: float,
+    *,
+    wmatic_usd_equiv: float | None,
+    wm_min: float,
+    valid_exit_reason: bool,
+) -> float:
+    """Sprint relaxation: be lenient on signal when WMATIC balance is decent so capital can rotate."""
+    if wmatic_usd_equiv is None or float(wmatic_usd_equiv) + 1e-9 < wm_min:
+        return strength
+    strength = max(strength, float(_MAIN_STRATEGY_PROFIT_TAKE_HEALTHY_WMATIC_SIGNAL_FLOOR))
+    if valid_exit_reason:
+        strength = max(strength, float(_MAIN_STRATEGY_PROFIT_TAKE_HEALTHY_WMATIC_EXIT_SIGNAL_FLOOR))
+    return strength
+
+
 def _profit_take_balance_relief_signal_strength(
     decision: TradeDecision,
     profit_signal: dict | None,
@@ -430,14 +448,21 @@ def _profit_take_balance_relief_signal_strength(
     strength = floor
 
     if profit_signal is not None:
+        reason = str(profit_signal.get("reason") or "").strip().upper()
         explicit = profit_signal.get("signal_strength")
         if explicit is not None:
+            if reason == "HOLD":
+                return 0.0
             strength = _clamp_unit_interval(explicit)
-            return _round_relief_signal_strength(
-                _profit_take_wmatic_stack_strength_boost(strength, wmatic_usd_equiv, wm_min)
+            strength = _profit_take_wmatic_stack_strength_boost(strength, wmatic_usd_equiv, wm_min)
+            strength = _profit_take_apply_healthy_wmatic_signal_floors(
+                strength,
+                wmatic_usd_equiv=wmatic_usd_equiv,
+                wm_min=wm_min,
+                valid_exit_reason=bool(reason),
             )
+            return _round_relief_signal_strength(strength)
 
-        reason = str(profit_signal.get("reason") or "").strip().upper()
         if reason == "HOLD":
             return 0.0
 
@@ -484,6 +509,12 @@ def _profit_take_balance_relief_signal_strength(
     if valid_exit_reason or has_positive_gain:
         strength = max(strength, floor if valid_exit_reason else 0.01)
 
+    strength = _profit_take_apply_healthy_wmatic_signal_floors(
+        strength,
+        wmatic_usd_equiv=wmatic_usd_equiv,
+        wm_min=wm_min,
+        valid_exit_reason=valid_exit_reason,
+    )
     return _round_relief_signal_strength(strength)
 
 
@@ -519,19 +550,16 @@ def _profit_take_force_small_relief_eligible(
     notional_usd: float,
     cycles_since_exit: int,
 ) -> bool:
-    """TEMPORARY (May 2026 sprint): force weak-signal relief when WMATIC stack is idle too long."""
+    """TEMPORARY / SPRINT (May 2026): force weak-signal relief when WMATIC ≥ $8 and idle 6+ cycles."""
     dir_u = str(direction or "").strip().upper()
     if dir_u not in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:
         return False
-    wm_min = float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN)
+    force_wm_min = float(_MAIN_STRATEGY_FORCE_PROFIT_TAKE_WMATIC_USD_MIN)
     floor_usd = float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD)
-    soft_min = float(_MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_SOFT_MIN_USD)
     cycles_min = int(_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN)
-    if wm_equiv_usd + 1e-9 <= wm_min:
+    if wm_equiv_usd + 1e-9 < force_wm_min:
         return False
-    if notional_usd + 1e-9 < soft_min:
-        return False
-    # Hard safety: never force below the P2 notional floor ($3.00).
+    # TEMPORARY / SPRINT: hard $3.00 notional floor — never force sub-floor exits.
     if notional_usd + 1e-9 < floor_usd:
         return False
     return cycles_since_exit >= cycles_min
@@ -972,7 +1000,7 @@ def determine_trade_decision(
         ):
             main_notional = _decision_notional_usd(main_decision, current_price_usd=current_price)
             notional_s = f"{main_notional:.2f}" if main_notional is not None else "?"
-            print(f"{_PROFIT_TAKE_P2_RELIEF_OVERRIDE_LOG} (notional=${notional_s})")
+            print(f"{_PROFIT_TAKE_P2_RELIEF_MAIN_OVERRIDE_LOG} (notional=${notional_s})")
             print(_PROFIT_TAKE_P2_RELIEF_LOG)
             return main_decision
     if _defer_if_dust(
