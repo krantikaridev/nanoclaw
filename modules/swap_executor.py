@@ -339,13 +339,13 @@ def _defer_if_dust(
 # Small WMATIC→stable exits (~$3.38–$3.99) were hard-blocked by MIN_TRADE_USD / dust defer
 # (`main_strategy_dust_deferred`) even when the stack was healthy. Revert after sprint window.
 _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 7.0
-_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 3.0
+_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 2.5
 _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH = 0.55
 _PROFIT_TAKE_P2_RELIEF_LOG = "[nanoclaw] Main strategy small profit take allowed (P2 relief)"
 _PROFIT_TAKE_P2_RELIEF_CHECK_LOG = "[nanoclaw] P2 relief check"
-_PROFIT_TAKE_P2_RELIEF_OVERRIDE_LOG = (
-    "[nanoclaw] P2 RELIEF OVERRIDE | Allowing small WMATIC profit take "
-    "(notional=${notional}, wm=${wm})"
+_PROFIT_TAKE_P2_RELIEF_OVERRIDE_ACTIVE_LOG = (
+    "[nanoclaw] P2 RELIEF OVERRIDE ACTIVE | WMATIC=${wm} | notional=${notional} | "
+    "bypassing min_notional"
 )
 
 # TEMPORARY SPRINT FIX - May 2026: force weak-signal relief when stack ≥ $8 and idle 5+ cycles.
@@ -569,7 +569,7 @@ def _profit_take_force_small_relief_eligible(
     cycles_min = int(_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN)
     if wm_equiv_usd + 1e-9 < force_wm_min:
         return False
-    # TEMPORARY / SPRINT: hard $3.00 notional floor — never force sub-floor exits.
+    # TEMPORARY / SPRINT: hard notional floor — never force sub-floor exits.
     if notional_usd + 1e-9 < floor_usd:
         return False
     return cycles_since_exit >= cycles_min
@@ -613,7 +613,7 @@ def _profit_take_balance_relief_bypass_allowed(
     Trade notional may be below ``MIN_TRADE_USD`` as long as total WMATIC USD equivalent is healthy
     (capital rotation — lock small gains back into stables without waiting for a large sell).
     After ``_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN`` cycles without a WMATIC→stable exit, a
-    healthy stack can force-allow a weak-signal small take (still respects the $3.00 notional floor).
+    healthy stack can force-allow a weak-signal small take (still respects the notional floor).
     Emits ``[nanoclaw] P2 relief check`` on every WMATIC→stable evaluation (pass/fail + reason).
     """
     direction = str(decision.direction or "").strip().upper()
@@ -677,7 +677,7 @@ def _profit_take_balance_relief_bypass_allowed(
     return allowed
 
 
-def _try_profit_take_p2_relief_override(
+def _wmatic_stable_p2_relief_override_active(
     decision: TradeDecision,
     *,
     balances: Balances,
@@ -686,7 +686,11 @@ def _try_profit_take_p2_relief_override(
     profit_signal: dict | None = None,
     state: dict | None = None,
 ) -> bool:
-    """TEMPORARY SPRINT FIX - May 2026: P2 relief before dust defer / min_notional_usd for WMATIC exits."""
+    """TEMPORARY SPRINT FIX - May 2026: bypass-first P2 relief for WMATIC→stable profit takes.
+
+    Calls ``_profit_take_balance_relief_bypass_allowed()`` before any dust defer or
+    ``MIN_TRADE_USD`` gate. When True, caller must return the decision immediately.
+    """
     direction = str(decision.direction or "").strip().upper()
     if direction not in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:
         return False
@@ -703,9 +707,9 @@ def _try_profit_take_p2_relief_override(
     notional_usd = _decision_notional_usd(decision, current_price_usd=current_price_usd)
     notional_s = f"{notional_usd:.2f}" if notional_usd is not None else "?"
     print(
-        _PROFIT_TAKE_P2_RELIEF_OVERRIDE_LOG.format(
-            notional=notional_s,
+        _PROFIT_TAKE_P2_RELIEF_OVERRIDE_ACTIVE_LOG.format(
             wm=f"{wm_equiv_usd:.2f}",
+            notional=notional_s,
         )
     )
     return True
@@ -910,17 +914,19 @@ def determine_trade_decision(
         print(f"🔍 DECISION PATH: PROFIT_TAKE ({profit_signal.get('reason','')})")
         profit_decision = cs_build_profit_exit_decision(profit_signal, balances.wmatic)
         eff_pt_min_usd = float(getattr(cs, "MIN_TRADE_USD", 0.0) or 0.0)
-        # TEMPORARY SPRINT FIX - May 2026: P2 override before PROFIT_TAKE dust defer / $10 floor.
-        if _try_profit_take_p2_relief_override(
-            profit_decision,
-            balances=balances,
-            current_price_usd=current_price,
-            min_trade_usd=eff_pt_min_usd,
-            profit_signal=profit_signal,
-            state=state,
-        ):
-            print(_PROFIT_TAKE_P2_RELIEF_LOG)
-            return profit_decision
+        profit_dir = str(profit_decision.direction or "").strip().upper()
+        # TEMPORARY SPRINT FIX - May 2026: P2 bypass-first — overrides PROFIT_TAKE dust defer / $10 floor.
+        if profit_dir in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:
+            if _wmatic_stable_p2_relief_override_active(
+                profit_decision,
+                balances=balances,
+                current_price_usd=current_price,
+                min_trade_usd=eff_pt_min_usd,
+                profit_signal=profit_signal,
+                state=state,
+            ):
+                print(_PROFIT_TAKE_P2_RELIEF_LOG)
+                return profit_decision
         if not _defer_if_dust(
             profit_decision,
             branch_name="PROFIT_TAKE",
@@ -1024,13 +1030,10 @@ def determine_trade_decision(
     print(f"🔍 DECISION PATH: MAIN_STRATEGY (WMATIC≈${current_price:.4f})")
     main_decision = select_main_strategy_trade(balances, current_price)
     main_dir = str(main_decision.direction or "").strip().upper()
-    if entries_paused and main_dir in _CONTROL_PAUSE_BLOCK_ENTRIES:
-        cs._log_trade_skipped("control.json paused=True — skipping main-strategy entry trade")
-        return TradeDecision(message="ℹ️ Paused via control.json (no new entries this cycle)")
-    # TEMPORARY SPRINT FIX - May 2026: P2 override before MAIN_STRATEGY dust defer / $10 floor.
     eff_main_min_usd = float(getattr(cs, "MIN_TRADE_USD", 0.0) or 0.0)
+    # TEMPORARY SPRINT FIX - May 2026: P2 bypass-first — overrides MAIN_STRATEGY dust defer / $10 floor.
     if main_dir in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:
-        if _try_profit_take_p2_relief_override(
+        if _wmatic_stable_p2_relief_override_active(
             main_decision,
             balances=balances,
             current_price_usd=current_price,
@@ -1040,6 +1043,9 @@ def determine_trade_decision(
         ):
             print(_PROFIT_TAKE_P2_RELIEF_LOG)
             return main_decision
+    if entries_paused and main_dir in _CONTROL_PAUSE_BLOCK_ENTRIES:
+        cs._log_trade_skipped("control.json paused=True — skipping main-strategy entry trade")
+        return TradeDecision(message="ℹ️ Paused via control.json (no new entries this cycle)")
     if _defer_if_dust(
         main_decision,
         branch_name="MAIN_STRATEGY",

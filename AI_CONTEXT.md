@@ -215,12 +215,12 @@ Operational focus: correctness of this precedence, USDC liquidity for equity **b
 
 - **P2 Profit-Take Relief** (TEMPORARY SPRINT FIX — May 2026; revert after sprint window):
   - `_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 7.0` — total WMATIC stack must be ≥ ~$7 USD equiv (trade notional may still be small).
-  - `_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 3.0` — gas guard for sub-$3.00 exits (production sizes ~$3.38–$3.99).
+  - `_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 2.5` — gas guard for sub-$2.50 exits (production sizes ~$2.88–$3.99).
   - `_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH = 0.55` — bypass gate; `_profit_take_balance_relief_signal_strength()` prefers `profit_signal['signal_strength']`, else sprint heuristics. When WMATIC ≥ $7 and exit reason is not HOLD, strength is never below **0.55**. HOLD snapshots are ignored for scoring when the stack is healthy (stops `main_strategy_dust_deferred` on rotation sells). Strengths rounded to two decimals.
   - Allows small WMATIC → USDT/USDC profit takes below `MIN_TRADE_USD` when stack + notional + signal pass; skips `min_trade_guard` in `main()` when bypass qualifies.
-  - **Precedence:** for `WMATIC_TO_USDT` / `WMATIC_TO_USDC`, `_try_profit_take_p2_relief_override()` runs **before** PROFIT_TAKE / `MAIN_STRATEGY` dust defer and `$10` `min_notional_usd`.
-  - Logs: `[nanoclaw] P2 relief check | wm=… | notional=… | signal=… | allowed=…`; `[nanoclaw] P2 RELIEF OVERRIDE | Allowing small WMATIC profit take (notional=$X, wm=$Y)`; `[nanoclaw] Main strategy small profit take allowed (P2 relief)`.
-  - **Force small profit take** (TEMPORARY SPRINT FIX): `state.profit_take_rotation.cycles_since_exit` increments each `determine_trade_decision`; resets on successful WMATIC→stable exit. After **5+** cycles without exit, WMATIC stack **≥ $8** and notional **≥ $3.00** can force-allow weak-signal relief — `[nanoclaw] FORCE small profit take | WMATIC healthy, forcing exit`; P2 reason `force_no_exit_cycles`.
+  - **Precedence:** for `WMATIC_TO_USDT` / `WMATIC_TO_USDC`, `_profit_take_balance_relief_bypass_allowed()` runs **first** via `_wmatic_stable_p2_relief_override_active()` — **before** PROFIT_TAKE / `MAIN_STRATEGY` dust defer and `$10` `min_notional_usd` (MAIN_STRATEGY checks relief before `entries_paused` entry gate).
+  - Logs: `[nanoclaw] P2 relief check | wm=… | notional=… | signal=… | allowed=…`; `[nanoclaw] P2 RELIEF OVERRIDE ACTIVE | WMATIC=$X | notional=$Y | bypassing min_notional`; `[nanoclaw] Main strategy small profit take allowed (P2 relief)`.
+  - **Force small profit take** (TEMPORARY SPRINT FIX): `state.profit_take_rotation.cycles_since_exit` increments each `determine_trade_decision`; resets on successful WMATIC→stable exit. After **5+** cycles without exit, WMATIC stack **≥ $8** and notional **≥ $2.50** can force-allow weak-signal relief — `[nanoclaw] FORCE small profit take | WMATIC healthy, forcing exit`; P2 reason `force_no_exit_cycles`.
   - Sprint goal: aggressive capital rotation from small seed WMATIC back into USDC/USDT. Monitor fill rate and gas drag before keeping thresholds.
 
 ## **Key `.env`** (defaults in `.env.example`; production overrides freely)

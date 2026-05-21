@@ -655,7 +655,8 @@ def test_determine_trade_decision_profit_take_balance_relief_allows_small_wm_to_
     captured = capsys.readouterr().out
     assert out is profit_small
     assert "[nanoclaw] P2 relief check" in captured
-    assert "[nanoclaw] P2 RELIEF OVERRIDE" in captured
+    assert "[nanoclaw] P2 RELIEF OVERRIDE ACTIVE" in captured
+    assert "bypassing min_notional" in captured
     assert "[nanoclaw] Main strategy small profit take allowed (P2 relief)" in captured
 
 
@@ -922,7 +923,8 @@ def test_determine_trade_decision_main_strategy_balance_relief_before_dust_defer
     assert out is main_small
     assert not any("main_strategy_dust_deferred" in reason for reason in skipped)
     assert "[nanoclaw] P2 relief check" in captured
-    assert "[nanoclaw] P2 RELIEF OVERRIDE" in captured
+    assert "[nanoclaw] P2 RELIEF OVERRIDE ACTIVE" in captured
+    assert "bypassing min_notional" in captured
     assert "notional=$4.00" in captured
     assert "[nanoclaw] Main strategy small profit take allowed (P2 relief)" in captured
 
@@ -969,7 +971,8 @@ def test_determine_trade_decision_main_strategy_balance_relief_with_hold_snapsho
     captured = capsys.readouterr().out
     assert out is main_small
     assert not any("main_strategy_dust_deferred" in reason for reason in skipped)
-    assert "[nanoclaw] P2 RELIEF OVERRIDE" in captured
+    assert "[nanoclaw] P2 RELIEF OVERRIDE ACTIVE" in captured
+    assert "bypassing min_notional" in captured
     assert "notional=$3.99" in captured
 
 
