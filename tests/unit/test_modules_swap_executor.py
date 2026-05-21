@@ -99,7 +99,7 @@ def test_profit_take_balance_relief_bypass_requires_balance_notional_and_signal(
 def test_profit_take_balance_relief_bypass_rejects_sub_floor_notional(capsys):
     decision = TradeDecision(
         direction="WMATIC_TO_USDT",
-        amount_in=int(2.49 * 1_000_000_000_000_000_000),
+        amount_in=int(1.99 * 1_000_000_000_000_000_000),
         signal_strength=0.80,
     )
     balances = Balances(usdt=10.0, usdc=30.0, wmatic=200.0, pol=1.0)
@@ -111,10 +111,10 @@ def test_profit_take_balance_relief_bypass_rejects_sub_floor_notional(capsys):
     )
     captured = capsys.readouterr().out
     assert "[nanoclaw] P2 relief check" in captured
-    assert "notional=$2.49" in captured
+    assert "notional=$1.99" in captured
     assert "allowed=False" in captured
     assert "reason=notional_below_floor" in captured
-    assert "floor=$2.50" in captured
+    assert "floor=$2.00" in captured
 
 
 def test_profit_take_force_small_relief_eligible_requires_cycles_and_floor():
@@ -209,7 +209,7 @@ def test_profit_take_balance_relief_bypass_rejects_low_wmatic_stack():
 def test_profit_take_balance_relief_bypass_accepts_notional_at_relaxed_floor(capsys):
     decision = TradeDecision(
         direction="WMATIC_TO_USDT",
-        amount_in=int(2.5 * 1_000_000_000_000_000_000),
+        amount_in=int(2.0 * 1_000_000_000_000_000_000),
         signal_strength=0.80,
     )
     balances = Balances(usdt=10.0, usdc=30.0, wmatic=200.0, pol=1.0)
@@ -221,12 +221,31 @@ def test_profit_take_balance_relief_bypass_accepts_notional_at_relaxed_floor(cap
     )
     captured = capsys.readouterr().out
     assert "[nanoclaw] P2 relief check" in captured
-    assert "notional=$2.50" in captured
+    assert "notional=$2.00" in captured
+    assert "allowed=True" in captured
+
+
+def test_profit_take_balance_relief_bypass_accepts_observed_two_usd_notional(capsys):
+    """TEMPORARY sprint (May 2026): ~$2.05 profit-take sizes pass at $2.0 floor."""
+    decision = TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(2.05 * 1_000_000_000_000_000_000),
+        signal_strength=0.80,
+    )
+    balances = Balances(usdt=10.0, usdc=30.0, wmatic=200.0, pol=1.0)
+    assert _profit_take_balance_relief_bypass_allowed(
+        decision,
+        balances=balances,
+        current_price_usd=1.0,
+        min_trade_usd=10.0,
+    )
+    captured = capsys.readouterr().out
+    assert "notional=$2.05" in captured
     assert "allowed=True" in captured
 
 
 def test_profit_take_balance_relief_bypass_accepts_observed_sub_three_notional(capsys):
-    """TEMPORARY sprint (May 2026): ~$2.88 profit-take sizes pass at $2.50 floor."""
+    """TEMPORARY sprint (May 2026): ~$2.88 profit-take sizes pass at $2.0 floor."""
     decision = TradeDecision(
         direction="WMATIC_TO_USDT",
         amount_in=int(2.88 * 1_000_000_000_000_000_000),

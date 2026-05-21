@@ -339,7 +339,8 @@ def _defer_if_dust(
 # Small WMATIC→stable exits (~$3.38–$3.99) were hard-blocked by MIN_TRADE_USD / dust defer
 # (`main_strategy_dust_deferred`) even when the stack was healthy. Revert after sprint window.
 _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 7.0
-_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 2.5
+# Temporary aggressive floor for sprint - lowered to $2.0 to allow currently observed small profit takes (~$2.05)
+_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 2.0
 _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH = 0.55
 _PROFIT_TAKE_P2_RELIEF_LOG = "[nanoclaw] Main strategy small profit take allowed (P2 relief)"
 _PROFIT_TAKE_P2_RELIEF_CHECK_LOG = "[nanoclaw] P2 relief check"
@@ -426,7 +427,7 @@ def _profit_take_apply_healthy_wmatic_signal_floors(
     wm_min: float,
     valid_exit_reason: bool,
 ) -> float:
-    # Sprint fix: be lenient on signal when WMATIC balance is healthy
+    # Sprint relaxation: be lenient on signal when WMATIC balance is healthy
     if wmatic_usd_equiv is None or float(wmatic_usd_equiv) + 1e-9 < wm_min:
         return strength
     if valid_exit_reason:
@@ -444,7 +445,8 @@ def _profit_take_balance_relief_signal_strength(
 
     Prefer profit_signal['signal_strength'] when the strategy supplies it.
     Otherwise derive strength from exit reason and gain/peak/pullback metrics.
-    When WMATIC stack ≥ $7 and exit reason is not HOLD, strength is never below 0.55.
+    When WMATIC stack ≥ $7 and exit reason is not HOLD, strength is never below 0.55
+    (Sprint relaxation: lenient scoring when WMATIC balance is healthy, even on modest gains).
     """
     floor = float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH)
     wm_min = float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN)
