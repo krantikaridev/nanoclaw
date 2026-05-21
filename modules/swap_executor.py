@@ -351,12 +351,13 @@ _PROFIT_TAKE_P2_RELIEF_OVERRIDE_ACTIVE_LOG = (
 
 # TEMPORARY SPRINT FIX - May 2026: keep capital rotation active when profit-take sizes stay
 # small and borderline exits would otherwise sit idle for many cycles (revert after sprint).
-_MAIN_STRATEGY_FORCE_PROFIT_TAKE_WMATIC_USD_MIN = 6.5
+# TEMPORARY SPRINT: Lowered force threshold to $5.5 so it can activate when WMATIC is in current observed range (~$5.7)
+_MAIN_STRATEGY_FORCE_PROFIT_TAKE_WMATIC_USD_MIN = 5.5
 _MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN = 4
 _MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_FLOOR_USD = 1.8
 _PROFIT_TAKE_FORCE_SMALL_LOG = (
-    "[nanoclaw] FORCE small profit take | WMATIC healthy, no exit for {cycles} cycles | "
-    "notional=${notional:.2f}"
+    "[nanoclaw] FORCE small profit take | WMATIC=${wm:.2f} healthy, no exit for {cycles} cycles | "
+    "notional=${notional:.2f} | bypassing min_notional"
 )
 
 # TEMPORARY (2026-05): small high-conviction X-SIGNAL (~$11) — very high fallback slippage only; easy revert.
@@ -565,7 +566,7 @@ def _profit_take_force_small_relief_eligible(
     notional_usd: float,
     cycles_since_exit: int,
 ) -> bool:
-    """TEMPORARY SPRINT FIX - May 2026: force small profit take when WMATIC ≥ $6.5, idle 4+ cycles."""
+    """TEMPORARY SPRINT FIX - May 2026: force small profit take when WMATIC ≥ $5.5, idle 4+ cycles."""
     dir_u = str(direction or "").strip().upper()
     if dir_u not in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:
         return False
@@ -617,7 +618,7 @@ def _profit_take_balance_relief_bypass_allowed(
     Trade notional may be below ``MIN_TRADE_USD`` as long as total WMATIC USD equivalent is healthy
     (capital rotation — lock small gains back into stables without waiting for a large sell).
     After ``_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN`` cycles without a WMATIC→stable exit, a
-    healthy stack (≥ $6.5 WMATIC, notional ≥ $1.8) can force-allow a small take and bypass the
+    healthy stack (≥ $5.5 WMATIC, notional ≥ $1.8) can force-allow a small take and bypass the
     standard P2 wm/notional/signal gates (still below ``MIN_TRADE_USD``).
     Emits ``[nanoclaw] P2 relief check`` on every WMATIC→stable evaluation (pass/fail + reason).
     """
@@ -660,6 +661,7 @@ def _profit_take_balance_relief_bypass_allowed(
     elif force_small:
         print(
             _PROFIT_TAKE_FORCE_SMALL_LOG.format(
+                wm=wm_equiv_usd,
                 cycles=cycles_since_exit,
                 notional=float(notional_usd),
             )

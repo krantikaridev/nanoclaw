@@ -145,8 +145,24 @@ def test_profit_take_force_small_relief_eligible_requires_cycles_and_floor():
     )
 
 
+def test_profit_take_force_small_relief_eligible_at_observed_wmatic_range():
+    """TEMPORARY SPRINT: force activates at ~$5.7 WMATIC (above $5.5 floor)."""
+    assert _profit_take_force_small_relief_eligible(
+        direction="WMATIC_TO_USDT",
+        wm_equiv_usd=5.7,
+        notional_usd=1.9,
+        cycles_since_exit=_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN,
+    )
+    assert not _profit_take_force_small_relief_eligible(
+        direction="WMATIC_TO_USDT",
+        wm_equiv_usd=5.49,
+        notional_usd=1.9,
+        cycles_since_exit=_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN,
+    )
+
+
 def test_profit_take_balance_relief_bypass_force_weak_signal_after_idle_cycles(capsys):
-    """TEMPORARY SPRINT FIX - May 2026: force-allow when WMATIC ≥ $6.5 and idle 4+ cycles."""
+    """TEMPORARY SPRINT FIX - May 2026: force-allow when WMATIC ≥ $5.5 and idle 4+ cycles."""
     state: dict = {}
     for _ in range(_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN):
         _profit_take_bump_cycle_counter(state)
@@ -164,8 +180,9 @@ def test_profit_take_balance_relief_bypass_force_weak_signal_after_idle_cycles(c
         state=state,
     )
     captured = capsys.readouterr().out
-    assert "FORCE small profit take | WMATIC healthy, no exit for 4 cycles" in captured
+    assert "FORCE small profit take | WMATIC=$20.00 healthy, no exit for 4 cycles" in captured
     assert "notional=$3.40" in captured
+    assert "bypassing min_notional" in captured
     assert "force_no_exit_cycles" in captured
 
 
@@ -189,8 +206,35 @@ def test_profit_take_balance_relief_bypass_force_below_standard_p2_floors(capsys
         state=state,
     )
     captured = capsys.readouterr().out
-    assert "FORCE small profit take | WMATIC healthy, no exit for 4 cycles" in captured
+    assert "FORCE small profit take | WMATIC=$6.80 healthy, no exit for 4 cycles" in captured
     assert f"notional=${notional:.2f}" in captured
+    assert "bypassing min_notional" in captured
+    assert "force_no_exit_cycles" in captured
+
+
+def test_profit_take_balance_relief_bypass_force_at_observed_wmatic_range(capsys):
+    """TEMPORARY SPRINT: full bypass path when WMATIC ~$5.7 and idle 4+ cycles."""
+    state: dict = {}
+    for _ in range(_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN):
+        _profit_take_bump_cycle_counter(state)
+    notional = 1.9
+    wmatic_usd = 5.7
+    decision = TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(notional * 1_000_000_000_000_000_000),
+        signal_strength=0.20,
+    )
+    assert _profit_take_balance_relief_bypass_allowed(
+        decision,
+        balances=Balances(usdt=10.0, wmatic=wmatic_usd, pol=1.0, usdc=30.0),
+        current_price_usd=1.0,
+        min_trade_usd=10.0,
+        profit_signal={"reason": "HOLD"},
+        state=state,
+    )
+    captured = capsys.readouterr().out
+    assert f"FORCE small profit take | WMATIC=${wmatic_usd:.2f} healthy" in captured
+    assert "bypassing min_notional" in captured
     assert "force_no_exit_cycles" in captured
 
 
