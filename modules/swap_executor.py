@@ -346,6 +346,9 @@ _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 3.0
 _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH = 0.55
 _PROFIT_TAKE_P2_RELIEF_LOG = "[nanoclaw] Main strategy small profit take allowed (P2 relief)"
 _PROFIT_TAKE_P2_RELIEF_CHECK_LOG = "[nanoclaw] P2 relief check"
+_PROFIT_TAKE_P2_RELIEF_OVERRIDE_LOG = (
+    "[nanoclaw] P2 relief override | Allowing small profit take below min_notional"
+)
 
 # TEMPORARY (2026-05): small high-conviction X-SIGNAL (~$11) — very high fallback slippage only; easy revert.
 _X_SIGNAL_SMALL_HIGH_CONVICTION_MAX_NOTIONAL_USD = 12.0
@@ -836,6 +839,26 @@ def determine_trade_decision(
     if entries_paused and main_dir in _CONTROL_PAUSE_BLOCK_ENTRIES:
         cs._log_trade_skipped("control.json paused=True — skipping main-strategy entry trade")
         return TradeDecision(message="ℹ️ Paused via control.json (no new entries this cycle)")
+    # TEMPORARY (May 2026 sprint): P2 profit-take relief takes precedence over MAIN_STRATEGY
+    # dust defer for WMATIC→USDT/USDC exits. Small-but-reasonable profit takes ($3–$5) were
+    # hard-blocked by min_notional_usd ($10 / MIN_TRADE_USD) before the bypass could run.
+    # Allows small WMATIC profit takes when relief conditions pass (stack + $3 floor + signal),
+    # even below global MIN_TRADE_USD — aggressive but necessary for +ve PnL with small seed
+    # capital and faster capital rotation. Revert after sprint window.
+    eff_main_min_usd = float(getattr(cs, "MIN_TRADE_USD", 0.0) or 0.0)
+    if main_dir in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:
+        if _profit_take_balance_relief_bypass_allowed(
+            main_decision,
+            balances=balances,
+            current_price_usd=current_price,
+            min_trade_usd=eff_main_min_usd,
+            profit_signal=profit_signal,
+        ):
+            main_notional = _decision_notional_usd(main_decision, current_price_usd=current_price)
+            notional_s = f"{main_notional:.2f}" if main_notional is not None else "?"
+            print(f"{_PROFIT_TAKE_P2_RELIEF_OVERRIDE_LOG} (notional=${notional_s})")
+            print(_PROFIT_TAKE_P2_RELIEF_LOG)
+            return main_decision
     if _defer_if_dust(
         main_decision,
         branch_name="MAIN_STRATEGY",
