@@ -350,6 +350,15 @@ _PROFIT_TAKE_P2_RELIEF_OVERRIDE_LOG = (
     "[nanoclaw] P2 relief override | Allowing small profit take below min_notional"
 )
 
+# TEMPORARY (May 2026 sprint — capital rotation): force small WMATIC→stable exits when the stack
+# is healthy but no profit take has executed for many cycles (weak signal still allowed).
+_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN = 8
+_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MAX = 10
+_MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_SOFT_MIN_USD = 2.5
+_PROFIT_TAKE_FORCE_SMALL_LOG = (
+    "[nanoclaw] FORCE small profit take | WMATIC healthy but no exit for {cycles} cycles"
+)
+
 # TEMPORARY (2026-05): small high-conviction X-SIGNAL (~$11) — very high fallback slippage only; easy revert.
 _X_SIGNAL_SMALL_HIGH_CONVICTION_MAX_NOTIONAL_USD = 12.0
 
@@ -478,6 +487,56 @@ def _profit_take_balance_relief_signal_strength(
     return _round_relief_signal_strength(strength)
 
 
+def _profit_take_rotation_state(state: dict | None) -> dict:
+    """May 2026 sprint: per-bot counter for cycles since last WMATIC→stable profit exit."""
+    if state is None:
+        return {}
+    return state.setdefault("profit_take_rotation", {})
+
+
+def _profit_take_cycles_since_exit(state: dict | None) -> int:
+    return int(_profit_take_rotation_state(state).get("cycles_since_exit", 0) or 0)
+
+
+def _profit_take_bump_cycle_counter(state: dict) -> int:
+    """Increment once per ``determine_trade_decision`` evaluation (saved with bot state)."""
+    d = _profit_take_rotation_state(state)
+    cycles = int(d.get("cycles_since_exit", 0) or 0) + 1
+    d["cycles_since_exit"] = cycles
+    return cycles
+
+
+def _profit_take_record_exit(state: dict) -> None:
+    """Reset rotation counter after a successful WMATIC→stable exit."""
+    d = _profit_take_rotation_state(state)
+    d["cycles_since_exit"] = 0
+
+
+def _profit_take_force_small_relief_eligible(
+    *,
+    direction: str,
+    wm_equiv_usd: float,
+    notional_usd: float,
+    cycles_since_exit: int,
+) -> bool:
+    """TEMPORARY (May 2026 sprint): force weak-signal relief when WMATIC stack is idle too long."""
+    dir_u = str(direction or "").strip().upper()
+    if dir_u not in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:
+        return False
+    wm_min = float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN)
+    floor_usd = float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD)
+    soft_min = float(_MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_SOFT_MIN_USD)
+    cycles_min = int(_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN)
+    if wm_equiv_usd + 1e-9 <= wm_min:
+        return False
+    if notional_usd + 1e-9 < soft_min:
+        return False
+    # Hard safety: never force below the P2 notional floor ($3.00).
+    if notional_usd + 1e-9 < floor_usd:
+        return False
+    return cycles_since_exit >= cycles_min
+
+
 def _log_profit_take_p2_relief_check(
     *,
     wm_equiv_usd: float | None,
@@ -509,11 +568,14 @@ def _profit_take_balance_relief_bypass_allowed(
     current_price_usd: float,
     min_trade_usd: float,
     profit_signal: dict | None = None,
+    state: dict | None = None,
 ) -> bool:
-    """TEMPORARY (48-hour sprint): allow small WMATIC→stable profit exits when stack, notional, and signal pass.
+    """TEMPORARY (May 2026 sprint): allow small WMATIC→stable profit exits when stack, notional, and signal pass.
 
     Trade notional may be below ``MIN_TRADE_USD`` as long as total WMATIC USD equivalent is healthy
     (capital rotation — lock small gains back into stables without waiting for a large sell).
+    After ``_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN`` cycles without a WMATIC→stable exit, a
+    healthy stack can force-allow a weak-signal small take (still respects the $3.00 notional floor).
     Emits ``[nanoclaw] P2 relief check`` on every WMATIC→stable evaluation (pass/fail + reason).
     """
     direction = str(decision.direction or "").strip().upper()
@@ -535,6 +597,13 @@ def _profit_take_balance_relief_bypass_allowed(
         )
         return False
     wm_equiv_usd = float(balances.wmatic) * float(current_price_usd)
+    cycles_since_exit = _profit_take_cycles_since_exit(state)
+    force_small = _profit_take_force_small_relief_eligible(
+        direction=direction,
+        wm_equiv_usd=wm_equiv_usd,
+        notional_usd=float(notional_usd),
+        cycles_since_exit=cycles_since_exit,
+    )
     strength = _profit_take_balance_relief_signal_strength(
         decision,
         profit_signal,
@@ -552,8 +621,13 @@ def _profit_take_balance_relief_bypass_allowed(
         allowed = False
         reason = "wmatic_stack_below_min"
     elif abs(float(strength)) + 1e-9 < float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH):
-        allowed = False
-        reason = "signal_below_min"
+        if force_small:
+            print(_PROFIT_TAKE_FORCE_SMALL_LOG.format(cycles=cycles_since_exit))
+            allowed = True
+            reason = "force_no_exit_cycles"
+        else:
+            allowed = False
+            reason = "signal_below_min"
     _log_profit_take_p2_relief_check(
         wm_equiv_usd=wm_equiv_usd,
         notional_usd=notional_usd,
@@ -715,6 +789,9 @@ def determine_trade_decision(
         print("[CONTROL] paused=True → skipping new entry trades (protection exits still allowed)")
     # ``ctrl.force_defensive`` is parsed in ``load_cycle_control`` for future wiring — does not alter protection yet.
 
+    # TEMPORARY (May 2026 sprint): track cycles since last WMATIC→stable profit exit for force-relief.
+    _profit_take_bump_cycle_counter(state)
+
     risk_level = _cycle_risk_level(balances)
     pause_active, pause_remaining = _defensive_pause_state(state, risk_level=risk_level)
     print(
@@ -767,6 +844,7 @@ def determine_trade_decision(
             current_price_usd=current_price,
             min_trade_usd=eff_pt_min_usd,
             profit_signal=profit_signal,
+            state=state,
         ):
             print(_PROFIT_TAKE_P2_RELIEF_LOG)
             return profit_decision
@@ -890,6 +968,7 @@ def determine_trade_decision(
             current_price_usd=current_price,
             min_trade_usd=eff_main_min_usd,
             profit_signal=profit_signal,
+            state=state,
         ):
             main_notional = _decision_notional_usd(main_decision, current_price_usd=current_price)
             notional_s = f"{main_notional:.2f}" if main_notional is not None else "?"
@@ -995,6 +1074,7 @@ async def main(*, dry_run: bool = False) -> None:
                 current_price_usd=current_price,
                 min_trade_usd=min_trade_usd,
                 profit_signal=profit_signal_guard,
+                state=state,
             ):
                 print(_PROFIT_TAKE_P2_RELIEF_LOG)
             else:
@@ -1106,6 +1186,8 @@ async def main(*, dry_run: bool = False) -> None:
                         f"notional=${float(row.get('notional_usd', 0.0)):.2f}"
                     )
             print("✅ Swap executed successfully!")
+            if str(decision.direction or "").strip().upper() in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:
+                _profit_take_record_exit(state)
             if decision.cooldown_asset:
                 sym_ca, secs_a = decision.cooldown_asset
                 cs.mark_asset_traded(sym_ca, cooldown_seconds=int(secs_a))
