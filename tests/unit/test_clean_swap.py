@@ -584,7 +584,7 @@ def test_determine_trade_decision_signal_rotation_xsignal_before_profit_take(mon
     )
     monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
     monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
-    monkeypatch.setattr(clean_swap, "_strong_x_signal_buy_present", lambda: True)
+    monkeypatch.setattr(clean_swap, "_rotation_priority_buy_present", lambda: True)
 
     profit_sentinel = clean_swap.TradeDecision(direction="WMATIC_TO_USDT", amount_in=456, message="profit")
     monkeypatch.setattr(clean_swap, "build_profit_exit_decision", lambda *_args, **_kwargs: profit_sentinel)
@@ -606,7 +606,7 @@ def test_determine_trade_decision_signal_rotation_xsignal_before_profit_take(mon
     captured = capsys.readouterr().out
     assert out is x_sentinel
     assert "Signal-Driven Rotation" in captured
-    assert "X_SIGNAL_EQUITY (strong BUY" in captured
+    assert "X_SIGNAL_EQUITY (rotation-priority BUY" in captured
 
 
 def test_determine_trade_decision_uses_xsignal_before_copy_and_main(monkeypatch):

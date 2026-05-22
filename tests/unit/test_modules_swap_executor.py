@@ -1,7 +1,10 @@
 from modules.runtime import TradeDecision, Balances
+from config import MIN_NET_EDGE_PCT
 from modules.swap_executor import (
     _decision_notional_usd,
+    _infer_expected_gross_edge_pct,
     _profit_take_balance_relief_bypass_allowed,
+    _reject_if_low_expected_net_edge,
     _profit_take_balance_relief_signal_strength,
     _profit_take_bump_cycle_counter,
     _profit_take_force_small_relief_eligible,
@@ -17,6 +20,8 @@ from modules.swap_executor import (
     _x_signal_gated_trade_relaxed_slippage,
     _x_signal_min_trade_guard_bypass,
     _x_signal_small_high_conviction_relaxed_slippage,
+    estimate_expected_net_edge_pct,
+    trade_passes_min_net_edge,
 )
 import pytest
 
@@ -765,3 +770,62 @@ def test_x_signal_equity_effective_dust_min_requires_healthy_stables(monkeypatch
     assert _x_signal_equity_effective_dust_min(b_low) is None
     b_ok = Balances(usdt=50.0, usdc=50.0, wmatic=0.0, pol=0.0)
     assert _x_signal_equity_effective_dust_min(b_ok) == pytest.approx(7.5)
+
+
+def test_estimate_expected_net_edge_pct_subtracts_gas_from_gross():
+    net = estimate_expected_net_edge_pct(
+        trade_usd=20.0,
+        expected_gross_edge_pct=5.0,
+        gas_cost_usd=0.20,
+    )
+    assert net == pytest.approx(4.0)
+
+
+def test_infer_expected_gross_edge_pct_scales_x_signal_by_strength(monkeypatch):
+    monkeypatch.setattr("modules.swap_executor.cfg.env_float", lambda _k, default: 12.0)
+    weak = TradeDecision(direction="USDC_TO_EQUITY", signal_strength=0.65)
+    strong = TradeDecision(direction="USDC_TO_EQUITY", signal_strength=0.95)
+    assert _infer_expected_gross_edge_pct(weak) == pytest.approx(3.0)
+    assert _infer_expected_gross_edge_pct(strong) == pytest.approx(12.0)
+
+
+def test_trade_passes_min_net_edge_rejects_small_weak_x_signal(monkeypatch):
+    monkeypatch.setattr("modules.swap_executor.cfg.POL_USD_PRICE", 0.5)
+    d = TradeDecision(direction="USDC_TO_EQUITY", trade_size=5.0, signal_strength=0.62)
+    passes, net = trade_passes_min_net_edge(d, trade_usd=5.0, gas_gwei=2500.0)
+    assert not passes
+    assert net < MIN_NET_EDGE_PCT
+
+
+def test_trade_passes_min_net_edge_allows_main_strategy_buy(monkeypatch):
+    monkeypatch.setattr("modules.swap_executor.cfg.POL_USD_PRICE", 0.5)
+    monkeypatch.setattr("modules.swap_executor.cfg.TAKE_PROFIT_PCT", 5.0)
+    d = TradeDecision(direction="USDT_TO_WMATIC", trade_size=15.0)
+    passes, net = trade_passes_min_net_edge(d, trade_usd=15.0, gas_gwei=40.0)
+    assert passes
+    assert net >= MIN_NET_EDGE_PCT
+
+
+def test_trade_passes_min_net_edge_skips_exits():
+    d = TradeDecision(direction="WMATIC_TO_USDT", trade_size=12.0)
+    passes, net = trade_passes_min_net_edge(d, trade_usd=12.0, gas_gwei=900.0)
+    assert passes
+    assert net == 0.0
+
+
+def test_reject_if_low_expected_net_edge_logs_and_returns_true(monkeypatch, capsys):
+    monkeypatch.setattr("modules.swap_executor.cfg.POL_USD_PRICE", 0.5)
+    skipped: list[str] = []
+
+    def _log(msg: str) -> None:
+        skipped.append(msg)
+
+    d = TradeDecision(direction="USDC_TO_EQUITY", trade_size=5.0, signal_strength=0.62)
+    assert _reject_if_low_expected_net_edge(
+        d,
+        trade_usd=5.0,
+        gas_gwei=2500.0,
+        log_skip=_log,
+    )
+    assert skipped and "low_expected_edge" in skipped[0]
+    assert "[nanoclaw] Trade rejected | Low edge | expected_net=" in capsys.readouterr().out

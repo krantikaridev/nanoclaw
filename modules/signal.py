@@ -9,7 +9,14 @@ import time
 from typing import Optional, Sequence
 
 import config as cfg
-from config import CHAIN_HINT_WRONG_ETH_ADDRESSES, X_SIGNAL_STRONG_THRESHOLD
+from config import (
+    CHAIN_HINT_WRONG_ETH_ADDRESSES,
+    X_SIGNAL_MIN_ACTIONABLE_STRENGTH,
+    X_SIGNAL_MIN_UPSIDE_PCT_FOR_WEAK,
+    X_SIGNAL_ROTATION_MIN_UPSIDE_PCT,
+    X_SIGNAL_ROTATION_PRIORITY_THRESHOLD,
+    X_SIGNAL_STRONG_THRESHOLD,
+)
 from nanoclaw.strategies.signal_equity_trader import (
     EquityBuildPlanParams,
     EquityTradePlan,
@@ -41,6 +48,37 @@ from .runtime import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _log_x_signal_decision(
+    symbol: str,
+    action: str,
+    reason: str,
+    *,
+    signal: float | None = None,
+    extra: str = "",
+) -> None:
+    """Signal-Driven Rotation (May 2026): grep-friendly accept/reject line for post-hoc analysis."""
+    sym = str(symbol).strip() or "?"
+    act = str(action).strip().upper()
+    rsn = str(reason).strip() or "unknown"
+    sig_part = f" | signal={float(signal):.3f}" if signal is not None else ""
+    tail = f" | {extra.strip()}" if extra.strip() else ""
+    line = f"X-SIGNAL DECISION | symbol={sym} | action={act} | reason={rsn}{sig_part}{tail}"
+    print(f"{runtime._nanolog()}{line}")
+    logger.info(line)
+
+
+def _x_signal_quality_score(asset: FollowedEquity) -> float:
+    """Blend |signal|, optional track_record_score, and upside_pct for ordering (higher = better)."""
+    s = abs(float(asset.signal_strength))
+    tr = getattr(asset, "track_record_score", None)
+    tr_f = float(tr) if isinstance(tr, (int, float)) and 0.0 <= float(tr) <= 1.0 else 0.0
+    up = float(asset.upside_pct) if isinstance(asset.upside_pct, (int, float)) else 0.0
+    up_norm = min(1.0, max(0.0, up / 30.0))
+    return s * 0.55 + tr_f * 0.30 + up_norm * 0.15
+
+
 _AUTO_USDC_FAILURE_STATE = {
     "next_retry_ts": 0.0,
     "last_failure_usdc": -1.0,
@@ -292,12 +330,53 @@ def _sorted_and_eligible_equities(
     return assets_list, eligible
 
 
+def _filter_x_signal_quality_noise(
+    eligible: Sequence[FollowedEquity],
+    *,
+    force_eligible_threshold: float,
+) -> list[FollowedEquity]:
+    """Signal-Driven Rotation (May 2026): optional weak-signal filter (env 0 = disabled)."""
+    min_actionable = float(X_SIGNAL_MIN_ACTIONABLE_STRENGTH)
+    min_upside = float(X_SIGNAL_MIN_UPSIDE_PCT_FOR_WEAK)
+    if min_actionable <= 0.0 and min_upside <= 0.0:
+        return list(eligible)
+    fe_thr = float(force_eligible_threshold)
+    kept: list[FollowedEquity] = []
+    for a in eligible:
+        sym = str(a.symbol).strip()
+        s = abs(float(a.signal_strength))
+        if s >= fe_thr:
+            kept.append(a)
+            continue
+        if min_actionable > 0.0 and s < min_actionable:
+            _log_x_signal_decision(
+                sym,
+                "REJECT",
+                "below_min_actionable_strength",
+                signal=float(a.signal_strength),
+                extra=f"min_actionable={min_actionable:.3f}",
+            )
+            continue
+        up = float(a.upside_pct) if isinstance(a.upside_pct, (int, float)) else 0.0
+        if min_upside > 0.0 and up < min_upside:
+            _log_x_signal_decision(
+                sym,
+                "REJECT",
+                "below_min_upside_for_weak_signal",
+                signal=float(a.signal_strength),
+                extra=f"min_upside_pct={min_upside:.1f} upside_pct={up:.1f}",
+            )
+            continue
+        kept.append(a)
+    return kept
+
+
 def _order_eligible_x_signal_candidates(
     eligible: Sequence[FollowedEquity],
     *,
     per_asset_cooldown_seconds: int,
 ) -> list[FollowedEquity]:
-    """Signal-Driven Rotation (May 2026): cooldown-ready, then conviction tier, then |signal|."""
+    """Signal-Driven Rotation (May 2026): cooldown-ready, conviction tier, quality score, |signal|."""
     cs = _cs_mod()
     seq = list(eligible)
     fe_thr = float(getattr(cs, "X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD", X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD))
@@ -313,15 +392,16 @@ def _order_eligible_x_signal_candidates(
     if not cs.X_SIGNAL_EQUITY_COOLDOWN_FIRST_SORT:
         return sorted(
             seq,
-            key=lambda a: (conviction_tier(a), -abs(float(a.signal_strength))),
+            key=lambda a: (conviction_tier(a), -_x_signal_quality_score(a), -abs(float(a.signal_strength))),
         )
 
-    def sort_key(a: FollowedEquity) -> tuple[int, int, float]:
+    def sort_key(a: FollowedEquity) -> tuple[int, int, float, float]:
         sym = str(a.symbol).strip()
         cooldown_ok = cs.can_trade_asset(sym, None, int(per_asset_cooldown_seconds))
         return (
             0 if cooldown_ok else 1,
             conviction_tier(a),
+            -_x_signal_quality_score(a),
             -abs(float(a.signal_strength)),
         )
 
@@ -357,6 +437,46 @@ def strong_buy_detector() -> bool:
     return any(
         float(a.signal_strength) > 0 and float(a.signal_strength) >= strong_thr for a in eligible
     )
+
+
+def rotation_priority_detector() -> bool:
+    """
+    Signal-Driven Rotation (May 2026): cycle precedence / main-strategy deferral.
+
+    Uses ``X_SIGNAL_ROTATION_PRIORITY_THRESHOLD`` (defaults to ``X_SIGNAL_STRONG_THRESHOLD`` so
+    existing deployments are unchanged). Optionally also true for force-eligible BUYs with
+    ``upside_pct >= X_SIGNAL_ROTATION_MIN_UPSIDE_PCT`` when that env is > 0.
+    """
+    cs = _cs_mod()
+    fe_cfg = cs._load_followed_equities_json_dict()
+    if not bool(fe_cfg.get("enabled", True)):
+        return False
+    min_strength = cs._effective_equity_signal_min(fe_cfg)
+    strong_thr = float(cs.X_SIGNAL_STRONG_THRESHOLD)
+    rot_thr = float(getattr(cs, "X_SIGNAL_ROTATION_PRIORITY_THRESHOLD", X_SIGNAL_ROTATION_PRIORITY_THRESHOLD))
+    fe_thr = float(cs.X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD)
+    rot_min_upside = float(getattr(cs, "X_SIGNAL_ROTATION_MIN_UPSIDE_PCT", X_SIGNAL_ROTATION_MIN_UPSIDE_PCT))
+    assets_seq = cs.X_SIGNAL_EQUITY_TRADER.load_followed_equities()
+    _, eligible = _sorted_and_eligible_equities(
+        assets_seq,
+        min_strength,
+        strong_thr,
+        force_high_conviction=X_SIGNAL_FORCE_HIGH_CONVICTION,
+        high_conviction_threshold=X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD,
+        force_eligible_threshold=fe_thr,
+    )
+    eligible = _filter_x_signal_quality_noise(eligible, force_eligible_threshold=fe_thr)
+    for a in eligible:
+        sig = float(a.signal_strength)
+        if sig <= 0:
+            continue
+        if sig >= rot_thr:
+            return True
+        if rot_min_upside > 0.0 and sig >= fe_thr:
+            up = float(a.upside_pct) if isinstance(a.upside_pct, (int, float)) else 0.0
+            if up >= rot_min_upside:
+                return True
+    return False
 
 
 def ensure_usdc_for_x_signal(min_usdc: float = 8.0, min_wmatic_value: float = 15.0, force: bool = False) -> bool:
@@ -783,6 +903,13 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
         high_conviction_threshold=high_conviction_threshold,
         force_eligible_threshold=force_eligible_thr,
     )
+    pre_filter_n = len(eligible)
+    eligible = _filter_x_signal_quality_noise(eligible, force_eligible_threshold=force_eligible_thr)
+    if pre_filter_n != len(eligible):
+        print(
+            f"{runtime._nanolog()}X-SIGNAL quality filter | kept={len(eligible)}/{pre_filter_n} "
+            f"(Signal-Driven Rotation)"
+        )
     eligible_count = len(eligible)
     high_conviction = bool(cfg_enabled) and any(
         float(a.signal_strength) >= high_conviction_threshold for a in eligible if float(a.signal_strength) > 0
@@ -1067,6 +1194,12 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                 plans.append((decision, float(a.signal_strength), sym))
             else:
                 block = plan_block or "unknown"
+                _log_x_signal_decision(
+                    sym,
+                    "REJECT",
+                    str(block),
+                    signal=float(a.signal_strength),
+                )
                 print(
                     f"{runtime._nanolog()}X-SIGNAL PLAN SKIPPED | {sym} | signal={float(a.signal_strength):.3f} | "
                     f"reason={block}"
@@ -1097,6 +1230,13 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
             decision = plans[0][0]
             _winner_sig = float(plans[0][1])
             _winner_sym = str(plans[0][2])
+            _log_x_signal_decision(
+                _winner_sym,
+                "ACCEPT",
+                "plan_selected",
+                signal=_winner_sig,
+                extra=f"direction={decision.direction} candidates={len(plans)}",
+            )
             print(
                 f"{runtime._nanolog()}X-SIGNAL PLAN SELECTED | {_winner_sym} | "
                 f"direction={decision.direction} | signal={_winner_sig:.3f} | "
@@ -1147,6 +1287,12 @@ def evaluate_x_signal_equity_trade(
         strong_thr,
         force_high_conviction=force_high_conviction,
         high_conviction_threshold=high_conviction_threshold,
+        force_eligible_threshold=force_eligible_thr,
+    )
+    if not eligible:
+        return None
+    eligible = _filter_x_signal_quality_noise(
+        eligible,
         force_eligible_threshold=force_eligible_thr,
     )
     if not eligible:

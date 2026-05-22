@@ -123,6 +123,8 @@ FIXED_TRADE_USD_MIN = reconcile_fixed_trade_min(MIN_TRADE_USD, _FIXED_TRADE_USD_
 FIXED_TRADE_USD_MAX = env_float("FIXED_TRADE_USD_MAX", 10.0)
 TRAILING_STOP_PCT = env_float("TRAILING_STOP_PCT", 5.0)
 TAKE_PROFIT_PCT = env_float("TAKE_PROFIT_PCT", 5.0)
+# v1 quality filter: minimum estimated net edge (% of notional after gas) for X-Signal / main entry trades.
+MIN_NET_EDGE_PCT = env_float("MIN_NET_EDGE_PCT", 1.75)
 STRONG_SIGNAL_TP = env_float("STRONG_SIGNAL_TP", 12.0)
 TAKE_PROFIT_SELL_PCT = env_float("TAKE_PROFIT_SELL_PCT", 0.45)
 STRONG_TP_SELL_PCT = env_float("STRONG_TP_SELL_PCT", 0.60)
@@ -141,10 +143,20 @@ X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD = env_float(
     HIGH_CONVICTION_THRESHOLD,
 )
 X_SIGNAL_STRONG_THRESHOLD = env_float("X_SIGNAL_STRONG_THRESHOLD", HIGH_CONVICTION_THRESHOLD)
+# Signal-Driven Rotation (May 2026): cycle precedence / main deferral only — defaults to strong bar (no change unless set lower).
+X_SIGNAL_ROTATION_PRIORITY_THRESHOLD = env_float(
+    "X_SIGNAL_ROTATION_PRIORITY_THRESHOLD",
+    X_SIGNAL_STRONG_THRESHOLD,
+)
+# Optional: force-eligible BUY also triggers rotation when upside_pct meets this (0 = strength-only).
+X_SIGNAL_ROTATION_MIN_UPSIDE_PCT = env_float("X_SIGNAL_ROTATION_MIN_UPSIDE_PCT", 0.0)
 X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD = env_float(
     "X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD",
     X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD,
 )
+# Quality filter (0 disables): drop non-force-eligible assets below actionable strength / upside.
+X_SIGNAL_MIN_ACTIONABLE_STRENGTH = env_float("X_SIGNAL_MIN_ACTIONABLE_STRENGTH", 0.0)
+X_SIGNAL_MIN_UPSIDE_PCT_FOR_WEAK = env_float("X_SIGNAL_MIN_UPSIDE_PCT_FOR_WEAK", 0.0)
 X_SIGNAL_HIGH_CONVICTION_PREP_MIN_USDC = env_float("X_SIGNAL_HIGH_CONVICTION_PREP_MIN_USDC", 8.0)
 X_SIGNAL_HIGH_CONVICTION_PREP_MIN_WMATIC = env_float("X_SIGNAL_HIGH_CONVICTION_PREP_MIN_WMATIC", 12.0)
 FOLLOWED_EQUITIES_PATH = env_str("FOLLOWED_EQUITIES_PATH", "followed_equities.json")

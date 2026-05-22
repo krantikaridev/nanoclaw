@@ -6,7 +6,7 @@ import asyncio
 import importlib
 import time
 from dataclasses import replace
-from typing import Optional
+from typing import Callable, Optional
 
 import config as cfg
 from config import (
@@ -45,6 +45,100 @@ _DEFENSIVE_PAUSE_CYCLES = 3
 
 # Entry directions blocked when ``control.json`` has ``paused: true`` (protection exits still run).
 _CONTROL_PAUSE_BLOCK_ENTRIES = frozenset({"USDT_TO_WMATIC", "USDC_TO_WMATIC", "USDC_TO_EQUITY"})
+
+# v1 minimum quality filter — first step toward rejecting low-edge entries after gas/fees.
+# Floor from env ``MIN_NET_EDGE_PCT`` (see config.py / .env.example); future learning can tune from history.
+_MIN_NET_EDGE_ENTRY_DIRECTIONS = frozenset({"USDC_TO_EQUITY", "USDT_TO_WMATIC"})
+_EST_SWAP_GAS_UNITS = 180_000.0
+
+
+def _estimate_swap_gas_cost_usd(gas_gwei: float) -> float:
+    """Rough Polygon ERC-20 swap gas cost in USD (matches signal_equity_trader estimate)."""
+    pol_price_usd = max(0.0, float(getattr(cfg, "POL_USD_PRICE", 0.0)))
+    return max(0.0, (float(gas_gwei) * _EST_SWAP_GAS_UNITS / 1_000_000_000.0) * pol_price_usd)
+
+
+def _infer_expected_gross_edge_pct(decision: TradeDecision) -> float:
+    """Conservative gross upside % before gas — v1 heuristic, not a live quote."""
+    direction = str(decision.direction or "").strip().upper()
+    if direction == "USDC_TO_EQUITY":
+        strong_tp = float(cfg.env_float("X_SIGNAL_EQUITY_STRONG_TP_PCT", 12.0))
+        strength = decision.signal_strength
+        if strength is not None and float(strength) > 0:
+            s = abs(float(strength))
+            if s < 0.6:
+                scale = 0.25
+            else:
+                scale = max(0.25, min(1.0, (s - 0.6) / 0.4))
+            return max(strong_tp * 0.25, strong_tp * scale)
+        return max(0.0, strong_tp)
+    if direction == "USDT_TO_WMATIC":
+        return max(0.0, float(getattr(cfg, "TAKE_PROFIT_PCT", 5.0)))
+    return 0.0
+
+
+def estimate_expected_net_edge_pct(
+    *,
+    trade_usd: float,
+    expected_gross_edge_pct: float,
+    gas_cost_usd: float,
+) -> float:
+    """Net expected return % of notional after subtracting estimated gas from gross edge."""
+    notional = float(trade_usd)
+    if notional <= 0.0:
+        return -100.0
+    gross_profit_usd = notional * (float(expected_gross_edge_pct) / 100.0)
+    net_profit_usd = gross_profit_usd - max(0.0, float(gas_cost_usd))
+    return (net_profit_usd / notional) * 100.0
+
+
+def trade_passes_min_net_edge(
+    decision: TradeDecision,
+    *,
+    trade_usd: float,
+    gas_gwei: float,
+    min_net_edge_pct: float | None = None,
+) -> tuple[bool, float]:
+    """Return (passes, expected_net_pct) for X-Signal and main-strategy entry directions."""
+    direction = str(decision.direction or "").strip().upper()
+    if direction not in _MIN_NET_EDGE_ENTRY_DIRECTIONS:
+        return True, 0.0
+    gross_pct = _infer_expected_gross_edge_pct(decision)
+    gas_usd = _estimate_swap_gas_cost_usd(float(gas_gwei))
+    expected_net = estimate_expected_net_edge_pct(
+        trade_usd=float(trade_usd),
+        expected_gross_edge_pct=gross_pct,
+        gas_cost_usd=gas_usd,
+    )
+    floor = float(
+        getattr(cfg, "MIN_NET_EDGE_PCT", 1.75) if min_net_edge_pct is None else min_net_edge_pct
+    )
+    return expected_net + 1e-9 >= floor, expected_net
+
+
+def _reject_if_low_expected_net_edge(
+    decision: TradeDecision,
+    *,
+    trade_usd: float | None,
+    gas_gwei: float,
+    log_skip: Callable[[str], None],
+) -> bool:
+    """Log and return True when the entry should be blocked for low expected net edge."""
+    if trade_usd is None:
+        return False
+    passes, expected_net = trade_passes_min_net_edge(
+        decision,
+        trade_usd=float(trade_usd),
+        gas_gwei=float(gas_gwei),
+    )
+    if passes:
+        return False
+    min_floor = float(getattr(cfg, "MIN_NET_EDGE_PCT", 1.75))
+    log_skip(
+        f"low_expected_edge (expected_net={expected_net:.2f}% < {min_floor:.2f}%)"
+    )
+    print(f"[nanoclaw] Trade rejected | Low edge | expected_net={expected_net:.2f}%")
+    return True
 
 
 def _usdc_copy_strategy_with_pct(strategy: USDCopyStrategy, pct: float) -> USDCopyStrategy:
@@ -238,11 +332,13 @@ def select_main_strategy_trade(
     trade_size = min(trade_size, balances.usdt)
     wmatic_value_usd = balances.wmatic * current_price
 
-    # Signal-Driven Rotation (May 2026): do not lock USDT into WMATIC when a strong X-Signal BUY is live.
-    strong_buy = getattr(cs, "_strong_x_signal_buy_present", signal_module.strong_buy_detector)
+    # Signal-Driven Rotation (May 2026): do not lock USDT into WMATIC when rotation-priority X BUY is live.
+    rotation_buy = getattr(
+        cs, "_rotation_priority_buy_present", signal_module.rotation_priority_detector
+    )
     if (
         bool(getattr(cs, "ENABLE_X_SIGNAL_EQUITY", False))
-        and bool(strong_buy())
+        and bool(rotation_buy())
         and balances.usdt >= MAIN_STRATEGY_MIN_USDT_RESERVE
         and MAIN_STRATEGY_CUT_LOSS_WMATIC_USD < wmatic_value_usd < MAIN_STRATEGY_TP_TRIGGER_WMATIC_USD
     ):
@@ -705,11 +801,13 @@ def _profit_take_balance_relief_bypass_allowed(
 
 
 def _signal_driven_rotation_x_signal_first() -> bool:
-    """Signal-Driven Rotation (May 2026): strong external BUY → X-Signal before WMATIC exits."""
+    """Signal-Driven Rotation (May 2026): rotation-priority external BUY → X-Signal before WMATIC exits."""
     cs = _facade()
     if not bool(getattr(cs, "ENABLE_X_SIGNAL_EQUITY", False)):
         return False
-    detector = getattr(cs, "_strong_x_signal_buy_present", signal_module.strong_buy_detector)
+    detector = getattr(
+        cs, "_rotation_priority_buy_present", signal_module.rotation_priority_detector
+    )
     return bool(detector())
 
 
@@ -926,7 +1024,7 @@ def determine_trade_decision(
     print(
         "🔍 DECISION PATH | precedence: PROTECTION → "
         + (
-            "X_SIGNAL_EQUITY (strong BUY — Signal-Driven Rotation) → PROFIT_TAKE → "
+            "X_SIGNAL_EQUITY (rotation-priority BUY — Signal-Driven Rotation) → PROFIT_TAKE → "
             if x_signal_rotation_first
             else "PROFIT_TAKE → X_SIGNAL_EQUITY → "
         )
@@ -1226,6 +1324,16 @@ async def main(*, dry_run: bool = False) -> None:
                 )
                 return
 
+        gas_status = cs.get_gas_status()
+        gas_gwei_edge = float(gas_status.get("gas_gwei") or 0.0)
+        if _reject_if_low_expected_net_edge(
+            decision,
+            trade_usd=decision_notional_usd,
+            gas_gwei=gas_gwei_edge,
+            log_skip=cs._log_trade_skipped,
+        ):
+            return
+
         if dry_run:
             print(f"🧪 DRY RUN: would execute {decision.direction} for amount_in={decision.amount_in}")
             return
@@ -1249,7 +1357,6 @@ async def main(*, dry_run: bool = False) -> None:
                 )
                 return
 
-        gas_status = cs.get_gas_status()
         if not gas_status["ok"]:
             gas_gwei = float(gas_status.get("gas_gwei") or 0.0)
             if gas_gwei <= 400.0:

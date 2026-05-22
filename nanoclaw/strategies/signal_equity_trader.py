@@ -61,6 +61,8 @@ _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD_BASE = 12.0
 def _x_signal_min_effective_trade_usd(signal_strength: float) -> float:
     """Effective notional (after gas) required for USDC→equity BUY; scales with |signal|."""
     s = abs(float(signal_strength))
+    if s >= float(_X_SIGNAL_VERY_STRONG_STRENGTH):
+        return _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD_BASE
     if s >= _X_SIGNAL_HIGH_CONVICTION_STRENGTH:
         return _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD_BASE
     if s >= float(_X_SIGNAL_VERY_STRONG_STRENGTH) - 0.10:  # 0.80 tier
@@ -98,6 +100,8 @@ class FollowedEquity:
     earnings_days: Optional[float] = None
     current_price_usd: Optional[float] = None
     upside_pct: Optional[float] = None
+    # Signal-Driven Rotation (May 2026): optional 0–1 score for plan ordering (higher = prefer).
+    track_record_score: Optional[float] = None
 
 
 @dataclass
@@ -398,6 +402,15 @@ class SignalEquityTrader:
             current_price_f = float(current_price) if current_price is not None else None
             up = item.get("upside_pct", None)
             upside_f = float(up) if up is not None else None
+            tr_raw = item.get("track_record_score", item.get("recent_hit_rate", None))
+            track_record_score = None
+            if tr_raw is not None:
+                try:
+                    tr_f = float(tr_raw)
+                    if 0.0 <= tr_f <= 1.0:
+                        track_record_score = tr_f
+                except Exception:
+                    track_record_score = None
             out.append(
                 FollowedEquity(
                     symbol=symbol,
@@ -408,6 +421,7 @@ class SignalEquityTrader:
                     earnings_days=earnings_days_f,
                     current_price_usd=current_price_f,
                     upside_pct=upside_f,
+                    track_record_score=track_record_score,
                 )
             )
         return out
@@ -611,6 +625,28 @@ class SignalEquityTrader:
             return max(base_threshold, float(self._LIMITED_USDC_FORCE_ELIGIBLE_THRESHOLD))
         return base_threshold
 
+    @staticmethod
+    def _x_signal_dynamic_lo_hi(usdc_balance: float, signal_strength: float) -> tuple[float, float]:
+        """Signal-Driven Rotation (May 2026): env-driven bounds before signal interpolation."""
+        from modules import runtime as rt
+
+        lo = max(float(rt.FIXED_TRADE_USD_MIN), 8.0)
+        hi = max(float(rt.FIXED_TRADE_USD_MAX), 12.0)
+        tier_high = float(cfg.env_float("X_SIGNAL_DYNAMIC_TIER_HIGH_MIN", 0.90))
+        usdc_high = float(cfg.env_float("X_SIGNAL_DYNAMIC_USDC_GTE_TIER_HIGH", 20.0))
+        usdc_fe = float(cfg.env_float("X_SIGNAL_DYNAMIC_USDC_GTE_FORCE_ELIGIBLE", 15.0))
+        usdc_low = float(cfg.env_float("X_SIGNAL_DYNAMIC_USDC_BELOW_FORCE_ELIGIBLE", 12.0))
+        usdc = float(usdc_balance)
+        s_abs = abs(float(signal_strength))
+        if usdc + 1e-9 < usdc_fe:
+            hi = min(hi, max(lo, usdc_low))
+            lo = min(lo, max(8.0, usdc_low - 2.0))
+        elif s_abs + 1e-9 >= tier_high and usdc + 1e-9 >= usdc_high:
+            hi = max(hi, usdc_high)
+        if hi < lo:
+            lo, hi = hi, lo
+        return lo, hi
+
     def _compute_trade_size(
         self,
         usdc_balance: float,
@@ -620,13 +656,7 @@ class SignalEquityTrader:
         symbol: str = "",
     ) -> float:
         """USD size between FIXED_TRADE_USD_MIN/MAX (runtime), scaled by |signal| vs strong threshold; capped by USDC."""
-        from modules import runtime as rt
-
-        # Keep strategy dynamic but never in the gas-killed micro-trade band.
-        lo = max(float(rt.FIXED_TRADE_USD_MIN), 8.0)
-        hi = max(float(rt.FIXED_TRADE_USD_MAX), 12.0)
-        if hi < lo:
-            lo, hi = hi, lo
+        lo, hi = self._x_signal_dynamic_lo_hi(usdc_balance, signal_strength)
         thr = float(self.config.strong_signal_threshold)
         s_abs = abs(float(signal_strength))
         if thr >= 1.0:
