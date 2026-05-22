@@ -757,13 +757,13 @@ _MAIN_STRATEGY_MODERATE_WMATIC_USD_THRESHOLD = 15.0
 _MAIN_STRATEGY_LOW_WMATIC_P2_WM_MIN_USD = 1.75
 _MAIN_STRATEGY_LOW_WMATIC_P2_SIGNAL_MIN = 0.45
 _MAIN_STRATEGY_LOW_WMATIC_FORCE_WM_MIN_USD = 1.75
-_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN = 2
+_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN = 1
 _MAIN_STRATEGY_MODERATE_P2_WM_MIN_USD = 4.0
 _MAIN_STRATEGY_MODERATE_P2_SIGNAL_MIN = 0.50
 _MAIN_STRATEGY_MODERATE_FORCE_WM_MIN_USD = 4.0
 _MAIN_STRATEGY_MODERATE_FORCE_CYCLES_MIN = 3
 # Long idle: many cycles without WMATIC→stable profit — allow micro rotation / force (gas-safe floor).
-_MAIN_STRATEGY_LONG_IDLE_CYCLES_LOW = 5
+_MAIN_STRATEGY_LONG_IDLE_CYCLES_LOW = 3
 _MAIN_STRATEGY_LONG_IDLE_CYCLES_MODERATE = 6
 _MAIN_STRATEGY_LONG_IDLE_CYCLES_HEALTHY = 8
 _MAIN_STRATEGY_LONG_IDLE_NOTIONAL_FLOOR_USD = 1.35
@@ -781,11 +781,11 @@ _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_LOW_WM_MIN_SIGNAL = 0.60
 _MAIN_STRATEGY_IDLE_ROTATION_SELL_FRACTION_LOW = 0.35
 _MAIN_STRATEGY_IDLE_ROTATION_NOTIONAL_FLOOR_LOW = 1.35
 # May 2026: mild unrealized loss on small WMATIC stack — controlled rotation (reversible).
-_MAIN_STRATEGY_MILD_LOSS_IDLE_GAIN_MIN_PCT = -8.0
-_MAIN_STRATEGY_MILD_LOSS_IDLE_GAIN_MAX_PCT = -2.5
+_MAIN_STRATEGY_MILD_LOSS_IDLE_GAIN_MIN_PCT = -7.0
+_MAIN_STRATEGY_MILD_LOSS_IDLE_GAIN_MAX_PCT = -1.0
 _MAIN_STRATEGY_MILD_LOSS_IDLE_WM_MIN_USD = 5.0
 _MAIN_STRATEGY_MILD_LOSS_IDLE_WM_MAX_USD = 8.0
-_MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN = 2
+_MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN = 1
 _MAIN_STRATEGY_MILD_LOSS_IDLE_NOTIONAL_FLOOR_USD = 1.25
 _MAIN_STRATEGY_MILD_LOSS_IDLE_SELL_FRACTION = 0.30
 _MAIN_STRATEGY_MILD_LOSS_IDLE_MAX_NOTIONAL_USD = 2.25
@@ -798,6 +798,10 @@ _MAIN_STRATEGY_IDLE_ROTATION_ALLOWED_LOG = (
     "[nanoclaw] MAIN_STRATEGY small idle rotation ALLOWED | "
     "wmatic_usd=${wm:.2f} | notional≈${notional:.2f} | cycles_since_exit={cycles} | "
     "path={path} | gain_pct={gain}"
+)
+_MAIN_STRATEGY_SMALL_IDLE_ROTATION_TRIGGERED_LOG = (
+    "[Main Strategy] Small idle rotation triggered | WMATIC=${wm:.2f} | "
+    "notional=${notional:.2f} | reason={reason}"
 )
 _MAIN_STRATEGY_STATUS_LOG = "[nanoclaw] MAIN_STRATEGY_STATUS"
 _MAIN_STRATEGY_OUTCOME_LOG = "[nanoclaw] MAIN_STRATEGY_OUTCOME"
@@ -834,7 +838,7 @@ def _profit_take_gain_metric_boost(gain_pct: float, peak_gain_pct: float) -> flo
 
 
 def _profit_take_mild_loss_gain_pct(profit_signal: dict | None) -> float | None:
-    """Return gain_pct when open trade is HOLD in the mild-loss rotation band (~-5% to -6%)."""
+    """Return gain_pct when open trade is HOLD in the mild-loss rotation band (~-7% to -1%)."""
     if profit_signal is None:
         return None
     if str(profit_signal.get("reason") or "").strip().upper() != "HOLD":
@@ -1181,6 +1185,19 @@ def _main_strategy_stable_rotation_fallback_params(
     )
 
 
+def _main_strategy_idle_cycles_required(
+    wm_equiv_usd: float,
+    *,
+    mild_loss_idle: bool,
+) -> int:
+    """Idle cycles before WMATIC→stable micro rotation (tiered; mild-loss / $5–$8 fast path)."""
+    if mild_loss_idle:
+        return int(_MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN)
+    if _wmatic_in_small_rotation_value_band(wm_equiv_usd):
+        return int(_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN)
+    return _profit_take_force_cycles_min(wm_equiv_usd)
+
+
 def _main_strategy_idle_rotation_sell_fraction(
     wm_equiv_usd: float,
     *,
@@ -1216,10 +1233,9 @@ def _main_strategy_idle_rotation_eligibility(
         force_wm_min = min(force_wm_min, float(_MAIN_STRATEGY_MILD_LOSS_IDLE_WM_MIN_USD))
     if wm_equiv + 1e-9 < force_wm_min:
         return False, f"wmatic_below_force_floor_${force_wm_min:.2f}"
-    cycles_min = (
-        int(_MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN)
-        if mild_loss_idle
-        else _profit_take_force_cycles_min(wm_equiv)
+    cycles_min = _main_strategy_idle_cycles_required(
+        wm_equiv,
+        mild_loss_idle=mild_loss_idle,
     )
     if cycles < cycles_min:
         return False, f"idle_cycles={cycles}/{cycles_min}"
@@ -1272,8 +1288,8 @@ def _main_strategy_idle_rotation_sell_decision(
     )
     notional = wm_equiv * fraction
     tier = _profit_take_stack_tier(wm_equiv)
-    reason = (
-        "mild_loss_idle_rotation"
+    rotation_reason = (
+        "recover_mild_loss"
         if mild_loss_idle
         else "low_wmatic_idle_rotation"
         if tier == "low"
@@ -1306,6 +1322,14 @@ def _main_strategy_idle_rotation_sell_decision(
         f"mild_loss_idle={mild_loss_idle} | gain_pct={gain_pct if gain_pct is not None else 'n/a'} | "
         f"sell_fraction={fraction:.2f} | notional≈${notional:.2f} | note={note}"
     )
+    if mild_loss_idle:
+        print(
+            _MAIN_STRATEGY_SMALL_IDLE_ROTATION_TRIGGERED_LOG.format(
+                wm=wm_equiv,
+                notional=notional,
+                reason="recover_mild_loss",
+            )
+        )
     if mild_loss_idle and gain_pct is not None:
         print(
             _MAIN_STRATEGY_MILD_LOSS_IDLE_LOG.format(
@@ -1322,7 +1346,7 @@ def _main_strategy_idle_rotation_sell_decision(
         )
     decision_log.log_main_strategy_decision(
         action="TAKE",
-        reason=reason,
+        reason=rotation_reason,
         direction="WMATIC_TO_USDT",
         notional_usd=notional,
         wmatic_balance=float(balances.wmatic),
@@ -1522,7 +1546,7 @@ def _profit_take_force_small_relief_eligible(
     )
     cycles_min = _profit_take_force_cycles_min(wm_equiv_usd)
     if _main_strategy_mild_loss_idle_context(profit_signal, wm_equiv_usd, cycles_since_exit):
-        cycles_min = max(cycles_min, int(_MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN))
+        cycles_min = min(cycles_min, int(_MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN))
         floor_usd = min(floor_usd, float(_MAIN_STRATEGY_MILD_LOSS_IDLE_NOTIONAL_FLOOR_USD))
     if wm_equiv_usd + 1e-9 < force_wm_min:
         return False
