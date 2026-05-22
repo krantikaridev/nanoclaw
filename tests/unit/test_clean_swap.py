@@ -552,6 +552,7 @@ def test_determine_trade_decision_prioritizes_profit_take_over_xsignal(monkeypat
     )
     monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
     monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(clean_swap, "_strong_x_signal_buy_present", lambda: False)
 
     sentinel = clean_swap.TradeDecision(direction="WMATIC_TO_USDT", amount_in=456, message="profit")
     monkeypatch.setattr(clean_swap, "build_profit_exit_decision", lambda *_args, **_kwargs: sentinel)
@@ -570,6 +571,42 @@ def test_determine_trade_decision_prioritizes_profit_take_over_xsignal(monkeypat
     )
 
     assert out is sentinel
+
+
+def test_determine_trade_decision_signal_rotation_xsignal_before_profit_take(monkeypatch, capsys):
+    """Signal-Driven Rotation (May 2026): strong X BUY runs before WMATIC profit-take."""
+    monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))
+    monkeypatch.setattr(clean_swap, "MIN_TRADE_USD", 0.0)
+    monkeypatch.setattr(
+        clean_swap,
+        "evaluate_take_profit",
+        lambda *_args, **_kwargs: (True, {"reason": "TP_HIT", "message": "tp", "sell_fraction": 0.45}),
+    )
+    monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(clean_swap, "_strong_x_signal_buy_present", lambda: True)
+
+    profit_sentinel = clean_swap.TradeDecision(direction="WMATIC_TO_USDT", amount_in=456, message="profit")
+    monkeypatch.setattr(clean_swap, "build_profit_exit_decision", lambda *_args, **_kwargs: profit_sentinel)
+
+    x_sentinel = clean_swap.TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=25_000_000,
+        trade_size=25.0,
+        message="x-signal rotation",
+    )
+    monkeypatch.setattr(clean_swap, "try_x_signal_equity_decision", lambda *_args, **_kwargs: x_sentinel)
+
+    out = clean_swap.determine_trade_decision(
+        state={},
+        balances=clean_swap.Balances(usdt=10.0, wmatic=5.0, pol=1.0, usdc=30.0),
+        current_price=1.0,
+    )
+
+    captured = capsys.readouterr().out
+    assert out is x_sentinel
+    assert "Signal-Driven Rotation" in captured
+    assert "X_SIGNAL_EQUITY (strong BUY" in captured
 
 
 def test_determine_trade_decision_uses_xsignal_before_copy_and_main(monkeypatch):

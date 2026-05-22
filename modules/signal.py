@@ -297,17 +297,39 @@ def _order_eligible_x_signal_candidates(
     *,
     per_asset_cooldown_seconds: int,
 ) -> list[FollowedEquity]:
+    """Signal-Driven Rotation (May 2026): cooldown-ready, then conviction tier, then |signal|."""
     cs = _cs_mod()
     seq = list(eligible)
-    if not cs.X_SIGNAL_EQUITY_COOLDOWN_FIRST_SORT:
-        return sorted(seq, key=lambda a: -abs(float(a.signal_strength)))
+    fe_thr = float(getattr(cs, "X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD", X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD))
 
-    def sort_key(a: FollowedEquity) -> tuple[int, float]:
+    def conviction_tier(asset: FollowedEquity) -> int:
+        s = abs(float(asset.signal_strength))
+        if s >= fe_thr:
+            return 0
+        if s >= float(_X_SIGNAL_HIGH_CONVICTION_STRENGTH):
+            return 1
+        return 2
+
+    if not cs.X_SIGNAL_EQUITY_COOLDOWN_FIRST_SORT:
+        return sorted(
+            seq,
+            key=lambda a: (conviction_tier(a), -abs(float(a.signal_strength))),
+        )
+
+    def sort_key(a: FollowedEquity) -> tuple[int, int, float]:
         sym = str(a.symbol).strip()
         cooldown_ok = cs.can_trade_asset(sym, None, int(per_asset_cooldown_seconds))
-        return (0 if cooldown_ok else 1, -abs(float(a.signal_strength)))
+        return (
+            0 if cooldown_ok else 1,
+            conviction_tier(a),
+            -abs(float(a.signal_strength)),
+        )
 
     return sorted(seq, key=sort_key)
+
+
+# High-conviction floor used by plan ordering (matches signal_equity_trader).
+_X_SIGNAL_HIGH_CONVICTION_STRENGTH = 0.85
 
 
 def _facade_strong_buy_present() -> bool:
@@ -1042,14 +1064,44 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                     signal_strength=float(plan.signal_strength),
                     x_signal_gated_execution=bool(getattr(plan, "gated_enhanced_execution", False)),
                 )
-                plans.append((decision, float(a.signal_strength)))
+                plans.append((decision, float(a.signal_strength), sym))
             else:
-                logger.warning(f"PLAN FAILED for {sym}: {plan_block or 'unknown'}")
+                block = plan_block or "unknown"
+                print(
+                    f"{runtime._nanolog()}X-SIGNAL PLAN SKIPPED | {sym} | signal={float(a.signal_strength):.3f} | "
+                    f"reason={block}"
+                )
+                logger.warning("X-SIGNAL PLAN SKIPPED | %s | signal=%.3f | reason=%s", sym, float(a.signal_strength), block)
 
         if plans:
-            # BEST PLAN WINS (highest signal)
-            plans.sort(key=lambda x: x[1], reverse=True)
+            # Signal-Driven Rotation (May 2026): prefer high-conviction BUYs, then highest |signal|.
+            fe_pick = float(
+                getattr(tuned_trader.config, "force_eligible_threshold", X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD)
+            )
+
+            def _plan_pick_key(item: tuple) -> tuple:
+                dec, sig, _sym = item[0], float(item[1]), item[2]
+                s = abs(sig)
+                is_buy = str(dec.direction or "").strip().upper() == "USDC_TO_EQUITY"
+                if is_buy and s >= fe_pick:
+                    tier = 0
+                elif is_buy and s >= _X_SIGNAL_HIGH_CONVICTION_STRENGTH:
+                    tier = 1
+                elif is_buy:
+                    tier = 2
+                else:
+                    tier = 3
+                return (tier, -s)
+
+            plans.sort(key=_plan_pick_key)
             decision = plans[0][0]
+            _winner_sig = float(plans[0][1])
+            _winner_sym = str(plans[0][2])
+            print(
+                f"{runtime._nanolog()}X-SIGNAL PLAN SELECTED | {_winner_sym} | "
+                f"direction={decision.direction} | signal={_winner_sig:.3f} | "
+                f"candidates={len(plans)} (Signal-Driven Rotation)"
+            )
         else:
             decision = None
 

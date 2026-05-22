@@ -238,6 +238,22 @@ def select_main_strategy_trade(
     trade_size = min(trade_size, balances.usdt)
     wmatic_value_usd = balances.wmatic * current_price
 
+    # Signal-Driven Rotation (May 2026): do not lock USDT into WMATIC when a strong X-Signal BUY is live.
+    strong_buy = getattr(cs, "_strong_x_signal_buy_present", signal_module.strong_buy_detector)
+    if (
+        bool(getattr(cs, "ENABLE_X_SIGNAL_EQUITY", False))
+        and bool(strong_buy())
+        and balances.usdt >= MAIN_STRATEGY_MIN_USDT_RESERVE
+        and MAIN_STRATEGY_CUT_LOSS_WMATIC_USD < wmatic_value_usd < MAIN_STRATEGY_TP_TRIGGER_WMATIC_USD
+    ):
+        print(
+            f"{runtime._nanolog()}Signal-Driven Rotation: deferring USDT→WMATIC — "
+            "strong external X-Signal BUY takes capital priority over WMATIC accumulation"
+        )
+        return TradeDecision(
+            message="ℹ️ Main WMATIC buy deferred (strong X-Signal BUY — Signal-Driven Rotation)"
+        )
+
     if balances.usdt < MAIN_STRATEGY_MIN_USDT_RESERVE:
         return TradeDecision(
             direction="WMATIC_TO_USDT",
@@ -688,6 +704,15 @@ def _profit_take_balance_relief_bypass_allowed(
     return allowed
 
 
+def _signal_driven_rotation_x_signal_first() -> bool:
+    """Signal-Driven Rotation (May 2026): strong external BUY → X-Signal before WMATIC exits."""
+    cs = _facade()
+    if not bool(getattr(cs, "ENABLE_X_SIGNAL_EQUITY", False)):
+        return False
+    detector = getattr(cs, "_strong_x_signal_buy_present", signal_module.strong_buy_detector)
+    return bool(detector())
+
+
 def _wmatic_stable_p2_relief_override_active(
     decision: TradeDecision,
     *,
@@ -702,6 +727,12 @@ def _wmatic_stable_p2_relief_override_active(
     Calls ``_profit_take_balance_relief_bypass_allowed()`` before any dust defer or
     ``MIN_TRADE_USD`` gate. When True, caller must return the decision immediately.
     """
+    if _signal_driven_rotation_x_signal_first():
+        print(
+            f"{runtime._nanolog()}Signal-Driven Rotation: P2 WMATIC→stable deferred — "
+            "strong X-Signal BUY has cycle priority"
+        )
+        return False
     direction = str(decision.direction or "").strip().upper()
     if direction not in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:
         return False
@@ -891,9 +922,15 @@ def determine_trade_decision(
         f"WMATIC≈{(balances.wmatic * current_price):.2f} USD | POL={balances.pol:.4f} "
         f"| copy_targets={len(target_wallets_prelude)}"
     )
+    x_signal_rotation_first = _signal_driven_rotation_x_signal_first()
     print(
-        "🔍 DECISION PATH | precedence: "
-        "PROTECTION → PROFIT_TAKE → X_SIGNAL_EQUITY → USDC_COPY | POLYCOPY → MAIN_STRATEGY"
+        "🔍 DECISION PATH | precedence: PROTECTION → "
+        + (
+            "X_SIGNAL_EQUITY (strong BUY — Signal-Driven Rotation) → PROFIT_TAKE → "
+            if x_signal_rotation_first
+            else "PROFIT_TAKE → X_SIGNAL_EQUITY → "
+        )
+        + "USDC_COPY | POLYCOPY → MAIN_STRATEGY"
     )
     print(
         f"{runtime._nanolog()}Runtime config | TAKE_PROFIT_PCT={cs.TAKE_PROFIT_PCT:.2f} "
@@ -921,6 +958,51 @@ def determine_trade_decision(
             return protection_decision
 
     should_take_profit, profit_signal = cs_evaluate_take_profit(current_price, state)
+
+    def _resolve_x_signal_equity_decision() -> Optional[TradeDecision]:
+        if not cs.ENABLE_X_SIGNAL_EQUITY:
+            return None
+        xd_local = cs_try_x_signal_equity_decision(balances, dry_run=dry_run)
+        if (
+            pause_active
+            and xd_local
+            and xd_local.should_execute
+            and str(xd_local.direction or "").strip().upper() in {"USDC_TO_EQUITY"}
+        ):
+            cs._log_trade_skipped(
+                f"defensive_pause (risk=HIGH, remaining_cycles={pause_remaining}) — pausing X-signal BUY entries"
+            )
+            xd_local = None
+        xd_dir_local = str(xd_local.direction or "").strip().upper() if xd_local else ""
+        if (
+            entries_paused
+            and xd_local
+            and xd_local.should_execute
+            and xd_dir_local in _CONTROL_PAUSE_BLOCK_ENTRIES
+        ):
+            cs._log_trade_skipped("control.json paused=True — skipping X-signal entry trade")
+            xd_local = None
+        if xd_local and xd_local.should_execute:
+            print("🔍 DECISION PATH: X_SIGNAL_EQUITY")
+            x_dust_min = _x_signal_equity_effective_dust_min(balances)
+            if not _defer_if_dust(
+                xd_local,
+                branch_name="X_SIGNAL_EQUITY",
+                current_price_usd=current_price,
+                min_trade_usd=x_dust_min,
+            ):
+                return xd_local
+        return None
+
+    if x_signal_rotation_first:
+        xd_early = _resolve_x_signal_equity_decision()
+        if xd_early is not None:
+            return xd_early
+        print(
+            f"{runtime._nanolog()}Signal-Driven Rotation: no executable X-Signal plan — "
+            "falling through to WMATIC profit-take / main strategy"
+        )
+
     if should_take_profit and profit_signal and balances.wmatic > 0:
         print(f"🔍 DECISION PATH: PROFIT_TAKE ({profit_signal.get('reason','')})")
         profit_decision = cs_build_profit_exit_decision(profit_signal, balances.wmatic)
@@ -948,37 +1030,10 @@ def determine_trade_decision(
     if profit_signal and profit_signal["reason"] == "HOLD":
         print(f"📈 {profit_signal['message']}")
 
-    if cs.ENABLE_X_SIGNAL_EQUITY:
-        xd = cs_try_x_signal_equity_decision(balances, dry_run=dry_run)
-        if (
-            pause_active
-            and xd
-            and xd.should_execute
-            and str(xd.direction or "").strip().upper() in {"USDC_TO_EQUITY"}
-        ):
-            cs._log_trade_skipped(
-                f"defensive_pause (risk=HIGH, remaining_cycles={pause_remaining}) — pausing X-signal BUY entries"
-            )
-            xd = None
-        xd_dir = str(xd.direction or "").strip().upper() if xd else ""
-        if (
-            entries_paused
-            and xd
-            and xd.should_execute
-            and xd_dir in _CONTROL_PAUSE_BLOCK_ENTRIES
-        ):
-            cs._log_trade_skipped("control.json paused=True — skipping X-signal entry trade")
-            xd = None
-        if xd and xd.should_execute:
-            print("🔍 DECISION PATH: X_SIGNAL_EQUITY")
-            x_dust_min = _x_signal_equity_effective_dust_min(balances)
-            if not _defer_if_dust(
-                xd,
-                branch_name="X_SIGNAL_EQUITY",
-                current_price_usd=current_price,
-                min_trade_usd=x_dust_min,
-            ):
-                return xd
+    if not x_signal_rotation_first:
+        xd = _resolve_x_signal_equity_decision()
+        if xd is not None:
+            return xd
 
     target_wallets = target_wallets_prelude or cs.get_target_wallets()
     if is_copy_trading_enabled() and target_wallets:

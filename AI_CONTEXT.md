@@ -176,9 +176,11 @@ A prior thread noted **`portfolio_history.csv` as a transitional store** — acc
 
 ## Core strategy (`clean_swap.py` precedence)
 
-Protection → Profit take (`evaluate_take_profit`) → **X-Signal equities** (`try_x_signal_equity_decision`) → USDC copy → polycopy/target wallets → main USDT↔WMATIC logic.
+Default: Protection → Profit take (`evaluate_take_profit`) → **X-Signal equities** (`try_x_signal_equity_decision`) → USDC copy → polycopy/target wallets → main USDT↔WMATIC logic.
 
-Operational focus: correctness of this precedence, USDC liquidity for equity **buys**, and execution on Polygon **chain ID 137** only.
+**Signal-Driven Rotation (May 2026):** When a **strong external X-Signal BUY** is present (`strong_buy_detector()`), precedence shifts to **Protection → X-Signal → Profit take → …** so high-conviction external intelligence rotates capital before WMATIC profit-taking. Main-strategy **USDT→WMATIC** accumulation is deferred in the “hold” band when a strong BUY is live; P2 small WMATIC→stable relief is also deferred so the cycle can execute the X-Signal plan first. Goal: faster, hours-to-2-day rotation driven by X signals instead of long WMATIC-centric accumulation.
+
+Operational focus: USDC liquidity for equity **buys**, conviction-tier plan ordering, and execution on Polygon **chain ID 137** only.
 
 ## Execution & observability
 
@@ -205,13 +207,14 @@ Operational focus: correctness of this precedence, USDC liquidity for equity **b
 - **`USDCopyStrategy`**: Mirrors USDC→WMATIC from followed wallets without marking cooldown until swap success.
 - **`evaluate_x_signal_equity_trade`** uses the **same eligibility and sort order** as `try_x_signal_equity_decision` (silent helper for tooling/tests).
 
-## Temporary Safeguards for +ve PnL Path (May 2026)
+## Signal-Driven Rotation & temporary safeguards (May 2026)
 
-- **X-SIGNAL Minimum Size Gate** (temporary): `_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD = 18.0`
-  - Only high-conviction X-SIGNAL buys above this effective size are allowed.
-  - Raised from 15.0 → 18.0 because trades around ~$11 were still failing too often with STF on the fallback router → high gas waste.
-  - Temporary until execution improves or capital rotation increases.
-- **X-SIGNAL gated-trade enhanced execution** (TEMPORARY — 48-hour sprint): USDC→equity BUYs that pass `_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD` (**$18** effective after gas) set `gated_enhanced_execution` on the plan and `x_signal_gated_execution` on `TradeDecision`. At swap time, `modules/swap_executor._resolve_x_signal_enhanced_fallback_execution` applies fallback-router slippage **9000 / 12000 bps** (`X_SIGNAL_GATED_TRADE_*` env) plus `min_out` buffer (`X_SIGNAL_GATED_TRADE_MIN_OUT_EXTRA_BPS`, default **75**). Scoped to gated BUYs only (small high-conviction path ≤$12 uses separate slippage, no min_out extra). Logs: plan `[nanoclaw-av] X-SIGNAL gated trade eligible — enhanced execution on swap` (includes bps); swap `[nanoclaw-av] X-SIGNAL enhanced execution active (48h sprint) | gated BUY`; router `[nanoclaw] [FALLBACK ROUTER] X-SIGNAL gated min_out buffer applied`. Goal: higher fill rate on allowed X-SIGNAL trades during the sprint.
+Directional shift: reduce WMATIC-centric main-strategy dominance; prioritize **external X-Signal** capital rotation (shorter holds, opportunistic entries).
+
+- **X-SIGNAL dynamic minimum effective size** (`nanoclaw/strategies/signal_equity_trader.py`): base **$12** effective after gas for `|signal| ≥ 0.85`; **$14** at `≥ 0.80`; **$15** below that. High-conviction bypass still allows **$7** effective when `|signal| ≥ 0.85` (checked **before** the dynamic gate). Logs: `[nanoclaw] X-SIGNAL skipped | below min effective size gate | … (Signal-Driven Rotation)` or `[nanoclaw-av] X-SIGNAL effective size allowed (high conviction bypass)`.
+- **X-SIGNAL plan ordering** (`modules/signal.py`): eligible assets sorted by cooldown-ready → conviction tier → `|signal|`; winner prefers force-eligible / high-conviction **BUY** plans. Logs: `X-SIGNAL PLAN SKIPPED | … reason=…`, `X-SIGNAL PLAN SELECTED | …`.
+- **Precedence override** (`modules/swap_executor.py`): strong X BUY → X-Signal before profit-take; P2 relief and main USDT→WMATIC buy deferred when rotation is active.
+- **X-SIGNAL gated-trade enhanced execution** (TEMPORARY — 48-hour sprint): USDC→equity BUYs that pass the dynamic effective gate set `gated_enhanced_execution` on the plan and `x_signal_gated_execution` on `TradeDecision`. At swap time, `modules/swap_executor._resolve_x_signal_enhanced_fallback_execution` applies fallback-router slippage **9000 / 12000 bps** (`X_SIGNAL_GATED_TRADE_*` env) plus `min_out` buffer (`X_SIGNAL_GATED_TRADE_MIN_OUT_EXTRA_BPS`, default **75**). Scoped to gated BUYs only (small high-conviction path ≤$12 uses separate slippage, no min_out extra). Logs: plan `[nanoclaw-av] X-SIGNAL gated trade eligible — enhanced execution on swap`; swap `[nanoclaw-av] X-SIGNAL enhanced execution active (48h sprint) | gated BUY`; router `[nanoclaw] [FALLBACK ROUTER] X-SIGNAL gated min_out buffer applied`.
 
 - **P2 Profit-Take Relief** (TEMPORARY SPRINT FIX — May 2026; revert after sprint window):
   - `_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 7.0` — total WMATIC stack must be ≥ ~$7 USD equiv (trade notional may still be small).

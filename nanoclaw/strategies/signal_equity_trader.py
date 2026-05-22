@@ -52,11 +52,24 @@ _X_SIGNAL_MIN_SIZE_OVERRIDE = 7.5
 # TEMPORARY: Allow slightly smaller effective size for high-conviction X-SIGNAL
 _X_SIGNAL_MIN_EFFECTIVE_OVERRIDE = 7.0
 
-# TEMPORARY (48-hour sprint): Minimum effective trade size for X-SIGNAL equity buys.
-# Raised from 15.0 → 18.0 to improve success rate on fallback router.
-# Buys that pass this gate use enhanced on-chain execution (9000/12000 bps fallback slippage
-# + min_out buffer) in modules/swap_executor.py — see gated_enhanced_execution on EquityTradePlan.
-_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD = 18.0
+# Signal-Driven Rotation (May 2026): dynamic effective-size floor for X-SIGNAL equity BUYs.
+# Base lowered from 18.0 → 12.0 so high-conviction external signals rotate capital faster;
+# weaker signals keep a higher floor to limit fallback-router gas waste.
+_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD_BASE = 12.0
+
+
+def _x_signal_min_effective_trade_usd(signal_strength: float) -> float:
+    """Effective notional (after gas) required for USDC→equity BUY; scales with |signal|."""
+    s = abs(float(signal_strength))
+    if s >= _X_SIGNAL_HIGH_CONVICTION_STRENGTH:
+        return _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD_BASE
+    if s >= float(_X_SIGNAL_VERY_STRONG_STRENGTH) - 0.10:  # 0.80 tier
+        return 14.0
+    return 15.0
+
+
+# Back-compat alias for tests/docs that patch a single constant.
+_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD = _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD_BASE
 
 
 def x_signal_gated_enhanced_execution_bps() -> tuple[int, int, int]:
@@ -901,34 +914,58 @@ class SignalEquityTrader:
                     f"gas=${gas_cost_usd:.2f} | expected=${expected_profit_usd:.2f} | "
                     f"required_expected>${min_expected_profit_usd:.2f} | effective_after_gas=${effective_trade_size_after_gas:.2f}"
                 )
-                # TEMPORARY (48-hour sprint): USDC→equity BUY only; supersedes high-conviction effective bypass below $18.
+                # Signal-Driven Rotation (May 2026): high-conviction bypass before dynamic min gate.
                 eff_after_gas = round(float(effective_trade_size_after_gas), 2)
-                min_eff_gate = round(float(_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD), 2)
-                if eff_after_gas < min_eff_gate:
+                x_signal_equity_high_conviction_effective_ok = (
+                    strength > 0
+                    and abs(float(strength)) >= float(_X_SIGNAL_HIGH_CONVICTION_STRENGTH)
+                    and eff_after_gas >= float(_X_SIGNAL_MIN_EFFECTIVE_OVERRIDE)
+                    and eff_after_gas < float(self._MIN_EFFECTIVE_TRADE_AFTER_GAS_USD)
+                )
+                if x_signal_equity_high_conviction_effective_ok:
                     print(
-                        f"[nanoclaw] X-SIGNAL skipped | below temporary min size gate | "
-                        f"size=${effective_trade_size_after_gas:.2f} | min=${_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD}"
+                        "[nanoclaw-av] X-SIGNAL effective size allowed (high conviction bypass) | "
+                        f"effective=${eff_after_gas:.2f} | signal={strength:.2f}"
+                    )
+                    logger.info(
+                        "[nanoclaw-av] X-SIGNAL effective size allowed (high conviction bypass) "
+                        "effective=%.2f signal=%.2f",
+                        eff_after_gas,
+                        strength,
+                    )
+                min_eff_gate = round(_x_signal_min_effective_trade_usd(strength), 2)
+                if (
+                    not x_signal_equity_high_conviction_effective_ok
+                    and eff_after_gas < min_eff_gate
+                ):
+                    print(
+                        f"[nanoclaw] X-SIGNAL skipped | below min effective size gate | "
+                        f"sym={sym} | signal={strength:.2f} | effective=${eff_after_gas:.2f} | "
+                        f"min=${min_eff_gate:.2f} (Signal-Driven Rotation)"
                     )
                     logger.debug(
-                        "build_plan block sym=%s reason=temporary_min_size_gate effective=%s min=%s",
+                        "build_plan block sym=%s reason=temporary_min_size_gate effective=%s "
+                        "min=%s signal=%s",
                         sym,
-                        effective_trade_size_after_gas,
-                        _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD,
+                        eff_after_gas,
+                        min_eff_gate,
+                        strength,
                     )
                     return None, "temporary_min_size_gate"
-                # TEMPORARY (48-hour sprint): flag gated BUYs for high-slippage fallback + min_out buffer.
+                # Signal-Driven Rotation (May 2026): gated BUYs use enhanced fallback slippage + min_out buffer.
                 _gate_pri, _gate_retry, _gate_min_out = x_signal_gated_enhanced_execution_bps()
                 print(
                     "[nanoclaw-av] X-SIGNAL gated trade eligible — enhanced execution on swap "
                     f"(effective_after_gas=${effective_trade_size_after_gas:.2f} | "
-                    f"min_gate=${_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD:.2f} | "
+                    f"min_gate=${min_eff_gate:.2f} | signal={strength:.2f} | "
                     f"fallback_slip={_gate_pri}/{_gate_retry} bps | min_out_extra={_gate_min_out} bps)"
                 )
                 logger.info(
                     "[nanoclaw-av] X-SIGNAL gated trade eligible — enhanced execution on swap "
-                    "(effective_after_gas=%.2f min_gate=%.2f slip=%s/%s min_out_extra=%s)",
+                    "(effective_after_gas=%.2f min_gate=%.2f signal=%.2f slip=%s/%s min_out_extra=%s)",
                     effective_trade_size_after_gas,
-                    _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD,
+                    min_eff_gate,
+                    strength,
                     _gate_pri,
                     _gate_retry,
                     _gate_min_out,
@@ -946,30 +983,22 @@ class SignalEquityTrader:
                         gas_cost_usd,
                     )
                     return None, "expected_profit_below_gas"
-                if effective_trade_size_after_gas < float(self._MIN_EFFECTIVE_TRADE_AFTER_GAS_USD):
-                    # USDC→equity BUY; allow marginally thin effective notional for high-conviction X-SIGNAL only.
-                    x_signal_equity_high_conviction_effective_ok = (
-                        strength > 0
-                        and abs(float(strength)) >= float(_X_SIGNAL_HIGH_CONVICTION_STRENGTH)
-                        and float(effective_trade_size_after_gas) >= float(_X_SIGNAL_MIN_EFFECTIVE_OVERRIDE)
-                        and float(effective_trade_size_after_gas)
-                        < float(self._MIN_EFFECTIVE_TRADE_AFTER_GAS_USD)
+                if (
+                    not x_signal_equity_high_conviction_effective_ok
+                    and effective_trade_size_after_gas < float(self._MIN_EFFECTIVE_TRADE_AFTER_GAS_USD)
+                ):
+                    print(
+                        f"[nanoclaw] BLOCK: {sym} | low_effective_trade_after_gas "
+                        f"(effective=${effective_trade_size_after_gas:.2f} < "
+                        f"${self._MIN_EFFECTIVE_TRADE_AFTER_GAS_USD:.2f})"
                     )
-                    if x_signal_equity_high_conviction_effective_ok:
-                        print("[nanoclaw-av] X-SIGNAL effective size allowed (high conviction bypass)")
-                        logger.info("[nanoclaw-av] X-SIGNAL effective size allowed (high conviction bypass)")
-                    else:
-                        print(
-                            f"[nanoclaw] BLOCK: {sym} | low_effective_trade_after_gas "
-                            f"(effective=${effective_trade_size_after_gas:.2f} < ${self._MIN_EFFECTIVE_TRADE_AFTER_GAS_USD:.2f})"
-                        )
-                        logger.debug(
-                            "build_plan block sym=%s reason=low_effective_trade_after_gas effective=%s gas=%s",
-                            sym,
-                            effective_trade_size_after_gas,
-                            gas_cost_usd,
-                        )
-                        return None, "low_effective_trade_after_gas"
+                    logger.debug(
+                        "build_plan block sym=%s reason=low_effective_trade_after_gas effective=%s gas=%s",
+                        sym,
+                        effective_trade_size_after_gas,
+                        gas_cost_usd,
+                    )
+                    return None, "low_effective_trade_after_gas"
                 tp = float(self.config.strong_take_profit_pct)
                 price_note = f" @ ${current_price_usd:.2f}" if isinstance(current_price_usd, (int, float)) else ""
                 earn_note = (
