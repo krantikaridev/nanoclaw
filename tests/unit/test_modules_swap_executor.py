@@ -511,8 +511,126 @@ def test_main_strategy_idle_rotation_sell_not_before_cycle_threshold():
     assert "idle_cycles=0/1" in note
 
 
+def test_main_strategy_mild_loss_fast_rotation_zero_cycles(capsys):
+    """~63 WMATIC @ ~$0.09, -5.99% HOLD → fast path without waiting for idle cycles."""
+    from modules.swap_executor import (
+        _MAIN_STRATEGY_MILD_LOSS_FAST_LOG,
+        _main_strategy_idle_rotation_sell_decision,
+    )
+
+    state: dict = {"profit_take_rotation": {"cycles_since_exit": 0}}
+    price = 0.09
+    wmatic_qty = 63.0
+    balances = Balances(usdt=80.0, usdc=30.0, wmatic=wmatic_qty, pol=1.0)
+    hold_signal = {
+        "reason": "HOLD",
+        "gain_pct": -5.99,
+        "peak_gain_pct": 0.0,
+        "pullback_pct": 0.0,
+        "message": "holding",
+    }
+    decision = _main_strategy_idle_rotation_sell_decision(
+        balances,
+        price,
+        state=state,
+        profit_signal=hold_signal,
+    )
+    assert decision is not None
+    assert decision.direction == "WMATIC_TO_USDT"
+    wm_usd = wmatic_qty * price
+    max_notional = 2.25
+    expected_frac = min(0.30, max_notional / wm_usd)
+    assert decision.amount_in == int(wmatic_qty * expected_frac * 1e18)
+    out = capsys.readouterr().out
+    assert _MAIN_STRATEGY_MILD_LOSS_FAST_LOG.split("|")[0].strip() in out
+    assert "reason=accelerate_recovery" in out
+    assert "mild_loss_fast=True" in out
+    assert "path=mild_loss_fast" in out
+
+
+def test_main_strategy_mild_loss_fast_rotation_requires_healthy_usdt():
+    from modules.swap_executor import _main_strategy_idle_rotation_sell_decision
+
+    state: dict = {"profit_take_rotation": {"cycles_since_exit": 0}}
+    hold_signal = {
+        "reason": "HOLD",
+        "gain_pct": -5.99,
+        "peak_gain_pct": 0.0,
+        "pullback_pct": 0.0,
+        "message": "holding",
+    }
+    low_usdt = Balances(usdt=10.0, usdc=30.0, wmatic=63.0, pol=1.0)
+    assert (
+        _main_strategy_idle_rotation_sell_decision(
+            low_usdt, 0.09, state=state, profit_signal=hold_signal
+        )
+        is None
+    )
+
+
+def test_main_strategy_mild_loss_fast_rotation_requires_wmatic_qty_above_ten():
+    from modules.swap_executor import _main_strategy_idle_rotation_sell_decision
+
+    state: dict = {"profit_take_rotation": {"cycles_since_exit": 0}}
+    hold_signal = {
+        "reason": "HOLD",
+        "gain_pct": -5.0,
+        "peak_gain_pct": 0.0,
+        "pullback_pct": 0.0,
+        "message": "holding",
+    }
+    few_tokens = Balances(usdt=80.0, usdc=30.0, wmatic=8.0, pol=1.0)
+    assert (
+        _main_strategy_idle_rotation_sell_decision(
+            few_tokens, 0.70, state=state, profit_signal=hold_signal
+        )
+        is None
+    )
+
+
+def test_wmatic_stable_p2_relief_not_deferred_on_mild_loss_fast(monkeypatch, capsys):
+    """Fast mild-loss rotation must clear P2 even when X-Signal rotation has priority."""
+    from modules.swap_executor import (
+        _wmatic_stable_p2_relief_override_active,
+        _profit_take_bump_cycle_counter,
+    )
+
+    monkeypatch.setattr(
+        "modules.swap_executor._signal_driven_rotation_x_signal_first",
+        lambda: True,
+    )
+    state: dict = {}
+    _profit_take_bump_cycle_counter(state)
+    balances = Balances(usdt=80.0, usdc=30.0, wmatic=63.0, pol=1.0)
+    price = 0.09
+    wm_usd = 63.0 * price
+    max_notional = 2.25
+    frac = min(0.30, max_notional / wm_usd)
+    decision = TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(63.0 * frac * 1e18),
+        signal_strength=0.0,
+    )
+    hold_signal = {
+        "reason": "HOLD",
+        "gain_pct": -5.99,
+        "peak_gain_pct": 0.0,
+        "pullback_pct": 0.0,
+    }
+    assert _wmatic_stable_p2_relief_override_active(
+        decision,
+        balances=balances,
+        current_price_usd=price,
+        min_trade_usd=10.0,
+        profit_signal=hold_signal,
+        state=state,
+    )
+    out = capsys.readouterr().out
+    assert "P2 WMATIC→stable deferred" not in out
+
+
 def test_main_strategy_mild_loss_idle_rotation_after_one_cycle(capsys):
-    """~63 WMATIC @ ~$0.09, -5.9% HOLD → small capped rotation after 1 idle cycle."""
+    """~$5.6 stack, -5.9% HOLD → mild-loss idle (not fast path) after 1 idle cycle."""
     from modules.swap_executor import (
         _MAIN_STRATEGY_IDLE_ROTATION_ALLOWED_LOG,
         _MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN,
@@ -524,8 +642,8 @@ def test_main_strategy_mild_loss_idle_rotation_after_one_cycle(capsys):
     state: dict = {}
     for _ in range(_MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN):
         _profit_take_bump_cycle_counter(state)
-    price = 0.09
-    wmatic_qty = 63.0
+    price = 0.70
+    wmatic_qty = 8.0
     balances = Balances(usdt=80.0, usdc=30.0, wmatic=wmatic_qty, pol=1.0)
     hold_signal = {
         "reason": "HOLD",
