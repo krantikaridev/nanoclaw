@@ -140,6 +140,63 @@ def _apply_fallback_min_out_extra_buffer(amount_out_min: int, *, extra_bps: int 
     return max(1, (int(amount_out_min) * (10000 - extra)) // 10000)
 
 
+def _x_signal_preflight_max_quote_age_seconds() -> float:
+    return max(0.0, float(getattr(cfg, "X_SIGNAL_PREFLIGHT_MAX_QUOTE_AGE_SECONDS", 8.0) or 8.0))
+
+
+def _x_signal_preflight_max_gas_limit() -> int:
+    return max(100_000, int(getattr(cfg, "X_SIGNAL_PREFLIGHT_MAX_GAS_LIMIT", 650000) or 650000))
+
+
+def _x_signal_quote_age_seconds(quote_ts: float | None) -> float | None:
+    if quote_ts is None:
+        return None
+    return max(0.0, time.time() - float(quote_ts))
+
+
+def _x_signal_quote_stale(quote_ts: float | None) -> bool:
+    """CRITICAL: stale V3 quotes cause STF — refresh before submit when older than env max age."""
+    max_age = _x_signal_preflight_max_quote_age_seconds()
+    if max_age <= 0:
+        return False
+    age = _x_signal_quote_age_seconds(quote_ts)
+    return age is not None and age > max_age
+
+
+def _x_signal_preflight_quote_sane(
+    *,
+    expected_out: int,
+    amount_out_min: int,
+    slippage_bps: int,
+) -> tuple[bool, str]:
+    """Sanity-check quoted outputs before spending gas on X-SIGNAL fallback."""
+    if int(expected_out) <= 0:
+        return False, "expected_out<=0"
+    if int(amount_out_min) <= 0:
+        return False, "min_out<=0"
+    if int(amount_out_min) > int(expected_out):
+        return False, f"min_out({amount_out_min})>expected({expected_out})"
+    slip = min(max(int(slippage_bps), 0), 9999)
+    implied_floor = max(1, (int(expected_out) * (10000 - slip)) // 10000)
+    if int(amount_out_min) < implied_floor * 95 // 100:
+        return False, f"min_out({amount_out_min})<<slippage_implied({implied_floor})"
+    return True, "ok"
+
+
+def _x_signal_preflight_gas_sane(w3, tx_for_estimate: dict) -> tuple[bool, str]:
+    """eth_estimateGas guard — catches broken paths before broadcast."""
+    max_gas = _x_signal_preflight_max_gas_limit()
+    try:
+        est = int(w3.eth.estimate_gas(tx_for_estimate))
+    except Exception as ex:  # noqa: BLE001
+        return False, f"gas_estimate_failed:{ex}"
+    if est > max_gas:
+        return False, f"gas_estimate={est}>max={max_gas}"
+    if est < 50_000:
+        return False, f"gas_estimate_suspiciously_low={est}"
+    return True, f"gas_estimate={est}"
+
+
 def _try_get_revert_reason(w3, *, tx_for_call: dict) -> str:
     """Best-effort revert extraction from eth_call for logging."""
     try:
@@ -532,11 +589,35 @@ async def approve_and_swap(
                     f"{_prefix}[FALLBACK ROUTER] X-SIGNAL min_out buffer applied (signal execution quality) | "
                     f"extra_bps={int(fallback_min_out_extra_bps)} | min_out {mq_before}→{mq}"
                 )
-            print(
-                f"{_prefix}[FALLBACK ROUTER] Pre-flight quote OK | fee={fee_pick} | "
-                f"expected_out≈{eq} | min_out={mq}"
-            )
-            v3_quote_attempt1 = (eq, mq, fee_pick)
+            if x_signal_enhanced_route:
+                quote_ok, quote_detail = _x_signal_preflight_quote_sane(
+                    expected_out=eq,
+                    amount_out_min=mq,
+                    slippage_bps=fb_primary,
+                )
+                if not quote_ok:
+                    print(
+                        f"{_prefix}[FALLBACK ROUTER] X-SIGNAL pre-flight quote rejected | "
+                        f"reason={quote_detail} | fee={fee_pick}"
+                    )
+                    if swap_outcome is not None:
+                        swap_outcome.update(
+                            success=False,
+                            revert_reason=f"preflight_quote:{quote_detail}",
+                            stf=False,
+                            direction=direction,
+                        )
+                    return None
+                print(
+                    f"{_prefix}[FALLBACK ROUTER] X-SIGNAL pre-flight quote OK | fee={fee_pick} | "
+                    f"expected_out≈{eq} | min_out={mq} | check={quote_detail}"
+                )
+            else:
+                print(
+                    f"{_prefix}[FALLBACK ROUTER] Pre-flight quote OK | fee={fee_pick} | "
+                    f"expected_out≈{eq} | min_out={mq}"
+                )
+            v3_quote_attempt1 = (eq, mq, fee_pick, time.time())
 
         approve_contract = w3.eth.contract(address=token_in_cs, abi=[{"constant":True,"inputs":[{"name":"_owner","type":"address"},{"name":"_spender","type":"address"}],"name":"allowance","outputs":[{"name":"","type":"uint256"}],"type":"function"},{"constant":False,"inputs":[{"name":"_spender","type":"address"},{"name":"_value","type":"uint256"}],"name":"approve","outputs":[{"name":"","type":"bool"}],"type":"function"}])
         approve_spender_cs = Web3.to_checksum_address(approve_spender)
@@ -636,8 +717,13 @@ async def approve_and_swap(
             slip_attempts = [(0, fb_primary), (1, fb_retry)]
         for attempt_idx, slip_bps in slip_attempts:
             v3_fee = 3000
+            quote_ts: float | None = None
             if attempt_idx == 0 and v3_quote_attempt1 is not None:
-                expected_out, amount_out_min, v3_fee = v3_quote_attempt1
+                if len(v3_quote_attempt1) >= 4:
+                    expected_out, amount_out_min, v3_fee, quote_ts = v3_quote_attempt1[:4]
+                else:
+                    expected_out, amount_out_min, v3_fee = v3_quote_attempt1[:3]
+                    quote_ts = None
             else:
                 if attempt_idx > 0 and x_signal_enhanced_route:
                     requote_delay = float(
@@ -691,10 +777,72 @@ async def approve_and_swap(
                         f"{_prefix}[FALLBACK ROUTER] X-SIGNAL min_out buffer applied (signal execution quality) | "
                         f"extra_bps={int(fallback_min_out_extra_bps)} | min_out {mq_before}→{amount_out_min}"
                     )
+                quote_ts = time.time()
+
+            if x_signal_enhanced_route:
+                quote_age_s = _x_signal_quote_age_seconds(quote_ts)
+                if _x_signal_quote_stale(quote_ts):
+                    print(
+                        f"{_prefix}[FALLBACK ROUTER] X-SIGNAL pre-flight stale quote | "
+                        f"age_s={quote_age_s:.1f} | max_age_s={_x_signal_preflight_max_quote_age_seconds():.1f} | "
+                        f"re-quoting before submit"
+                    )
+                    try:
+                        v3_fee, expected_out, amount_out_min = _quote_uniswap_v3_best_fee_single(
+                            w3,
+                            token_in=token_in_cs,
+                            token_out=token_out_cs,
+                            amount_in=amount_in,
+                            slippage_bps=slip_bps,
+                            prefer_stable_fee=True,
+                        )
+                        if fallback_min_out_extra_bps is not None and int(fallback_min_out_extra_bps) > 0:
+                            amount_out_min = _apply_fallback_min_out_extra_buffer(
+                                amount_out_min,
+                                extra_bps=fallback_min_out_extra_bps,
+                            )
+                        quote_ts = time.time()
+                    except Exception as qex:
+                        print(
+                            f"{_prefix}[FALLBACK ROUTER] X-SIGNAL stale re-quote failed | "
+                            f"attempt={attempt_idx + 1} | {qex}"
+                        )
+                        if swap_outcome is not None:
+                            swap_outcome.update(
+                                success=False,
+                                revert_reason=str(qex),
+                                stf=False,
+                                direction=direction,
+                            )
+                        return None
+                quote_ok, quote_detail = _x_signal_preflight_quote_sane(
+                    expected_out=expected_out,
+                    amount_out_min=amount_out_min,
+                    slippage_bps=slip_bps,
+                )
+                if not quote_ok:
+                    print(
+                        f"{_prefix}[FALLBACK ROUTER] X-SIGNAL pre-flight quote rejected | "
+                        f"attempt={attempt_idx + 1} | reason={quote_detail}"
+                    )
+                    if swap_outcome is not None:
+                        swap_outcome.update(
+                            success=False,
+                            revert_reason=f"preflight_quote:{quote_detail}",
+                            stf=False,
+                            direction=direction,
+                        )
+                    return None
+
             print(
                 f"{_prefix}[FALLBACK ROUTER] route attempt={attempt_idx + 1}/{len(slip_attempts)} | "
                 f"fee={v3_fee} | slip_bps={slip_bps} | expected_out≈{expected_out} | "
                 f"min_out={amount_out_min}"
+                + (
+                    f" | quote_age_s={quote_age_s:.1f}"
+                    if x_signal_enhanced_route and quote_age_s is not None
+                    else ""
+                )
             )
 
             nonce_swap = w3.eth.get_transaction_count(WALLET)
@@ -725,6 +873,42 @@ async def approve_and_swap(
                 "data": swap_tx.get("data"),
                 "value": swap_tx.get("value", 0),
             }
+            if x_signal_enhanced_route:
+                gas_ok, gas_detail = _x_signal_preflight_gas_sane(
+                    w3,
+                    {
+                        "from": WALLET,
+                        "to": router_cs,
+                        "data": swap_tx.get("data"),
+                        "value": int(swap_tx.get("value") or 0),
+                    },
+                )
+                print(
+                    f"{_prefix}[FALLBACK ROUTER] X-SIGNAL pre-flight gas | "
+                    f"attempt={attempt_idx + 1} | {gas_detail}"
+                )
+                if not gas_ok:
+                    if swap_outcome is not None:
+                        swap_outcome.update(
+                            success=False,
+                            revert_reason=f"preflight_gas:{gas_detail}",
+                            stf=False,
+                            direction=direction,
+                            slippage_bps=slip_bps,
+                            amount_out_min=amount_out_min,
+                            expected_out=expected_out,
+                            fee_tier=v3_fee,
+                            min_out_extra_bps=fallback_min_out_extra_bps,
+                        )
+                    if attempt_idx < len(slip_attempts) - 1:
+                        next_bps = slip_attempts[attempt_idx + 1][1]
+                        print(
+                            f"{_prefix}RETRY ATTEMPT {attempt_idx + 1}/{len(slip_attempts) - 1} | "
+                            f"pre-flight gas failed — trying slippage {next_bps} bps (was {slip_bps})"
+                        )
+                        continue
+                    print(f"{_prefix}❌ X-SIGNAL pre-flight gas check failed after all ramp steps.")
+                    return None
             receipt = None
             try:
                 signed_swap = w3.eth.account.sign_transaction(swap_tx, resolved_key)

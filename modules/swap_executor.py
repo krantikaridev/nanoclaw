@@ -1567,9 +1567,27 @@ def _x_signal_min_out_extra_bps(signal_strength: float | None) -> int:
 
 
 def _x_signal_stf_sort_penalty(state: dict | None, symbol: str) -> int:
-    """CRITICAL: deprioritize assets in STF backoff so rotation tries healthier symbols first."""
-    paused, _ = _x_signal_stf_pause_active(state, str(symbol).strip().upper())
-    return 1 if paused else 0
+    """CRITICAL: deprioritize assets in STF backoff so rotation tries healthier symbols first.
+
+    Higher penalty = sort later. Escalates with short cooldown, long pause, and repeat pause cycles.
+    """
+    sym = str(symbol).strip().upper()
+    if not state or not sym:
+        return 0
+    root = state.get(_X_SIGNAL_STF_STATE_KEY) or {}
+    entry = root.get(sym) or {}
+    paused, _ = _x_signal_stf_pause_active(state, sym)
+    failures = int(entry.get("failures") or 0)
+    pause_gen = int(entry.get("pause_generations") or 0)
+    if paused:
+        if pause_gen >= 2:
+            return 4
+        if pause_gen >= 1:
+            return 3
+        return 2 if failures > 0 else 1
+    if failures >= 1:
+        return 1
+    return 0
 
 
 def _is_x_signal_usdc_equity_buy(decision: TradeDecision | None) -> bool:
@@ -1593,7 +1611,10 @@ def _x_signal_stf_pause_entry(state: dict | None, symbol: str) -> dict:
     if state is None:
         raise ValueError("state is required for X-SIGNAL STF backoff tracking")
     root = state.setdefault(_X_SIGNAL_STF_STATE_KEY, {})
-    return root.setdefault(str(symbol).strip().upper(), {"failures": 0, "paused_until": 0.0})
+    return root.setdefault(
+        str(symbol).strip().upper(),
+        {"failures": 0, "paused_until": 0.0, "pause_generations": 0},
+    )
 
 
 def _x_signal_stf_pause_active(state: dict | None, symbol: str) -> tuple[bool, str]:
@@ -1605,7 +1626,12 @@ def _x_signal_stf_pause_active(state: dict | None, symbol: str) -> tuple[bool, s
     now = time.time()
     if until > now:
         remain = int(until - now)
-        return True, f"stf_pause_active ({remain}s remaining, failures={int(entry.get('failures') or 0)})"
+        pause_gen = int(entry.get("pause_generations") or 0)
+        return (
+            True,
+            f"stf_pause_active ({remain}s remaining, failures={int(entry.get('failures') or 0)}, "
+            f"pause_gen={pause_gen})",
+        )
     if until > 0 and until <= now:
         entry["paused_until"] = 0.0
     return False, ""
@@ -1629,11 +1655,18 @@ def _record_x_signal_stf_failure(state: dict, decision: TradeDecision, swap_outc
         f"revert={str(swap_outcome.get('revert_reason') or '')[:120]}"
     )
     if failures >= threshold:
-        entry["paused_until"] = time.time() + float(long_pause_secs)
+        pause_gen = int(entry.get("pause_generations") or 0) + 1
+        entry["pause_generations"] = pause_gen
+        mult = max(1.0, float(cfg.X_SIGNAL_STF_PAUSE_ESCALATION_MULTIPLIER))
+        escalated = int(long_pause_secs * (mult ** (pause_gen - 1)))
+        max_pause = max(60, int(cfg.X_SIGNAL_STF_MAX_PAUSE_SECONDS))
+        pause_secs = min(max(60, escalated), max_pause)
+        entry["paused_until"] = time.time() + float(pause_secs)
         entry["failures"] = 0
         print(
             f"{_X_SIGNAL_STF_LOG} | pausing X-SIGNAL BUY for {sym} | "
-            f"duration={long_pause_secs}s | reason=repeated_stf"
+            f"duration={pause_secs}s | pause_generation={pause_gen} | "
+            f"base={long_pause_secs}s | multiplier={mult} | reason=repeated_stf_escalated"
         )
     else:
         until = time.time() + float(short_cd)
@@ -1736,14 +1769,24 @@ def _x_signal_gated_trade_relaxed_slippage(
     )
 
 
+def _x_signal_conservative_primary_bps(primary_bps: int, signal_strength: float | None) -> int:
+    """CRITICAL: |signal|>=0.90 uses a slightly lower first ramp step; retry ramp still reaches tier max."""
+    if signal_strength is None or abs(float(signal_strength)) + 1e-9 < _X_SIGNAL_VERY_STRONG_STRENGTH:
+        return int(primary_bps)
+    relief = max(0, int(cfg.X_SIGNAL_HIGH_CONVICTION_PRIMARY_RELIEF_BPS))
+    floor = 600
+    return max(floor, int(primary_bps) - relief)
+
+
 def _x_signal_default_relaxed_slippage(
     decision: TradeDecision,
 ) -> tuple[int, int, int]:
     """CRITICAL: fallback tier for USDC→equity X-SIGNAL without gated/small enhanced params."""
     strength = decision.signal_strength
     min_out = int(cfg.X_SIGNAL_DEFAULT_MIN_OUT_EXTRA_BPS) + _x_signal_min_out_extra_bps(strength)
+    primary = _x_signal_conservative_primary_bps(int(cfg.X_SIGNAL_DEFAULT_FALLBACK_PRIMARY_BPS), strength)
     return (
-        int(cfg.X_SIGNAL_DEFAULT_FALLBACK_PRIMARY_BPS),
+        primary,
         int(cfg.X_SIGNAL_DEFAULT_FALLBACK_RETRY_BPS),
         min_out,
     )
@@ -1770,14 +1813,16 @@ def _resolve_x_signal_enhanced_fallback_execution(
         min_out = int(cfg.X_SIGNAL_SMALL_HIGH_CONVICTION_MIN_OUT_EXTRA_BPS) + _x_signal_min_out_extra_bps(
             strength
         )
-        return small[0], small[1], min_out
+        primary = _x_signal_conservative_primary_bps(small[0], strength)
+        return primary, small[1], min_out
     gated = _x_signal_gated_trade_relaxed_slippage(
         decision,
         decision_notional_usd=decision_notional_usd,
     )
     if gated is not None:
         min_out = int(cfg.X_SIGNAL_GATED_TRADE_MIN_OUT_EXTRA_BPS) + _x_signal_min_out_extra_bps(strength)
-        return gated[0], gated[1], min_out
+        primary = _x_signal_conservative_primary_bps(gated[0], strength)
+        return primary, gated[1], min_out
     return _x_signal_default_relaxed_slippage(decision)
 
 

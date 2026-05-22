@@ -260,8 +260,17 @@ X_SIGNAL_SMALL_HIGH_CONVICTION_MIN_OUT_EXTRA_BPS = env_int(
 # Pause per-asset X-SIGNAL BUY after repeated on-chain STF (slippage) reverts.
 X_SIGNAL_STF_PAUSE_AFTER_FAILURES = env_int("X_SIGNAL_STF_PAUSE_AFTER_FAILURES", 2)
 X_SIGNAL_STF_PAUSE_SECONDS = env_int("X_SIGNAL_STF_PAUSE_SECONDS", 3600)
+# Multiply long STF pause duration per asset on each repeated pause cycle (cap: X_SIGNAL_STF_MAX_PAUSE_SECONDS).
+X_SIGNAL_STF_PAUSE_ESCALATION_MULTIPLIER = env_float("X_SIGNAL_STF_PAUSE_ESCALATION_MULTIPLIER", 2.0)
+X_SIGNAL_STF_MAX_PAUSE_SECONDS = env_int("X_SIGNAL_STF_MAX_PAUSE_SECONDS", 14400)
 # Short per-asset cooldown after each STF revert (before long pause at STF_PAUSE_AFTER_FAILURES).
 X_SIGNAL_STF_FAILURE_COOLDOWN_SECONDS = env_int("X_SIGNAL_STF_FAILURE_COOLDOWN_SECONDS", 600)
+# Pre-flight: re-quote if cached V3 quote is older than this many seconds before submit.
+X_SIGNAL_PREFLIGHT_MAX_QUOTE_AGE_SECONDS = env_float("X_SIGNAL_PREFLIGHT_MAX_QUOTE_AGE_SECONDS", 8.0)
+# Pre-flight: abort when eth_estimateGas exceeds this limit (illiquid / bad path).
+X_SIGNAL_PREFLIGHT_MAX_GAS_LIMIT = env_int("X_SIGNAL_PREFLIGHT_MAX_GAS_LIMIT", 650000)
+# High-conviction (|signal|>=0.90): lower first ramp step vs tier max — ramp still reaches retry bps.
+X_SIGNAL_HIGH_CONVICTION_PRIMARY_RELIEF_BPS = env_int("X_SIGNAL_HIGH_CONVICTION_PRIMARY_RELIEF_BPS", 800)
 # Seconds to wait before re-quoting on X-SIGNAL fallback retry (fresh pool state).
 X_SIGNAL_FALLBACK_REQUOTE_DELAY_SECONDS = env_float("X_SIGNAL_FALLBACK_REQUOTE_DELAY_SECONDS", 1.5)
 # Prefer 0.3% V3 pool when its quote is within this many bps of the best tier (stabler path for equities).

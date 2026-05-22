@@ -143,6 +143,30 @@ def test_apply_fallback_min_out_extra_buffer_reduces_min_out():
     assert swap_executor._apply_fallback_min_out_extra_buffer(1, extra_bps=500) == 1
 
 
+def test_x_signal_preflight_quote_sane_rejects_bad_outputs():
+    ok, detail = swap_executor._x_signal_preflight_quote_sane(
+        expected_out=0,
+        amount_out_min=1,
+        slippage_bps=100,
+    )
+    assert ok is False
+    assert "expected_out" in detail
+
+    ok2, _ = swap_executor._x_signal_preflight_quote_sane(
+        expected_out=10_000,
+        amount_out_min=9_900,
+        slippage_bps=100,
+    )
+    assert ok2 is True
+
+
+def test_x_signal_quote_stale_when_older_than_max_age(monkeypatch):
+    monkeypatch.setattr(swap_executor.cfg, "X_SIGNAL_PREFLIGHT_MAX_QUOTE_AGE_SECONDS", 5.0)
+    old_ts = swap_executor.time.time() - 10.0
+    assert swap_executor._x_signal_quote_stale(old_ts) is True
+    assert swap_executor._x_signal_quote_stale(swap_executor.time.time()) is False
+
+
 def test_is_stf_revert_reason_detects_common_patterns():
     assert swap_executor._is_stf_revert_reason("execution reverted: STF()")
     assert swap_executor._is_stf_revert_reason("Too little received")

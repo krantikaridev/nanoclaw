@@ -969,7 +969,7 @@ def test_resolve_x_signal_enhanced_fallback_prefers_small_over_gated(monkeypatch
         signal_strength=0.90,
     )
     resolved = _resolve_x_signal_enhanced_fallback_execution(decision, decision_notional_usd=11.0)
-    assert resolved[0:2] == (8000, 10000)
+    assert resolved[0:2] == (7200, 10000)
     assert resolved[2] is not None and resolved[2] >= 50
 
 
@@ -1005,8 +1005,60 @@ def test_x_signal_stf_sort_penalty_deprioritizes_paused_symbol():
     }
     from modules.swap_executor import _x_signal_stf_sort_penalty
 
-    assert _x_signal_stf_sort_penalty(state, "NVDA_ALPHA") == 1
+    assert _x_signal_stf_sort_penalty(state, "NVDA_ALPHA") == 2
     assert _x_signal_stf_sort_penalty(state, "AAPL_ALPHA") == 0
+
+
+def test_x_signal_stf_sort_penalty_escalates_with_pause_generations():
+    from modules.swap_executor import _x_signal_stf_sort_penalty
+
+    state = {
+        "x_signal_stf_backoff": {
+            "NVDA_ALPHA": {
+                "failures": 0,
+                "paused_until": time.time() + 500,
+                "pause_generations": 2,
+            },
+        }
+    }
+    assert _x_signal_stf_sort_penalty(state, "NVDA_ALPHA") == 4
+
+
+def test_x_signal_stf_pause_escalates_duration_on_repeat(monkeypatch):
+    monkeypatch.setattr("modules.swap_executor.cfg.X_SIGNAL_STF_PAUSE_AFTER_FAILURES", 2)
+    monkeypatch.setattr("modules.swap_executor.cfg.X_SIGNAL_STF_PAUSE_SECONDS", 600)
+    monkeypatch.setattr("modules.swap_executor.cfg.X_SIGNAL_STF_PAUSE_ESCALATION_MULTIPLIER", 2.0)
+    monkeypatch.setattr("modules.swap_executor.cfg.X_SIGNAL_STF_MAX_PAUSE_SECONDS", 5000)
+    monkeypatch.setattr("modules.swap_executor.cfg.X_SIGNAL_STF_FAILURE_COOLDOWN_SECONDS", 60)
+    state: dict = {}
+    decision = TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=12_000_000,
+        signal_strength=0.92,
+        cooldown_asset=("WETH_ALPHA", 1800),
+    )
+    _record_x_signal_stf_failure(state, decision, {"stf": True, "revert_reason": "STF"})
+    _record_x_signal_stf_failure(state, decision, {"stf": True, "revert_reason": "STF"})
+    entry = state["x_signal_stf_backoff"]["WETH_ALPHA"]
+    assert int(entry.get("pause_generations") or 0) == 1
+    first_remain = float(entry["paused_until"]) - time.time()
+    assert 550 < first_remain <= 650
+    entry["paused_until"] = 0.0
+    entry["failures"] = 1
+    _record_x_signal_stf_failure(state, decision, {"stf": True, "revert_reason": "STF"})
+    _record_x_signal_stf_failure(state, decision, {"stf": True, "revert_reason": "STF"})
+    entry = state["x_signal_stf_backoff"]["WETH_ALPHA"]
+    assert int(entry.get("pause_generations") or 0) == 2
+    second_remain = float(entry["paused_until"]) - time.time()
+    assert 1150 < second_remain <= 1250
+
+
+def test_x_signal_conservative_primary_bps_for_very_strong_signal(monkeypatch):
+    from modules.swap_executor import _x_signal_conservative_primary_bps
+
+    monkeypatch.setattr("modules.swap_executor.cfg.X_SIGNAL_HIGH_CONVICTION_PRIMARY_RELIEF_BPS", 800)
+    assert _x_signal_conservative_primary_bps(9500, 0.92) == 8700
+    assert _x_signal_conservative_primary_bps(9500, 0.80) == 9500
 
 
 def test_x_signal_min_out_extra_bps_high_conviction_at_085(monkeypatch):
