@@ -1202,6 +1202,15 @@ def try_x_signal_equity_decision(
                         f"Size: ${dynamic_trade_size_usdc:.2f}"
                     )
                 secs_plan = int(trader.config.per_asset_cooldown_seconds)
+                _plan_gross_edge: float | None = None
+                if str(plan.direction).strip().upper() == "USDC_TO_EQUITY":
+                    from modules.swap_executor import plan_x_signal_gross_edge_pct
+
+                    _up = float(a.upside_pct) if isinstance(a.upside_pct, (int, float)) else None
+                    _plan_gross_edge = plan_x_signal_gross_edge_pct(
+                        float(getattr(plan, "signal_strength", a.signal_strength)),
+                        _up,
+                    )
                 decision = TradeDecision(
                     direction=plan.direction,
                     amount_in=(
@@ -1215,6 +1224,7 @@ def try_x_signal_equity_decision(
                     token_out=plan.token_out,
                     cooldown_asset=(sym, secs_plan),
                     signal_strength=float(getattr(plan, "signal_strength", a.signal_strength)),
+                    expected_gross_edge_pct=_plan_gross_edge,
                     x_signal_gated_execution=bool(getattr(plan, "gated_enhanced_execution", False)),
                 )
                 plans.append((decision, float(a.signal_strength), sym))

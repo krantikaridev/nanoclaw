@@ -123,10 +123,16 @@ FIXED_TRADE_USD_MIN = reconcile_fixed_trade_min(MIN_TRADE_USD, _FIXED_TRADE_USD_
 FIXED_TRADE_USD_MAX = env_float("FIXED_TRADE_USD_MAX", 10.0)
 TRAILING_STOP_PCT = env_float("TRAILING_STOP_PCT", 5.0)
 TAKE_PROFIT_PCT = env_float("TAKE_PROFIT_PCT", 5.0)
-# v1 quality filter: minimum estimated net edge (% of notional after gas) for X-Signal / main entry trades.
-MIN_NET_EDGE_PCT = env_float("MIN_NET_EDGE_PCT", 1.8)
+# v1 quality filter: minimum estimated net edge (% of notional after gas/fees) for X-Signal / main entry trades.
+MIN_NET_EDGE_PCT = env_float("MIN_NET_EDGE_PCT", 2.5)
+# Reserve % of notional for swap fee/slippage before gas (subtracted from gross edge in planning).
+MIN_NET_EDGE_FEE_BUFFER_PCT = env_float("MIN_NET_EDGE_FEE_BUFFER_PCT", 0.75)
 # Conservative planning gas (gwei) for early net-edge gates in determine_trade_decision (no RPC).
-NET_EDGE_PLANNING_GAS_GWEI = env_float("NET_EDGE_PLANNING_GAS_GWEI", 80.0)
+NET_EDGE_PLANNING_GAS_GWEI = env_float("NET_EDGE_PLANNING_GAS_GWEI", 120.0)
+# Main USDT→WMATIC entry: fraction of TAKE_PROFIT_PCT used as gross edge when MAIN_STRATEGY_ENTRY_EDGE_PCT=0.
+MAIN_STRATEGY_ENTRY_EDGE_FRAC = env_float("MAIN_STRATEGY_ENTRY_EDGE_FRAC", 0.70)
+# Optional override gross edge % for main entry (0 = use MAIN_STRATEGY_ENTRY_EDGE_FRAC × TAKE_PROFIT_PCT).
+MAIN_STRATEGY_ENTRY_EDGE_PCT = env_float("MAIN_STRATEGY_ENTRY_EDGE_PCT", 0.0)
 STRONG_SIGNAL_TP = env_float("STRONG_SIGNAL_TP", 12.0)
 TAKE_PROFIT_SELL_PCT = env_float("TAKE_PROFIT_SELL_PCT", 0.45)
 STRONG_TP_SELL_PCT = env_float("STRONG_TP_SELL_PCT", 0.60)
@@ -254,6 +260,10 @@ X_SIGNAL_SMALL_HIGH_CONVICTION_MIN_OUT_EXTRA_BPS = env_int(
 # Pause per-asset X-SIGNAL BUY after repeated on-chain STF (slippage) reverts.
 X_SIGNAL_STF_PAUSE_AFTER_FAILURES = env_int("X_SIGNAL_STF_PAUSE_AFTER_FAILURES", 2)
 X_SIGNAL_STF_PAUSE_SECONDS = env_int("X_SIGNAL_STF_PAUSE_SECONDS", 3600)
+# Short per-asset cooldown after each STF revert (before long pause at STF_PAUSE_AFTER_FAILURES).
+X_SIGNAL_STF_FAILURE_COOLDOWN_SECONDS = env_int("X_SIGNAL_STF_FAILURE_COOLDOWN_SECONDS", 600)
+# Seconds to wait before re-quoting on X-SIGNAL fallback retry (fresh pool state).
+X_SIGNAL_FALLBACK_REQUOTE_DELAY_SECONDS = env_float("X_SIGNAL_FALLBACK_REQUOTE_DELAY_SECONDS", 1.5)
 
 MAIN_STRATEGY_MIN_USDT_RESERVE = env_float("MAIN_STRATEGY_MIN_USDT_RESERVE", 25.0)
 MAIN_STRATEGY_TP_TRIGGER_WMATIC_USD = env_float("MAIN_STRATEGY_TP_TRIGGER_WMATIC_USD", 52.0)

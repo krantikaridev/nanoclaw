@@ -102,6 +102,25 @@ def _is_stf_revert_reason(reason: str) -> bool:
     return "0X3610C973" in compact or "3610C973" in compact
 
 
+def _x_signal_fallback_slippage_ramp(primary_bps: int, retry_bps: int) -> list[int]:
+    """CRITICAL (Signal-Driven Rotation profitability): ramp slippage primary→mid→retry for X-SIGNAL fallback.
+
+    Avoids a single large jump that still STFs; mid step uses half the primary→retry gap when gap ≥ 400 bps.
+    """
+    floor = _FALLBACK_ROUTER_SLIPPAGE_FLOOR_BPS
+    primary = min(max(int(primary_bps), floor), 9999)
+    retry = min(max(int(retry_bps), primary, floor), 9999)
+    if retry <= primary:
+        return [primary]
+    gap = retry - primary
+    if gap < 400:
+        return [primary, retry]
+    mid = min(primary + gap // 2, retry - 1)
+    if mid <= primary:
+        return [primary, retry]
+    return [primary, mid, retry]
+
+
 def _apply_fallback_min_out_extra_buffer(amount_out_min: int, *, extra_bps: int | None) -> int:
     """Signal-driven execution quality (May 2026): extra min_out beyond quoted slippage (X-SIGNAL)."""
     if extra_bps is None or int(extra_bps) <= 0:
@@ -575,12 +594,31 @@ async def approve_and_swap(
                     continue
                 return None
 
-        slip_attempts: list[tuple[int, int]] = [(0, fb_primary), (1, fb_retry)]
+        # CRITICAL: X-SIGNAL rotation only pays off when selected BUYs actually fill on-chain.
+        if x_signal_enhanced_route:
+            ramp_bps = _x_signal_fallback_slippage_ramp(fb_primary, fb_retry)
+            slip_attempts = list(enumerate(ramp_bps))
+            print(
+                f"{_prefix}[FALLBACK ROUTER] X-SIGNAL slippage ramp | "
+                f"steps={len(ramp_bps)} | bps={' → '.join(str(b) for b in ramp_bps)}"
+            )
+        else:
+            slip_attempts = [(0, fb_primary), (1, fb_retry)]
         for attempt_idx, slip_bps in slip_attempts:
             v3_fee = 3000
             if attempt_idx == 0 and v3_quote_attempt1 is not None:
                 expected_out, amount_out_min, v3_fee = v3_quote_attempt1
             else:
+                if attempt_idx > 0 and x_signal_enhanced_route:
+                    requote_delay = float(
+                        getattr(cfg, "X_SIGNAL_FALLBACK_REQUOTE_DELAY_SECONDS", 0.0) or 0.0
+                    )
+                    if requote_delay > 0:
+                        print(
+                            f"{_prefix}[FALLBACK ROUTER] X-SIGNAL re-quote delay | "
+                            f"wait={requote_delay:.1f}s | attempt={attempt_idx + 1}/{len(slip_attempts)}"
+                        )
+                        await asyncio.sleep(requote_delay)
                 try:
                     if x_signal_enhanced_route:
                         v3_fee, expected_out, amount_out_min = _quote_uniswap_v3_best_fee_single(
@@ -680,13 +718,14 @@ async def approve_and_swap(
                         fee_tier=v3_fee,
                         slippage_bps=slip_bps,
                     )
-                if attempt_idx == 0:
+                if attempt_idx < len(slip_attempts) - 1:
+                    next_bps = slip_attempts[attempt_idx + 1][1]
                     print(
-                        f"{_prefix}RETRY ATTEMPT 1/1 | Increasing slippage to {fb_retry} bps "
-                        f"(router fallback; was {fb_primary} bps)"
+                        f"{_prefix}RETRY ATTEMPT {attempt_idx + 1}/{len(slip_attempts) - 1} | "
+                        f"Increasing slippage to {next_bps} bps (router fallback; was {slip_bps} bps)"
                     )
                     continue
-                print(f"{_prefix}❌ Swap failed on-chain after fallback retry.")
+                print(f"{_prefix}❌ Swap failed on-chain after fallback retries.")
                 return None
             if receipt is None:
                 print(f"{_prefix}[FALLBACK ROUTER] Missing receipt after swap attempt; aborting.")
@@ -713,13 +752,14 @@ async def approve_and_swap(
                     slippage_bps=slip_bps,
                     tx_hash=swap_hash.hex(),
                 )
-            if attempt_idx == 0:
+            if attempt_idx < len(slip_attempts) - 1:
+                next_bps = slip_attempts[attempt_idx + 1][1]
                 print(
-                    f"{_prefix}RETRY ATTEMPT 1/1 | Increasing slippage to {fb_retry} bps "
-                    f"(router fallback; was {fb_primary} bps)"
+                    f"{_prefix}RETRY ATTEMPT {attempt_idx + 1}/{len(slip_attempts) - 1} | "
+                    f"Increasing slippage to {next_bps} bps (router fallback; was {slip_bps} bps)"
                 )
                 continue
-            print(f"{_prefix}❌ Swap failed on-chain after fallback retry.")
+            print(f"{_prefix}❌ Swap failed on-chain after fallback retries.")
             return None
 
     except Exception as e:

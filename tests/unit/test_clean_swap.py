@@ -829,6 +829,8 @@ def test_determine_trade_decision_rejects_x_signal_below_min_net_edge(monkeypatc
     monkeypatch.setattr("modules.swap_executor.cfg.POL_USD_PRICE", 0.5)
     monkeypatch.setattr("modules.swap_executor.cfg.MIN_NET_EDGE_PCT", 3.0)
     monkeypatch.setattr("modules.swap_executor.cfg.NET_EDGE_PLANNING_GAS_GWEI", 80.0)
+    monkeypatch.setattr("modules.swap_executor.cfg.MIN_NET_EDGE_FEE_BUFFER_PCT", 0.75)
+    monkeypatch.setattr("modules.swap_executor.cfg.MAIN_STRATEGY_ENTRY_EDGE_FRAC", 1.0)
 
     x_low_edge = clean_swap.TradeDecision(
         direction="USDC_TO_EQUITY",

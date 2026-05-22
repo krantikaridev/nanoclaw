@@ -188,6 +188,8 @@ class TradeDecision:
     cooldown_asset: Optional[Tuple[str, int]] = None
     cooldown_wallet: Optional[Tuple[str, int]] = None
     signal_strength: Optional[float] = None
+    # Conservative planning gross edge % (net-edge filter); set by X-SIGNAL orchestration when known.
+    expected_gross_edge_pct: Optional[float] = None
     # TEMPORARY (48-hour sprint): set on X-SIGNAL USDC→equity BUYs that passed $18 effective gate.
     x_signal_gated_execution: bool = False
 

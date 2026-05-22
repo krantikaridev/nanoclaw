@@ -120,6 +120,17 @@ def test_best_quote_path_accepts_explicit_slippage_bps(monkeypatch):
     assert min_out == 975
 
 
+def test_x_signal_fallback_slippage_ramp_three_steps_when_gap_large():
+    # Retry capped at 9999 bps (same as approve_and_swap fallback path).
+    ramp = swap_executor._x_signal_fallback_slippage_ramp(8000, 9800)
+    assert ramp == [8000, 8900, 9800]
+
+
+def test_x_signal_fallback_slippage_ramp_two_steps_when_gap_small():
+    ramp = swap_executor._x_signal_fallback_slippage_ramp(9500, 9700)
+    assert ramp == [9500, 9700]
+
+
 def test_apply_fallback_min_out_extra_buffer_reduces_min_out():
     assert swap_executor._apply_fallback_min_out_extra_buffer(10_000, extra_bps=75) == 9925
     assert swap_executor._apply_fallback_min_out_extra_buffer(10_000, extra_bps=None) == 10_000

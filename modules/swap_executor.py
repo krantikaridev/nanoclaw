@@ -24,7 +24,7 @@ from nanoclaw.strategies.signal_equity_trader import (
     _x_signal_min_effective_trade_usd,
 )
 from nanoclaw.strategies.usdc_copy import USDCopyStrategy
-from swap_executor import approve_and_swap
+from swap_executor import _x_signal_fallback_slippage_ramp, approve_and_swap
 
 from external_layer.control import CycleControlSnapshot, load_cycle_control
 
@@ -48,13 +48,14 @@ _DEFENSIVE_PAUSE_CYCLES = 3
 # Entry directions blocked when ``control.json`` has ``paused: true`` (protection exits still run).
 _CONTROL_PAUSE_BLOCK_ENTRIES = frozenset({"USDT_TO_WMATIC", "USDC_TO_WMATIC", "USDC_TO_EQUITY"})
 
-# v1 minimum quality filter — first step toward rejecting low-edge entries after gas/fees.
-# Floor from env ``MIN_NET_EDGE_PCT`` (see config.py / .env.example); future learning can tune from history.
-_MIN_NET_EDGE_PCT = 1.8
+# v1 minimum quality filter — reject low expected net return after gas/fees on entry directions.
+# Floor from env ``MIN_NET_EDGE_PCT`` (see config.py / .env.example); tune from trade history when ready.
+_MIN_NET_EDGE_PCT = 2.5
+_MIN_NET_EDGE_FEE_BUFFER_PCT = 0.75
 _MIN_NET_EDGE_ENTRY_DIRECTIONS = frozenset({"USDC_TO_EQUITY", "USDT_TO_WMATIC"})
 _EST_SWAP_GAS_UNITS = 180_000.0
 # Planning estimate for early decision gates (no RPC); ``main()`` uses live ``get_gas_status()`` gas.
-_NET_EDGE_PLANNING_GAS_GWEI = 80.0
+_NET_EDGE_PLANNING_GAS_GWEI = 120.0
 _MIN_NET_EDGE_POLICY_LOGGED = False
 
 
@@ -68,28 +69,66 @@ def _planning_gas_gwei_for_net_edge() -> float:
     return float(getattr(cfg, "NET_EDGE_PLANNING_GAS_GWEI", _NET_EDGE_PLANNING_GAS_GWEI))
 
 
+def _min_net_edge_fee_buffer_pct() -> float:
+    """Swap fee/slippage reserve subtracted from gross edge before gas (planning only)."""
+    return max(0.0, float(getattr(cfg, "MIN_NET_EDGE_FEE_BUFFER_PCT", _MIN_NET_EDGE_FEE_BUFFER_PCT)))
+
+
 def _estimate_swap_gas_cost_usd(gas_gwei: float) -> float:
     """Rough Polygon ERC-20 swap gas cost in USD (matches signal_equity_trader estimate)."""
     pol_price_usd = max(0.0, float(getattr(cfg, "POL_USD_PRICE", 0.0)))
     return max(0.0, (float(gas_gwei) * _EST_SWAP_GAS_UNITS / 1_000_000_000.0) * pol_price_usd)
 
 
+def _x_signal_strength_scale(signal_strength: float) -> float:
+    s = abs(float(signal_strength))
+    if s < 0.6:
+        return 0.25
+    return max(0.25, min(1.0, (s - 0.6) / 0.4))
+
+
+def plan_x_signal_gross_edge_pct(
+    signal_strength: float,
+    upside_pct: float | None = None,
+) -> float:
+    """Conservative gross edge % for X-SIGNAL USDC→equity net-edge planning (not a live quote)."""
+    strong_tp = float(getattr(cfg, "X_SIGNAL_EQUITY_STRONG_TP_PCT", 12.0))
+    scale = _x_signal_strength_scale(signal_strength)
+    heuristic = max(strong_tp * 0.25, strong_tp * scale)
+    if upside_pct is not None and float(upside_pct) > 0:
+        capped_upside = min(float(upside_pct), strong_tp * 1.25)
+        realization = 0.35 + 0.45 * scale
+        from_upside = capped_upside * realization
+        return min(heuristic, from_upside)
+    return heuristic
+
+
+def plan_main_strategy_gross_edge_pct() -> float:
+    """Conservative gross edge % for main USDT→WMATIC entry (below take-profit target)."""
+    explicit = float(getattr(cfg, "MAIN_STRATEGY_ENTRY_EDGE_PCT", 0.0))
+    if explicit > 0.0:
+        return max(0.0, explicit)
+    take_profit = max(0.0, float(getattr(cfg, "TAKE_PROFIT_PCT", 5.0)))
+    frac = max(0.0, min(1.0, float(getattr(cfg, "MAIN_STRATEGY_ENTRY_EDGE_FRAC", 0.70))))
+    return take_profit * frac
+
+
+def _effective_gross_edge_after_fee_buffer(gross_edge_pct: float) -> float:
+    return max(0.0, float(gross_edge_pct) - _min_net_edge_fee_buffer_pct())
+
+
 def _infer_expected_gross_edge_pct(decision: TradeDecision) -> float:
-    """Conservative gross upside % before gas — v1 heuristic, not a live quote."""
+    """Conservative gross upside % before fee buffer and gas — v1 heuristic, not a live quote."""
+    if decision.expected_gross_edge_pct is not None:
+        return max(0.0, float(decision.expected_gross_edge_pct))
     direction = str(decision.direction or "").strip().upper()
     if direction == "USDC_TO_EQUITY":
-        strong_tp = float(getattr(cfg, "X_SIGNAL_EQUITY_STRONG_TP_PCT", 12.0))
         strength = decision.signal_strength
         if strength is not None and float(strength) > 0:
-            s = abs(float(strength))
-            if s < 0.6:
-                scale = 0.25
-            else:
-                scale = max(0.25, min(1.0, (s - 0.6) / 0.4))
-            return max(strong_tp * 0.25, strong_tp * scale)
-        return max(0.0, strong_tp)
+            return plan_x_signal_gross_edge_pct(float(strength))
+        return max(0.0, float(getattr(cfg, "X_SIGNAL_EQUITY_STRONG_TP_PCT", 12.0)) * 0.25)
     if direction == "USDT_TO_WMATIC":
-        return max(0.0, float(getattr(cfg, "TAKE_PROFIT_PCT", 5.0)))
+        return plan_main_strategy_gross_edge_pct()
     return 0.0
 
 
@@ -98,12 +137,15 @@ def estimate_expected_net_edge_pct(
     trade_usd: float,
     expected_gross_edge_pct: float,
     gas_cost_usd: float,
+    fee_buffer_pct: float | None = None,
 ) -> float:
-    """Net expected return % of notional after subtracting estimated gas from gross edge."""
+    """Net expected return % of notional after fee buffer and estimated gas."""
     notional = float(trade_usd)
     if notional <= 0.0:
         return -100.0
-    gross_profit_usd = notional * (float(expected_gross_edge_pct) / 100.0)
+    buffer = _min_net_edge_fee_buffer_pct() if fee_buffer_pct is None else max(0.0, float(fee_buffer_pct))
+    effective_gross = max(0.0, float(expected_gross_edge_pct) - buffer)
+    gross_profit_usd = notional * (effective_gross / 100.0)
     net_profit_usd = gross_profit_usd - max(0.0, float(gas_cost_usd))
     return (net_profit_usd / notional) * 100.0
 
@@ -138,10 +180,33 @@ def _log_min_net_edge_policy_once(*, stage: str = "planning") -> None:
     _MIN_NET_EDGE_POLICY_LOGGED = True
     floor = _min_net_edge_floor_pct()
     planning_gwei = _planning_gas_gwei_for_net_edge()
+    fee_buf = _min_net_edge_fee_buffer_pct()
     dirs = ",".join(sorted(_MIN_NET_EDGE_ENTRY_DIRECTIONS))
     print(
         f"{runtime._nanolog()}MIN_NET_EDGE_ACTIVE | floor={floor:.2f}% "
-        f"| planning_gas={planning_gwei:.0f}gwei | directions={dirs} | stage={stage}"
+        f"| fee_buffer={fee_buf:.2f}% | planning_gas={planning_gwei:.0f}gwei "
+        f"| directions={dirs} | stage={stage}"
+    )
+
+
+def _low_edge_rejection_log_line(
+    *,
+    direction: str,
+    notional: float | None,
+    expected_gross_pct: float,
+    effective_gross_pct: float,
+    gas_usd: float,
+    expected_net_pct: float,
+    floor_pct: float,
+    reason: str,
+    stage: str,
+) -> str:
+    notional_s = "n/a" if notional is None or float(notional) <= 0.0 else f"${float(notional):.2f}"
+    return (
+        f"[nanoclaw] Low edge rejected | direction={direction} | notional={notional_s} "
+        f"| expected_gross={expected_gross_pct:.2f}% | effective_gross={effective_gross_pct:.2f}% "
+        f"| gas_est=${gas_usd:.4f} | expected_net_return_pct={expected_net_pct:.2f}% "
+        f"| floor={floor_pct:.2f}% | reason={reason} | stage={stage}"
     )
 
 
@@ -158,13 +223,23 @@ def _reject_if_low_expected_net_edge(
     if direction not in _MIN_NET_EDGE_ENTRY_DIRECTIONS:
         return False
     min_floor = _min_net_edge_floor_pct()
+    fee_buf = _min_net_edge_fee_buffer_pct()
     notional = float(trade_usd) if trade_usd is not None else 0.0
     if notional <= 0.0:
         reason = "below_min_net_edge (missing_notional)"
         log_skip(f"low_expected_edge ({reason}; floor={min_floor:.2f}%)")
         print(
-            f"[nanoclaw] Low edge rejected | direction={direction} | notional=n/a "
-            f"| reason={reason} | floor={min_floor:.2f}% | stage={stage}"
+            _low_edge_rejection_log_line(
+                direction=direction,
+                notional=None,
+                expected_gross_pct=0.0,
+                effective_gross_pct=0.0,
+                gas_usd=0.0,
+                expected_net_pct=-100.0,
+                floor_pct=min_floor,
+                reason=reason,
+                stage=stage,
+            )
         )
         return True
     passes, expected_net = trade_passes_min_net_edge(
@@ -175,16 +250,26 @@ def _reject_if_low_expected_net_edge(
     if passes:
         return False
     gross_pct = _infer_expected_gross_edge_pct(decision)
+    effective_gross = _effective_gross_edge_after_fee_buffer(gross_pct)
     gas_usd = _estimate_swap_gas_cost_usd(float(gas_gwei))
     reason = f"below_min_net_edge (floor={min_floor:.2f}%)"
     log_skip(
-        f"low_expected_edge (expected_net={expected_net:.2f}% < {min_floor:.2f}% "
-        f"after gas; gross≈{gross_pct:.2f}% notional=${notional:.2f})"
+        f"low_expected_edge (expected_net_return_pct={expected_net:.2f}% < {min_floor:.2f}% "
+        f"after gas; effective_gross={effective_gross:.2f}% fee_buffer={fee_buf:.2f}% "
+        f"notional=${notional:.2f})"
     )
     print(
-        f"[nanoclaw] Low edge rejected | direction={direction} | notional=${notional:.2f} "
-        f"| expected_gross={gross_pct:.2f}% | gas_est=${gas_usd:.4f} "
-        f"| expected_net={expected_net:.2f}% | floor={min_floor:.2f}% | reason={reason} | stage={stage}"
+        _low_edge_rejection_log_line(
+            direction=direction,
+            notional=notional,
+            expected_gross_pct=gross_pct,
+            effective_gross_pct=effective_gross,
+            gas_usd=gas_usd,
+            expected_net_pct=expected_net,
+            floor_pct=min_floor,
+            reason=reason,
+            stage=stage,
+        )
     )
     return True
 
@@ -610,23 +695,36 @@ _PROFIT_TAKE_FORCE_SMALL_LOG = (
     "no exit for {cycles} cycles | notional=${notional:.2f} | bypassing min_notional"
 )
 
-# Signal-Driven Rotation (May 2026): reduce WMATIC dependency — relax P2/force when stack is below $7.
+# Signal-Driven Rotation (May 2026): reduce over-reliance on high WMATIC — tiered P2/force/idle paths.
+# Low (< $7): smallest stacks still rotate via micro exits. Moderate ($7–$15): between low and healthy.
 _MAIN_STRATEGY_LOW_WMATIC_USD_THRESHOLD = 7.0
-_MAIN_STRATEGY_LOW_WMATIC_P2_WM_MIN_USD = 2.0
+_MAIN_STRATEGY_MODERATE_WMATIC_USD_THRESHOLD = 15.0
+_MAIN_STRATEGY_LOW_WMATIC_P2_WM_MIN_USD = 1.75
 _MAIN_STRATEGY_LOW_WMATIC_P2_SIGNAL_MIN = 0.45
-_MAIN_STRATEGY_LOW_WMATIC_FORCE_WM_MIN_USD = 2.0
-_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN = 3
+_MAIN_STRATEGY_LOW_WMATIC_FORCE_WM_MIN_USD = 1.75
+_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN = 2
+_MAIN_STRATEGY_MODERATE_P2_WM_MIN_USD = 4.0
+_MAIN_STRATEGY_MODERATE_P2_SIGNAL_MIN = 0.50
+_MAIN_STRATEGY_MODERATE_FORCE_WM_MIN_USD = 4.0
+_MAIN_STRATEGY_MODERATE_FORCE_CYCLES_MIN = 3
+# Long idle: many cycles without WMATIC→stable profit — allow micro rotation / force (gas-safe floor).
+_MAIN_STRATEGY_LONG_IDLE_CYCLES_LOW = 5
+_MAIN_STRATEGY_LONG_IDLE_CYCLES_MODERATE = 6
+_MAIN_STRATEGY_LONG_IDLE_CYCLES_HEALTHY = 8
+_MAIN_STRATEGY_LONG_IDLE_NOTIONAL_FLOOR_USD = 1.35
+_MAIN_STRATEGY_LONG_IDLE_FORCE_WM_MIN_USD = 1.5
+_MAIN_STRATEGY_LONG_IDLE_LOG = "[nanoclaw] MAIN_STRATEGY long idle fallback"
 
 # Signal-Driven Rotation (May 2026): after idle WMATIC→stable cycles, rotate a small stable slice via X-SIGNAL.
 _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_CYCLES_MIN = 6
 _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_MIN_STABLE_USD = 50.0
 _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_MIN_SIGNAL = 0.75
 # Relaxed fallback when WMATIC stack is low — still rotates stables without waiting for a large WMATIC exit.
-_MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_LOW_WM_CYCLES_MIN = 4
-_MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_LOW_WM_MIN_STABLE_USD = 35.0
-_MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_LOW_WM_MIN_SIGNAL = 0.65
-_MAIN_STRATEGY_IDLE_ROTATION_SELL_FRACTION_LOW = 0.32
-_MAIN_STRATEGY_IDLE_ROTATION_NOTIONAL_FLOOR_LOW = 1.5
+_MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_LOW_WM_CYCLES_MIN = 3
+_MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_LOW_WM_MIN_STABLE_USD = 30.0
+_MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_LOW_WM_MIN_SIGNAL = 0.60
+_MAIN_STRATEGY_IDLE_ROTATION_SELL_FRACTION_LOW = 0.35
+_MAIN_STRATEGY_IDLE_ROTATION_NOTIONAL_FLOOR_LOW = 1.35
 _MAIN_STRATEGY_STATUS_LOG = "[nanoclaw] MAIN_STRATEGY_STATUS"
 _MAIN_STRATEGY_OUTCOME_LOG = "[nanoclaw] MAIN_STRATEGY_OUTCOME"
 _STABLE_ROTATION_FALLBACK_LOG = (
@@ -634,6 +732,8 @@ _STABLE_ROTATION_FALLBACK_LOG = (
     "stables=${stable:.2f} | X-SIGNAL BUY eligible"
 )
 
+# CRITICAL (Signal-Driven Rotation profitability): on-chain fill rate for X-SIGNAL USDC→equity BUYs.
+# Without reliable fallback execution + STF backoff, selected signals burn gas and never rotate capital.
 # Signal-driven execution quality (May 2026): small high-conviction X-SIGNAL (~$11) — fallback slippage + min_out.
 _X_SIGNAL_SMALL_HIGH_CONVICTION_MAX_NOTIONAL_USD = 12.0
 _X_SIGNAL_STF_STATE_KEY = "x_signal_stf_backoff"
@@ -735,16 +835,18 @@ def _profit_take_balance_relief_signal_strength(
 
     Prefer profit_signal['signal_strength'] when the strategy supplies it.
     Otherwise derive strength from exit reason and gain/peak/pullback metrics.
-    When WMATIC stack ≥ $7 and exit reason is not HOLD, strength is never below 0.55.
-    When stack < $7 (Signal-Driven Rotation), floor drops to 0.45 for small profit takes.
+    Tiered floors: low 0.45, moderate 0.50, healthy 0.55 (see ``_profit_take_p2_signal_min``).
+    When ``wmatic_usd_equiv`` is unknown, use the healthy default (0.55).
     """
     wm_min = float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN)
     profit_signal = _profit_signal_for_relief_scoring(
         profit_signal,
         wmatic_usd_equiv=wmatic_usd_equiv,
     )
-    wm_for_floor = float(wmatic_usd_equiv) if wmatic_usd_equiv is not None else wm_min
-    floor = _profit_take_p2_signal_min(wm_for_floor)
+    if wmatic_usd_equiv is not None:
+        floor = _profit_take_p2_signal_min(float(wmatic_usd_equiv))
+    else:
+        floor = float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH)
 
     valid_exit_reason = False
     has_positive_gain = False
@@ -851,28 +953,92 @@ def _profit_take_wmatic_stack_low(wm_equiv_usd: float) -> bool:
     return float(wm_equiv_usd) + 1e-9 < float(_MAIN_STRATEGY_LOW_WMATIC_USD_THRESHOLD)
 
 
-def _profit_take_p2_wm_stack_min_usd(wm_equiv_usd: float) -> float:
+def _profit_take_wmatic_stack_moderate(wm_equiv_usd: float) -> bool:
+    """Stack $7–$15: between depleted and healthy — still reduce WMATIC-centric gates."""
+    wm = float(wm_equiv_usd)
+    return wm + 1e-9 >= float(_MAIN_STRATEGY_LOW_WMATIC_USD_THRESHOLD) and wm + 1e-9 < float(
+        _MAIN_STRATEGY_MODERATE_WMATIC_USD_THRESHOLD
+    )
+
+
+def _profit_take_stack_tier(wm_equiv_usd: float) -> str:
+    """low | moderate | healthy — drives P2/force/idle thresholds (less WMATIC balance required)."""
     if _profit_take_wmatic_stack_low(wm_equiv_usd):
+        return "low"
+    if _profit_take_wmatic_stack_moderate(wm_equiv_usd):
+        return "moderate"
+    return "healthy"
+
+
+def _profit_take_long_idle_cycles_min(wm_equiv_usd: float) -> int:
+    tier = _profit_take_stack_tier(wm_equiv_usd)
+    if tier == "low":
+        return int(_MAIN_STRATEGY_LONG_IDLE_CYCLES_LOW)
+    if tier == "moderate":
+        return int(_MAIN_STRATEGY_LONG_IDLE_CYCLES_MODERATE)
+    return int(_MAIN_STRATEGY_LONG_IDLE_CYCLES_HEALTHY)
+
+
+def _profit_take_long_idle_active(wm_equiv_usd: float, cycles_since_exit: int) -> bool:
+    """Many cycles without WMATIC→stable exit — micro rotation / force within gas-safe bounds."""
+    return int(cycles_since_exit) >= _profit_take_long_idle_cycles_min(wm_equiv_usd)
+
+
+def _profit_take_p2_wm_stack_min_usd(wm_equiv_usd: float) -> float:
+    tier = _profit_take_stack_tier(wm_equiv_usd)
+    if tier == "low":
         return float(_MAIN_STRATEGY_LOW_WMATIC_P2_WM_MIN_USD)
+    if tier == "moderate":
+        return float(_MAIN_STRATEGY_MODERATE_P2_WM_MIN_USD)
     return float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN)
 
 
 def _profit_take_p2_signal_min(wm_equiv_usd: float) -> float:
-    if _profit_take_wmatic_stack_low(wm_equiv_usd):
+    tier = _profit_take_stack_tier(wm_equiv_usd)
+    if tier == "low":
         return float(_MAIN_STRATEGY_LOW_WMATIC_P2_SIGNAL_MIN)
+    if tier == "moderate":
+        return float(_MAIN_STRATEGY_MODERATE_P2_SIGNAL_MIN)
     return float(_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH)
 
 
-def _profit_take_force_wm_min_usd(wm_equiv_usd: float) -> float:
-    if _profit_take_wmatic_stack_low(wm_equiv_usd):
-        return float(_MAIN_STRATEGY_LOW_WMATIC_FORCE_WM_MIN_USD)
-    return float(_MAIN_STRATEGY_FORCE_PROFIT_TAKE_WMATIC_USD_MIN)
+def _profit_take_force_wm_min_usd(
+    wm_equiv_usd: float,
+    *,
+    cycles_since_exit: int = 0,
+) -> float:
+    tier = _profit_take_stack_tier(wm_equiv_usd)
+    if tier == "low":
+        base = float(_MAIN_STRATEGY_LOW_WMATIC_FORCE_WM_MIN_USD)
+    elif tier == "moderate":
+        base = float(_MAIN_STRATEGY_MODERATE_FORCE_WM_MIN_USD)
+    else:
+        base = float(_MAIN_STRATEGY_FORCE_PROFIT_TAKE_WMATIC_USD_MIN)
+    if _profit_take_long_idle_active(wm_equiv_usd, cycles_since_exit):
+        return min(base, float(_MAIN_STRATEGY_LONG_IDLE_FORCE_WM_MIN_USD))
+    return base
 
 
 def _profit_take_force_cycles_min(wm_equiv_usd: float) -> int:
-    if _profit_take_wmatic_stack_low(wm_equiv_usd):
+    tier = _profit_take_stack_tier(wm_equiv_usd)
+    if tier == "low":
         return int(_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN)
+    if tier == "moderate":
+        return int(_MAIN_STRATEGY_MODERATE_FORCE_CYCLES_MIN)
     return int(_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN)
+
+
+def _profit_take_force_notional_floor_usd(
+    wm_equiv_usd: float,
+    *,
+    cycles_since_exit: int = 0,
+) -> float:
+    base = float(_MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_FLOOR_USD)
+    if _profit_take_wmatic_stack_low(wm_equiv_usd):
+        base = float(_MAIN_STRATEGY_IDLE_ROTATION_NOTIONAL_FLOOR_LOW)
+    if _profit_take_long_idle_active(wm_equiv_usd, cycles_since_exit):
+        return float(_MAIN_STRATEGY_LONG_IDLE_NOTIONAL_FLOOR_USD)
+    return base
 
 
 def _main_strategy_stable_rotation_fallback_params(
@@ -909,23 +1075,26 @@ def _main_strategy_idle_rotation_eligibility(
     wm_equiv = float(balances.wmatic) * float(current_price)
     if wm_equiv + 1e-9 >= float(MAIN_STRATEGY_TP_TRIGGER_WMATIC_USD):
         return False, "wmatic_above_tp_band"
-    if wm_equiv + 1e-9 < _profit_take_force_wm_min_usd(wm_equiv):
-        return False, "wmatic_below_force_floor"
     cycles = _profit_take_cycles_since_exit(state)
+    force_wm_min = _profit_take_force_wm_min_usd(wm_equiv, cycles_since_exit=cycles)
+    if wm_equiv + 1e-9 < force_wm_min:
+        return False, f"wmatic_below_force_floor_${force_wm_min:.2f}"
     cycles_min = _profit_take_force_cycles_min(wm_equiv)
     if cycles < cycles_min:
         return False, f"idle_cycles={cycles}/{cycles_min}"
     fraction = _main_strategy_idle_rotation_sell_fraction(wm_equiv)
     notional = wm_equiv * fraction
-    floor = (
-        float(_MAIN_STRATEGY_IDLE_ROTATION_NOTIONAL_FLOOR_LOW)
-        if _profit_take_wmatic_stack_low(wm_equiv)
-        else float(_MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_FLOOR_USD)
-    )
+    floor = _profit_take_force_notional_floor_usd(wm_equiv, cycles_since_exit=cycles)
     if notional + 1e-9 < floor:
-        return False, f"notional_${notional:.2f}_below_${floor:.2f}"
+        long_idle = _profit_take_long_idle_active(wm_equiv, cycles)
+        return False, (
+            f"notional_${notional:.2f}_below_${floor:.2f}"
+            + (" (long_idle_not_met)" if long_idle else "")
+        )
     if int(balances.wmatic * fraction * 1e18) <= 0:
         return False, "zero_amount_in"
+    if _profit_take_long_idle_active(wm_equiv, cycles):
+        return True, "eligible_long_idle_micro_rotation"
     return True, "eligible"
 
 
@@ -942,14 +1111,26 @@ def _main_strategy_idle_rotation_sell_decision(
     wm_equiv = float(balances.wmatic) * float(current_price)
     fraction = _main_strategy_idle_rotation_sell_fraction(wm_equiv)
     notional = wm_equiv * fraction
-    low = _profit_take_wmatic_stack_low(wm_equiv)
-    reason = "low_wmatic_idle_rotation" if low else "moderate_wmatic_idle_rotation"
+    tier = _profit_take_stack_tier(wm_equiv)
+    reason = (
+        "low_wmatic_idle_rotation"
+        if tier == "low"
+        else "moderate_wmatic_idle_rotation"
+        if tier == "moderate"
+        else "healthy_wmatic_idle_rotation"
+    )
     cycles = _profit_take_cycles_since_exit(state)
+    long_idle = _profit_take_long_idle_active(wm_equiv, cycles)
     print(
         f"{runtime._nanolog()}Main strategy idle rotation | wmatic_usd=${wm_equiv:.2f} | "
-        f"low_stack={low} | cycles_since_exit={cycles} | sell_fraction={fraction:.2f} | "
-        f"notional≈${notional:.2f} | note={note}"
+        f"stack_tier={tier} | cycles_since_exit={cycles} | long_idle={long_idle} | "
+        f"sell_fraction={fraction:.2f} | notional≈${notional:.2f} | note={note}"
     )
+    if long_idle:
+        print(
+            f"{_MAIN_STRATEGY_LONG_IDLE_LOG} | tier={tier} | cycles={cycles} | "
+            f"wmatic_usd=${wm_equiv:.2f} | micro_rotation_ready=True"
+        )
     decision_log.log_main_strategy_decision(
         action="TAKE",
         reason=reason,
@@ -964,10 +1145,44 @@ def _main_strategy_idle_rotation_sell_decision(
         direction="WMATIC_TO_USDT",
         amount_in=int(balances.wmatic * fraction * 1e18),
         message=(
-            f"🔄 Idle WMATIC rotation ({'low' if low else 'moderate'} stack: "
-            f"${wm_equiv:.2f}, {cycles} cycles since exit)"
+            f"🔄 Idle WMATIC rotation ({tier} stack: "
+            f"${wm_equiv:.2f}, {cycles} cycles since exit"
+            f"{', long idle' if long_idle else ''})"
         ),
     )
+
+
+def _main_strategy_quiet_blocker(
+    balances: Balances,
+    current_price: float,
+    profit_signal: dict | None,
+    state: dict | None,
+) -> str:
+    """Human-readable reason main strategy is quiet this cycle (reduces WMATIC-balance mystery)."""
+    wm_usd = float(balances.wmatic) * float(current_price)
+    cycles = _profit_take_cycles_since_exit(state)
+    idle_eligible, idle_note = _main_strategy_idle_rotation_eligibility(
+        balances,
+        current_price,
+        state,
+    )
+    if idle_eligible:
+        return "idle_rotation_ready"
+    if cycles < _profit_take_force_cycles_min(wm_usd):
+        need = _profit_take_force_cycles_min(wm_usd) - cycles
+        return f"waiting_idle_cycles (need {need} more)"
+    if wm_usd + 1e-9 < _profit_take_force_wm_min_usd(wm_usd, cycles_since_exit=cycles):
+        return "wmatic_below_force_floor"
+    stable = float(balances.usdt) + float(balances.usdc)
+    fb_cycles, fb_stable_min, _ = _main_strategy_stable_rotation_fallback_params(wm_usd)
+    if cycles >= fb_cycles and stable + 1e-9 >= fb_stable_min:
+        return "stable_fallback_or_xsignal_pending"
+    pt_reason = str((profit_signal or {}).get("reason") or "").strip().upper()
+    if pt_reason == "HOLD":
+        return "profit_take_hold_no_exit_signal"
+    if "notional" in idle_note:
+        return idle_note
+    return idle_note or "default_usdt_to_wmatic_or_deferred"
 
 
 def _log_main_strategy_cycle_status(
@@ -978,8 +1193,12 @@ def _log_main_strategy_cycle_status(
 ) -> None:
     """Signal-Driven Rotation (May 2026): per-cycle visibility into main-strategy activity vs quiet."""
     wm_usd = float(balances.wmatic) * float(current_price)
-    low = _profit_take_wmatic_stack_low(wm_usd)
+    tier = _profit_take_stack_tier(wm_usd)
+    low = tier == "low"
+    moderate = tier == "moderate"
     cycles = _profit_take_cycles_since_exit(state)
+    long_idle = _profit_take_long_idle_active(wm_usd, cycles)
+    long_idle_in = max(0, _profit_take_long_idle_cycles_min(wm_usd) - cycles)
     stable = float(balances.usdt) + float(balances.usdc)
     pt_reason = str((profit_signal or {}).get("reason") or "n/a").strip().upper()
     fb_cycles, fb_stable_min, fb_signal_min = _main_strategy_stable_rotation_fallback_params(wm_usd)
@@ -989,17 +1208,28 @@ def _log_main_strategy_cycle_status(
         current_price,
         state,
     )
-    activity = "active_idle_rotation" if idle_eligible else (
-        "active_p2_or_force" if low or cycles >= _profit_take_force_cycles_min(wm_usd) else "quiet_accumulate_or_wait"
+    force_cycles_min = _profit_take_force_cycles_min(wm_usd)
+    p2_or_force_ready = cycles >= force_cycles_min and wm_usd + 1e-9 >= _profit_take_p2_wm_stack_min_usd(
+        wm_usd
     )
+    activity = "active_idle_rotation" if idle_eligible else (
+        "active_p2_or_force"
+        if p2_or_force_ready or long_idle
+        else "quiet_accumulate_or_wait"
+    )
+    quiet_blocker = _main_strategy_quiet_blocker(balances, current_price, profit_signal, state)
     print(
-        f"{_MAIN_STRATEGY_STATUS_LOG} | wmatic_usd=${wm_usd:.2f} | low_wmatic_stack={low} | "
-        f"cycles_since_wm_exit={cycles} | stables=${stable:.2f} | profit_take_reason={pt_reason} | "
-        f"activity={activity} | idle_rotation_eligible={idle_eligible} | idle_rotation_note={idle_note} | "
+        f"{_MAIN_STRATEGY_STATUS_LOG} | wmatic_usd=${wm_usd:.2f} | stack_tier={tier} | "
+        f"low_wmatic_stack={low} | moderate_wmatic_stack={moderate} | "
+        f"cycles_since_wm_exit={cycles} | long_idle_active={long_idle} | "
+        f"cycles_to_long_idle={long_idle_in} | stables=${stable:.2f} | profit_take_reason={pt_reason} | "
+        f"activity={activity} | quiet_blocker={quiet_blocker} | "
+        f"idle_rotation_eligible={idle_eligible} | idle_rotation_note={idle_note} | "
         f"p2_wm_min=${_profit_take_p2_wm_stack_min_usd(wm_usd):.2f} | "
         f"p2_signal_min={_profit_take_p2_signal_min(wm_usd):.2f} | "
-        f"force_wm_min=${_profit_take_force_wm_min_usd(wm_usd):.2f} | "
-        f"force_cycles_min={_profit_take_force_cycles_min(wm_usd)} | "
+        f"force_wm_min=${_profit_take_force_wm_min_usd(wm_usd, cycles_since_exit=cycles):.2f} | "
+        f"force_cycles_min={force_cycles_min} | "
+        f"force_notional_floor=${_profit_take_force_notional_floor_usd(wm_usd, cycles_since_exit=cycles):.2f} | "
         f"stable_fallback_ready={fallback_ready} | stable_fallback_min_signal={fb_signal_min:.2f}"
     )
 
@@ -1083,13 +1313,20 @@ def _profit_take_force_small_relief_eligible(
 ) -> bool:
     """TEMPORARY SPRINT FIX - May 2026: force small profit take when stack + idle cycles qualify.
 
-    Signal-Driven Rotation (May 2026): when WMATIC stack < $7, force threshold drops to $2 and 3 cycles.
+    Signal-Driven Rotation (May 2026): tiered wm/cycle floors; long idle lowers notional to $1.35.
+    Reduces over-reliance on high WMATIC balance for capital rotation.
     """
     dir_u = str(direction or "").strip().upper()
     if dir_u not in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:
         return False
-    force_wm_min = _profit_take_force_wm_min_usd(wm_equiv_usd)
-    floor_usd = float(_MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_FLOOR_USD)
+    force_wm_min = _profit_take_force_wm_min_usd(
+        wm_equiv_usd,
+        cycles_since_exit=cycles_since_exit,
+    )
+    floor_usd = _profit_take_force_notional_floor_usd(
+        wm_equiv_usd,
+        cycles_since_exit=cycles_since_exit,
+    )
     cycles_min = _profit_take_force_cycles_min(wm_equiv_usd)
     if wm_equiv_usd + 1e-9 < force_wm_min:
         return False
@@ -1106,15 +1343,23 @@ def _log_profit_take_p2_relief_check(
     allowed: bool,
     floor_usd: float | None = None,
     reason: str | None = None,
+    cycles_since_exit: int | None = None,
 ) -> None:
     """TEMPORARY (48-hour sprint): structured P2 relief decision log for ops triage."""
     wm_s = "n/a" if wm_equiv_usd is None else f"${wm_equiv_usd:.2f}"
     notional_s = "n/a" if notional_usd is None else f"${notional_usd:.2f}"
     signal_s = "n/a" if signal_strength is None else f"{signal_strength:.2f}"
-    line = (
-        f"{_PROFIT_TAKE_P2_RELIEF_CHECK_LOG} | wm={wm_s} | notional={notional_s} | "
-        f"signal={signal_s} | allowed={allowed}"
+    tier_s = (
+        "n/a"
+        if wm_equiv_usd is None
+        else _profit_take_stack_tier(float(wm_equiv_usd))
     )
+    line = (
+        f"{_PROFIT_TAKE_P2_RELIEF_CHECK_LOG} | wm={wm_s} | stack_tier={tier_s} | "
+        f"notional={notional_s} | signal={signal_s} | allowed={allowed}"
+    )
+    if cycles_since_exit is not None:
+        line += f" | cycles_since_exit={cycles_since_exit}"
     if floor_usd is not None:
         line += f" | floor=${floor_usd:.2f}"
     if reason:
@@ -1177,7 +1422,9 @@ def _profit_take_balance_relief_bypass_allowed(
         allowed = False
         reason = "notional_at_or_above_min_trade"
     elif force_small:
-        stack_label = "low_stack" if _profit_take_wmatic_stack_low(wm_equiv_usd) else "healthy_stack"
+        stack_label = _profit_take_stack_tier(wm_equiv_usd) + "_stack"
+        if _profit_take_long_idle_active(wm_equiv_usd, cycles_since_exit):
+            stack_label += "+long_idle"
         print(
             _PROFIT_TAKE_FORCE_SMALL_LOG.format(
                 wm=wm_equiv_usd,
@@ -1204,6 +1451,7 @@ def _profit_take_balance_relief_bypass_allowed(
         allowed=allowed,
         floor_usd=floor_usd,
         reason=reason,
+        cycles_since_exit=cycles_since_exit,
     )
     return allowed
 
@@ -1315,24 +1563,33 @@ def _x_signal_stf_pause_active(state: dict | None, symbol: str) -> tuple[bool, s
 
 
 def _record_x_signal_stf_failure(state: dict, decision: TradeDecision, swap_outcome: dict | None) -> None:
-    """Signal-driven execution quality (May 2026): backoff asset after repeated STF reverts."""
+    """CRITICAL: per-asset STF backoff — short cooldown each revert; long pause after threshold."""
     if not swap_outcome or not bool(swap_outcome.get("stf")):
         return
     sym = _x_signal_symbol_from_decision(decision)
     entry = _x_signal_stf_pause_entry(state, sym)
     entry["failures"] = int(entry.get("failures") or 0) + 1
     threshold = max(1, int(cfg.X_SIGNAL_STF_PAUSE_AFTER_FAILURES))
-    pause_secs = max(60, int(cfg.X_SIGNAL_STF_PAUSE_SECONDS))
+    short_cd = max(60, int(cfg.X_SIGNAL_STF_FAILURE_COOLDOWN_SECONDS))
+    long_pause_secs = max(60, int(cfg.X_SIGNAL_STF_PAUSE_SECONDS))
+    failures = int(entry["failures"])
     print(
         f"{_X_SIGNAL_STF_LOG} | STF failure recorded | sym={sym} | "
-        f"failures={entry['failures']}/{threshold} | revert={str(swap_outcome.get('revert_reason') or '')[:120]}"
+        f"failures={failures}/{threshold} | revert={str(swap_outcome.get('revert_reason') or '')[:120]}"
     )
-    if int(entry["failures"]) >= threshold:
-        entry["paused_until"] = time.time() + float(pause_secs)
+    if failures >= threshold:
+        entry["paused_until"] = time.time() + float(long_pause_secs)
         entry["failures"] = 0
         print(
             f"{_X_SIGNAL_STF_LOG} | pausing X-SIGNAL BUY for {sym} | "
-            f"duration={pause_secs}s | reason=repeated_stf"
+            f"duration={long_pause_secs}s | reason=repeated_stf"
+        )
+    else:
+        until = time.time() + float(short_cd)
+        entry["paused_until"] = max(float(entry.get("paused_until") or 0.0), until)
+        print(
+            f"{_X_SIGNAL_STF_LOG} | STF cooldown for {sym} | "
+            f"duration={short_cd}s | failures={failures}/{threshold}"
         )
 
 
@@ -1433,7 +1690,7 @@ def _resolve_x_signal_enhanced_fallback_execution(
     *,
     decision_notional_usd: float | None,
 ) -> tuple[int, int, int | None] | None:
-    """Signal-driven execution quality (May 2026): (primary_bps, retry_bps, min_out_extra_bps) for fallback router."""
+    """CRITICAL: (primary_bps, retry_bps, min_out_extra_bps) for X-SIGNAL fallback router execution."""
     strength = decision.signal_strength
     small = _x_signal_small_high_conviction_relaxed_slippage(
         decision,
@@ -1817,6 +2074,11 @@ def determine_trade_decision(
             )
             x_dust_min_fb = _x_signal_equity_effective_dust_min(balances)
             fb_notional = _decision_notional_usd(fallback_xd, current_price_usd=current_price)
+            _, edge_fb = trade_passes_min_net_edge(
+                fallback_xd,
+                trade_usd=float(fb_notional or 0.0),
+                gas_gwei=planning_gas_gwei,
+            )
             if _decision_blocked_by_min_net_edge(
                 fallback_xd,
                 trade_usd=fb_notional,
@@ -1828,7 +2090,10 @@ def determine_trade_decision(
                     reason="below_min_net_edge",
                     wmatic_balance=float(balances.wmatic),
                     wmatic_usd=float(balances.wmatic) * float(current_price),
-                    extra=f"stable_rotation_fallback notional=${fb_notional}",
+                    extra=(
+                        f"stable_rotation_fallback notional=${fb_notional} "
+                        f"expected_net_return_pct={edge_fb:.2f}% floor={_min_net_edge_floor_pct():.2f}%"
+                    ),
                     state=state,
                 )
             elif not _defer_if_dust(
@@ -2075,10 +2340,12 @@ async def main(*, dry_run: bool = False) -> None:
             tier = "gated" if fallback_min_out_extra_bps and int(fallback_min_out_extra_bps) >= int(
                 cfg.X_SIGNAL_GATED_TRADE_MIN_OUT_EXTRA_BPS
             ) else "small_high_conviction"
+            ramp = _x_signal_fallback_slippage_ramp(fallback_slip_bps, fallback_slip_retry_bps)
             print(
                 f"{_X_SIGNAL_STF_LOG} | EXEC ATTEMPT | sym={x_sym} | tier={tier} | "
                 f"notional=${decision_notional_usd:.2f} | signal={decision.signal_strength} | "
                 f"fallback_slip={fallback_slip_bps}/{fallback_slip_retry_bps} bps | "
+                f"slippage_ramp={'→'.join(str(b) for b in ramp)} | "
                 f"min_out_extra={fallback_min_out_extra_bps} bps | v3_fee=best_of(500,3000,10000)"
             )
         elif is_x_signal_buy:

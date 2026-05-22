@@ -1,7 +1,7 @@
 import time
 
 from modules.runtime import TradeDecision, Balances
-from config import MIN_NET_EDGE_PCT
+from config import MIN_NET_EDGE_FEE_BUFFER_PCT, MIN_NET_EDGE_PCT
 from modules import swap_executor as swap_exec_mod
 from modules.swap_executor import (
     _MIN_NET_EDGE_PCT,
@@ -9,6 +9,8 @@ from modules.swap_executor import (
     _infer_expected_gross_edge_pct,
     _log_min_net_edge_policy_once,
     _min_net_edge_floor_pct,
+    plan_main_strategy_gross_edge_pct,
+    plan_x_signal_gross_edge_pct,
     _profit_take_balance_relief_bypass_allowed,
     _reject_if_low_expected_net_edge,
     _profit_take_balance_relief_signal_strength,
@@ -16,6 +18,13 @@ from modules.swap_executor import (
     _profit_take_force_small_relief_eligible,
     _profit_take_record_exit,
     _profit_take_wmatic_stack_low,
+    _profit_take_wmatic_stack_moderate,
+    _profit_take_stack_tier,
+    _profit_take_long_idle_active,
+    _profit_take_force_notional_floor_usd,
+    _MAIN_STRATEGY_MODERATE_FORCE_CYCLES_MIN,
+    _MAIN_STRATEGY_LONG_IDLE_CYCLES_LOW,
+    _MAIN_STRATEGY_LONG_IDLE_NOTIONAL_FLOOR_USD,
     _main_strategy_stable_rotation_fallback,
     _MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN,
     _MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_FLOOR_USD,
@@ -156,9 +165,10 @@ def test_profit_take_force_small_relief_eligible_requires_cycles_and_floor():
         notional_usd=3.5,
         cycles_since_exit=_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN,
     )
+    # Long idle lowers wm floor to $1.50 — sub-$1.50 stack still blocked even after many cycles.
     assert not _profit_take_force_small_relief_eligible(
         direction="WMATIC_TO_USDT",
-        wm_equiv_usd=_MAIN_STRATEGY_LOW_WMATIC_FORCE_WM_MIN_USD - 0.01,
+        wm_equiv_usd=_MAIN_STRATEGY_LONG_IDLE_NOTIONAL_FLOOR_USD - 0.01,
         notional_usd=3.5,
         cycles_since_exit=10,
     )
@@ -288,7 +298,7 @@ def test_profit_take_balance_relief_bypass_rejects_weak_signal():
 
 
 def test_profit_take_balance_relief_bypass_rejects_sub_two_dollar_wmatic_stack():
-    """Signal-Driven Rotation: low-WMATIC P2 still needs ≥ $2 stack."""
+    """Signal-Driven Rotation: low-WMATIC P2 still needs ≥ $1.75 stack."""
     decision = TradeDecision(
         direction="WMATIC_TO_USDT",
         amount_in=int(8 * 1_000_000_000_000_000_000),
@@ -328,7 +338,7 @@ def test_profit_take_wmatic_stack_low_boundary():
     assert not _profit_take_wmatic_stack_low(7.0)
 
 
-def test_profit_take_force_small_relief_low_wmatic_three_cycles():
+def test_profit_take_force_small_relief_low_wmatic_two_cycles():
     assert _profit_take_force_small_relief_eligible(
         direction="WMATIC_TO_USDT",
         wm_equiv_usd=5.5,
@@ -340,6 +350,42 @@ def test_profit_take_force_small_relief_low_wmatic_three_cycles():
         wm_equiv_usd=_MAIN_STRATEGY_LOW_WMATIC_FORCE_WM_MIN_USD - 0.01,
         notional_usd=_MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_FLOOR_USD,
         cycles_since_exit=_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN,
+    )
+
+
+def test_profit_take_stack_tier_and_moderate_thresholds():
+    assert _profit_take_stack_tier(5.0) == "low"
+    assert _profit_take_stack_tier(10.0) == "moderate"
+    assert _profit_take_stack_tier(20.0) == "healthy"
+    assert _profit_take_wmatic_stack_moderate(10.0)
+    assert not _profit_take_wmatic_stack_moderate(5.0)
+    assert _profit_take_force_small_relief_eligible(
+        direction="WMATIC_TO_USDT",
+        wm_equiv_usd=10.0,
+        notional_usd=2.0,
+        cycles_since_exit=_MAIN_STRATEGY_MODERATE_FORCE_CYCLES_MIN,
+    )
+    assert not _profit_take_force_small_relief_eligible(
+        direction="WMATIC_TO_USDT",
+        wm_equiv_usd=10.0,
+        notional_usd=2.0,
+        cycles_since_exit=_MAIN_STRATEGY_MODERATE_FORCE_CYCLES_MIN - 1,
+    )
+
+
+def test_profit_take_long_idle_lowers_notional_floor():
+    wm = 5.7
+    assert not _profit_take_long_idle_active(wm, _MAIN_STRATEGY_LONG_IDLE_CYCLES_LOW - 1)
+    assert _profit_take_long_idle_active(wm, _MAIN_STRATEGY_LONG_IDLE_CYCLES_LOW)
+    assert (
+        _profit_take_force_notional_floor_usd(wm, cycles_since_exit=_MAIN_STRATEGY_LONG_IDLE_CYCLES_LOW)
+        == _MAIN_STRATEGY_LONG_IDLE_NOTIONAL_FLOOR_USD
+    )
+    assert _profit_take_force_small_relief_eligible(
+        direction="WMATIC_TO_USDT",
+        wm_equiv_usd=wm,
+        notional_usd=1.36,
+        cycles_since_exit=_MAIN_STRATEGY_LONG_IDLE_CYCLES_LOW,
     )
 
 
@@ -451,7 +497,7 @@ def test_main_strategy_idle_rotation_sell_after_low_wmatic_idle_cycles():
     decision = _main_strategy_idle_rotation_sell_decision(balances, 1.0, state=state)
     assert decision is not None
     assert decision.direction == "WMATIC_TO_USDT"
-    assert decision.amount_in == int(5.7 * 0.32 * 1e18)
+    assert decision.amount_in == int(5.7 * 0.35 * 1e18)
 
 
 def test_main_strategy_idle_rotation_sell_not_before_cycle_threshold():
@@ -461,7 +507,7 @@ def test_main_strategy_idle_rotation_sell_not_before_cycle_threshold():
     assert _main_strategy_idle_rotation_sell_decision(balances, 1.0, state=state) is None
     eligible, note = _main_strategy_idle_rotation_eligibility(balances, 1.0, state)
     assert not eligible
-    assert "idle_cycles=1/3" in note
+    assert "idle_cycles=1/2" in note
 
 
 def test_profit_take_balance_relief_bypass_accepts_notional_at_relaxed_floor(capsys):
@@ -948,9 +994,27 @@ def test_resolve_x_signal_enhanced_fallback_gated_includes_min_out_extra(monkeyp
     assert resolved == (9000, 12000, 75)
 
 
+def test_x_signal_stf_pause_after_single_failure(monkeypatch):
+    monkeypatch.setattr("modules.swap_executor.cfg.X_SIGNAL_STF_PAUSE_AFTER_FAILURES", 2)
+    monkeypatch.setattr("modules.swap_executor.cfg.X_SIGNAL_STF_FAILURE_COOLDOWN_SECONDS", 300)
+    state: dict = {}
+    decision = TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=12_000_000,
+        signal_strength=0.92,
+        cooldown_asset=("WETH_ALPHA", 1800),
+    )
+    _record_x_signal_stf_failure(state, decision, {"stf": True, "revert_reason": "STF"})
+    paused, detail = _x_signal_stf_pause_active(state, "WETH_ALPHA")
+    assert paused is True
+    assert "stf_pause_active" in detail
+    assert state["x_signal_stf_backoff"]["WETH_ALPHA"]["failures"] == 1
+
+
 def test_x_signal_stf_pause_blocks_buy_after_threshold(monkeypatch):
     monkeypatch.setattr("modules.swap_executor.cfg.X_SIGNAL_STF_PAUSE_AFTER_FAILURES", 2)
     monkeypatch.setattr("modules.swap_executor.cfg.X_SIGNAL_STF_PAUSE_SECONDS", 600)
+    monkeypatch.setattr("modules.swap_executor.cfg.X_SIGNAL_STF_FAILURE_COOLDOWN_SECONDS", 60)
     state: dict = {}
     decision = TradeDecision(
         direction="USDC_TO_EQUITY",
@@ -1004,13 +1068,30 @@ def test_min_net_edge_floor_pct_uses_config_when_set(monkeypatch):
     assert _min_net_edge_floor_pct() == pytest.approx(2.5)
 
 
-def test_estimate_expected_net_edge_pct_subtracts_gas_from_gross():
+def test_estimate_expected_net_edge_pct_subtracts_fee_buffer_and_gas(monkeypatch):
+    monkeypatch.setattr("modules.swap_executor.cfg.MIN_NET_EDGE_FEE_BUFFER_PCT", 0.75)
     net = estimate_expected_net_edge_pct(
         trade_usd=20.0,
         expected_gross_edge_pct=5.0,
         gas_cost_usd=0.20,
+        fee_buffer_pct=0.75,
     )
-    assert net == pytest.approx(4.0)
+    assert net == pytest.approx(3.25)
+
+
+def test_plan_x_signal_gross_edge_pct_caps_high_upside_for_weak_signal(monkeypatch):
+    monkeypatch.setattr("modules.swap_executor.cfg.env_float", lambda _k, default: 12.0)
+    weak_high_upside = plan_x_signal_gross_edge_pct(0.62, upside_pct=22.0)
+    assert weak_high_upside == pytest.approx(3.0)
+    strong = plan_x_signal_gross_edge_pct(0.95, upside_pct=22.0)
+    assert strong == pytest.approx(10.5)
+
+
+def test_plan_main_strategy_gross_edge_pct_uses_take_profit_fraction(monkeypatch):
+    monkeypatch.setattr("modules.swap_executor.cfg.TAKE_PROFIT_PCT", 6.0)
+    monkeypatch.setattr("modules.swap_executor.cfg.MAIN_STRATEGY_ENTRY_EDGE_PCT", 0.0)
+    monkeypatch.setattr("modules.swap_executor.cfg.MAIN_STRATEGY_ENTRY_EDGE_FRAC", 0.70)
+    assert plan_main_strategy_gross_edge_pct() == pytest.approx(4.2)
 
 
 def test_infer_expected_gross_edge_pct_scales_x_signal_by_strength(monkeypatch):
@@ -1019,6 +1100,15 @@ def test_infer_expected_gross_edge_pct_scales_x_signal_by_strength(monkeypatch):
     strong = TradeDecision(direction="USDC_TO_EQUITY", signal_strength=0.95)
     assert _infer_expected_gross_edge_pct(weak) == pytest.approx(3.0)
     assert _infer_expected_gross_edge_pct(strong) == pytest.approx(10.5)
+
+
+def test_infer_expected_gross_edge_pct_prefers_decision_field():
+    d = TradeDecision(
+        direction="USDC_TO_EQUITY",
+        signal_strength=0.95,
+        expected_gross_edge_pct=4.0,
+    )
+    assert _infer_expected_gross_edge_pct(d) == pytest.approx(4.0)
 
 
 def test_trade_passes_min_net_edge_respects_env_floor(monkeypatch):
@@ -1040,10 +1130,27 @@ def test_trade_passes_min_net_edge_rejects_small_weak_x_signal(monkeypatch):
 def test_trade_passes_min_net_edge_allows_main_strategy_buy(monkeypatch):
     monkeypatch.setattr("modules.swap_executor.cfg.POL_USD_PRICE", 0.5)
     monkeypatch.setattr("modules.swap_executor.cfg.TAKE_PROFIT_PCT", 5.0)
+    monkeypatch.setattr("modules.swap_executor.cfg.MAIN_STRATEGY_ENTRY_EDGE_FRAC", 0.70)
+    monkeypatch.setattr("modules.swap_executor.cfg.MIN_NET_EDGE_FEE_BUFFER_PCT", 0.75)
     d = TradeDecision(direction="USDT_TO_WMATIC", trade_size=15.0)
     passes, net = trade_passes_min_net_edge(d, trade_usd=15.0, gas_gwei=40.0)
     assert passes
     assert net >= MIN_NET_EDGE_PCT
+
+
+def test_trade_passes_min_net_edge_rejects_weak_x_at_default_floor(monkeypatch):
+    monkeypatch.setattr("modules.swap_executor.cfg.POL_USD_PRICE", 0.10)
+    monkeypatch.setattr("modules.swap_executor.cfg.MIN_NET_EDGE_PCT", 2.5)
+    monkeypatch.setattr("modules.swap_executor.cfg.MIN_NET_EDGE_FEE_BUFFER_PCT", MIN_NET_EDGE_FEE_BUFFER_PCT)
+    d = TradeDecision(
+        direction="USDC_TO_EQUITY",
+        trade_size=12.0,
+        signal_strength=0.62,
+        expected_gross_edge_pct=plan_x_signal_gross_edge_pct(0.62, upside_pct=22.0),
+    )
+    passes, net = trade_passes_min_net_edge(d, trade_usd=12.0, gas_gwei=120.0)
+    assert not passes
+    assert net < 2.5
 
 
 def test_trade_passes_min_net_edge_skips_exits():
@@ -1071,7 +1178,8 @@ def test_reject_if_low_expected_net_edge_logs_and_returns_true(monkeypatch, caps
     assert "after gas" in skipped[0]
     out = capsys.readouterr().out
     assert "[nanoclaw] Low edge rejected | direction=USDC_TO_EQUITY" in out
-    assert "expected_net=" in out
+    assert "expected_net_return_pct=" in out
+    assert "effective_gross=" in out
     assert "reason=below_min_net_edge" in out
     assert "stage=planning" in out
 
@@ -1101,4 +1209,5 @@ def test_log_min_net_edge_policy_once_emits_single_banner(capsys):
     out = capsys.readouterr().out
     assert out.count("MIN_NET_EDGE_ACTIVE") == 1
     assert "floor=" in out
+    assert "fee_buffer=" in out
     assert "planning_gas=" in out

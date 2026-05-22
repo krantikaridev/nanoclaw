@@ -75,7 +75,7 @@ _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD = _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD_BASE
 
 
 def x_signal_gated_enhanced_execution_bps(signal_strength: float | None = None) -> tuple[int, int, int]:
-    """Signal-driven execution quality (May 2026): fallback slippage + min_out for gated X-SIGNAL BUYs."""
+    """CRITICAL (rotation PnL): fallback slippage + min_out for gated X-SIGNAL USDC→equity BUYs."""
     min_out_extra = int(cfg.X_SIGNAL_GATED_TRADE_MIN_OUT_EXTRA_BPS)
     if signal_strength is not None and abs(float(signal_strength)) + 1e-9 >= _X_SIGNAL_VERY_STRONG_STRENGTH:
         min_out_extra += int(cfg.X_SIGNAL_HIGH_CONVICTION_MIN_OUT_EXTRA_BPS)
