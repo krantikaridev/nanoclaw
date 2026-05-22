@@ -820,11 +820,12 @@ def test_x_signal_gated_trade_relaxed_slippage_for_usdc_to_equity_at_min_gate(mo
 def test_x_signal_gated_trade_relaxed_slippage_rejects_below_min_gate():
     decision = TradeDecision(
         direction="USDC_TO_EQUITY",
-        amount_in=17_000_000,
-        trade_size=17.0,
+        amount_in=11_000_000,
+        trade_size=11.0,
         signal_strength=0.90,
     )
-    assert _x_signal_gated_trade_relaxed_slippage(decision, decision_notional_usd=17.0) is None
+    # Dynamic effective gate is $12 at |signal|>=0.85; $11 must not get gated slippage.
+    assert _x_signal_gated_trade_relaxed_slippage(decision, decision_notional_usd=11.0) is None
 
 
 def test_x_signal_gated_trade_relaxed_slippage_uses_plan_flag_without_notional_gate():

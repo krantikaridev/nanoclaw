@@ -21,6 +21,7 @@ from config import (
 from nanoclaw.strategies.signal_equity_trader import (
     _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD,
     _X_SIGNAL_MIN_SIZE_OVERRIDE,
+    _x_signal_min_effective_trade_usd,
 )
 from nanoclaw.strategies.usdc_copy import USDCopyStrategy
 from swap_executor import approve_and_swap
@@ -1120,14 +1121,19 @@ def _x_signal_gated_trade_enhanced_execution_eligible(
     *,
     decision_notional_usd: float | None,
 ) -> bool:
-    """TEMPORARY (48-hour sprint): USDC→equity BUY that passed the $18 effective gate at plan build."""
+    """TEMPORARY (48-hour sprint): USDC→equity BUY that passed the dynamic effective gate at plan build."""
     if str(decision.direction or "").strip().upper() != "USDC_TO_EQUITY":
         return False
     if bool(getattr(decision, "x_signal_gated_execution", False)):
         return True
     if decision_notional_usd is None:
         return False
-    return decision_notional_usd + 1e-9 >= float(_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD)
+    strength = decision.signal_strength
+    if strength is not None:
+        min_gate = float(_x_signal_min_effective_trade_usd(float(strength)))
+    else:
+        min_gate = float(_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD)
+    return float(decision_notional_usd) + 1e-9 >= min_gate
 
 
 def _x_signal_gated_trade_relaxed_slippage(

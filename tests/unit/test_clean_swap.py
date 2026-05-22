@@ -1170,6 +1170,12 @@ def test_main_skips_small_wmatic_exit_when_below_min_trade_usd(monkeypatch, caps
             message="tiny main strategy exit",
         ),
     )
+    monkeypatch.setattr(
+        swap_exec,
+        "cs_evaluate_take_profit",
+        lambda *_args, **_kwargs: (False, None),
+    )
+    monkeypatch.setattr(swap_exec, "_profit_take_balance_relief_bypass_allowed", lambda *_a, **_k: False)
     monkeypatch.setattr(swap_exec, "approve_and_swap", _unexpected_swap)
 
     asyncio.run(clean_swap.main(dry_run=False))

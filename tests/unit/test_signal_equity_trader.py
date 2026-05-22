@@ -1140,7 +1140,7 @@ def test_buy_blocks_when_expected_profit_is_below_gas(monkeypatch):
 def test_buy_blocks_when_effective_trade_after_gas_is_too_small(monkeypatch):
     s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
     monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 1.0)
-    monkeypatch.setattr(strategy_module, "_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD", 0.0)
+    monkeypatch.setattr(strategy_module, "_x_signal_min_effective_trade_usd", lambda _s: 0.0)
     monkeypatch.setattr(
         SignalEquityTrader,
         "_compute_trade_size",
@@ -1323,7 +1323,7 @@ def test_x_signal_min_effective_trade_usd_dynamic(monkeypatch):
 def test_low_effective_after_gas_still_blocks_when_effective_below_override(monkeypatch):
     s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
     monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 1.0)
-    monkeypatch.setattr(strategy_module, "_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD", 0.0)
+    monkeypatch.setattr(strategy_module, "_x_signal_min_effective_trade_usd", lambda _s: 0.0)
     monkeypatch.setattr(
         SignalEquityTrader,
         "_compute_trade_size",
@@ -1350,7 +1350,7 @@ def test_low_effective_after_gas_still_blocks_when_effective_below_override(monk
 def test_low_effective_after_gas_not_bypassed_when_signal_below_085(monkeypatch):
     s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
     monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 1.0)
-    monkeypatch.setattr(strategy_module, "_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD", 0.0)
+    monkeypatch.setattr(strategy_module, "_x_signal_min_effective_trade_usd", lambda _s: 0.0)
     monkeypatch.setattr(
         SignalEquityTrader,
         "_compute_trade_size",
