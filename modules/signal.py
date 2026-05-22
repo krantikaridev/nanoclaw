@@ -391,11 +391,16 @@ def _order_eligible_x_signal_candidates(
     eligible: Sequence[FollowedEquity],
     *,
     per_asset_cooldown_seconds: int,
+    state: dict | None = None,
 ) -> list[FollowedEquity]:
-    """Signal-Driven Rotation (May 2026): cooldown-ready, conviction tier, quality score, |signal|."""
+    """Signal-Driven Rotation (May 2026): cooldown-ready, conviction tier, quality score, |signal|.
+
+    CRITICAL: assets in STF backoff sort last so repeated on-chain failures do not waste gas each cycle.
+    """
     cs = _cs_mod()
     seq = list(eligible)
     fe_thr = float(getattr(cs, "X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD", X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD))
+    from modules.swap_executor import _x_signal_stf_sort_penalty
 
     def conviction_tier(asset: FollowedEquity) -> int:
         s = abs(float(asset.signal_strength))
@@ -408,13 +413,19 @@ def _order_eligible_x_signal_candidates(
     if not cs.X_SIGNAL_EQUITY_COOLDOWN_FIRST_SORT:
         return sorted(
             seq,
-            key=lambda a: (conviction_tier(a), -_x_signal_quality_score(a), -abs(float(a.signal_strength))),
+            key=lambda a: (
+                _x_signal_stf_sort_penalty(state, str(a.symbol).strip()),
+                conviction_tier(a),
+                -_x_signal_quality_score(a),
+                -abs(float(a.signal_strength)),
+            ),
         )
 
-    def sort_key(a: FollowedEquity) -> tuple[int, int, float, float]:
+    def sort_key(a: FollowedEquity) -> tuple[int, int, int, float, float]:
         sym = str(a.symbol).strip()
         cooldown_ok = cs.can_trade_asset(sym, None, int(per_asset_cooldown_seconds))
         return (
+            _x_signal_stf_sort_penalty(state, sym),
             0 if cooldown_ok else 1,
             conviction_tier(a),
             -_x_signal_quality_score(a),
@@ -1131,7 +1142,11 @@ def try_x_signal_equity_decision(
                         f"POL low for BUY path (pol={float(balances.pol):.4f}, min={fcb.MIN_POL_FOR_GAS:.4f})"
                     )
 
-        eligible_ordered = _order_eligible_x_signal_candidates(eligible, per_asset_cooldown_seconds=secs_order)
+        eligible_ordered = _order_eligible_x_signal_candidates(
+            eligible,
+            per_asset_cooldown_seconds=secs_order,
+            state=state,
+        )
         
         print(f"{runtime._nanolog()}=== ELIGIBLE ASSET ORDERING ===")
         for _a in eligible_ordered:
@@ -1250,10 +1265,13 @@ def try_x_signal_equity_decision(
                 getattr(tuned_trader.config, "force_eligible_threshold", X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD)
             )
 
+            from modules.swap_executor import _x_signal_stf_sort_penalty
+
             def _plan_pick_key(item: tuple) -> tuple:
                 dec, sig, _sym = item[0], float(item[1]), item[2]
                 s = abs(sig)
                 is_buy = str(dec.direction or "").strip().upper() == "USDC_TO_EQUITY"
+                stf_penalty = _x_signal_stf_sort_penalty(state, _sym) if is_buy else 0
                 if is_buy and s >= fe_pick:
                     tier = 0
                 elif is_buy and s >= _X_SIGNAL_HIGH_CONVICTION_STRENGTH:
@@ -1262,7 +1280,7 @@ def try_x_signal_equity_decision(
                     tier = 2
                 else:
                     tier = 3
-                return (tier, -s)
+                return (stf_penalty, tier, -s)
 
             plans.sort(key=_plan_pick_key)
             decision = plans[0][0]
@@ -1283,6 +1301,46 @@ def try_x_signal_equity_decision(
                 f"direction={decision.direction} | signal={_winner_sig:.3f} | "
                 f"candidates={len(plans)} (Signal-Driven Rotation)"
             )
+            # Foundation net-edge gate: reject weak BUY plans before swap_executor spends gas.
+            if str(decision.direction or "").strip().upper() == "USDC_TO_EQUITY":
+                from modules.swap_executor import (
+                    _log_min_net_edge_policy_once,
+                    _min_net_edge_floor_pct,
+                    _planning_gas_gwei_for_net_edge,
+                    _reject_if_low_expected_net_edge,
+                    trade_passes_min_net_edge,
+                )
+
+                _log_min_net_edge_policy_once(stage="x_signal_plan")
+                x_notional = float(decision.trade_size or 0.0)
+                x_gwei = _planning_gas_gwei_for_net_edge()
+                _, edge_plan = trade_passes_min_net_edge(
+                    decision,
+                    trade_usd=x_notional,
+                    gas_gwei=x_gwei,
+                )
+                if _reject_if_low_expected_net_edge(
+                    decision,
+                    trade_usd=x_notional,
+                    gas_gwei=x_gwei,
+                    stage="x_signal_plan",
+                ):
+                    _log_x_signal_decision(
+                        _winner_sym,
+                        "REJECT",
+                        "below_min_net_edge",
+                        signal=_winner_sig,
+                        expected_edge_pct=edge_plan,
+                        notional_usd=x_notional,
+                        wmatic_balance=float(balances.wmatic),
+                        extra=f"floor={_min_net_edge_floor_pct():.2f}%",
+                        state=state,
+                    )
+                    print(
+                        f"{runtime._nanolog()}X-SIGNAL PLAN REJECTED | {_winner_sym} | "
+                        f"reason=below_min_net_edge | signal={_winner_sig:.3f}"
+                    )
+                    decision = None
         else:
             decision = None
 

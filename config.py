@@ -124,7 +124,7 @@ FIXED_TRADE_USD_MAX = env_float("FIXED_TRADE_USD_MAX", 10.0)
 TRAILING_STOP_PCT = env_float("TRAILING_STOP_PCT", 5.0)
 TAKE_PROFIT_PCT = env_float("TAKE_PROFIT_PCT", 5.0)
 # v1 quality filter: minimum estimated net edge (% of notional after gas/fees) for X-Signal / main entry trades.
-MIN_NET_EDGE_PCT = env_float("MIN_NET_EDGE_PCT", 2.5)
+MIN_NET_EDGE_PCT = env_float("MIN_NET_EDGE_PCT", 2.0)
 # Reserve % of notional for swap fee/slippage before gas (subtracted from gross edge in planning).
 MIN_NET_EDGE_FEE_BUFFER_PCT = env_float("MIN_NET_EDGE_FEE_BUFFER_PCT", 0.75)
 # Conservative planning gas (gwei) for early net-edge gates in determine_trade_decision (no RPC).
@@ -264,6 +264,12 @@ X_SIGNAL_STF_PAUSE_SECONDS = env_int("X_SIGNAL_STF_PAUSE_SECONDS", 3600)
 X_SIGNAL_STF_FAILURE_COOLDOWN_SECONDS = env_int("X_SIGNAL_STF_FAILURE_COOLDOWN_SECONDS", 600)
 # Seconds to wait before re-quoting on X-SIGNAL fallback retry (fresh pool state).
 X_SIGNAL_FALLBACK_REQUOTE_DELAY_SECONDS = env_float("X_SIGNAL_FALLBACK_REQUOTE_DELAY_SECONDS", 1.5)
+# Prefer 0.3% V3 pool when its quote is within this many bps of the best tier (stabler path for equities).
+X_SIGNAL_STABLE_FEE_PREFER_BPS = env_int("X_SIGNAL_STABLE_FEE_PREFER_BPS", 75)
+# Fallback slippage for USDC→equity X-SIGNAL that missed gated/small tiers (still ramps on router).
+X_SIGNAL_DEFAULT_FALLBACK_PRIMARY_BPS = env_int("X_SIGNAL_DEFAULT_FALLBACK_PRIMARY_BPS", 7000)
+X_SIGNAL_DEFAULT_FALLBACK_RETRY_BPS = env_int("X_SIGNAL_DEFAULT_FALLBACK_RETRY_BPS", 11000)
+X_SIGNAL_DEFAULT_MIN_OUT_EXTRA_BPS = env_int("X_SIGNAL_DEFAULT_MIN_OUT_EXTRA_BPS", 75)
 
 MAIN_STRATEGY_MIN_USDT_RESERVE = env_float("MAIN_STRATEGY_MIN_USDT_RESERVE", 25.0)
 MAIN_STRATEGY_TP_TRIGGER_WMATIC_USD = env_float("MAIN_STRATEGY_TP_TRIGGER_WMATIC_USD", 52.0)

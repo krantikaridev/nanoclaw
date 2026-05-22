@@ -48,9 +48,9 @@ _DEFENSIVE_PAUSE_CYCLES = 3
 # Entry directions blocked when ``control.json`` has ``paused: true`` (protection exits still run).
 _CONTROL_PAUSE_BLOCK_ENTRIES = frozenset({"USDT_TO_WMATIC", "USDC_TO_WMATIC", "USDC_TO_EQUITY"})
 
-# v1 minimum quality filter — reject low expected net return after gas/fees on entry directions.
-# Floor from env ``MIN_NET_EDGE_PCT`` (see config.py / .env.example); tune from trade history when ready.
-_MIN_NET_EDGE_PCT = 2.5
+# Foundation quality filter — block entry trades unlikely to clear gas + fees (avoids repeated low-edge churn).
+# Conservative default 2.0% net after gas; override via env ``MIN_NET_EDGE_PCT`` (see config.py / .env.example).
+_MIN_NET_EDGE_PCT = 2.0
 _MIN_NET_EDGE_FEE_BUFFER_PCT = 0.75
 _MIN_NET_EDGE_ENTRY_DIRECTIONS = frozenset({"USDC_TO_EQUITY", "USDT_TO_WMATIC"})
 _EST_SWAP_GAS_UNITS = 180_000.0
@@ -173,7 +173,7 @@ def trade_passes_min_net_edge(
 
 
 def _log_min_net_edge_policy_once(*, stage: str = "planning") -> None:
-    """Emit active net-edge floor once per process so ops can confirm the filter is armed."""
+    """Emit active net-edge threshold once per process so ops can confirm the filter is armed."""
     global _MIN_NET_EDGE_POLICY_LOGGED
     if _MIN_NET_EDGE_POLICY_LOGGED:
         return
@@ -183,30 +183,33 @@ def _log_min_net_edge_policy_once(*, stage: str = "planning") -> None:
     fee_buf = _min_net_edge_fee_buffer_pct()
     dirs = ",".join(sorted(_MIN_NET_EDGE_ENTRY_DIRECTIONS))
     print(
-        f"{runtime._nanolog()}MIN_NET_EDGE_ACTIVE | floor={floor:.2f}% "
+        f"[nanoclaw] MIN_NET_EDGE_ACTIVE | threshold={floor:.2f}% net after gas "
         f"| fee_buffer={fee_buf:.2f}% | planning_gas={planning_gwei:.0f}gwei "
         f"| directions={dirs} | stage={stage}"
     )
 
 
+def _signal_label_for_edge_log(decision: TradeDecision) -> str:
+    strength = decision.signal_strength
+    if strength is not None:
+        return f"{float(strength):.3f}"
+    return "n/a"
+
+
 def _low_edge_rejection_log_line(
     *,
-    direction: str,
-    notional: float | None,
-    expected_gross_pct: float,
-    effective_gross_pct: float,
-    gas_usd: float,
     expected_net_pct: float,
+    signal: str,
+    notional: float | None,
     floor_pct: float,
-    reason: str,
+    direction: str,
     stage: str,
 ) -> str:
     notional_s = "n/a" if notional is None or float(notional) <= 0.0 else f"${float(notional):.2f}"
     return (
-        f"[nanoclaw] Low edge rejected | direction={direction} | notional={notional_s} "
-        f"| expected_gross={expected_gross_pct:.2f}% | effective_gross={effective_gross_pct:.2f}% "
-        f"| gas_est=${gas_usd:.4f} | expected_net_return_pct={expected_net_pct:.2f}% "
-        f"| floor={floor_pct:.2f}% | reason={reason} | stage={stage}"
+        f"[nanoclaw] LOW EDGE REJECTED | expected_net={expected_net_pct:.2f}% "
+        f"| signal={signal} | notional={notional_s} | floor={floor_pct:.2f}% "
+        f"| direction={direction} | stage={stage}"
     )
 
 
@@ -215,7 +218,7 @@ def _reject_if_low_expected_net_edge(
     *,
     trade_usd: float | None,
     gas_gwei: float,
-    log_skip: Callable[[str], None],
+    log_skip: Callable[[str], None] | None = None,
     stage: str = "planning",
 ) -> bool:
     """Log and return True when the entry should be blocked for low expected net edge."""
@@ -224,20 +227,19 @@ def _reject_if_low_expected_net_edge(
         return False
     min_floor = _min_net_edge_floor_pct()
     fee_buf = _min_net_edge_fee_buffer_pct()
+    signal_s = _signal_label_for_edge_log(decision)
     notional = float(trade_usd) if trade_usd is not None else 0.0
     if notional <= 0.0:
         reason = "below_min_net_edge (missing_notional)"
-        log_skip(f"low_expected_edge ({reason}; floor={min_floor:.2f}%)")
+        if log_skip is not None:
+            log_skip(f"low_expected_edge ({reason}; floor={min_floor:.2f}%)")
         print(
             _low_edge_rejection_log_line(
-                direction=direction,
-                notional=None,
-                expected_gross_pct=0.0,
-                effective_gross_pct=0.0,
-                gas_usd=0.0,
                 expected_net_pct=-100.0,
+                signal=signal_s,
+                notional=None,
                 floor_pct=min_floor,
-                reason=reason,
+                direction=direction,
                 stage=stage,
             )
         )
@@ -251,23 +253,20 @@ def _reject_if_low_expected_net_edge(
         return False
     gross_pct = _infer_expected_gross_edge_pct(decision)
     effective_gross = _effective_gross_edge_after_fee_buffer(gross_pct)
-    gas_usd = _estimate_swap_gas_cost_usd(float(gas_gwei))
     reason = f"below_min_net_edge (floor={min_floor:.2f}%)"
-    log_skip(
-        f"low_expected_edge (expected_net_return_pct={expected_net:.2f}% < {min_floor:.2f}% "
-        f"after gas; effective_gross={effective_gross:.2f}% fee_buffer={fee_buf:.2f}% "
-        f"notional=${notional:.2f})"
-    )
+    if log_skip is not None:
+        log_skip(
+            f"low_expected_edge (expected_net_return_pct={expected_net:.2f}% < {min_floor:.2f}% "
+            f"after gas; effective_gross={effective_gross:.2f}% fee_buffer={fee_buf:.2f}% "
+            f"notional=${notional:.2f})"
+        )
     print(
         _low_edge_rejection_log_line(
-            direction=direction,
-            notional=notional,
-            expected_gross_pct=gross_pct,
-            effective_gross_pct=effective_gross,
-            gas_usd=gas_usd,
             expected_net_pct=expected_net,
+            signal=signal_s,
+            notional=notional,
             floor_pct=min_floor,
-            reason=reason,
+            direction=direction,
             stage=stage,
         )
     )
@@ -280,14 +279,26 @@ def _decision_blocked_by_min_net_edge(
     trade_usd: float | None,
     gas_gwei: float,
     log_skip: Callable[[str], None],
-) -> bool:
-    """Early decision-flow gate for X-Signal / main entry directions (same rules as execution)."""
-    return _reject_if_low_expected_net_edge(
+    stage: str = "planning",
+) -> tuple[bool, float]:
+    """Early decision-flow gate for X-Signal / main entry (before dust defer / execution)."""
+    direction = str(decision.direction or "").strip().upper()
+    if direction not in _MIN_NET_EDGE_ENTRY_DIRECTIONS:
+        return False, 0.0
+    notional = float(trade_usd) if trade_usd is not None else 0.0
+    _, expected_net = trade_passes_min_net_edge(
+        decision,
+        trade_usd=notional,
+        gas_gwei=float(gas_gwei),
+    )
+    blocked = _reject_if_low_expected_net_edge(
         decision,
         trade_usd=trade_usd,
         gas_gwei=gas_gwei,
         log_skip=log_skip,
+        stage=stage,
     )
+    return blocked, expected_net
 
 
 def _usdc_copy_strategy_with_pct(strategy: USDCopyStrategy, pct: float) -> USDCopyStrategy:
@@ -588,6 +599,39 @@ def select_main_strategy_trade(
     if idle_rotation is not None:
         return idle_rotation
 
+    gross_edge = plan_main_strategy_gross_edge_pct()
+    buy_decision = TradeDecision(
+        direction="USDT_TO_WMATIC",
+        amount_in=int(trade_size * 1_000_000),
+        trade_size=trade_size,
+        message=f"🔄 Buying WMATIC (hold preferred) | Size: ${trade_size:.2f}",
+        expected_gross_edge_pct=gross_edge,
+    )
+    _log_min_net_edge_policy_once(stage="main_strategy_plan")
+    planning_gwei = _planning_gas_gwei_for_net_edge()
+    if _reject_if_low_expected_net_edge(
+        buy_decision,
+        trade_usd=float(trade_size),
+        gas_gwei=planning_gwei,
+        log_skip=cs._log_trade_skipped,
+        stage="main_strategy_plan",
+    ):
+        floor = _min_net_edge_floor_pct()
+        decision_log.log_main_strategy_decision(
+            action="REJECT",
+            reason="below_min_net_edge",
+            direction="USDT_TO_WMATIC",
+            notional_usd=float(trade_size),
+            wmatic_balance=float(balances.wmatic),
+            wmatic_usd=wmatic_value_usd,
+            extra=f"floor={floor:.2f}%",
+            state=state,
+        )
+        return TradeDecision(
+            message=(
+                f"ℹ️ Main strategy skipped (expected net edge below {floor:.2f}% after gas)"
+            ),
+        )
     decision_log.log_main_strategy_decision(
         action="ACCEPT",
         reason="usdt_to_wmatic_accumulate",
@@ -597,12 +641,7 @@ def select_main_strategy_trade(
         wmatic_usd=wmatic_value_usd,
         state=state,
     )
-    return TradeDecision(
-        direction="USDT_TO_WMATIC",
-        amount_in=int(trade_size * 1_000_000),
-        trade_size=trade_size,
-        message=f"🔄 Buying WMATIC (hold preferred) | Size: ${trade_size:.2f}",
-    )
+    return buy_decision
 
 
 def _decision_notional_usd(decision: TradeDecision, *, current_price_usd: float = 0.0) -> Optional[float]:
@@ -1516,11 +1555,21 @@ _X_SIGNAL_VERY_STRONG_STRENGTH = 0.90
 
 
 def _x_signal_min_out_extra_bps(signal_strength: float | None) -> int:
-    """Stack base min_out buffer with optional high-conviction add-on."""
-    extra = 0
-    if signal_strength is not None and abs(float(signal_strength)) + 1e-9 >= _X_SIGNAL_VERY_STRONG_STRENGTH:
-        extra = int(cfg.X_SIGNAL_HIGH_CONVICTION_MIN_OUT_EXTRA_BPS)
-    return extra
+    """Stack base min_out buffer with high-conviction add-on (|signal| ≥ 0.85)."""
+    if signal_strength is None:
+        return 0
+    s = abs(float(signal_strength))
+    if s + 1e-9 >= _X_SIGNAL_VERY_STRONG_STRENGTH:
+        return int(cfg.X_SIGNAL_HIGH_CONVICTION_MIN_OUT_EXTRA_BPS)
+    if s + 1e-9 >= _X_SIGNAL_HIGH_CONVICTION_STRENGTH:
+        return max(0, int(cfg.X_SIGNAL_HIGH_CONVICTION_MIN_OUT_EXTRA_BPS) // 2)
+    return 0
+
+
+def _x_signal_stf_sort_penalty(state: dict | None, symbol: str) -> int:
+    """CRITICAL: deprioritize assets in STF backoff so rotation tries healthier symbols first."""
+    paused, _ = _x_signal_stf_pause_active(state, str(symbol).strip().upper())
+    return 1 if paused else 0
 
 
 def _is_x_signal_usdc_equity_buy(decision: TradeDecision | None) -> bool:
@@ -1575,7 +1624,9 @@ def _record_x_signal_stf_failure(state: dict, decision: TradeDecision, swap_outc
     failures = int(entry["failures"])
     print(
         f"{_X_SIGNAL_STF_LOG} | STF failure recorded | sym={sym} | "
-        f"failures={failures}/{threshold} | revert={str(swap_outcome.get('revert_reason') or '')[:120]}"
+        f"failures={failures}/{threshold} | slippage_bps={swap_outcome.get('slippage_bps')} | "
+        f"min_out={swap_outcome.get('amount_out_min')} | fee_tier={swap_outcome.get('fee_tier')} | "
+        f"revert={str(swap_outcome.get('revert_reason') or '')[:120]}"
     )
     if failures >= threshold:
         entry["paused_until"] = time.time() + float(long_pause_secs)
@@ -1685,12 +1736,31 @@ def _x_signal_gated_trade_relaxed_slippage(
     )
 
 
+def _x_signal_default_relaxed_slippage(
+    decision: TradeDecision,
+) -> tuple[int, int, int]:
+    """CRITICAL: fallback tier for USDC→equity X-SIGNAL without gated/small enhanced params."""
+    strength = decision.signal_strength
+    min_out = int(cfg.X_SIGNAL_DEFAULT_MIN_OUT_EXTRA_BPS) + _x_signal_min_out_extra_bps(strength)
+    return (
+        int(cfg.X_SIGNAL_DEFAULT_FALLBACK_PRIMARY_BPS),
+        int(cfg.X_SIGNAL_DEFAULT_FALLBACK_RETRY_BPS),
+        min_out,
+    )
+
+
 def _resolve_x_signal_enhanced_fallback_execution(
     decision: TradeDecision,
     *,
     decision_notional_usd: float | None,
 ) -> tuple[int, int, int | None] | None:
-    """CRITICAL: (primary_bps, retry_bps, min_out_extra_bps) for X-SIGNAL fallback router execution."""
+    """CRITICAL: (primary_bps, retry_bps, min_out_extra_bps) for X-SIGNAL fallback router execution.
+
+    Signal-driven rotation only pays off when selected BUYs fill on-chain; every USDC→equity X-SIGNAL
+    path uses enhanced slippage ramp + min_out buffer (small → gated → default).
+    """
+    if not _is_x_signal_usdc_equity_buy(decision):
+        return None
     strength = decision.signal_strength
     small = _x_signal_small_high_conviction_relaxed_slippage(
         decision,
@@ -1708,7 +1778,7 @@ def _resolve_x_signal_enhanced_fallback_execution(
     if gated is not None:
         min_out = int(cfg.X_SIGNAL_GATED_TRADE_MIN_OUT_EXTRA_BPS) + _x_signal_min_out_extra_bps(strength)
         return gated[0], gated[1], min_out
-    return None
+    return _x_signal_default_relaxed_slippage(decision)
 
 
 def _x_signal_min_trade_guard_bypass(
@@ -1865,17 +1935,14 @@ def determine_trade_decision(
             print("🔍 DECISION PATH: X_SIGNAL_EQUITY")
             x_dust_min = _x_signal_equity_effective_dust_min(balances)
             x_notional = _decision_notional_usd(xd_local, current_price_usd=current_price)
-            _, edge_x = trade_passes_min_net_edge(
-                xd_local,
-                trade_usd=float(x_notional or 0.0),
-                gas_gwei=planning_gas_gwei,
-            )
-            if _decision_blocked_by_min_net_edge(
+            blocked_x, edge_x = _decision_blocked_by_min_net_edge(
                 xd_local,
                 trade_usd=x_notional,
                 gas_gwei=planning_gas_gwei,
                 log_skip=cs._log_trade_skipped,
-            ):
+                stage="x_signal_decision",
+            )
+            if blocked_x:
                 decision_log.log_x_signal_decision(
                     "n/a",
                     "REJECT",
@@ -2074,17 +2141,14 @@ def determine_trade_decision(
             )
             x_dust_min_fb = _x_signal_equity_effective_dust_min(balances)
             fb_notional = _decision_notional_usd(fallback_xd, current_price_usd=current_price)
-            _, edge_fb = trade_passes_min_net_edge(
-                fallback_xd,
-                trade_usd=float(fb_notional or 0.0),
-                gas_gwei=planning_gas_gwei,
-            )
-            if _decision_blocked_by_min_net_edge(
+            blocked_fb, edge_fb = _decision_blocked_by_min_net_edge(
                 fallback_xd,
                 trade_usd=fb_notional,
                 gas_gwei=planning_gas_gwei,
                 log_skip=cs._log_trade_skipped,
-            ):
+                stage="stable_rotation_fallback",
+            )
+            if blocked_fb:
                 decision_log.log_main_strategy_decision(
                     action="REJECT",
                     reason="below_min_net_edge",
@@ -2125,12 +2189,14 @@ def determine_trade_decision(
         return TradeDecision(message="ℹ️ Paused via control.json (no new entries this cycle)")
     if main_decision.should_execute and main_dir == "USDT_TO_WMATIC":
         main_notional = _decision_notional_usd(main_decision, current_price_usd=current_price)
-        if _decision_blocked_by_min_net_edge(
+        blocked_main, _edge_main = _decision_blocked_by_min_net_edge(
             main_decision,
             trade_usd=main_notional,
             gas_gwei=planning_gas_gwei,
             log_skip=cs._log_trade_skipped,
-        ):
+            stage="main_strategy_decision",
+        )
+        if blocked_main:
             low_edge = TradeDecision(
                 message=(
                     f"ℹ️ Main strategy skipped (expected net edge below {_min_net_edge_floor_pct():.2f}% "
@@ -2335,23 +2401,26 @@ async def main(*, dry_run: bool = False) -> None:
         fallback_min_out_extra_bps: int | None = None
         is_x_signal_buy = _is_x_signal_usdc_equity_buy(decision)
         x_sym = _x_signal_symbol_from_decision(decision) if is_x_signal_buy else ""
-        if x_signal_exec is not None:
+        if is_x_signal_buy and x_signal_exec is not None:
             fallback_slip_bps, fallback_slip_retry_bps, fallback_min_out_extra_bps = x_signal_exec
-            tier = "gated" if fallback_min_out_extra_bps and int(fallback_min_out_extra_bps) >= int(
-                cfg.X_SIGNAL_GATED_TRADE_MIN_OUT_EXTRA_BPS
-            ) else "small_high_conviction"
+            mo_extra = int(fallback_min_out_extra_bps or 0)
+            gated_mo = int(cfg.X_SIGNAL_GATED_TRADE_MIN_OUT_EXTRA_BPS)
+            small_mo = int(cfg.X_SIGNAL_SMALL_HIGH_CONVICTION_MIN_OUT_EXTRA_BPS)
+            if mo_extra >= gated_mo + small_mo:
+                tier = "gated+high_conviction"
+            elif mo_extra >= gated_mo:
+                tier = "gated"
+            elif mo_extra >= small_mo:
+                tier = "small_high_conviction"
+            else:
+                tier = "default"
             ramp = _x_signal_fallback_slippage_ramp(fallback_slip_bps, fallback_slip_retry_bps)
             print(
                 f"{_X_SIGNAL_STF_LOG} | EXEC ATTEMPT | sym={x_sym} | tier={tier} | "
                 f"notional=${decision_notional_usd:.2f} | signal={decision.signal_strength} | "
                 f"fallback_slip={fallback_slip_bps}/{fallback_slip_retry_bps} bps | "
                 f"slippage_ramp={'→'.join(str(b) for b in ramp)} | "
-                f"min_out_extra={fallback_min_out_extra_bps} bps | v3_fee=best_of(500,3000,10000)"
-            )
-        elif is_x_signal_buy:
-            print(
-                f"{_X_SIGNAL_STF_LOG} | EXEC ATTEMPT | sym={x_sym} | tier=standard | "
-                f"notional=${decision_notional_usd:.2f} | signal={decision.signal_strength}"
+                f"min_out_extra={mo_extra} bps | v3_fee=stable_prefer(500,3000,10000)"
             )
 
         swap_outcome: dict = {}
@@ -2404,8 +2473,14 @@ async def main(*, dry_run: bool = False) -> None:
             if is_x_signal_buy:
                 _record_x_signal_stf_failure(state, decision, swap_outcome)
                 stf_flag = bool(swap_outcome.get("stf"))
+                slip_used = swap_outcome.get("slippage_bps")
+                min_out_used = swap_outcome.get("amount_out_min")
+                fee_used = swap_outcome.get("fee_tier")
+                mo_extra_used = swap_outcome.get("min_out_extra_bps")
                 print(
                     f"{_X_SIGNAL_STF_LOG} | EXEC FAILED | sym={x_sym} | stf={stf_flag} | "
+                    f"slippage_bps={slip_used} | min_out={min_out_used} | "
+                    f"min_out_extra_bps={mo_extra_used} | fee_tier={fee_used} | "
                     f"revert={str(swap_outcome.get('revert_reason') or 'unknown')[:160]}"
                 )
             if str(decision.direction or "").strip().upper() in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:

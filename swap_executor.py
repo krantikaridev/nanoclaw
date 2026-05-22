@@ -103,9 +103,10 @@ def _is_stf_revert_reason(reason: str) -> bool:
 
 
 def _x_signal_fallback_slippage_ramp(primary_bps: int, retry_bps: int) -> list[int]:
-    """CRITICAL (Signal-Driven Rotation profitability): ramp slippage primary→mid→retry for X-SIGNAL fallback.
+    """CRITICAL (Signal-Driven Rotation profitability): ramp slippage for X-SIGNAL fallback router.
 
-    Avoids a single large jump that still STFs; mid step uses half the primary→retry gap when gap ≥ 400 bps.
+    Graduated steps reduce repeated STF reverts vs one large jump. Four steps when primary→retry gap ≥ 2000 bps;
+    three steps when gap ≥ 300 bps; otherwise primary then retry only.
     """
     floor = _FALLBACK_ROUTER_SLIPPAGE_FLOOR_BPS
     primary = min(max(int(primary_bps), floor), 9999)
@@ -113,7 +114,17 @@ def _x_signal_fallback_slippage_ramp(primary_bps: int, retry_bps: int) -> list[i
     if retry <= primary:
         return [primary]
     gap = retry - primary
-    if gap < 400:
+    if gap >= 2000:
+        step2 = min(primary + gap // 3, retry - 1)
+        step3 = min(primary + (2 * gap) // 3, retry - 1)
+        steps = [primary]
+        for s in (step2, step3):
+            if s > steps[-1]:
+                steps.append(s)
+        if steps[-1] < retry:
+            steps.append(retry)
+        return steps
+    if gap < 300:
         return [primary, retry]
     mid = min(primary + gap // 2, retry - 1)
     if mid <= primary:
@@ -273,11 +284,19 @@ def _quote_uniswap_v3_best_fee_single(
     amount_in: int,
     slippage_bps: int,
     fees: tuple[int, ...] = (500, 3000, 10000),
+    prefer_stable_fee: bool = False,
 ) -> tuple[int, int, int]:
-    """Pick the V3 pool fee tier with the highest quoted output (signal-driven routing quality)."""
-    best_fee = 3000
-    best_out = 0
-    best_min = 0
+    """Pick the V3 pool fee tier with the highest quoted output (signal-driven routing quality).
+
+    When ``prefer_stable_fee`` is True (X-SIGNAL), prefer the 0.3% (3000) pool if its quote is within
+    ``X_SIGNAL_STABLE_FEE_PREFER_BPS`` of the best tier — reduces thin-pool STFs on tokenized equities.
+    """
+    stable_fee = 3000
+    stable_prefer_bps = max(
+        0,
+        int(getattr(cfg, "X_SIGNAL_STABLE_FEE_PREFER_BPS", 0) or 0),
+    )
+    quotes: dict[int, tuple[int, int]] = {}
     last_err: Exception | None = None
     for fee in fees:
         try:
@@ -292,14 +311,23 @@ def _quote_uniswap_v3_best_fee_single(
         except Exception as ex:  # noqa: BLE001
             last_err = ex
             continue
-        if expected_out > best_out:
-            best_out = int(expected_out)
-            best_min = int(amount_out_min)
-            best_fee = int(fee)
-    if best_out <= 0:
+        quotes[int(fee)] = (int(expected_out), int(amount_out_min))
+    if not quotes:
         if last_err is not None:
             raise last_err
         raise RuntimeError("No quotable Uniswap V3 single-hop pool for fee tiers tried")
+    best_fee = max(quotes, key=lambda f: quotes[f][0])
+    best_out, best_min = quotes[best_fee]
+    if (
+        prefer_stable_fee
+        and stable_prefer_bps > 0
+        and stable_fee in quotes
+        and best_out > 0
+    ):
+        stable_out, stable_min = quotes[stable_fee]
+        floor_out = (best_out * (10000 - stable_prefer_bps)) // 10000
+        if stable_out >= floor_out:
+            return stable_fee, stable_out, stable_min
     return best_fee, best_out, best_min
 
 
@@ -470,10 +498,12 @@ async def approve_and_swap(
                         token_out=token_out_cs,
                         amount_in=amount_in,
                         slippage_bps=fb_primary,
+                        prefer_stable_fee=True,
                     )
                     print(
                         f"{_prefix}[FALLBACK ROUTER] X-SIGNAL best V3 fee tier | fee={fee_pick} | "
-                        f"slip_bps={fb_primary}"
+                        f"slip_bps={fb_primary} | stable_prefer_bps="
+                        f"{int(getattr(cfg, 'X_SIGNAL_STABLE_FEE_PREFER_BPS', 0) or 0)}"
                     )
                 else:
                     fee_pick = 3000
@@ -627,6 +657,7 @@ async def approve_and_swap(
                             token_out=token_out_cs,
                             amount_in=amount_in,
                             slippage_bps=slip_bps,
+                            prefer_stable_fee=True,
                         )
                     else:
                         expected_out, amount_out_min = _quote_uniswap_v3_exact_input_single(
@@ -717,6 +748,9 @@ async def approve_and_swap(
                         direction=direction,
                         fee_tier=v3_fee,
                         slippage_bps=slip_bps,
+                        amount_out_min=amount_out_min,
+                        expected_out=expected_out,
+                        min_out_extra_bps=fallback_min_out_extra_bps,
                     )
                 if attempt_idx < len(slip_attempts) - 1:
                     next_bps = slip_attempts[attempt_idx + 1][1]
@@ -751,6 +785,9 @@ async def approve_and_swap(
                     fee_tier=v3_fee,
                     slippage_bps=slip_bps,
                     tx_hash=swap_hash.hex(),
+                    amount_out_min=amount_out_min,
+                    expected_out=expected_out,
+                    min_out_extra_bps=fallback_min_out_extra_bps,
                 )
             if attempt_idx < len(slip_attempts) - 1:
                 next_bps = slip_attempts[attempt_idx + 1][1]

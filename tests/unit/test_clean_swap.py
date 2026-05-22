@@ -14,6 +14,19 @@ def _reset_auto_usdc_failure_state() -> None:
     signal_module._AUTO_USDC_FAILURE_STATE["consecutive_failures"] = 0
 
 
+def _x_signal_decision_passes_net_edge(**kwargs) -> clean_swap.TradeDecision:
+    """Stub X-SIGNAL plan that clears the planning min-net-edge gate in ``determine_trade_decision``."""
+    defaults = {
+        "direction": "USDC_TO_EQUITY",
+        "amount_in": 25_000_000,
+        "trade_size": 25.0,
+        "expected_gross_edge_pct": 10.0,
+        "message": "x-signal",
+    }
+    defaults.update(kwargs)
+    return clean_swap.TradeDecision(**defaults)
+
+
 def test_log_format_prefixes_short_commit_hash():
     assert clean_swap.COMMIT
     assert f"[{clean_swap.COMMIT}]" in clean_swap.LOG_FORMAT
@@ -542,7 +555,7 @@ def test_determine_trade_decision_defers_dust_protection_and_falls_through(monke
         message="protection dust",
     )
     monkeypatch.setattr(clean_swap, "build_protection_exit_decision", lambda **kwargs: protection_dust)
-    sentinel = clean_swap.TradeDecision(direction="USDC_TO_EQUITY", amount_in=25_000_000, message="x-signal")
+    sentinel = _x_signal_decision_passes_net_edge()
     monkeypatch.setattr(clean_swap, "try_x_signal_equity_decision", lambda *_args, **_kwargs: sentinel)
 
     skipped: list[str] = []
@@ -609,12 +622,7 @@ def test_determine_trade_decision_signal_rotation_xsignal_before_profit_take(mon
     profit_sentinel = clean_swap.TradeDecision(direction="WMATIC_TO_USDT", amount_in=456, message="profit")
     monkeypatch.setattr(clean_swap, "build_profit_exit_decision", lambda *_args, **_kwargs: profit_sentinel)
 
-    x_sentinel = clean_swap.TradeDecision(
-        direction="USDC_TO_EQUITY",
-        amount_in=25_000_000,
-        trade_size=25.0,
-        message="x-signal rotation",
-    )
+    x_sentinel = _x_signal_decision_passes_net_edge(message="x-signal rotation")
     monkeypatch.setattr(clean_swap, "try_x_signal_equity_decision", lambda *_args, **_kwargs: x_sentinel)
 
     out = clean_swap.determine_trade_decision(
@@ -738,7 +746,7 @@ def test_determine_trade_decision_profit_take_balance_relief_allows_small_wm_to_
 
 
 def test_determine_trade_decision_profit_take_balance_relief_skipped_when_wm_stack_small(monkeypatch, capsys):
-    """Signal-Driven Rotation: P2 skipped only when WMATIC USD equiv is below $2 (low-stack floor)."""
+    """Signal-Driven Rotation: P2 skipped only when WMATIC USD equiv is below $1.75 (low-stack floor)."""
     monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))
     monkeypatch.setattr(
         clean_swap,
@@ -755,13 +763,7 @@ def test_determine_trade_decision_profit_take_balance_relief_skipped_when_wm_sta
         amount_in=int(8 * 1_000_000_000_000_000_000),
         message="small tp",
     )
-    sentinel = clean_swap.TradeDecision(
-        direction="USDC_TO_EQUITY",
-        amount_in=25_000_000,
-        trade_size=25.0,
-        message="x-signal",
-        cooldown_asset=("", 0),
-    )
+    sentinel = _x_signal_decision_passes_net_edge(cooldown_asset=("", 0))
     monkeypatch.setattr(clean_swap, "build_profit_exit_decision", lambda *_args, **_kwargs: profit_small)
     monkeypatch.setattr(clean_swap, "try_x_signal_equity_decision", lambda *_args, **_kwargs: sentinel)
 
@@ -787,8 +789,7 @@ def test_determine_trade_decision_defers_dust_x_signal_and_falls_through_to_main
     monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
     monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
 
-    x_dust = clean_swap.TradeDecision(
-        direction="USDC_TO_EQUITY",
+    x_dust = _x_signal_decision_passes_net_edge(
         amount_in=int(4.15 * 1_000_000),
         trade_size=4.15,
         message="tiny x buy",
@@ -864,7 +865,8 @@ def test_determine_trade_decision_rejects_x_signal_below_min_net_edge(monkeypatc
     assert out is main_ok
     assert "direction=USDC_TO_EQUITY" in captured
     assert any("low_expected_edge" in reason for reason in skipped)
-    assert "[nanoclaw] Low edge rejected | direction=USDC_TO_EQUITY" in captured
+    assert "[nanoclaw] LOW EDGE REJECTED" in captured
+    assert "direction=USDC_TO_EQUITY" in captured
     assert "MIN_NET_EDGE_ACTIVE" in captured
 
 
@@ -899,7 +901,8 @@ def test_determine_trade_decision_rejects_main_buy_below_min_net_edge(monkeypatc
     assert not out.should_execute
     assert "expected net edge below" in (out.message or "")
     assert any("low_expected_edge" in reason for reason in skipped)
-    assert "[nanoclaw] Low edge rejected | direction=USDT_TO_WMATIC" in captured
+    assert "[nanoclaw] LOW EDGE REJECTED" in captured
+    assert "direction=USDT_TO_WMATIC" in captured
 
 
 def test_determine_trade_decision_x_signal_uses_lower_dust_floor_when_stables_healthy(monkeypatch, capsys):
@@ -911,8 +914,7 @@ def test_determine_trade_decision_x_signal_uses_lower_dust_floor_when_stables_he
     monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
     monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
 
-    x_small = clean_swap.TradeDecision(
-        direction="USDC_TO_EQUITY",
+    x_small = _x_signal_decision_passes_net_edge(
         amount_in=int(8.0 * 1_000_000),
         trade_size=8.0,
         message="x buy",

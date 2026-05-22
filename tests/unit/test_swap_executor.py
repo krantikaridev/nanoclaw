@@ -131,6 +131,12 @@ def test_x_signal_fallback_slippage_ramp_two_steps_when_gap_small():
     assert ramp == [9500, 9700]
 
 
+def test_x_signal_fallback_slippage_ramp_four_steps_when_gap_very_large():
+    # Retry is capped at 9999 bps (same as approve_and_swap fallback path).
+    ramp = swap_executor._x_signal_fallback_slippage_ramp(7500, 9999)
+    assert ramp == [7500, 8333, 9166, 9999]
+
+
 def test_apply_fallback_min_out_extra_buffer_reduces_min_out():
     assert swap_executor._apply_fallback_min_out_extra_buffer(10_000, extra_bps=75) == 9925
     assert swap_executor._apply_fallback_min_out_extra_buffer(10_000, extra_bps=None) == 10_000
@@ -167,6 +173,28 @@ def test_quote_uniswap_v3_best_fee_single_picks_highest_output(monkeypatch):
     assert expected == 1500
     assert min_out > 0
     assert set(calls) == {500, 3000, 10000}
+
+
+def test_quote_uniswap_v3_best_fee_single_prefers_stable_3000_when_close(monkeypatch):
+    def _fake_quote(_w3, **_kwargs):
+        fee = int(_kwargs["fee"])
+        out = {500: 1000, 3000: 1490, 10000: 1500}[fee]
+        slip = int(_kwargs["slippage_bps"])
+        min_out = max(1, (out * (10000 - slip)) // 10000)
+        return out, min_out
+
+    monkeypatch.setattr(swap_executor, "_quote_uniswap_v3_exact_input_single", _fake_quote)
+    monkeypatch.setattr(swap_executor.cfg, "X_SIGNAL_STABLE_FEE_PREFER_BPS", 75)
+    fee, expected, _min_out = swap_executor._quote_uniswap_v3_best_fee_single(
+        object(),
+        token_in="0x" + "a" * 40,
+        token_out="0x" + "b" * 40,
+        amount_in=1_000_000,
+        slippage_bps=100,
+        prefer_stable_fee=True,
+    )
+    assert fee == 3000
+    assert expected == 1490
 
 
 def test_best_quote_path_caps_slippage_and_enforces_min_out_floor(monkeypatch):

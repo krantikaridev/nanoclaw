@@ -54,7 +54,13 @@ def test_defensive_pause_blocks_x_signal_buy_and_copy_trades(monkeypatch):
     monkeypatch.setattr(
         swap_executor,
         "cs_try_x_signal_equity_decision",
-        lambda *_a, **_k: TradeDecision(direction="USDC_TO_EQUITY", amount_in=10_000_000, message="x buy"),
+        lambda *_a, **_k: TradeDecision(
+            direction="USDC_TO_EQUITY",
+            amount_in=10_000_000,
+            trade_size=25.0,
+            expected_gross_edge_pct=10.0,
+            message="x buy",
+        ),
     )
     monkeypatch.setattr(swap_executor, "_facade", lambda: cs)
     monkeypatch.setattr(swap_executor, "is_copy_trading_enabled", lambda: True)

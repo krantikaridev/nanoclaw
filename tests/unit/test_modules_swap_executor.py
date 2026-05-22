@@ -51,6 +51,7 @@ from modules.swap_executor import (
     _x_signal_min_trade_guard_bypass,
     _x_signal_small_high_conviction_relaxed_slippage,
     estimate_expected_net_edge_pct,
+    select_main_strategy_trade,
     trade_passes_min_net_edge,
 )
 import pytest
@@ -972,6 +973,50 @@ def test_resolve_x_signal_enhanced_fallback_prefers_small_over_gated(monkeypatch
     assert resolved[2] is not None and resolved[2] >= 50
 
 
+def test_resolve_x_signal_enhanced_fallback_default_tier_when_not_gated(monkeypatch):
+    monkeypatch.setattr(
+        "modules.swap_executor.cfg.X_SIGNAL_DEFAULT_FALLBACK_PRIMARY_BPS",
+        7000,
+    )
+    monkeypatch.setattr(
+        "modules.swap_executor.cfg.X_SIGNAL_DEFAULT_FALLBACK_RETRY_BPS",
+        11000,
+    )
+    monkeypatch.setattr(
+        "modules.swap_executor.cfg.X_SIGNAL_DEFAULT_MIN_OUT_EXTRA_BPS",
+        75,
+    )
+    decision = TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=10_000_000,
+        trade_size=10.0,
+        signal_strength=0.70,
+        x_signal_gated_execution=False,
+    )
+    resolved = _resolve_x_signal_enhanced_fallback_execution(decision, decision_notional_usd=10.0)
+    assert resolved == (7000, 11000, 75)
+
+
+def test_x_signal_stf_sort_penalty_deprioritizes_paused_symbol():
+    state = {
+        "x_signal_stf_backoff": {
+            "NVDA_ALPHA": {"failures": 1, "paused_until": time.time() + 500},
+        }
+    }
+    from modules.swap_executor import _x_signal_stf_sort_penalty
+
+    assert _x_signal_stf_sort_penalty(state, "NVDA_ALPHA") == 1
+    assert _x_signal_stf_sort_penalty(state, "AAPL_ALPHA") == 0
+
+
+def test_x_signal_min_out_extra_bps_high_conviction_at_085(monkeypatch):
+    from modules.swap_executor import _x_signal_min_out_extra_bps
+
+    monkeypatch.setattr("modules.swap_executor.cfg.X_SIGNAL_HIGH_CONVICTION_MIN_OUT_EXTRA_BPS", 50)
+    assert _x_signal_min_out_extra_bps(0.88) == 25
+    assert _x_signal_min_out_extra_bps(0.92) == 50
+
+
 def test_resolve_x_signal_enhanced_fallback_gated_includes_min_out_extra(monkeypatch):
     monkeypatch.setattr(
         "modules.swap_executor.cfg.X_SIGNAL_GATED_TRADE_FALLBACK_PRIMARY_BPS",
@@ -1139,7 +1184,8 @@ def test_trade_passes_min_net_edge_allows_main_strategy_buy(monkeypatch):
     assert net >= MIN_NET_EDGE_PCT
 
 
-def test_trade_passes_min_net_edge_rejects_weak_x_at_default_floor(monkeypatch):
+def test_trade_passes_min_net_edge_rejects_weak_x_below_floor(monkeypatch):
+    """Weak X-SIGNAL (~3% gross) nets ~2.2% at 120 gwei — blocked when floor is 2.5%."""
     monkeypatch.setattr("modules.swap_executor.cfg.POL_USD_PRICE", 0.10)
     monkeypatch.setattr("modules.swap_executor.cfg.MIN_NET_EDGE_PCT", 2.5)
     monkeypatch.setattr("modules.swap_executor.cfg.MIN_NET_EDGE_FEE_BUFFER_PCT", MIN_NET_EDGE_FEE_BUFFER_PCT)
@@ -1178,10 +1224,10 @@ def test_reject_if_low_expected_net_edge_logs_and_returns_true(monkeypatch, caps
     assert skipped and "low_expected_edge" in skipped[0]
     assert "after gas" in skipped[0]
     out = capsys.readouterr().out
-    assert "[nanoclaw] Low edge rejected | direction=USDC_TO_EQUITY" in out
-    assert "expected_net_return_pct=" in out
-    assert "effective_gross=" in out
-    assert "reason=below_min_net_edge" in out
+    assert "[nanoclaw] LOW EDGE REJECTED" in out
+    assert "expected_net=" in out
+    assert "signal=0.620" in out
+    assert "direction=USDC_TO_EQUITY" in out
     assert "stage=planning" in out
 
 
@@ -1203,12 +1249,35 @@ def test_reject_if_low_expected_net_edge_fails_closed_missing_notional(capsys):
     assert "notional=n/a" in out
 
 
+def test_select_main_strategy_rejects_buy_below_min_net_edge(monkeypatch, capsys):
+    import clean_swap
+
+    monkeypatch.setattr("modules.swap_executor.cfg.POL_USD_PRICE", 0.5)
+    monkeypatch.setattr("modules.swap_executor.cfg.MIN_NET_EDGE_PCT", 50.0)
+    monkeypatch.setattr("modules.swap_executor.cfg.NET_EDGE_PLANNING_GAS_GWEI", 2500.0)
+    skipped: list[str] = []
+    monkeypatch.setattr(clean_swap, "_log_trade_skipped", lambda reason: skipped.append(reason))
+
+    decision = select_main_strategy_trade(
+        clean_swap.Balances(usdt=80.0, wmatic=20.0, pol=1.0),
+        current_price=0.75,
+    )
+
+    assert not decision.should_execute
+    assert "net edge below" in (decision.message or "").lower()
+    assert any("low_expected_edge" in reason for reason in skipped)
+    captured = capsys.readouterr().out
+    assert "[nanoclaw] LOW EDGE REJECTED" in captured
+    assert "direction=USDT_TO_WMATIC" in captured
+    assert "stage=main_strategy_plan" in captured
+
+
 def test_log_min_net_edge_policy_once_emits_single_banner(capsys):
     swap_exec_mod._MIN_NET_EDGE_POLICY_LOGGED = False
     _log_min_net_edge_policy_once(stage="planning")
     _log_min_net_edge_policy_once(stage="planning")
     out = capsys.readouterr().out
     assert out.count("MIN_NET_EDGE_ACTIVE") == 1
-    assert "floor=" in out
+    assert "threshold=" in out
     assert "fee_buffer=" in out
     assert "planning_gas=" in out
