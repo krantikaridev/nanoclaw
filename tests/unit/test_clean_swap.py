@@ -3420,3 +3420,109 @@ def test_select_copy_trade_none_when_all_target_wallets_on_cooldown(monkeypatch)
     )
     assert decision.should_execute is False
     assert "cooldown" in (decision.message or "").lower()
+
+
+def test_load_xsignal_blocked_symbols_reads_block_file(tmp_path, monkeypatch):
+    from modules import signal as signal_module
+
+    (tmp_path / ".xsignal_blocked_symbols").write_text("WMATIC_ALPHA\n# ignore\n\n")
+    monkeypatch.setattr(signal_module, "_xsignal_repo_root", lambda: tmp_path)
+    signal_module._XSIGNAL_BLOCKED_CACHE = None
+
+    blocked, source = signal_module.load_xsignal_blocked_symbols()
+    assert blocked == frozenset({"WMATIC_ALPHA"})
+    assert source == ".xsignal_blocked_symbols"
+
+
+def test_try_x_signal_equity_skips_blocked_symbol_before_build_plan(tmp_path, monkeypatch, capsys):
+    from modules import signal as signal_module
+
+    (tmp_path / ".xsignal_blocked_symbols").write_text("WMATIC_ALPHA\n")
+    monkeypatch.setattr(signal_module, "_xsignal_repo_root", lambda: tmp_path)
+    signal_module._XSIGNAL_BLOCKED_CACHE = None
+
+    class _Plan:
+        direction = "USDC_TO_EQUITY"
+        amount_in = 8_000_000
+        trade_size = 8.0
+        message = "buy"
+        token_in = "0x" + "2" * 40
+        token_out = "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619"
+
+    class _TunedConfig:
+        min_trade_usdc = 5.0
+        per_asset_cooldown_seconds = 1800
+        min_pol_for_gas = 0.005
+
+    build_order: list[str] = []
+
+    class _TunedTrader:
+        config = _TunedConfig()
+        gas_protector = _DummyGasProtector()
+
+        def build_plan_with_block_reason(self, **kwargs):
+            sym = str(kwargs.get("symbol", "")).strip()
+            build_order.append(sym)
+            return _Plan(), None
+
+        def build_plan(self, **kwargs):
+            p, _ = self.build_plan_with_block_reason(**kwargs)
+            return p
+
+    class _BaseTrader:
+        def load_followed_equities(self):
+            return [
+                clean_swap.FollowedEquity(
+                    symbol="WMATIC_ALPHA",
+                    token_address="0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
+                    decimals=18,
+                    signal_strength=0.92,
+                ),
+                clean_swap.FollowedEquity(
+                    symbol="WETH_ALPHA",
+                    token_address="0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+                    decimals=18,
+                    signal_strength=0.87,
+                ),
+            ]
+
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(clean_swap, "AUTO_TOPUP_POL", False)
+    monkeypatch.setattr(clean_swap, "_load_followed_equities_json_dict", lambda: {"enabled": True, "min_signal_strength": 0.60})
+    monkeypatch.setattr(clean_swap, "_effective_equity_signal_min", lambda cfg: 0.60)
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_EQUITY_TRADER", _BaseTrader())
+    monkeypatch.setattr(clean_swap, "_tuned_signal_equity_trader", lambda min_strength: _TunedTrader())
+    monkeypatch.setattr(clean_swap, "can_trade_asset", lambda *_a, **_k: True)
+    monkeypatch.setattr(clean_swap, "get_token_balance", lambda *_a, **_k: 0.0)
+
+    decision = clean_swap.try_x_signal_equity_decision(
+        clean_swap.Balances(usdt=40.0, wmatic=10.0, pol=1.0, usdc=20.0),
+        dry_run=True,
+    )
+
+    out = capsys.readouterr().out
+    assert decision is not None
+    assert decision.direction == "USDC_TO_EQUITY"
+    assert "WMATIC_ALPHA" not in build_order
+    assert build_order == ["WETH_ALPHA"]
+    assert "[X-SIGNAL] Skipping blocked symbol: WMATIC_ALPHA (from .xsignal_blocked_symbols)" in out
+
+
+def test_x_signal_blocked_symbol_filter_blocks_execution_path(monkeypatch, capsys):
+    from modules import signal as signal_module
+
+    monkeypatch.setattr(signal_module, "load_xsignal_blocked_symbols", lambda: (frozenset({"WETH_ALPHA"}), ".xsignal_blocked_symbols"))
+    monkeypatch.setattr(signal_module, "is_xsignal_symbol_blocked", lambda sym: str(sym).strip().upper() == "WETH_ALPHA")
+
+    decision = clean_swap.TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=10_000_000,
+        trade_size=10.0,
+        cooldown_asset=("WETH_ALPHA", 1800),
+    )
+    skipped: list[str] = []
+
+    filtered = swap_exec._x_signal_apply_blocked_symbol_filter(decision, log_skip=skipped.append)
+    assert filtered is None
+    assert skipped == ["xsignal_blocked_symbol (WETH_ALPHA)"]
+    assert "[X-SIGNAL] Skipping blocked symbol: WETH_ALPHA (from .xsignal_blocked_symbols)" in capsys.readouterr().out

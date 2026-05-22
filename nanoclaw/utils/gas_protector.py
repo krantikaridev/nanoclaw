@@ -6,7 +6,14 @@ from dataclasses import dataclass
 from typing import Any, Callable, Iterable, List, Optional, Tuple, cast
 
 from config import RPC_FALLBACKS_RAW
-from nanoclaw.config import connect_web3, default_json_rpc_url
+import time
+
+from nanoclaw.config import (
+    RPC_RECOVERY_PASS_DELAY_SEC,
+    connect_web3,
+    default_json_rpc_url,
+    order_rpc_endpoints,
+)
 
 try:
     from web3 import Web3 as _Web3
@@ -148,13 +155,17 @@ class GasProtector:
             return address
 
     def _query_with_fallback(self, query_fn: SafeQuery) -> Tuple[Optional[float], Optional[str]]:
-        for _ in range(self.config.retry_attempts):
-            for rpc_url in self._rpc_urls():
+        urls = order_rpc_endpoints(self._rpc_urls())
+        passes = max(2, int(self.config.retry_attempts))
+        for pass_idx in range(passes):
+            for rpc_url in urls:
                 try:
                     web3_client = self._build_web3(rpc_url)
                     return float(query_fn(web3_client)), rpc_url
                 except Exception:
                     continue
+            if pass_idx + 1 < passes:
+                time.sleep(float(RPC_RECOVERY_PASS_DELAY_SEC))
         return None, None
 
     def get_gas_price_gwei(self) -> float:

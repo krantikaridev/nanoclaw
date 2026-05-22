@@ -946,7 +946,7 @@ def test_query_onchain_usdc_balance_retries_and_succeeds(monkeypatch):
     assert s.last_usdc_balance_source == "onchain"
 
 
-def test_query_onchain_usdc_balance_uses_fallback_only_after_retries(monkeypatch):
+def test_query_onchain_usdc_balance_uses_fallback_only_after_retries(monkeypatch, capsys):
     import nanoclaw.config as nc_cfg
 
     s = _build_strategy_tuned()
@@ -979,11 +979,14 @@ def test_query_onchain_usdc_balance_uses_fallback_only_after_retries(monkeypatch
 
     monkeypatch.setattr(nc_cfg, "connect_web3", lambda *args, **kwargs: _FakeWeb3Client())
 
+    monkeypatch.setattr(nc_cfg, "RPC_RECOVERY_PASS_DELAY_SEC", 0.0)
+
     fallback = 41.5
     out = s._query_onchain_usdc_balance(fallback)
     assert out == pytest.approx(fallback)
-    assert calls["count"] == 2
+    assert calls["count"] == 6
     assert s.last_usdc_balance_source == "fallback_after_all_rpcs_failed"
+    assert "USDC balance source=SNAPSHOT" in capsys.readouterr().out
 
 
 def test_query_onchain_usdc_balance_tries_next_rpc_when_previous_fails(monkeypatch):
@@ -1035,14 +1038,13 @@ def test_query_onchain_usdc_balance_tries_next_rpc_when_previous_fails(monkeypat
 
     monkeypatch.setattr(nc_cfg, "connect_web3", _connect_web3)
 
+    monkeypatch.setattr(nc_cfg, "RPC_RECOVERY_PASS_DELAY_SEC", 0.0)
+
     out = s._query_onchain_usdc_balance(10.0)
     assert out == pytest.approx(42.5)
-    assert endpoints_seen == [
-        "https://rpc-one",
-        "https://rpc-one",
-        "https://rpc-two",
-    ]
-    assert per_endpoint_calls["https://rpc-one"] == 2
+    assert endpoints_seen[:3] == ["https://rpc-one"] * 3
+    assert "https://rpc-two" in endpoints_seen
+    assert per_endpoint_calls["https://rpc-one"] == 3
     assert per_endpoint_calls["https://rpc-two"] == 1
     assert s.last_usdc_balance_source == "onchain"
 

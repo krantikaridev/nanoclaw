@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import time
+from pathlib import Path
 from typing import Optional, Sequence
 
 import config as cfg
@@ -125,6 +126,66 @@ def _format_money(x: float) -> str:
         return f"${float(x):.2f}"
     except Exception:
         return f"{x!r}"
+
+
+_XSIGNAL_BLOCKED_FILE_NAMES = (".xsignal_blocked_symbols", ".xsignal_skip_symbols")
+_XSIGNAL_BLOCKED_CACHE: tuple[float, frozenset[str], str] | None = None
+
+
+def _xsignal_repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def load_xsignal_blocked_symbols() -> tuple[frozenset[str], str]:
+    """Load blocked symbols from repo-root block list (mtime-cached per cycle)."""
+    global _XSIGNAL_BLOCKED_CACHE
+    root = _xsignal_repo_root()
+    path: Path | None = None
+    for name in _XSIGNAL_BLOCKED_FILE_NAMES:
+        candidate = root / name
+        if candidate.is_file():
+            path = candidate
+            break
+    if path is None:
+        return frozenset(), ""
+    mtime = float(path.stat().st_mtime)
+    cache = _XSIGNAL_BLOCKED_CACHE
+    if cache is not None and cache[0] == mtime and cache[2] == str(path):
+        return cache[1], path.name
+    symbols: set[str] = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        raw = line.strip()
+        if not raw or raw.startswith("#"):
+            continue
+        symbols.add(raw.upper())
+    blocked = frozenset(symbols)
+    _XSIGNAL_BLOCKED_CACHE = (mtime, blocked, str(path))
+    return blocked, path.name
+
+
+def is_xsignal_symbol_blocked(symbol: str) -> bool:
+    blocked, _ = load_xsignal_blocked_symbols()
+    return str(symbol or "").strip().upper() in blocked
+
+
+def _filter_xsignal_blocked_equities(
+    assets: Sequence[FollowedEquity],
+    *,
+    log_skips: bool = True,
+) -> list[FollowedEquity]:
+    """Drop block-listed symbols before eligibility/planning (early cycle gate)."""
+    blocked, source = load_xsignal_blocked_symbols()
+    if not blocked:
+        return list(assets)
+    out: list[FollowedEquity] = []
+    for asset in assets:
+        sym = str(asset.symbol).strip().upper()
+        if sym in blocked:
+            if log_skips:
+                print(f"[X-SIGNAL] Skipping blocked symbol: {sym} (from {source})")
+            continue
+        out.append(asset)
+    return out
 
 
 def _assess_x_signal_buy_risk(
@@ -926,7 +987,7 @@ def try_x_signal_equity_decision(
         f"force_high_conviction = {force_high_conviction}"
     )
 
-    assets_seq = fcb.X_SIGNAL_EQUITY_TRADER.load_followed_equities()
+    assets_seq = _filter_xsignal_blocked_equities(fcb.X_SIGNAL_EQUITY_TRADER.load_followed_equities())
     assets, eligible = _sorted_and_eligible_equities(
         assets_seq,
         min_strength,
@@ -1379,7 +1440,7 @@ def evaluate_x_signal_equity_trade(
     force_high_conviction = bool(trader.config.force_high_conviction)
     high_conviction_threshold = float(trader.config.high_conviction_threshold)
     force_eligible_thr = float(trader.config.force_eligible_threshold)
-    assets_seq = trader.load_followed_equities()
+    assets_seq = _filter_xsignal_blocked_equities(trader.load_followed_equities(), log_skips=False)
     _, eligible = _sorted_and_eligible_equities(
         assets_seq,
         min_strength,

@@ -529,12 +529,20 @@ class SignalEquityTrader:
         """Read wallet USDC balance directly from chain with endpoint fallback and retries."""
         wallet = cfg.env_str("WALLET", "")
         usdc_tokens = self._usdc_token_addresses_for_balance()
-        per_rpc_attempts = max(2, int(cfg.env_int("X_SIGNAL_ONCHAIN_USDC_RETRY_ATTEMPTS", 2)))
+        per_rpc_attempts = max(3, int(cfg.env_int("X_SIGNAL_ONCHAIN_USDC_RETRY_ATTEMPTS", 3)))
+        inter_attempt_delay_s = max(
+            0.0,
+            float(cfg.env_float("X_SIGNAL_ONCHAIN_USDC_RETRY_DELAY_SECONDS", 1.0)),
+        )
         if not wallet or not usdc_tokens:
             self.last_usdc_balance_source = "fallback_missing_wallet_or_token"
             logger.warning(
-                "on-chain USDC balance query skipped (missing wallet/token); using fallback balance: $%.2f",
+                "on-chain USDC balance query skipped (missing wallet/token); using SNAPSHOT balance: $%.2f",
                 float(fallback_balance),
+            )
+            print(
+                f"[nanoclaw] USDC balance source=SNAPSHOT (${float(fallback_balance):.2f}) "
+                "| reason=missing_wallet_or_token"
             )
             return float(fallback_balance)
 
@@ -547,44 +555,86 @@ class SignalEquityTrader:
         if not rpc_endpoints:
             self.last_usdc_balance_source = "fallback_missing_rpc_endpoints"
             logger.warning(
-                "on-chain USDC balance query skipped (no RPC endpoints configured); using fallback balance: $%.2f",
+                "on-chain USDC balance query skipped (no RPC endpoints configured); using SNAPSHOT balance: $%.2f",
                 float(fallback_balance),
+            )
+            print(
+                f"[nanoclaw] USDC balance source=SNAPSHOT (${float(fallback_balance):.2f}) "
+                "| reason=no_rpc_endpoints"
             )
             return float(fallback_balance)
 
-        last_error: Optional[Exception] = None
-        for endpoint in rpc_endpoints:
-            logger.info("Trying RPC endpoint: %s", endpoint)
-            for attempt in range(1, per_rpc_attempts + 1):
-                try:
-                    from nanoclaw.config import connect_web3
+        from nanoclaw.config import connect_web3, order_rpc_endpoints
 
-                    web3_client = connect_web3(urls=[endpoint])
-                    # Use total USDC (native + bridged) for X-SIGNAL to avoid false zero_usdc blocks
-                    onchain_balance = sum(
-                        self._read_erc20_usdc_balance_usd(web3_client, wallet, token_addr)
-                        for token_addr in usdc_tokens
-                    )
-                    self._last_known_good_usdc_balance = onchain_balance
-                    self.last_usdc_balance_source = "onchain"
-                    logger.info(
-                        "Successfully fetched on-chain USDC balance via %s (attempt %d/%d): $%.2f",
-                        endpoint,
-                        attempt,
-                        per_rpc_attempts,
-                        onchain_balance,
-                    )
-                    return onchain_balance
-                except Exception as exc:
-                    last_error = exc
-                    logger.warning(
-                        "RPC %s failed (attempt %d/%d): %s",
-                        endpoint,
-                        attempt,
-                        per_rpc_attempts,
-                        exc,
-                    )
-            logger.warning("Falling back to next RPC after failures on %s", endpoint)
+        ordered_endpoints = order_rpc_endpoints(rpc_endpoints)
+        last_error: Optional[Exception] = None
+
+        def _try_endpoints(*, recovery_pass: bool) -> Optional[float]:
+            nonlocal last_error
+            endpoints = rpc_endpoints if recovery_pass else ordered_endpoints
+            for endpoint in endpoints:
+                if not recovery_pass:
+                    from nanoclaw.config import rpc_endpoint_in_cooldown
+
+                    if rpc_endpoint_in_cooldown(endpoint):
+                        logger.info("USDC balance RPC skip (cooldown): %s", endpoint)
+                        continue
+                logger.info("Trying RPC endpoint for USDC balance: %s", endpoint)
+                for attempt in range(1, per_rpc_attempts + 1):
+                    try:
+                        web3_client = connect_web3(urls=[endpoint])
+                        onchain_balance = sum(
+                            self._read_erc20_usdc_balance_usd(web3_client, wallet, token_addr)
+                            for token_addr in usdc_tokens
+                        )
+                        self._last_known_good_usdc_balance = onchain_balance
+                        self.last_usdc_balance_source = "onchain"
+                        logger.info(
+                            "USDC balance LIVE on-chain via %s (attempt %d/%d): $%.2f "
+                            "(snapshot was $%.2f)",
+                            endpoint,
+                            attempt,
+                            per_rpc_attempts,
+                            onchain_balance,
+                            float(fallback_balance),
+                        )
+                        print(
+                            f"[nanoclaw] USDC balance source=LIVE_RPC (${onchain_balance:.2f}) "
+                            f"| endpoint={endpoint} | snapshot=${float(fallback_balance):.2f}"
+                        )
+                        return onchain_balance
+                    except Exception as exc:
+                        last_error = exc
+                        logger.warning(
+                            "USDC balance RPC %s failed (attempt %d/%d): %s",
+                            endpoint,
+                            attempt,
+                            per_rpc_attempts,
+                            exc,
+                        )
+                        if attempt < per_rpc_attempts and inter_attempt_delay_s > 0:
+                            time.sleep(inter_attempt_delay_s)
+                logger.warning(
+                    "USDC balance RPC exhausted %d attempts on %s; trying next endpoint",
+                    per_rpc_attempts,
+                    endpoint,
+                )
+            return None
+
+        live = _try_endpoints(recovery_pass=False)
+        if live is not None:
+            return live
+
+        from nanoclaw.config import RPC_RECOVERY_PASS_DELAY_SEC
+
+        logger.warning(
+            "USDC balance: all ordered RPC endpoints failed; recovery pass in %.1fs",
+            RPC_RECOVERY_PASS_DELAY_SEC,
+        )
+        time.sleep(float(RPC_RECOVERY_PASS_DELAY_SEC))
+        live = _try_endpoints(recovery_pass=True)
+        if live is not None:
+            return live
 
         if (
             isinstance(self._last_known_good_usdc_balance, (int, float))
@@ -593,17 +643,28 @@ class SignalEquityTrader:
         ):
             self.last_usdc_balance_source = "fallback_last_known_good"
             logger.warning(
-                "All RPC endpoints failed; using last known good on-chain USDC balance: $%.2f | last_error=%s",
+                "All RPC endpoints failed; using LAST KNOWN GOOD on-chain USDC $%.2f "
+                "(snapshot was $%.2f) | last_error=%s",
                 float(self._last_known_good_usdc_balance),
+                float(fallback_balance),
                 last_error,
+            )
+            print(
+                f"[nanoclaw] USDC balance source=LAST_KNOWN_GOOD "
+                f"(${float(self._last_known_good_usdc_balance):.2f}) "
+                f"| snapshot=${float(fallback_balance):.2f} | reason=all_rpcs_failed"
             )
             return float(self._last_known_good_usdc_balance)
 
         self.last_usdc_balance_source = "fallback_after_all_rpcs_failed"
         logger.warning(
-            "All RPC endpoints failed; using snapshot fallback balance: $%.2f | last_error=%s",
+            "All RPC endpoints failed; using SNAPSHOT fallback balance: $%.2f | last_error=%s",
             float(fallback_balance),
             last_error,
+        )
+        print(
+            f"[nanoclaw] USDC balance source=SNAPSHOT (${float(fallback_balance):.2f}) "
+            f"| reason=all_rpcs_failed_no_last_known_good"
         )
         return float(fallback_balance)
 

@@ -502,6 +502,7 @@ def select_main_strategy_trade(
     current_price: float,
     *,
     state: dict | None = None,
+    profit_signal: dict | None = None,
 ) -> TradeDecision:
     cs = _facade()
     # FIXED SIZING: $12–$20 per signal (bug fix 2026-05-03)
@@ -596,6 +597,7 @@ def select_main_strategy_trade(
         balances,
         current_price,
         state=state,
+        profit_signal=profit_signal,
     )
     if idle_rotation is not None:
         return idle_rotation
@@ -765,6 +767,20 @@ _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_LOW_WM_MIN_STABLE_USD = 30.0
 _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_LOW_WM_MIN_SIGNAL = 0.60
 _MAIN_STRATEGY_IDLE_ROTATION_SELL_FRACTION_LOW = 0.35
 _MAIN_STRATEGY_IDLE_ROTATION_NOTIONAL_FLOOR_LOW = 1.35
+# May 2026: mild unrealized loss on small WMATIC stack — controlled rotation (reversible).
+_MAIN_STRATEGY_MILD_LOSS_IDLE_GAIN_MIN_PCT = -7.5
+_MAIN_STRATEGY_MILD_LOSS_IDLE_GAIN_MAX_PCT = -3.0
+_MAIN_STRATEGY_MILD_LOSS_IDLE_WM_MIN_USD = 5.5
+_MAIN_STRATEGY_MILD_LOSS_IDLE_WM_MAX_USD = 7.5
+_MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN = 3
+_MAIN_STRATEGY_MILD_LOSS_IDLE_NOTIONAL_FLOOR_USD = 1.25
+_MAIN_STRATEGY_MILD_LOSS_IDLE_SELL_FRACTION = 0.30
+_MAIN_STRATEGY_MILD_LOSS_IDLE_MAX_NOTIONAL_USD = 2.25
+_MAIN_STRATEGY_MILD_LOSS_IDLE_LOG = (
+    "[nanoclaw] MAIN_STRATEGY mild-loss idle rotation ALLOWED | "
+    "gain_pct={gain:.2f}% | wmatic_usd=${wm:.2f} | notional≈${notional:.2f} | "
+    "cycles_since_exit={cycles} | capped_small_sell=True"
+)
 _MAIN_STRATEGY_STATUS_LOG = "[nanoclaw] MAIN_STRATEGY_STATUS"
 _MAIN_STRATEGY_OUTCOME_LOG = "[nanoclaw] MAIN_STRATEGY_OUTCOME"
 _STABLE_ROTATION_FALLBACK_LOG = (
@@ -797,6 +813,43 @@ def _profit_take_gain_metric_boost(gain_pct: float, peak_gain_pct: float) -> flo
         return 0.0
     # +0.04 at ~2% gain, up to +0.12 at ~6%+ (keeps small winners above the relief floor).
     return min(0.12, 0.02 + metric / 50.0)
+
+
+def _profit_take_mild_loss_gain_pct(profit_signal: dict | None) -> float | None:
+    """Return gain_pct when open trade is HOLD in the mild-loss rotation band (~-5% to -6%)."""
+    if profit_signal is None:
+        return None
+    if str(profit_signal.get("reason") or "").strip().upper() != "HOLD":
+        return None
+    try:
+        gain = float(profit_signal.get("gain_pct", 0) or 0)
+    except (TypeError, ValueError):
+        return None
+    if float(_MAIN_STRATEGY_MILD_LOSS_IDLE_GAIN_MIN_PCT) <= gain <= float(
+        _MAIN_STRATEGY_MILD_LOSS_IDLE_GAIN_MAX_PCT
+    ):
+        return gain
+    return None
+
+
+def _wmatic_in_small_rotation_value_band(wm_equiv_usd: float) -> bool:
+    wm = float(wm_equiv_usd)
+    return wm + 1e-9 >= float(_MAIN_STRATEGY_MILD_LOSS_IDLE_WM_MIN_USD) and wm <= float(
+        _MAIN_STRATEGY_MILD_LOSS_IDLE_WM_MAX_USD
+    )
+
+
+def _main_strategy_mild_loss_idle_context(
+    profit_signal: dict | None,
+    wm_equiv_usd: float,
+    cycles_since_exit: int,
+) -> bool:
+    """Small stack + mild unrealized loss + several idle cycles → safe micro rotation."""
+    if _profit_take_mild_loss_gain_pct(profit_signal) is None:
+        return False
+    if not _wmatic_in_small_rotation_value_band(wm_equiv_usd):
+        return False
+    return int(cycles_since_exit) >= int(_MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN)
 
 
 # May 2026 sprint: floor for standard profit-take reasons so modest gains still clear P2 relief.
@@ -837,6 +890,12 @@ def _profit_signal_for_relief_scoring(
         return None
     reason = str(profit_signal.get("reason") or "").strip().upper()
     if reason != "HOLD":
+        return profit_signal
+    if (
+        wmatic_usd_equiv is not None
+        and _profit_take_mild_loss_gain_pct(profit_signal) is not None
+        and _wmatic_in_small_rotation_value_band(float(wmatic_usd_equiv))
+    ):
         return profit_signal
     if wmatic_usd_equiv is not None and _profit_take_wmatic_stack_low(float(wmatic_usd_equiv)):
         return None
@@ -909,6 +968,12 @@ def _profit_take_balance_relief_signal_strength(
             return _round_relief_signal_strength(strength)
 
         if reason == "HOLD":
+            if (
+                wmatic_usd_equiv is not None
+                and _profit_take_mild_loss_gain_pct(profit_signal) is not None
+                and _wmatic_in_small_rotation_value_band(float(wmatic_usd_equiv))
+            ):
+                return _round_relief_signal_strength(floor)
             return 0.0
 
         valid_exit_reason = bool(reason)
@@ -1098,8 +1163,17 @@ def _main_strategy_stable_rotation_fallback_params(
     )
 
 
-def _main_strategy_idle_rotation_sell_fraction(wm_equiv_usd: float) -> float:
+def _main_strategy_idle_rotation_sell_fraction(
+    wm_equiv_usd: float,
+    *,
+    mild_loss_idle: bool = False,
+) -> float:
     """Smaller sell slice when WMATIC stack is depleted — keeps rotation gas-efficient."""
+    if mild_loss_idle:
+        wm = max(float(wm_equiv_usd), 1e-9)
+        frac = float(_MAIN_STRATEGY_MILD_LOSS_IDLE_SELL_FRACTION)
+        cap_frac = float(_MAIN_STRATEGY_MILD_LOSS_IDLE_MAX_NOTIONAL_USD) / wm
+        return min(frac, cap_frac, float(MAIN_STRATEGY_RESERVE_SELL_FRACTION))
     if _profit_take_wmatic_stack_low(wm_equiv_usd):
         # ~32% on a ~$5.7 stack clears the $1.50 low-stack notional floor for idle rotation.
         return float(_MAIN_STRATEGY_IDLE_ROTATION_SELL_FRACTION_LOW)
@@ -1110,29 +1184,46 @@ def _main_strategy_idle_rotation_eligibility(
     balances: Balances,
     current_price: float,
     state: dict | None,
+    *,
+    profit_signal: dict | None = None,
 ) -> tuple[bool, str]:
     """Whether main strategy would emit an idle WMATIC→stable rotation sell this cycle."""
     wm_equiv = float(balances.wmatic) * float(current_price)
     if wm_equiv + 1e-9 >= float(MAIN_STRATEGY_TP_TRIGGER_WMATIC_USD):
         return False, "wmatic_above_tp_band"
     cycles = _profit_take_cycles_since_exit(state)
+    mild_loss_idle = _main_strategy_mild_loss_idle_context(profit_signal, wm_equiv, cycles)
     force_wm_min = _profit_take_force_wm_min_usd(wm_equiv, cycles_since_exit=cycles)
+    if mild_loss_idle:
+        force_wm_min = min(force_wm_min, float(_MAIN_STRATEGY_MILD_LOSS_IDLE_WM_MIN_USD))
     if wm_equiv + 1e-9 < force_wm_min:
         return False, f"wmatic_below_force_floor_${force_wm_min:.2f}"
-    cycles_min = _profit_take_force_cycles_min(wm_equiv)
+    cycles_min = (
+        int(_MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN)
+        if mild_loss_idle
+        else _profit_take_force_cycles_min(wm_equiv)
+    )
     if cycles < cycles_min:
         return False, f"idle_cycles={cycles}/{cycles_min}"
-    fraction = _main_strategy_idle_rotation_sell_fraction(wm_equiv)
+    fraction = _main_strategy_idle_rotation_sell_fraction(
+        wm_equiv,
+        mild_loss_idle=mild_loss_idle,
+    )
     notional = wm_equiv * fraction
     floor = _profit_take_force_notional_floor_usd(wm_equiv, cycles_since_exit=cycles)
+    if mild_loss_idle:
+        floor = min(floor, float(_MAIN_STRATEGY_MILD_LOSS_IDLE_NOTIONAL_FLOOR_USD))
     if notional + 1e-9 < floor:
         long_idle = _profit_take_long_idle_active(wm_equiv, cycles)
         return False, (
             f"notional_${notional:.2f}_below_${floor:.2f}"
             + (" (long_idle_not_met)" if long_idle else "")
+            + (" (mild_loss_idle)" if mild_loss_idle else "")
         )
     if int(balances.wmatic * fraction * 1e18) <= 0:
         return False, "zero_amount_in"
+    if mild_loss_idle:
+        return True, "eligible_mild_loss_idle_rotation"
     if _profit_take_long_idle_active(wm_equiv, cycles):
         return True, "eligible_long_idle_micro_rotation"
     return True, "eligible"
@@ -1143,29 +1234,52 @@ def _main_strategy_idle_rotation_sell_decision(
     current_price: float,
     *,
     state: dict | None = None,
+    profit_signal: dict | None = None,
 ) -> TradeDecision | None:
     """Small WMATIC→stable exit after idle cycles — capital rotation without high WMATIC stack."""
-    eligible, note = _main_strategy_idle_rotation_eligibility(balances, current_price, state)
+    eligible, note = _main_strategy_idle_rotation_eligibility(
+        balances,
+        current_price,
+        state,
+        profit_signal=profit_signal,
+    )
     if not eligible:
         return None
     wm_equiv = float(balances.wmatic) * float(current_price)
-    fraction = _main_strategy_idle_rotation_sell_fraction(wm_equiv)
+    cycles = _profit_take_cycles_since_exit(state)
+    mild_loss_idle = _main_strategy_mild_loss_idle_context(profit_signal, wm_equiv, cycles)
+    fraction = _main_strategy_idle_rotation_sell_fraction(
+        wm_equiv,
+        mild_loss_idle=mild_loss_idle,
+    )
     notional = wm_equiv * fraction
     tier = _profit_take_stack_tier(wm_equiv)
     reason = (
-        "low_wmatic_idle_rotation"
+        "mild_loss_idle_rotation"
+        if mild_loss_idle
+        else "low_wmatic_idle_rotation"
         if tier == "low"
         else "moderate_wmatic_idle_rotation"
         if tier == "moderate"
         else "healthy_wmatic_idle_rotation"
     )
-    cycles = _profit_take_cycles_since_exit(state)
     long_idle = _profit_take_long_idle_active(wm_equiv, cycles)
+    gain_pct = _profit_take_mild_loss_gain_pct(profit_signal)
     print(
         f"{runtime._nanolog()}Main strategy idle rotation | wmatic_usd=${wm_equiv:.2f} | "
         f"stack_tier={tier} | cycles_since_exit={cycles} | long_idle={long_idle} | "
+        f"mild_loss_idle={mild_loss_idle} | gain_pct={gain_pct if gain_pct is not None else 'n/a'} | "
         f"sell_fraction={fraction:.2f} | notional≈${notional:.2f} | note={note}"
     )
+    if mild_loss_idle and gain_pct is not None:
+        print(
+            _MAIN_STRATEGY_MILD_LOSS_IDLE_LOG.format(
+                gain=gain_pct,
+                wm=wm_equiv,
+                notional=notional,
+                cycles=cycles,
+            )
+        )
     if long_idle:
         print(
             f"{_MAIN_STRATEGY_LONG_IDLE_LOG} | tier={tier} | cycles={cycles} | "
@@ -1187,6 +1301,7 @@ def _main_strategy_idle_rotation_sell_decision(
         message=(
             f"🔄 Idle WMATIC rotation ({tier} stack: "
             f"${wm_equiv:.2f}, {cycles} cycles since exit"
+            f"{', mild loss' if mild_loss_idle else ''}"
             f"{', long idle' if long_idle else ''})"
         ),
     )
@@ -1205,6 +1320,7 @@ def _main_strategy_quiet_blocker(
         balances,
         current_price,
         state,
+        profit_signal=profit_signal,
     )
     if idle_eligible:
         return "idle_rotation_ready"
@@ -1247,6 +1363,7 @@ def _log_main_strategy_cycle_status(
         balances,
         current_price,
         state,
+        profit_signal=profit_signal,
     )
     force_cycles_min = _profit_take_force_cycles_min(wm_usd)
     p2_or_force_ready = cycles >= force_cycles_min and wm_usd + 1e-9 >= _profit_take_p2_wm_stack_min_usd(
@@ -1350,6 +1467,7 @@ def _profit_take_force_small_relief_eligible(
     wm_equiv_usd: float,
     notional_usd: float,
     cycles_since_exit: int,
+    profit_signal: dict | None = None,
 ) -> bool:
     """TEMPORARY SPRINT FIX - May 2026: force small profit take when stack + idle cycles qualify.
 
@@ -1368,6 +1486,9 @@ def _profit_take_force_small_relief_eligible(
         cycles_since_exit=cycles_since_exit,
     )
     cycles_min = _profit_take_force_cycles_min(wm_equiv_usd)
+    if _main_strategy_mild_loss_idle_context(profit_signal, wm_equiv_usd, cycles_since_exit):
+        cycles_min = max(cycles_min, int(_MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN))
+        floor_usd = min(floor_usd, float(_MAIN_STRATEGY_MILD_LOSS_IDLE_NOTIONAL_FLOOR_USD))
     if wm_equiv_usd + 1e-9 < force_wm_min:
         return False
     if notional_usd + 1e-9 < floor_usd:
@@ -1450,6 +1571,7 @@ def _profit_take_balance_relief_bypass_allowed(
         wm_equiv_usd=wm_equiv_usd,
         notional_usd=float(notional_usd),
         cycles_since_exit=cycles_since_exit,
+        profit_signal=profit_signal,
     )
     strength = _profit_take_balance_relief_signal_strength(
         decision,
@@ -1707,6 +1829,25 @@ def _x_signal_apply_stf_pause_filter(
         extra=detail,
         state=state,
     )
+    return None
+
+
+def _x_signal_apply_blocked_symbol_filter(
+    decision: TradeDecision | None,
+    *,
+    log_skip: Callable[[str], None] | None = None,
+) -> TradeDecision | None:
+    """Block-list gate for X-SIGNAL USDC→equity (decision + fallback router execution)."""
+    if not _is_x_signal_usdc_equity_buy(decision):
+        return decision
+    sym = _x_signal_symbol_from_decision(decision)
+    if not signal_module.is_xsignal_symbol_blocked(sym):
+        return decision
+    _, source = signal_module.load_xsignal_blocked_symbols()
+    src_label = source or ".xsignal_blocked_symbols"
+    print(f"[X-SIGNAL] Skipping blocked symbol: {sym} (from {src_label})")
+    if log_skip is not None:
+        log_skip(f"xsignal_blocked_symbol ({sym})")
     return None
 
 
@@ -1978,6 +2119,8 @@ def determine_trade_decision(
         if xd_local and xd_local.should_execute:
             xd_local = _x_signal_apply_stf_pause_filter(xd_local, state=state)
         if xd_local and xd_local.should_execute:
+            xd_local = _x_signal_apply_blocked_symbol_filter(xd_local, log_skip=cs._log_trade_skipped)
+        if xd_local and xd_local.should_execute:
             print("🔍 DECISION PATH: X_SIGNAL_EQUITY")
             x_dust_min = _x_signal_equity_effective_dust_min(balances)
             x_notional = _decision_notional_usd(xd_local, current_price_usd=current_price)
@@ -2106,6 +2249,27 @@ def determine_trade_decision(
 
     if profit_signal and profit_signal["reason"] == "HOLD":
         print(f"📈 {profit_signal['message']}")
+        # May 2026: rotate small WMATIC→stable on mild loss before copy/main accumulate paths.
+        if not _signal_driven_rotation_x_signal_first():
+            hold_idle = _main_strategy_idle_rotation_sell_decision(
+                balances,
+                current_price,
+                state=state,
+                profit_signal=profit_signal,
+            )
+            if hold_idle is not None and hold_idle.should_execute:
+                eff_pt_min = float(getattr(cs, "MIN_TRADE_USD", 0.0) or 0.0)
+                if _wmatic_stable_p2_relief_override_active(
+                    hold_idle,
+                    balances=balances,
+                    current_price_usd=current_price,
+                    min_trade_usd=eff_pt_min,
+                    profit_signal=profit_signal,
+                    state=state,
+                ):
+                    print(_PROFIT_TAKE_P2_RELIEF_LOG)
+                    decision_log.log_tracking_summary(state)
+                    return hold_idle
 
     if not x_signal_rotation_first:
         xd = _resolve_x_signal_equity_decision()
@@ -2214,7 +2378,12 @@ def determine_trade_decision(
             ):
                 _log_main_strategy_outcome(fallback_xd)
                 return fallback_xd
-    main_decision = select_main_strategy_trade(balances, current_price, state=state)
+    main_decision = select_main_strategy_trade(
+        balances,
+        current_price,
+        state=state,
+        profit_signal=profit_signal,
+    )
     _log_main_strategy_outcome(main_decision)
     main_dir = str(main_decision.direction or "").strip().upper()
     eff_main_min_usd = float(getattr(cs, "MIN_TRADE_USD", 0.0) or 0.0)
@@ -2345,6 +2514,11 @@ async def main(*, dry_run: bool = False) -> None:
         if not decision.should_execute:
             cs._log_trade_skipped("protection/strategy returned no actionable trade")
             print("ℹ️ No actionable trade this cycle")
+            return
+
+        decision = _x_signal_apply_blocked_symbol_filter(decision, log_skip=cs._log_trade_skipped)
+        if decision is None or not decision.should_execute:
+            print("ℹ️ No actionable trade this cycle (X-SIGNAL symbol block list)")
             return
 
         min_trade_usd = float(getattr(cs, "MIN_TRADE_USD", 0.0) or 0.0)

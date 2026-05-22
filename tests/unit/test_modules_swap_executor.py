@@ -512,6 +512,44 @@ def test_main_strategy_idle_rotation_sell_not_before_cycle_threshold():
     assert "idle_cycles=1/2" in note
 
 
+def test_main_strategy_mild_loss_idle_rotation_after_three_cycles(capsys):
+    """~63 WMATIC @ ~$0.09, -5.9% HOLD → small capped rotation after 3 idle cycles."""
+    from modules.swap_executor import (
+        _MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN,
+        _MAIN_STRATEGY_MILD_LOSS_IDLE_LOG,
+        _profit_take_bump_cycle_counter,
+    )
+
+    state: dict = {}
+    for _ in range(_MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN):
+        _profit_take_bump_cycle_counter(state)
+    price = 0.09
+    wmatic_qty = 63.0
+    balances = Balances(usdt=80.0, usdc=30.0, wmatic=wmatic_qty, pol=1.0)
+    hold_signal = {
+        "reason": "HOLD",
+        "gain_pct": -5.9,
+        "peak_gain_pct": 0.0,
+        "pullback_pct": 0.0,
+        "message": "holding",
+    }
+    decision = _main_strategy_idle_rotation_sell_decision(
+        balances,
+        price,
+        state=state,
+        profit_signal=hold_signal,
+    )
+    assert decision is not None
+    assert decision.direction == "WMATIC_TO_USDT"
+    wm_usd = wmatic_qty * price
+    max_notional = 2.25
+    expected_frac = min(0.30, max_notional / wm_usd)
+    assert decision.amount_in == int(wmatic_qty * expected_frac * 1e18)
+    out = capsys.readouterr().out
+    assert _MAIN_STRATEGY_MILD_LOSS_IDLE_LOG.split("|")[0].strip() in out
+    assert "mild_loss_idle=True" in out
+
+
 def test_profit_take_balance_relief_bypass_accepts_notional_at_relaxed_floor(capsys):
     decision = TradeDecision(
         direction="WMATIC_TO_USDT",
