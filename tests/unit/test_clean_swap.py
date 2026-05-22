@@ -347,6 +347,25 @@ def test_select_main_strategy_cuts_loss_when_wmatic_value_is_low_and_size_is_lar
     assert "Cutting loss" in decision.message
 
 
+def test_select_main_strategy_idle_rotation_over_accumulate_when_low_wmatic():
+    """Low WMATIC + idle cycles → small WMATIC→USDT rotation instead of USDT→WMATIC buy."""
+    from modules.swap_executor import (
+        _MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN,
+        _profit_take_bump_cycle_counter,
+    )
+
+    state: dict = {}
+    for _ in range(_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN):
+        _profit_take_bump_cycle_counter(state)
+    decision = clean_swap.select_main_strategy_trade(
+        clean_swap.Balances(usdt=80.0, usdc=30.0, wmatic=5.7, pol=1.0),
+        current_price=1.0,
+        state=state,
+    )
+    assert decision.direction == "WMATIC_TO_USDT"
+    assert "Idle WMATIC rotation" in decision.message
+
+
 def test_select_copy_trade_skips_when_all_wallets_are_on_cooldown(monkeypatch):
     logs = []
     monkeypatch.setattr(clean_swap, "can_trade_wallet", lambda wallet: False)
@@ -799,6 +818,86 @@ def test_determine_trade_decision_defers_dust_x_signal_and_falls_through_to_main
     assert any("x_signal_equity_dust_deferred" in reason for reason in skipped)
     assert "X_SIGNAL_EQUITY DUST DEFER" in captured
     assert "DECISION PATH: MAIN_STRATEGY" in captured
+
+
+def test_determine_trade_decision_rejects_x_signal_below_min_net_edge(monkeypatch, capsys):
+    swap_exec._MIN_NET_EDGE_POLICY_LOGGED = False
+    monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))
+    monkeypatch.setattr(clean_swap, "evaluate_take_profit", lambda *_args, **_kwargs: (False, None))
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
+    monkeypatch.setattr("modules.swap_executor.cfg.POL_USD_PRICE", 0.5)
+    monkeypatch.setattr("modules.swap_executor.cfg.MIN_NET_EDGE_PCT", 3.0)
+    monkeypatch.setattr("modules.swap_executor.cfg.NET_EDGE_PLANNING_GAS_GWEI", 80.0)
+
+    x_low_edge = clean_swap.TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=int(12.0 * 1_000_000),
+        trade_size=12.0,
+        signal_strength=0.62,
+        message="weak x buy",
+        token_in="0x" + "2" * 40,
+        token_out="0x" + "1" * 40,
+    )
+    main_ok = clean_swap.TradeDecision(
+        direction="USDT_TO_WMATIC",
+        amount_in=int(20 * 1_000_000),
+        trade_size=20.0,
+        message="main buy",
+    )
+    monkeypatch.setattr(clean_swap, "try_x_signal_equity_decision", lambda *_args, **_kwargs: x_low_edge)
+    monkeypatch.setattr(swap_exec, "select_main_strategy_trade", lambda *_args, **_kwargs: main_ok)
+    monkeypatch.setattr(clean_swap, "TAKE_PROFIT_PCT", 5.0)
+
+    skipped: list[str] = []
+    monkeypatch.setattr(clean_swap, "_log_trade_skipped", lambda reason: skipped.append(reason))
+
+    out = clean_swap.determine_trade_decision(
+        state={},
+        balances=clean_swap.Balances(usdt=40.0, wmatic=5.0, pol=1.0, usdc=50.0),
+        current_price=1.0,
+    )
+
+    captured = capsys.readouterr().out
+    assert out is main_ok
+    assert "direction=USDC_TO_EQUITY" in captured
+    assert any("low_expected_edge" in reason for reason in skipped)
+    assert "[nanoclaw] Low edge rejected | direction=USDC_TO_EQUITY" in captured
+    assert "MIN_NET_EDGE_ACTIVE" in captured
+
+
+def test_determine_trade_decision_rejects_main_buy_below_min_net_edge(monkeypatch, capsys):
+    swap_exec._MIN_NET_EDGE_POLICY_LOGGED = False
+    monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))
+    monkeypatch.setattr(clean_swap, "evaluate_take_profit", lambda *_args, **_kwargs: (False, None))
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", False)
+    monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
+    monkeypatch.setattr("modules.swap_executor.cfg.POL_USD_PRICE", 0.5)
+    monkeypatch.setattr("modules.swap_executor.cfg.MIN_NET_EDGE_PCT", 50.0)
+    monkeypatch.setattr("modules.swap_executor.cfg.NET_EDGE_PLANNING_GAS_GWEI", 2500.0)
+
+    main_buy = clean_swap.TradeDecision(
+        direction="USDT_TO_WMATIC",
+        amount_in=int(12.0 * 1_000_000),
+        trade_size=12.0,
+        message="main buy",
+    )
+    monkeypatch.setattr(swap_exec, "select_main_strategy_trade", lambda *_args, **_kwargs: main_buy)
+
+    skipped: list[str] = []
+    monkeypatch.setattr(clean_swap, "_log_trade_skipped", lambda reason: skipped.append(reason))
+
+    out = clean_swap.determine_trade_decision(
+        state={},
+        balances=clean_swap.Balances(usdt=40.0, wmatic=5.0, pol=1.0, usdc=10.0),
+        current_price=1.0,
+    )
+
+    captured = capsys.readouterr().out
+    assert not out.should_execute
+    assert "expected net edge below" in (out.message or "")
+    assert any("low_expected_edge" in reason for reason in skipped)
+    assert "[nanoclaw] Low edge rejected | direction=USDT_TO_WMATIC" in captured
 
 
 def test_determine_trade_decision_x_signal_uses_lower_dust_floor_when_stables_healthy(monkeypatch, capsys):

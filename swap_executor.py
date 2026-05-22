@@ -91,8 +91,19 @@ def _fallback_router_retry_slippage_bps(primary_bps: int) -> int:
     return min(max(primary_bps + ONCHAIN_SWAP_RETRY_EXTRA_BPS, _FALLBACK_ROUTER_SLIPPAGE_FLOOR_BPS), 9999)
 
 
+def _is_stf_revert_reason(reason: str) -> bool:
+    """True when revert looks like Uniswap V3 STF (Too little received / slippage tolerance)."""
+    if not reason:
+        return False
+    compact = reason.upper().replace(" ", "")
+    if "STF" in compact or "TOOLITTLERECEIVED" in compact:
+        return True
+    # Uniswap V3 SwapRouter error selector for STF()
+    return "0X3610C973" in compact or "3610C973" in compact
+
+
 def _apply_fallback_min_out_extra_buffer(amount_out_min: int, *, extra_bps: int | None) -> int:
-    """TEMPORARY (48-hour sprint): extra min_out haircut beyond quoted slippage (X-SIGNAL gated trades)."""
+    """Signal-driven execution quality (May 2026): extra min_out beyond quoted slippage (X-SIGNAL)."""
     if extra_bps is None or int(extra_bps) <= 0:
         return int(amount_out_min)
     extra = min(int(extra_bps), 9999)
@@ -235,6 +246,44 @@ def _quote_uniswap_v3_exact_input_single(
     )
 
 
+def _quote_uniswap_v3_best_fee_single(
+    w3,
+    *,
+    token_in: str,
+    token_out: str,
+    amount_in: int,
+    slippage_bps: int,
+    fees: tuple[int, ...] = (500, 3000, 10000),
+) -> tuple[int, int, int]:
+    """Pick the V3 pool fee tier with the highest quoted output (signal-driven routing quality)."""
+    best_fee = 3000
+    best_out = 0
+    best_min = 0
+    last_err: Exception | None = None
+    for fee in fees:
+        try:
+            expected_out, amount_out_min = _quote_uniswap_v3_exact_input_single(
+                w3,
+                token_in=token_in,
+                token_out=token_out,
+                amount_in=amount_in,
+                slippage_bps=slippage_bps,
+                fee=int(fee),
+            )
+        except Exception as ex:  # noqa: BLE001
+            last_err = ex
+            continue
+        if expected_out > best_out:
+            best_out = int(expected_out)
+            best_min = int(amount_out_min)
+            best_fee = int(fee)
+    if best_out <= 0:
+        if last_err is not None:
+            raise last_err
+        raise RuntimeError("No quotable Uniswap V3 single-hop pool for fee tiers tried")
+    return best_fee, best_out, best_min
+
+
 def _oneinch_api_key() -> str:
     return ONEINCH_API_KEY
 
@@ -295,6 +344,7 @@ async def approve_and_swap(
     fallback_slippage_bps: int | None = None,
     fallback_retry_slippage_bps: int | None = None,
     fallback_min_out_extra_bps: int | None = None,
+    swap_outcome: dict | None = None,
 ):
     print(f"{_prefix}swap EXEC | direction={direction} | amount_in={amount_in}")
 
@@ -357,7 +407,8 @@ async def approve_and_swap(
 
         fb_primary = 0
         fb_retry = 0
-        v3_quote_attempt1: tuple[int, int] | None = None
+        v3_quote_attempt1: tuple[int, int, int] | None = None
+        x_signal_enhanced_route = fallback_slippage_bps is not None
         if not use_oneinch:
             had_oneinch_key = bool(_oneinch_api_key())
             if not had_oneinch_key:
@@ -393,30 +444,50 @@ async def approve_and_swap(
                 f"(base SWAP_SLIPPAGE_BPS={SWAP_SLIPPAGE_BPS})."
             )
             try:
-                v3_quote_attempt1 = _quote_uniswap_v3_exact_input_single(
-                    w3,
-                    token_in=token_in_cs,
-                    token_out=token_out_cs,
-                    amount_in=amount_in,
-                    slippage_bps=fb_primary,
-                    fee=3000,
-                )
+                if x_signal_enhanced_route:
+                    fee_pick, eq, mq = _quote_uniswap_v3_best_fee_single(
+                        w3,
+                        token_in=token_in_cs,
+                        token_out=token_out_cs,
+                        amount_in=amount_in,
+                        slippage_bps=fb_primary,
+                    )
+                    print(
+                        f"{_prefix}[FALLBACK ROUTER] X-SIGNAL best V3 fee tier | fee={fee_pick} | "
+                        f"slip_bps={fb_primary}"
+                    )
+                else:
+                    fee_pick = 3000
+                    eq, mq = _quote_uniswap_v3_exact_input_single(
+                        w3,
+                        token_in=token_in_cs,
+                        token_out=token_out_cs,
+                        amount_in=amount_in,
+                        slippage_bps=fb_primary,
+                        fee=fee_pick,
+                    )
             except Exception as qex:
                 print(f"{_prefix}[FALLBACK ROUTER] Quote failed (pre-flight, {fb_primary} bps): {qex}")
+                if swap_outcome is not None:
+                    swap_outcome.update(
+                        success=False,
+                        revert_reason=str(qex),
+                        stf=False,
+                        direction=direction,
+                    )
                 return None
-            eq, mq = v3_quote_attempt1
             if fallback_min_out_extra_bps is not None and int(fallback_min_out_extra_bps) > 0:
                 mq_before = mq
                 mq = _apply_fallback_min_out_extra_buffer(mq, extra_bps=fallback_min_out_extra_bps)
                 print(
-                    f"{_prefix}[FALLBACK ROUTER] X-SIGNAL gated min_out buffer applied (48h sprint) | "
+                    f"{_prefix}[FALLBACK ROUTER] X-SIGNAL min_out buffer applied (signal execution quality) | "
                     f"extra_bps={int(fallback_min_out_extra_bps)} | min_out {mq_before}→{mq}"
                 )
             print(
-                f"{_prefix}[FALLBACK ROUTER] Pre-flight quote OK | fee=3000 | "
+                f"{_prefix}[FALLBACK ROUTER] Pre-flight quote OK | fee={fee_pick} | "
                 f"expected_out≈{eq} | min_out={mq}"
             )
-            v3_quote_attempt1 = (eq, mq)
+            v3_quote_attempt1 = (eq, mq, fee_pick)
 
         approve_contract = w3.eth.contract(address=token_in_cs, abi=[{"constant":True,"inputs":[{"name":"_owner","type":"address"},{"name":"_spender","type":"address"}],"name":"allowance","outputs":[{"name":"","type":"uint256"}],"type":"function"},{"constant":False,"inputs":[{"name":"_spender","type":"address"},{"name":"_value","type":"uint256"}],"name":"approve","outputs":[{"name":"","type":"bool"}],"type":"function"}])
         approve_spender_cs = Web3.to_checksum_address(approve_spender)
@@ -506,23 +577,40 @@ async def approve_and_swap(
 
         slip_attempts: list[tuple[int, int]] = [(0, fb_primary), (1, fb_retry)]
         for attempt_idx, slip_bps in slip_attempts:
+            v3_fee = 3000
             if attempt_idx == 0 and v3_quote_attempt1 is not None:
-                expected_out, amount_out_min = v3_quote_attempt1
+                expected_out, amount_out_min, v3_fee = v3_quote_attempt1
             else:
                 try:
-                    expected_out, amount_out_min = _quote_uniswap_v3_exact_input_single(
-                        w3,
-                        token_in=token_in_cs,
-                        token_out=token_out_cs,
-                        amount_in=amount_in,
-                        slippage_bps=slip_bps,
-                        fee=3000,
-                    )
+                    if x_signal_enhanced_route:
+                        v3_fee, expected_out, amount_out_min = _quote_uniswap_v3_best_fee_single(
+                            w3,
+                            token_in=token_in_cs,
+                            token_out=token_out_cs,
+                            amount_in=amount_in,
+                            slippage_bps=slip_bps,
+                        )
+                    else:
+                        expected_out, amount_out_min = _quote_uniswap_v3_exact_input_single(
+                            w3,
+                            token_in=token_in_cs,
+                            token_out=token_out_cs,
+                            amount_in=amount_in,
+                            slippage_bps=slip_bps,
+                            fee=3000,
+                        )
                 except Exception as qex:
                     print(
                         f"{_prefix}[FALLBACK ROUTER] Quote failed (attempt {attempt_idx + 1}/{len(slip_attempts)}, "
                         f"{slip_bps} bps): {qex}"
                     )
+                    if swap_outcome is not None:
+                        swap_outcome.update(
+                            success=False,
+                            revert_reason=str(qex),
+                            stf=False,
+                            direction=direction,
+                        )
                     return None
                 if fallback_min_out_extra_bps is not None and int(fallback_min_out_extra_bps) > 0:
                     mq_before = amount_out_min
@@ -531,12 +619,12 @@ async def approve_and_swap(
                         extra_bps=fallback_min_out_extra_bps,
                     )
                     print(
-                        f"{_prefix}[FALLBACK ROUTER] X-SIGNAL gated min_out buffer applied (48h sprint) | "
+                        f"{_prefix}[FALLBACK ROUTER] X-SIGNAL min_out buffer applied (signal execution quality) | "
                         f"extra_bps={int(fallback_min_out_extra_bps)} | min_out {mq_before}→{amount_out_min}"
                     )
             print(
                 f"{_prefix}[FALLBACK ROUTER] route attempt={attempt_idx + 1}/{len(slip_attempts)} | "
-                f"fee=3000 | slip_bps={slip_bps} | expected_out≈{expected_out} | "
+                f"fee={v3_fee} | slip_bps={slip_bps} | expected_out≈{expected_out} | "
                 f"min_out={amount_out_min}"
             )
 
@@ -547,7 +635,7 @@ async def approve_and_swap(
             v3_params = (
                 Web3.to_checksum_address(token_in_cs),
                 Web3.to_checksum_address(token_out_cs),
-                3000,
+                int(v3_fee),
                 WALLET,
                 int(time.time()) + 300,
                 int(amount_in),
@@ -577,10 +665,21 @@ async def approve_and_swap(
                 receipt = w3.eth.wait_for_transaction_receipt(swap_hash, timeout=300)
             except Exception as tx_ex:  # noqa: BLE001
                 revert_reason = _try_get_revert_reason(w3, tx_for_call=tx_for_call)
+                stf = _is_stf_revert_reason(revert_reason)
                 print(
                     f"{_prefix}[FALLBACK ROUTER] Swap submission/wait failed "
-                    f"(attempt {attempt_idx + 1}/{len(slip_attempts)}): {tx_ex} | revert={revert_reason}"
+                    f"(attempt {attempt_idx + 1}/{len(slip_attempts)}): {tx_ex} | "
+                    f"stf={stf} | revert={revert_reason}"
                 )
+                if swap_outcome is not None:
+                    swap_outcome.update(
+                        success=False,
+                        revert_reason=revert_reason,
+                        stf=stf,
+                        direction=direction,
+                        fee_tier=v3_fee,
+                        slippage_bps=slip_bps,
+                    )
                 if attempt_idx == 0:
                     print(
                         f"{_prefix}RETRY ATTEMPT 1/1 | Increasing slippage to {fb_retry} bps "
@@ -594,13 +693,26 @@ async def approve_and_swap(
                 return None
             if receipt["status"] == 1:
                 print(f"{_prefix}✅ Swap confirmed ([FALLBACK ROUTER] attempt {attempt_idx + 1}).")
+                if swap_outcome is not None:
+                    swap_outcome.update(success=True, stf=False, direction=direction, fee_tier=v3_fee)
                 return swap_hash.hex()
 
             revert_reason = _try_get_revert_reason(w3, tx_for_call=tx_for_call)
+            stf = _is_stf_revert_reason(revert_reason)
             print(
                 f"{_prefix}[FALLBACK ROUTER] On-chain swap reverted (attempt {attempt_idx + 1}). "
-                f"Tx: {swap_hash.hex()} | receipt={dict(receipt)} | revert={revert_reason}"
+                f"Tx: {swap_hash.hex()} | stf={stf} | receipt={dict(receipt)} | revert={revert_reason}"
             )
+            if swap_outcome is not None:
+                swap_outcome.update(
+                    success=False,
+                    revert_reason=revert_reason,
+                    stf=stf,
+                    direction=direction,
+                    fee_tier=v3_fee,
+                    slippage_bps=slip_bps,
+                    tx_hash=swap_hash.hex(),
+                )
             if attempt_idx == 0:
                 print(
                     f"{_prefix}RETRY ATTEMPT 1/1 | Increasing slippage to {fb_retry} bps "

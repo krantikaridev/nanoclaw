@@ -74,12 +74,15 @@ def _x_signal_min_effective_trade_usd(signal_strength: float) -> float:
 _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD = _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD_BASE
 
 
-def x_signal_gated_enhanced_execution_bps() -> tuple[int, int, int]:
-    """TEMPORARY (48-hour sprint): fallback slippage + min_out extra for gated X-SIGNAL BUYs."""
+def x_signal_gated_enhanced_execution_bps(signal_strength: float | None = None) -> tuple[int, int, int]:
+    """Signal-driven execution quality (May 2026): fallback slippage + min_out for gated X-SIGNAL BUYs."""
+    min_out_extra = int(cfg.X_SIGNAL_GATED_TRADE_MIN_OUT_EXTRA_BPS)
+    if signal_strength is not None and abs(float(signal_strength)) + 1e-9 >= _X_SIGNAL_VERY_STRONG_STRENGTH:
+        min_out_extra += int(cfg.X_SIGNAL_HIGH_CONVICTION_MIN_OUT_EXTRA_BPS)
     return (
         int(cfg.X_SIGNAL_GATED_TRADE_FALLBACK_PRIMARY_BPS),
         int(cfg.X_SIGNAL_GATED_TRADE_FALLBACK_RETRY_BPS),
-        int(cfg.X_SIGNAL_GATED_TRADE_MIN_OUT_EXTRA_BPS),
+        min_out_extra,
     )
 
 # TEMPORARY: Slightly larger USDC→equity sizing for very strong X-SIGNAL (target ~$9–$9.5)
@@ -983,7 +986,7 @@ class SignalEquityTrader:
                     )
                     return None, "temporary_min_size_gate"
                 # Signal-Driven Rotation (May 2026): gated BUYs use enhanced fallback slippage + min_out buffer.
-                _gate_pri, _gate_retry, _gate_min_out = x_signal_gated_enhanced_execution_bps()
+                _gate_pri, _gate_retry, _gate_min_out = x_signal_gated_enhanced_execution_bps(strength)
                 print(
                     "[nanoclaw-av] X-SIGNAL gated trade eligible — enhanced execution on swap "
                     f"(effective_after_gas=${effective_trade_size_after_gas:.2f} | "

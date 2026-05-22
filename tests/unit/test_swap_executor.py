@@ -126,6 +126,38 @@ def test_apply_fallback_min_out_extra_buffer_reduces_min_out():
     assert swap_executor._apply_fallback_min_out_extra_buffer(1, extra_bps=500) == 1
 
 
+def test_is_stf_revert_reason_detects_common_patterns():
+    assert swap_executor._is_stf_revert_reason("execution reverted: STF()")
+    assert swap_executor._is_stf_revert_reason("Too little received")
+    assert swap_executor._is_stf_revert_reason("0x3610c973")
+    assert not swap_executor._is_stf_revert_reason("insufficient allowance")
+
+
+def test_quote_uniswap_v3_best_fee_single_picks_highest_output(monkeypatch):
+    calls: list[int] = []
+
+    def _fake_quote(_w3, **_kwargs):
+        fee = int(_kwargs["fee"])
+        calls.append(fee)
+        out = {500: 1000, 3000: 1500, 10000: 1200}[fee]
+        slip = int(_kwargs["slippage_bps"])
+        min_out = max(1, (out * (10000 - slip)) // 10000)
+        return out, min_out
+
+    monkeypatch.setattr(swap_executor, "_quote_uniswap_v3_exact_input_single", _fake_quote)
+    fee, expected, min_out = swap_executor._quote_uniswap_v3_best_fee_single(
+        object(),
+        token_in="0x" + "a" * 40,
+        token_out="0x" + "b" * 40,
+        amount_in=1_000_000,
+        slippage_bps=100,
+    )
+    assert fee == 3000
+    assert expected == 1500
+    assert min_out > 0
+    assert set(calls) == {500, 3000, 10000}
+
+
 def test_best_quote_path_caps_slippage_and_enforces_min_out_floor(monkeypatch):
     monkeypatch.setattr(swap_executor, "SWAP_SLIPPAGE_BPS", 15000)
     p1 = [swap_executor.USDC, swap_executor.WMATIC]

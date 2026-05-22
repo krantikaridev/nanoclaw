@@ -125,6 +125,8 @@ TRAILING_STOP_PCT = env_float("TRAILING_STOP_PCT", 5.0)
 TAKE_PROFIT_PCT = env_float("TAKE_PROFIT_PCT", 5.0)
 # v1 quality filter: minimum estimated net edge (% of notional after gas) for X-Signal / main entry trades.
 MIN_NET_EDGE_PCT = env_float("MIN_NET_EDGE_PCT", 1.8)
+# Conservative planning gas (gwei) for early net-edge gates in determine_trade_decision (no RPC).
+NET_EDGE_PLANNING_GAS_GWEI = env_float("NET_EDGE_PLANNING_GAS_GWEI", 80.0)
 STRONG_SIGNAL_TP = env_float("STRONG_SIGNAL_TP", 12.0)
 TAKE_PROFIT_SELL_PCT = env_float("TAKE_PROFIT_SELL_PCT", 0.45)
 STRONG_TP_SELL_PCT = env_float("STRONG_TP_SELL_PCT", 0.60)
@@ -226,20 +228,32 @@ X_SIGNAL_SMALL_HIGH_CONVICTION_FALLBACK_RETRY_BPS = env_int(
     "X_SIGNAL_SMALL_HIGH_CONVICTION_FALLBACK_RETRY_BPS",
     10000,
 )
-# TEMPORARY (48-hour sprint): X-SIGNAL USDC→equity passing $18 effective gate — fallback router only.
+# Signal-driven execution quality (May 2026): X-SIGNAL USDC→equity gated BUY — fallback router only.
 X_SIGNAL_GATED_TRADE_FALLBACK_PRIMARY_BPS = env_int(
     "X_SIGNAL_GATED_TRADE_FALLBACK_PRIMARY_BPS",
-    9000,
+    9500,
 )
 X_SIGNAL_GATED_TRADE_FALLBACK_RETRY_BPS = env_int(
     "X_SIGNAL_GATED_TRADE_FALLBACK_RETRY_BPS",
-    12000,
+    12500,
 )
 # Extra min_out haircut beyond quoted slippage (bps) for gated X-SIGNAL fallback swaps.
 X_SIGNAL_GATED_TRADE_MIN_OUT_EXTRA_BPS = env_int(
     "X_SIGNAL_GATED_TRADE_MIN_OUT_EXTRA_BPS",
-    75,
+    100,
 )
+# Additional min_out buffer (bps) when |signal| >= 0.90 on gated/small high-conviction paths.
+X_SIGNAL_HIGH_CONVICTION_MIN_OUT_EXTRA_BPS = env_int(
+    "X_SIGNAL_HIGH_CONVICTION_MIN_OUT_EXTRA_BPS",
+    25,
+)
+X_SIGNAL_SMALL_HIGH_CONVICTION_MIN_OUT_EXTRA_BPS = env_int(
+    "X_SIGNAL_SMALL_HIGH_CONVICTION_MIN_OUT_EXTRA_BPS",
+    50,
+)
+# Pause per-asset X-SIGNAL BUY after repeated on-chain STF (slippage) reverts.
+X_SIGNAL_STF_PAUSE_AFTER_FAILURES = env_int("X_SIGNAL_STF_PAUSE_AFTER_FAILURES", 2)
+X_SIGNAL_STF_PAUSE_SECONDS = env_int("X_SIGNAL_STF_PAUSE_SECONDS", 3600)
 
 MAIN_STRATEGY_MIN_USDT_RESERVE = env_float("MAIN_STRATEGY_MIN_USDT_RESERVE", 25.0)
 MAIN_STRATEGY_TP_TRIGGER_WMATIC_USD = env_float("MAIN_STRATEGY_TP_TRIGGER_WMATIC_USD", 52.0)

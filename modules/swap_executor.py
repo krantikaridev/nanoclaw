@@ -55,6 +55,7 @@ _MIN_NET_EDGE_ENTRY_DIRECTIONS = frozenset({"USDC_TO_EQUITY", "USDT_TO_WMATIC"})
 _EST_SWAP_GAS_UNITS = 180_000.0
 # Planning estimate for early decision gates (no RPC); ``main()`` uses live ``get_gas_status()`` gas.
 _NET_EDGE_PLANNING_GAS_GWEI = 80.0
+_MIN_NET_EDGE_POLICY_LOGGED = False
 
 
 def _min_net_edge_floor_pct() -> float:
@@ -129,29 +130,62 @@ def trade_passes_min_net_edge(
     return expected_net + 1e-9 >= floor, expected_net
 
 
+def _log_min_net_edge_policy_once(*, stage: str = "planning") -> None:
+    """Emit active net-edge floor once per process so ops can confirm the filter is armed."""
+    global _MIN_NET_EDGE_POLICY_LOGGED
+    if _MIN_NET_EDGE_POLICY_LOGGED:
+        return
+    _MIN_NET_EDGE_POLICY_LOGGED = True
+    floor = _min_net_edge_floor_pct()
+    planning_gwei = _planning_gas_gwei_for_net_edge()
+    dirs = ",".join(sorted(_MIN_NET_EDGE_ENTRY_DIRECTIONS))
+    print(
+        f"{runtime._nanolog()}MIN_NET_EDGE_ACTIVE | floor={floor:.2f}% "
+        f"| planning_gas={planning_gwei:.0f}gwei | directions={dirs} | stage={stage}"
+    )
+
+
 def _reject_if_low_expected_net_edge(
     decision: TradeDecision,
     *,
     trade_usd: float | None,
     gas_gwei: float,
     log_skip: Callable[[str], None],
+    stage: str = "planning",
 ) -> bool:
     """Log and return True when the entry should be blocked for low expected net edge."""
-    if trade_usd is None:
+    direction = str(decision.direction or "").strip().upper()
+    if direction not in _MIN_NET_EDGE_ENTRY_DIRECTIONS:
         return False
+    min_floor = _min_net_edge_floor_pct()
+    notional = float(trade_usd) if trade_usd is not None else 0.0
+    if notional <= 0.0:
+        reason = "below_min_net_edge (missing_notional)"
+        log_skip(f"low_expected_edge ({reason}; floor={min_floor:.2f}%)")
+        print(
+            f"[nanoclaw] Low edge rejected | direction={direction} | notional=n/a "
+            f"| reason={reason} | floor={min_floor:.2f}% | stage={stage}"
+        )
+        return True
     passes, expected_net = trade_passes_min_net_edge(
         decision,
-        trade_usd=float(trade_usd),
+        trade_usd=notional,
         gas_gwei=float(gas_gwei),
     )
     if passes:
         return False
-    min_floor = _min_net_edge_floor_pct()
+    gross_pct = _infer_expected_gross_edge_pct(decision)
+    gas_usd = _estimate_swap_gas_cost_usd(float(gas_gwei))
     reason = f"below_min_net_edge (floor={min_floor:.2f}%)"
     log_skip(
-        f"low_expected_edge (expected_net={expected_net:.2f}% < {min_floor:.2f}%)"
+        f"low_expected_edge (expected_net={expected_net:.2f}% < {min_floor:.2f}% "
+        f"after gas; gross≈{gross_pct:.2f}% notional=${notional:.2f})"
     )
-    print(f"[nanoclaw] Low edge rejected | expected_net={expected_net:.2f}% | reason={reason}")
+    print(
+        f"[nanoclaw] Low edge rejected | direction={direction} | notional=${notional:.2f} "
+        f"| expected_gross={gross_pct:.2f}% | gas_est=${gas_usd:.4f} "
+        f"| expected_net={expected_net:.2f}% | floor={min_floor:.2f}% | reason={reason} | stage={stage}"
+    )
     return True
 
 
@@ -458,6 +492,17 @@ def select_main_strategy_trade(
             message=f"🔄 Cutting loss (WMATIC down: ${wmatic_value_usd:.2f})",
         )
 
+    # Signal-Driven Rotation (May 2026): prefer small WMATIC→stable rotation over USDT→WMATIC
+    # accumulation when the stack is below the high take-profit band — reduces over-reliance on
+    # large WMATIC balances for main-strategy participation (P2/force paths handle dust/min guards).
+    idle_rotation = _main_strategy_idle_rotation_sell_decision(
+        balances,
+        current_price,
+        state=state,
+    )
+    if idle_rotation is not None:
+        return idle_rotation
+
     decision_log.log_main_strategy_decision(
         action="ACCEPT",
         reason="usdt_to_wmatic_accumulate",
@@ -561,8 +606,8 @@ _MAIN_STRATEGY_FORCE_PROFIT_TAKE_WMATIC_USD_MIN = 5.5
 _MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN = 4
 _MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_FLOOR_USD = 1.8
 _PROFIT_TAKE_FORCE_SMALL_LOG = (
-    "[nanoclaw] FORCE small profit take | WMATIC=${wm:.2f} healthy, no exit for {cycles} cycles | "
-    "notional=${notional:.2f} | bypassing min_notional"
+    "[nanoclaw] FORCE small profit take | WMATIC=${wm:.2f} {stack_label}, "
+    "no exit for {cycles} cycles | notional=${notional:.2f} | bypassing min_notional"
 )
 
 # Signal-Driven Rotation (May 2026): reduce WMATIC dependency — relax P2/force when stack is below $7.
@@ -576,6 +621,12 @@ _MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN = 3
 _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_CYCLES_MIN = 6
 _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_MIN_STABLE_USD = 50.0
 _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_MIN_SIGNAL = 0.75
+# Relaxed fallback when WMATIC stack is low — still rotates stables without waiting for a large WMATIC exit.
+_MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_LOW_WM_CYCLES_MIN = 4
+_MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_LOW_WM_MIN_STABLE_USD = 35.0
+_MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_LOW_WM_MIN_SIGNAL = 0.65
+_MAIN_STRATEGY_IDLE_ROTATION_SELL_FRACTION_LOW = 0.32
+_MAIN_STRATEGY_IDLE_ROTATION_NOTIONAL_FLOOR_LOW = 1.5
 _MAIN_STRATEGY_STATUS_LOG = "[nanoclaw] MAIN_STRATEGY_STATUS"
 _MAIN_STRATEGY_OUTCOME_LOG = "[nanoclaw] MAIN_STRATEGY_OUTCOME"
 _STABLE_ROTATION_FALLBACK_LOG = (
@@ -583,8 +634,10 @@ _STABLE_ROTATION_FALLBACK_LOG = (
     "stables=${stable:.2f} | X-SIGNAL BUY eligible"
 )
 
-# TEMPORARY (2026-05): small high-conviction X-SIGNAL (~$11) — very high fallback slippage only; easy revert.
+# Signal-driven execution quality (May 2026): small high-conviction X-SIGNAL (~$11) — fallback slippage + min_out.
 _X_SIGNAL_SMALL_HIGH_CONVICTION_MAX_NOTIONAL_USD = 12.0
+_X_SIGNAL_STF_STATE_KEY = "x_signal_stf_backoff"
+_X_SIGNAL_STF_LOG = "[nanoclaw] X-SIGNAL execution quality"
 
 
 def _clamp_unit_interval(value: float) -> float:
@@ -822,6 +875,101 @@ def _profit_take_force_cycles_min(wm_equiv_usd: float) -> int:
     return int(_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN)
 
 
+def _main_strategy_stable_rotation_fallback_params(
+    wm_equiv_usd: float,
+) -> tuple[int, float, float]:
+    """Return (cycles_min, min_stables_usd, min_signal) for stable→equity fallback."""
+    if _profit_take_wmatic_stack_low(wm_equiv_usd):
+        return (
+            int(_MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_LOW_WM_CYCLES_MIN),
+            float(_MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_LOW_WM_MIN_STABLE_USD),
+            float(_MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_LOW_WM_MIN_SIGNAL),
+        )
+    return (
+        int(_MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_CYCLES_MIN),
+        float(_MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_MIN_STABLE_USD),
+        float(_MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_MIN_SIGNAL),
+    )
+
+
+def _main_strategy_idle_rotation_sell_fraction(wm_equiv_usd: float) -> float:
+    """Smaller sell slice when WMATIC stack is depleted — keeps rotation gas-efficient."""
+    if _profit_take_wmatic_stack_low(wm_equiv_usd):
+        # ~32% on a ~$5.7 stack clears the $1.50 low-stack notional floor for idle rotation.
+        return float(_MAIN_STRATEGY_IDLE_ROTATION_SELL_FRACTION_LOW)
+    return float(MAIN_STRATEGY_RESERVE_SELL_FRACTION)
+
+
+def _main_strategy_idle_rotation_eligibility(
+    balances: Balances,
+    current_price: float,
+    state: dict | None,
+) -> tuple[bool, str]:
+    """Whether main strategy would emit an idle WMATIC→stable rotation sell this cycle."""
+    wm_equiv = float(balances.wmatic) * float(current_price)
+    if wm_equiv + 1e-9 >= float(MAIN_STRATEGY_TP_TRIGGER_WMATIC_USD):
+        return False, "wmatic_above_tp_band"
+    if wm_equiv + 1e-9 < _profit_take_force_wm_min_usd(wm_equiv):
+        return False, "wmatic_below_force_floor"
+    cycles = _profit_take_cycles_since_exit(state)
+    cycles_min = _profit_take_force_cycles_min(wm_equiv)
+    if cycles < cycles_min:
+        return False, f"idle_cycles={cycles}/{cycles_min}"
+    fraction = _main_strategy_idle_rotation_sell_fraction(wm_equiv)
+    notional = wm_equiv * fraction
+    floor = (
+        float(_MAIN_STRATEGY_IDLE_ROTATION_NOTIONAL_FLOOR_LOW)
+        if _profit_take_wmatic_stack_low(wm_equiv)
+        else float(_MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_FLOOR_USD)
+    )
+    if notional + 1e-9 < floor:
+        return False, f"notional_${notional:.2f}_below_${floor:.2f}"
+    if int(balances.wmatic * fraction * 1e18) <= 0:
+        return False, "zero_amount_in"
+    return True, "eligible"
+
+
+def _main_strategy_idle_rotation_sell_decision(
+    balances: Balances,
+    current_price: float,
+    *,
+    state: dict | None = None,
+) -> TradeDecision | None:
+    """Small WMATIC→stable exit after idle cycles — capital rotation without high WMATIC stack."""
+    eligible, note = _main_strategy_idle_rotation_eligibility(balances, current_price, state)
+    if not eligible:
+        return None
+    wm_equiv = float(balances.wmatic) * float(current_price)
+    fraction = _main_strategy_idle_rotation_sell_fraction(wm_equiv)
+    notional = wm_equiv * fraction
+    low = _profit_take_wmatic_stack_low(wm_equiv)
+    reason = "low_wmatic_idle_rotation" if low else "moderate_wmatic_idle_rotation"
+    cycles = _profit_take_cycles_since_exit(state)
+    print(
+        f"{runtime._nanolog()}Main strategy idle rotation | wmatic_usd=${wm_equiv:.2f} | "
+        f"low_stack={low} | cycles_since_exit={cycles} | sell_fraction={fraction:.2f} | "
+        f"notional≈${notional:.2f} | note={note}"
+    )
+    decision_log.log_main_strategy_decision(
+        action="TAKE",
+        reason=reason,
+        direction="WMATIC_TO_USDT",
+        notional_usd=notional,
+        wmatic_balance=float(balances.wmatic),
+        wmatic_usd=wm_equiv,
+        extra=f"cycles_since_exit={cycles}",
+        state=state,
+    )
+    return TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(balances.wmatic * fraction * 1e18),
+        message=(
+            f"🔄 Idle WMATIC rotation ({'low' if low else 'moderate'} stack: "
+            f"${wm_equiv:.2f}, {cycles} cycles since exit)"
+        ),
+    )
+
+
 def _log_main_strategy_cycle_status(
     balances: Balances,
     current_price: float,
@@ -834,17 +982,25 @@ def _log_main_strategy_cycle_status(
     cycles = _profit_take_cycles_since_exit(state)
     stable = float(balances.usdt) + float(balances.usdc)
     pt_reason = str((profit_signal or {}).get("reason") or "n/a").strip().upper()
-    fallback_ready = cycles >= int(_MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_CYCLES_MIN) and stable + 1e-9 >= float(
-        _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_MIN_STABLE_USD
+    fb_cycles, fb_stable_min, fb_signal_min = _main_strategy_stable_rotation_fallback_params(wm_usd)
+    fallback_ready = cycles >= fb_cycles and stable + 1e-9 >= fb_stable_min
+    idle_eligible, idle_note = _main_strategy_idle_rotation_eligibility(
+        balances,
+        current_price,
+        state,
+    )
+    activity = "active_idle_rotation" if idle_eligible else (
+        "active_p2_or_force" if low or cycles >= _profit_take_force_cycles_min(wm_usd) else "quiet_accumulate_or_wait"
     )
     print(
         f"{_MAIN_STRATEGY_STATUS_LOG} | wmatic_usd=${wm_usd:.2f} | low_wmatic_stack={low} | "
         f"cycles_since_wm_exit={cycles} | stables=${stable:.2f} | profit_take_reason={pt_reason} | "
+        f"activity={activity} | idle_rotation_eligible={idle_eligible} | idle_rotation_note={idle_note} | "
         f"p2_wm_min=${_profit_take_p2_wm_stack_min_usd(wm_usd):.2f} | "
         f"p2_signal_min={_profit_take_p2_signal_min(wm_usd):.2f} | "
         f"force_wm_min=${_profit_take_force_wm_min_usd(wm_usd):.2f} | "
         f"force_cycles_min={_profit_take_force_cycles_min(wm_usd)} | "
-        f"stable_fallback_ready={fallback_ready}"
+        f"stable_fallback_ready={fallback_ready} | stable_fallback_min_signal={fb_signal_min:.2f}"
     )
 
 
@@ -855,31 +1011,46 @@ def _log_main_strategy_outcome(decision: TradeDecision) -> None:
     quiet = (not actionable) or (
         direction == "NONE" and bool(msg) and ("deferred" in msg.lower() or msg.startswith("ℹ️"))
     )
+    if actionable and direction == "USDT_TO_WMATIC":
+        quiet_reason = "accumulate_wmatic"
+    elif actionable and direction in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:
+        quiet_reason = "wmatic_to_stable_exit"
+    elif quiet:
+        quiet_reason = "deferred_or_info"
+    else:
+        quiet_reason = "no_trade"
     note = msg[:100] if msg else "no_message"
     print(
         f"{_MAIN_STRATEGY_OUTCOME_LOG} | direction={direction} | actionable={actionable} | "
-        f"quiet={quiet} | note={note}"
+        f"quiet={quiet} | quiet_reason={quiet_reason} | note={note}"
     )
 
 
 def _main_strategy_stable_rotation_fallback(
     balances: Balances,
+    current_price: float,
     *,
     dry_run: bool = False,
     state: dict | None = None,
 ) -> Optional[TradeDecision]:
-    """Signal-Driven Rotation (May 2026): idle WMATIC profit-take → small stable→equity via X-SIGNAL."""
+    """Signal-Driven Rotation (May 2026): idle WMATIC profit-take → small stable→equity via X-SIGNAL.
+
+    When WMATIC stack is low, uses relaxed cycles/stables/signal floors so capital can still rotate
+    without waiting for a large WMATIC→stable exit (reduces over-reliance on high WMATIC balance).
+    """
     cs = _facade()
     if not bool(getattr(cs, "ENABLE_X_SIGNAL_EQUITY", False)):
         return None
+    wm_equiv = float(balances.wmatic) * float(current_price)
     cycles = _profit_take_cycles_since_exit(state)
-    if cycles < int(_MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_CYCLES_MIN):
-        return None
     stable = float(balances.usdt) + float(balances.usdc)
-    if stable + 1e-9 < float(_MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_MIN_STABLE_USD):
+    fb_cycles_min, fb_stable_min, fb_signal_min = _main_strategy_stable_rotation_fallback_params(wm_equiv)
+    if cycles < fb_cycles_min:
+        return None
+    if stable + 1e-9 < fb_stable_min:
         print(
             f"{runtime._nanolog()}Signal-Driven Rotation: stable fallback skipped — "
-            f"stables=${stable:.2f} < ${_MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_MIN_STABLE_USD:.0f}"
+            f"stables=${stable:.2f} < ${fb_stable_min:.0f} (low_wmatic={_profit_take_wmatic_stack_low(wm_equiv)})"
         )
         return None
     xd = cs_try_x_signal_equity_decision(balances, dry_run=dry_run)
@@ -893,10 +1064,10 @@ def _main_strategy_stable_rotation_fallback(
     if direction != "USDC_TO_EQUITY":
         return None
     strength = xd.signal_strength
-    if strength is None or float(strength) + 1e-9 < float(_MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_MIN_SIGNAL):
+    if strength is None or float(strength) + 1e-9 < fb_signal_min:
         print(
             f"{runtime._nanolog()}Signal-Driven Rotation: stable fallback skipped — "
-            f"signal={strength} below {_MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_MIN_SIGNAL:.2f}"
+            f"signal={strength} below {fb_signal_min:.2f} (low_wmatic_stack)"
         )
         return None
     print(_STABLE_ROTATION_FALLBACK_LOG.format(cycles=cycles, stable=stable))
@@ -1006,9 +1177,11 @@ def _profit_take_balance_relief_bypass_allowed(
         allowed = False
         reason = "notional_at_or_above_min_trade"
     elif force_small:
+        stack_label = "low_stack" if _profit_take_wmatic_stack_low(wm_equiv_usd) else "healthy_stack"
         print(
             _PROFIT_TAKE_FORCE_SMALL_LOG.format(
                 wm=wm_equiv_usd,
+                stack_label=stack_label,
                 cycles=cycles_since_exit,
                 notional=float(notional_usd),
             )
@@ -1091,6 +1264,108 @@ def _wmatic_stable_p2_relief_override_active(
 
 
 _X_SIGNAL_HIGH_CONVICTION_STRENGTH = 0.85
+_X_SIGNAL_VERY_STRONG_STRENGTH = 0.90
+
+
+def _x_signal_min_out_extra_bps(signal_strength: float | None) -> int:
+    """Stack base min_out buffer with optional high-conviction add-on."""
+    extra = 0
+    if signal_strength is not None and abs(float(signal_strength)) + 1e-9 >= _X_SIGNAL_VERY_STRONG_STRENGTH:
+        extra = int(cfg.X_SIGNAL_HIGH_CONVICTION_MIN_OUT_EXTRA_BPS)
+    return extra
+
+
+def _is_x_signal_usdc_equity_buy(decision: TradeDecision | None) -> bool:
+    return (
+        decision is not None
+        and bool(decision.should_execute)
+        and str(decision.direction or "").strip().upper() == "USDC_TO_EQUITY"
+    )
+
+
+def _x_signal_symbol_from_decision(decision: TradeDecision) -> str:
+    asset = getattr(decision, "cooldown_asset", None)
+    if isinstance(asset, tuple) and len(asset) >= 1:
+        sym = str(asset[0] or "").strip().upper()
+        if sym:
+            return sym
+    return "UNKNOWN"
+
+
+def _x_signal_stf_pause_entry(state: dict | None, symbol: str) -> dict:
+    if state is None:
+        raise ValueError("state is required for X-SIGNAL STF backoff tracking")
+    root = state.setdefault(_X_SIGNAL_STF_STATE_KEY, {})
+    return root.setdefault(str(symbol).strip().upper(), {"failures": 0, "paused_until": 0.0})
+
+
+def _x_signal_stf_pause_active(state: dict | None, symbol: str) -> tuple[bool, str]:
+    """True when repeated STF failures triggered a temporary pause for this asset."""
+    if not state or not symbol:
+        return False, ""
+    entry = _x_signal_stf_pause_entry(state, symbol)
+    until = float(entry.get("paused_until") or 0.0)
+    now = time.time()
+    if until > now:
+        remain = int(until - now)
+        return True, f"stf_pause_active ({remain}s remaining, failures={int(entry.get('failures') or 0)})"
+    if until > 0 and until <= now:
+        entry["paused_until"] = 0.0
+    return False, ""
+
+
+def _record_x_signal_stf_failure(state: dict, decision: TradeDecision, swap_outcome: dict | None) -> None:
+    """Signal-driven execution quality (May 2026): backoff asset after repeated STF reverts."""
+    if not swap_outcome or not bool(swap_outcome.get("stf")):
+        return
+    sym = _x_signal_symbol_from_decision(decision)
+    entry = _x_signal_stf_pause_entry(state, sym)
+    entry["failures"] = int(entry.get("failures") or 0) + 1
+    threshold = max(1, int(cfg.X_SIGNAL_STF_PAUSE_AFTER_FAILURES))
+    pause_secs = max(60, int(cfg.X_SIGNAL_STF_PAUSE_SECONDS))
+    print(
+        f"{_X_SIGNAL_STF_LOG} | STF failure recorded | sym={sym} | "
+        f"failures={entry['failures']}/{threshold} | revert={str(swap_outcome.get('revert_reason') or '')[:120]}"
+    )
+    if int(entry["failures"]) >= threshold:
+        entry["paused_until"] = time.time() + float(pause_secs)
+        entry["failures"] = 0
+        print(
+            f"{_X_SIGNAL_STF_LOG} | pausing X-SIGNAL BUY for {sym} | "
+            f"duration={pause_secs}s | reason=repeated_stf"
+        )
+
+
+def _clear_x_signal_stf_pause(state: dict, decision: TradeDecision) -> None:
+    sym = _x_signal_symbol_from_decision(decision)
+    root = state.get(_X_SIGNAL_STF_STATE_KEY) or {}
+    if sym in root:
+        root.pop(sym, None)
+        print(f"{_X_SIGNAL_STF_LOG} | STF backoff cleared after successful swap | sym={sym}")
+
+
+def _x_signal_apply_stf_pause_filter(
+    decision: TradeDecision | None,
+    *,
+    state: dict | None,
+) -> TradeDecision | None:
+    if not _is_x_signal_usdc_equity_buy(decision) or state is None:
+        return decision
+    sym = _x_signal_symbol_from_decision(decision)
+    paused, detail = _x_signal_stf_pause_active(state, sym)
+    if not paused:
+        return decision
+    print(f"{_X_SIGNAL_STF_LOG} | skipping BUY | sym={sym} | {detail}")
+    decision_log.log_x_signal_decision(
+        sym,
+        "REJECT",
+        "stf_pause",
+        signal=decision.signal_strength,
+        notional_usd=None,
+        extra=detail,
+        state=state,
+    )
+    return None
 
 
 def _x_signal_small_high_conviction_relaxed_slippage(
@@ -1098,7 +1373,7 @@ def _x_signal_small_high_conviction_relaxed_slippage(
     *,
     decision_notional_usd: float | None,
 ) -> tuple[int, int] | None:
-    """TEMPORARY: very high fallback slippage for small USDC→equity X-SIGNAL (>=0.85); easy revert."""
+    """Signal-driven execution quality (May 2026): high fallback slippage for small USDC→equity X-SIGNAL (>=0.85)."""
     if str(decision.direction or "").strip().upper() != "USDC_TO_EQUITY":
         return None
     strength = decision.signal_strength
@@ -1141,7 +1416,7 @@ def _x_signal_gated_trade_relaxed_slippage(
     *,
     decision_notional_usd: float | None,
 ) -> tuple[int, int] | None:
-    """TEMPORARY (48-hour sprint): high fallback slippage for gated X-SIGNAL USDC→equity BUYs."""
+    """Signal-driven execution quality (May 2026): high fallback slippage for gated X-SIGNAL USDC→equity BUYs."""
     if not _x_signal_gated_trade_enhanced_execution_eligible(
         decision,
         decision_notional_usd=decision_notional_usd,
@@ -1158,23 +1433,24 @@ def _resolve_x_signal_enhanced_fallback_execution(
     *,
     decision_notional_usd: float | None,
 ) -> tuple[int, int, int | None] | None:
-    """TEMPORARY (48-hour sprint): (primary_bps, retry_bps, min_out_extra_bps) for X-SIGNAL fallback router."""
+    """Signal-driven execution quality (May 2026): (primary_bps, retry_bps, min_out_extra_bps) for fallback router."""
+    strength = decision.signal_strength
     small = _x_signal_small_high_conviction_relaxed_slippage(
         decision,
         decision_notional_usd=decision_notional_usd,
     )
     if small is not None:
-        return small[0], small[1], None
+        min_out = int(cfg.X_SIGNAL_SMALL_HIGH_CONVICTION_MIN_OUT_EXTRA_BPS) + _x_signal_min_out_extra_bps(
+            strength
+        )
+        return small[0], small[1], min_out
     gated = _x_signal_gated_trade_relaxed_slippage(
         decision,
         decision_notional_usd=decision_notional_usd,
     )
     if gated is not None:
-        return (
-            gated[0],
-            gated[1],
-            int(cfg.X_SIGNAL_GATED_TRADE_MIN_OUT_EXTRA_BPS),
-        )
+        min_out = int(cfg.X_SIGNAL_GATED_TRADE_MIN_OUT_EXTRA_BPS) + _x_signal_min_out_extra_bps(strength)
+        return gated[0], gated[1], min_out
     return None
 
 
@@ -1254,6 +1530,7 @@ def determine_trade_decision(
         f"\n{runtime._nanolog()}=== CYCLE {int(time.time())} | BALANCES: USDT=${balances.usdt:.2f} "
         f"USDC=${balances.usdc:.2f} WMATIC=${balances.wmatic:.2f} ==="
     )
+    _log_min_net_edge_policy_once(stage="planning")
     target_wallets_prelude = cs.get_target_wallets()
     print(
         f"🔍 BALANCES | USDT=${balances.usdt:.2f} USDC=${balances.usdc:.2f} "
@@ -1326,6 +1603,8 @@ def determine_trade_decision(
             cs._log_trade_skipped("control.json paused=True — skipping X-signal entry trade")
             xd_local = None
         if xd_local and xd_local.should_execute:
+            xd_local = _x_signal_apply_stf_pause_filter(xd_local, state=state)
+        if xd_local and xd_local.should_execute:
             print("🔍 DECISION PATH: X_SIGNAL_EQUITY")
             x_dust_min = _x_signal_equity_effective_dust_min(balances)
             x_notional = _decision_notional_usd(xd_local, current_price_usd=current_price)
@@ -1334,23 +1613,7 @@ def determine_trade_decision(
                 trade_usd=float(x_notional or 0.0),
                 gas_gwei=planning_gas_gwei,
             )
-            if _defer_if_dust(
-                xd_local,
-                branch_name="X_SIGNAL_EQUITY",
-                current_price_usd=current_price,
-                min_trade_usd=x_dust_min,
-            ):
-                decision_log.log_x_signal_decision(
-                    "n/a",
-                    "REJECT",
-                    "dust_deferred",
-                    wmatic_balance=float(balances.wmatic),
-                    notional_usd=x_notional,
-                    expected_edge_pct=edge_x,
-                    extra="branch=X_SIGNAL_EQUITY",
-                    state=state,
-                )
-            elif _decision_blocked_by_min_net_edge(
+            if _decision_blocked_by_min_net_edge(
                 xd_local,
                 trade_usd=x_notional,
                 gas_gwei=planning_gas_gwei,
@@ -1364,6 +1627,23 @@ def determine_trade_decision(
                     expected_edge_pct=edge_x,
                     notional_usd=x_notional,
                     wmatic_balance=float(balances.wmatic),
+                    extra=f"floor={_min_net_edge_floor_pct():.2f}%",
+                    state=state,
+                )
+            elif _defer_if_dust(
+                xd_local,
+                branch_name="X_SIGNAL_EQUITY",
+                current_price_usd=current_price,
+                min_trade_usd=x_dust_min,
+            ):
+                decision_log.log_x_signal_decision(
+                    "n/a",
+                    "REJECT",
+                    "dust_deferred",
+                    wmatic_balance=float(balances.wmatic),
+                    notional_usd=x_notional,
+                    expected_edge_pct=edge_x,
+                    extra="branch=X_SIGNAL_EQUITY",
                     state=state,
                 )
             else:
@@ -1526,6 +1806,7 @@ def determine_trade_decision(
     if not pause_active and not entries_paused:
         fallback_xd = _main_strategy_stable_rotation_fallback(
             balances,
+            current_price,
             dry_run=dry_run,
             state=state,
         )
@@ -1535,21 +1816,29 @@ def determine_trade_decision(
                 "(Signal-Driven Rotation — idle WMATIC profit-take)"
             )
             x_dust_min_fb = _x_signal_equity_effective_dust_min(balances)
-            if not _defer_if_dust(
+            fb_notional = _decision_notional_usd(fallback_xd, current_price_usd=current_price)
+            if _decision_blocked_by_min_net_edge(
+                fallback_xd,
+                trade_usd=fb_notional,
+                gas_gwei=planning_gas_gwei,
+                log_skip=cs._log_trade_skipped,
+            ):
+                decision_log.log_main_strategy_decision(
+                    action="REJECT",
+                    reason="below_min_net_edge",
+                    wmatic_balance=float(balances.wmatic),
+                    wmatic_usd=float(balances.wmatic) * float(current_price),
+                    extra=f"stable_rotation_fallback notional=${fb_notional}",
+                    state=state,
+                )
+            elif not _defer_if_dust(
                 fallback_xd,
                 branch_name="MAIN_STABLE_ROTATION_FALLBACK",
                 current_price_usd=current_price,
                 min_trade_usd=x_dust_min_fb,
             ):
-                fb_notional = _decision_notional_usd(fallback_xd, current_price_usd=current_price)
-                if not _decision_blocked_by_min_net_edge(
-                    fallback_xd,
-                    trade_usd=fb_notional,
-                    gas_gwei=planning_gas_gwei,
-                    log_skip=cs._log_trade_skipped,
-                ):
-                    _log_main_strategy_outcome(fallback_xd)
-                    return fallback_xd
+                _log_main_strategy_outcome(fallback_xd)
+                return fallback_xd
     main_decision = select_main_strategy_trade(balances, current_price, state=state)
     _log_main_strategy_outcome(main_decision)
     main_dir = str(main_decision.direction or "").strip().upper()
@@ -1569,6 +1858,31 @@ def determine_trade_decision(
     if entries_paused and main_dir in _CONTROL_PAUSE_BLOCK_ENTRIES:
         cs._log_trade_skipped("control.json paused=True — skipping main-strategy entry trade")
         return TradeDecision(message="ℹ️ Paused via control.json (no new entries this cycle)")
+    if main_decision.should_execute and main_dir == "USDT_TO_WMATIC":
+        main_notional = _decision_notional_usd(main_decision, current_price_usd=current_price)
+        if _decision_blocked_by_min_net_edge(
+            main_decision,
+            trade_usd=main_notional,
+            gas_gwei=planning_gas_gwei,
+            log_skip=cs._log_trade_skipped,
+        ):
+            low_edge = TradeDecision(
+                message=(
+                    f"ℹ️ Main strategy skipped (expected net edge below {_min_net_edge_floor_pct():.2f}% "
+                    "after gas)"
+                ),
+            )
+            _log_main_strategy_outcome(low_edge)
+            decision_log.log_main_strategy_decision(
+                action="REJECT",
+                reason="below_min_net_edge",
+                wmatic_balance=float(balances.wmatic),
+                wmatic_usd=float(balances.wmatic) * float(current_price),
+                extra=f"notional=${main_notional}",
+                state=state,
+            )
+            decision_log.log_tracking_summary(state)
+            return low_edge
     if _defer_if_dust(
         main_decision,
         branch_name="MAIN_STRATEGY",
@@ -1585,22 +1899,6 @@ def determine_trade_decision(
         )
         decision_log.log_tracking_summary(state)
         return deferred
-    if main_decision.should_execute and main_dir == "USDT_TO_WMATIC":
-        main_notional = _decision_notional_usd(main_decision, current_price_usd=current_price)
-        if _decision_blocked_by_min_net_edge(
-            main_decision,
-            trade_usd=main_notional,
-            gas_gwei=planning_gas_gwei,
-            log_skip=cs._log_trade_skipped,
-        ):
-            low_edge = TradeDecision(
-                message=(
-                    f"ℹ️ Main strategy skipped (low expected net edge < {_min_net_edge_floor_pct():.2f}%)"
-                ),
-            )
-            _log_main_strategy_outcome(low_edge)
-            decision_log.log_tracking_summary(state)
-            return low_edge
     decision_log.log_tracking_summary(state)
     return main_decision
 
@@ -1616,6 +1914,7 @@ async def main(*, dry_run: bool = False) -> None:
     print(
         f"{runtime._nanolog()}SECRETS CHECK | All sensitive variables loaded from .env only (not hardcoded)"
     )
+    _log_min_net_edge_policy_once(stage="execution")
     state = cs.load_state()
     balances = cs.get_balances()
     print(f"{runtime._nanolog()}WALLET BALANCE | USDC=${balances.usdc:.2f} | Address={cs.WALLET}")
@@ -1717,6 +2016,7 @@ async def main(*, dry_run: bool = False) -> None:
             trade_usd=decision_notional_usd,
             gas_gwei=gas_gwei_edge,
             log_skip=cs._log_trade_skipped,
+            stage="execution",
         ):
             return
 
@@ -1768,22 +2068,26 @@ async def main(*, dry_run: bool = False) -> None:
         fallback_slip_bps: int | None = None
         fallback_slip_retry_bps: int | None = None
         fallback_min_out_extra_bps: int | None = None
+        is_x_signal_buy = _is_x_signal_usdc_equity_buy(decision)
+        x_sym = _x_signal_symbol_from_decision(decision) if is_x_signal_buy else ""
         if x_signal_exec is not None:
             fallback_slip_bps, fallback_slip_retry_bps, fallback_min_out_extra_bps = x_signal_exec
-            if fallback_min_out_extra_bps is not None:
-                print(
-                    "[nanoclaw-av] X-SIGNAL enhanced execution active (48h sprint) | gated BUY "
-                    f"| notional=${decision_notional_usd:.2f} "
-                    f"| fallback_slip={fallback_slip_bps}/{fallback_slip_retry_bps} bps "
-                    f"| min_out_extra={fallback_min_out_extra_bps} bps"
-                )
-            else:
-                print(
-                    "[nanoclaw-av] X-SIGNAL enhanced execution active (48h sprint) | small high-conviction "
-                    f"| notional=${decision_notional_usd:.2f} "
-                    f"| fallback_slip={fallback_slip_bps}/{fallback_slip_retry_bps} bps"
-                )
+            tier = "gated" if fallback_min_out_extra_bps and int(fallback_min_out_extra_bps) >= int(
+                cfg.X_SIGNAL_GATED_TRADE_MIN_OUT_EXTRA_BPS
+            ) else "small_high_conviction"
+            print(
+                f"{_X_SIGNAL_STF_LOG} | EXEC ATTEMPT | sym={x_sym} | tier={tier} | "
+                f"notional=${decision_notional_usd:.2f} | signal={decision.signal_strength} | "
+                f"fallback_slip={fallback_slip_bps}/{fallback_slip_retry_bps} bps | "
+                f"min_out_extra={fallback_min_out_extra_bps} bps | v3_fee=best_of(500,3000,10000)"
+            )
+        elif is_x_signal_buy:
+            print(
+                f"{_X_SIGNAL_STF_LOG} | EXEC ATTEMPT | sym={x_sym} | tier=standard | "
+                f"notional=${decision_notional_usd:.2f} | signal={decision.signal_strength}"
+            )
 
+        swap_outcome: dict = {}
         tx_hash = await approve_and_swap(
             w3,
             None,
@@ -1794,8 +2098,12 @@ async def main(*, dry_run: bool = False) -> None:
             fallback_slippage_bps=fallback_slip_bps,
             fallback_retry_slippage_bps=fallback_slip_retry_bps,
             fallback_min_out_extra_bps=fallback_min_out_extra_bps,
+            swap_outcome=swap_outcome if is_x_signal_buy else None,
         )
         if tx_hash:
+            if is_x_signal_buy:
+                _clear_x_signal_stf_pause(state, decision)
+                print(f"{_X_SIGNAL_STF_LOG} | EXEC SUCCESS | sym={x_sym} | tx={tx_hash}")
             attribution.notify_swap_success(decision=decision, tx_hash=tx_hash)
             if decision.direction == "USDC_TO_WMATIC" and decision.cooldown_wallet and decision.cooldown_wallet[0]:
                 wallet_performance.record_copy_entry(
@@ -1826,6 +2134,13 @@ async def main(*, dry_run: bool = False) -> None:
                 wal_cw, secs_w = decision.cooldown_wallet
                 cs.mark_wallet_traded(str(wal_cw).strip(), cooldown_seconds=int(secs_w))
         else:
+            if is_x_signal_buy:
+                _record_x_signal_stf_failure(state, decision, swap_outcome)
+                stf_flag = bool(swap_outcome.get("stf"))
+                print(
+                    f"{_X_SIGNAL_STF_LOG} | EXEC FAILED | sym={x_sym} | stf={stf_flag} | "
+                    f"revert={str(swap_outcome.get('revert_reason') or 'unknown')[:160]}"
+                )
             if str(decision.direction or "").strip().upper() in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:
                 decision_log.record_profit_take_execution(state, success=False, reason="swap_failed")
             print(f"{runtime._nanolog()}Swap failed — per-asset/per-wallet cooldown not applied")

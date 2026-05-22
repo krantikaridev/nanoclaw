@@ -1,9 +1,13 @@
+import time
+
 from modules.runtime import TradeDecision, Balances
 from config import MIN_NET_EDGE_PCT
+from modules import swap_executor as swap_exec_mod
 from modules.swap_executor import (
     _MIN_NET_EDGE_PCT,
     _decision_notional_usd,
     _infer_expected_gross_edge_pct,
+    _log_min_net_edge_policy_once,
     _min_net_edge_floor_pct,
     _profit_take_balance_relief_bypass_allowed,
     _reject_if_low_expected_net_edge,
@@ -20,10 +24,17 @@ from modules.swap_executor import (
     _MAIN_STRATEGY_LOW_WMATIC_FORCE_WM_MIN_USD,
     _MAIN_STRATEGY_LOW_WMATIC_P2_SIGNAL_MIN,
     _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_CYCLES_MIN,
+    _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_LOW_WM_CYCLES_MIN,
+    _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_LOW_WM_MIN_SIGNAL,
     _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_MIN_SIGNAL,
+    _main_strategy_idle_rotation_sell_decision,
+    _main_strategy_idle_rotation_eligibility,
     _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH,
     _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD,
     _resolve_x_signal_enhanced_fallback_execution,
+    _record_x_signal_stf_failure,
+    _x_signal_apply_stf_pause_filter,
+    _x_signal_stf_pause_active,
     _x_signal_equity_effective_dust_min,
     _x_signal_gated_trade_enhanced_execution_eligible,
     _x_signal_gated_trade_relaxed_slippage,
@@ -194,7 +205,7 @@ def test_profit_take_balance_relief_bypass_force_weak_signal_after_idle_cycles(c
         state=state,
     )
     captured = capsys.readouterr().out
-    assert "FORCE small profit take | WMATIC=$20.00 healthy, no exit for 4 cycles" in captured
+    assert "FORCE small profit take | WMATIC=$20.00 healthy_stack, no exit for 4 cycles" in captured
     assert "notional=$3.40" in captured
     assert "bypassing min_notional" in captured
     assert "force_no_exit_cycles" in captured
@@ -220,7 +231,7 @@ def test_profit_take_balance_relief_bypass_force_below_standard_p2_floors(capsys
         state=state,
     )
     captured = capsys.readouterr().out
-    assert "FORCE small profit take | WMATIC=$6.80 healthy, no exit for 4 cycles" in captured
+    assert "FORCE small profit take | WMATIC=$6.80 low_stack, no exit for 4 cycles" in captured
     assert f"notional=${notional:.2f}" in captured
     assert "bypassing min_notional" in captured
     assert "force_no_exit_cycles" in captured
@@ -247,7 +258,7 @@ def test_profit_take_balance_relief_bypass_force_at_observed_wmatic_range(capsys
         state=state,
     )
     captured = capsys.readouterr().out
-    assert f"FORCE small profit take | WMATIC=${wmatic_usd:.2f} healthy" in captured
+    assert f"FORCE small profit take | WMATIC=${wmatic_usd:.2f} low_stack" in captured
     assert "bypassing min_notional" in captured
     assert "force_no_exit_cycles" in captured
 
@@ -349,7 +360,7 @@ def test_main_strategy_stable_rotation_fallback_requires_cycles(monkeypatch):
         "modules.swap_executor._facade",
         lambda: type("C", (), {"ENABLE_X_SIGNAL_EQUITY": True})(),
     )
-    assert _main_strategy_stable_rotation_fallback(balances, state=state) is None
+    assert _main_strategy_stable_rotation_fallback(balances, 1.0, state=state) is None
 
 
 def test_main_strategy_stable_rotation_fallback_returns_xsignal_buy(monkeypatch):
@@ -375,8 +386,36 @@ def test_main_strategy_stable_rotation_fallback_returns_xsignal_buy(monkeypatch)
         "modules.swap_executor.cs_try_x_signal_equity_decision",
         lambda *_a, **_k: expected,
     )
-    got = _main_strategy_stable_rotation_fallback(balances, state=state)
+    got = _main_strategy_stable_rotation_fallback(balances, 1.0, state=state)
     assert got is expected
+
+
+def test_main_strategy_stable_rotation_fallback_low_wmatic_relaxed_signal(monkeypatch):
+    """Low WMATIC stack uses relaxed stable fallback signal floor (0.65)."""
+    state: dict = {
+        "profit_take_rotation": {
+            "cycles_since_exit": _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_LOW_WM_CYCLES_MIN,
+        }
+    }
+    balances = Balances(usdt=40.0, usdc=30.0, wmatic=5.0, pol=1.0)
+    moderate = TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=8_000_000,
+        trade_size=8.0,
+        signal_strength=_MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_LOW_WM_MIN_SIGNAL,
+        message="low wm fallback",
+    )
+
+    class _Facade:
+        ENABLE_X_SIGNAL_EQUITY = True
+
+    monkeypatch.setattr("modules.swap_executor._facade", lambda: _Facade())
+    monkeypatch.setattr(
+        "modules.swap_executor.cs_try_x_signal_equity_decision",
+        lambda *_a, **_k: moderate,
+    )
+    got = _main_strategy_stable_rotation_fallback(balances, 1.0, state=state)
+    assert got is moderate
 
 
 def test_main_strategy_stable_rotation_fallback_rejects_weak_signal(monkeypatch):
@@ -390,7 +429,7 @@ def test_main_strategy_stable_rotation_fallback_rejects_weak_signal(monkeypatch)
         direction="USDC_TO_EQUITY",
         amount_in=8_000_000,
         trade_size=8.0,
-        signal_strength=_MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_MIN_SIGNAL - 0.05,
+        signal_strength=_MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_LOW_WM_MIN_SIGNAL - 0.05,
     )
 
     class _Facade:
@@ -401,7 +440,28 @@ def test_main_strategy_stable_rotation_fallback_rejects_weak_signal(monkeypatch)
         "modules.swap_executor.cs_try_x_signal_equity_decision",
         lambda *_a, **_k: weak,
     )
-    assert _main_strategy_stable_rotation_fallback(balances, state=state) is None
+    assert _main_strategy_stable_rotation_fallback(balances, 1.0, state=state) is None
+
+
+def test_main_strategy_idle_rotation_sell_after_low_wmatic_idle_cycles():
+    state: dict = {}
+    for _ in range(_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN):
+        _profit_take_bump_cycle_counter(state)
+    balances = Balances(usdt=80.0, usdc=30.0, wmatic=5.7, pol=1.0)
+    decision = _main_strategy_idle_rotation_sell_decision(balances, 1.0, state=state)
+    assert decision is not None
+    assert decision.direction == "WMATIC_TO_USDT"
+    assert decision.amount_in == int(5.7 * 0.32 * 1e18)
+
+
+def test_main_strategy_idle_rotation_sell_not_before_cycle_threshold():
+    state: dict = {}
+    _profit_take_bump_cycle_counter(state)
+    balances = Balances(usdt=80.0, usdc=30.0, wmatic=5.7, pol=1.0)
+    assert _main_strategy_idle_rotation_sell_decision(balances, 1.0, state=state) is None
+    eligible, note = _main_strategy_idle_rotation_eligibility(balances, 1.0, state)
+    assert not eligible
+    assert "idle_cycles=1/3" in note
 
 
 def test_profit_take_balance_relief_bypass_accepts_notional_at_relaxed_floor(capsys):
@@ -842,7 +902,7 @@ def test_x_signal_gated_trade_relaxed_slippage_uses_plan_flag_without_notional_g
     assert slip is not None
     resolved = _resolve_x_signal_enhanced_fallback_execution(decision, decision_notional_usd=12.0)
     assert resolved is not None
-    assert resolved[2] == 75
+    assert resolved[2] == 125
 
 
 def test_resolve_x_signal_enhanced_fallback_prefers_small_over_gated(monkeypatch):
@@ -861,7 +921,8 @@ def test_resolve_x_signal_enhanced_fallback_prefers_small_over_gated(monkeypatch
         signal_strength=0.90,
     )
     resolved = _resolve_x_signal_enhanced_fallback_execution(decision, decision_notional_usd=11.0)
-    assert resolved == (8000, 10000, None)
+    assert resolved[0:2] == (8000, 10000)
+    assert resolved[2] is not None and resolved[2] >= 50
 
 
 def test_resolve_x_signal_enhanced_fallback_gated_includes_min_out_extra(monkeypatch):
@@ -885,6 +946,42 @@ def test_resolve_x_signal_enhanced_fallback_gated_includes_min_out_extra(monkeyp
     )
     resolved = _resolve_x_signal_enhanced_fallback_execution(decision, decision_notional_usd=22.0)
     assert resolved == (9000, 12000, 75)
+
+
+def test_x_signal_stf_pause_blocks_buy_after_threshold(monkeypatch):
+    monkeypatch.setattr("modules.swap_executor.cfg.X_SIGNAL_STF_PAUSE_AFTER_FAILURES", 2)
+    monkeypatch.setattr("modules.swap_executor.cfg.X_SIGNAL_STF_PAUSE_SECONDS", 600)
+    state: dict = {}
+    decision = TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=12_000_000,
+        signal_strength=0.92,
+        cooldown_asset=("WETH_ALPHA", 1800),
+    )
+    _record_x_signal_stf_failure(state, decision, {"stf": True, "revert_reason": "STF"})
+    _record_x_signal_stf_failure(state, decision, {"stf": True, "revert_reason": "STF"})
+    paused, detail = _x_signal_stf_pause_active(state, "WETH_ALPHA")
+    assert paused is True
+    assert "stf_pause_active" in detail
+    filtered = _x_signal_apply_stf_pause_filter(decision, state=state)
+    assert filtered is None
+
+
+def test_x_signal_stf_pause_clears_after_success_path():
+    state = {
+        "x_signal_stf_backoff": {
+            "WETH_ALPHA": {"failures": 1, "paused_until": time.time() + 500},
+        }
+    }
+    from modules.swap_executor import _clear_x_signal_stf_pause
+
+    decision = TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=12_000_000,
+        cooldown_asset=("WETH_ALPHA", 1800),
+    )
+    _clear_x_signal_stf_pause(state, decision)
+    assert "WETH_ALPHA" not in state.get("x_signal_stf_backoff", {})
 
 
 def test_x_signal_equity_effective_dust_min_requires_healthy_stables(monkeypatch):
@@ -971,6 +1068,37 @@ def test_reject_if_low_expected_net_edge_logs_and_returns_true(monkeypatch, caps
         log_skip=_log,
     )
     assert skipped and "low_expected_edge" in skipped[0]
+    assert "after gas" in skipped[0]
     out = capsys.readouterr().out
-    assert "[nanoclaw] Low edge rejected | expected_net=" in out
+    assert "[nanoclaw] Low edge rejected | direction=USDC_TO_EQUITY" in out
+    assert "expected_net=" in out
     assert "reason=below_min_net_edge" in out
+    assert "stage=planning" in out
+
+
+def test_reject_if_low_expected_net_edge_fails_closed_missing_notional(capsys):
+    skipped: list[str] = []
+
+    def _log(msg: str) -> None:
+        skipped.append(msg)
+
+    d = TradeDecision(direction="USDT_TO_WMATIC")
+    assert _reject_if_low_expected_net_edge(
+        d,
+        trade_usd=None,
+        gas_gwei=80.0,
+        log_skip=_log,
+    )
+    assert skipped and "missing_notional" in skipped[0]
+    out = capsys.readouterr().out
+    assert "notional=n/a" in out
+
+
+def test_log_min_net_edge_policy_once_emits_single_banner(capsys):
+    swap_exec_mod._MIN_NET_EDGE_POLICY_LOGGED = False
+    _log_min_net_edge_policy_once(stage="planning")
+    _log_min_net_edge_policy_once(stage="planning")
+    out = capsys.readouterr().out
+    assert out.count("MIN_NET_EDGE_ACTIVE") == 1
+    assert "floor=" in out
+    assert "planning_gas=" in out
