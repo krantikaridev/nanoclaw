@@ -203,7 +203,8 @@ def _try_connect_chain(chain: Sequence[str], *, timeout: int, recovery_pass: boo
                 logger.info("RPC recovery pass succeeded: %s", endpoint)
             return client
         except Exception as exc:
-            record_rpc_failure(endpoint)
+            if not recovery_pass:
+                record_rpc_failure(endpoint)
             last_exc = exc
             logger.warning(
                 "RPC connect failed (%d attempts): %s | %s",

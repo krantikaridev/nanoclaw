@@ -168,13 +168,19 @@ def is_xsignal_symbol_blocked(symbol: str) -> bool:
     return str(symbol or "").strip().upper() in blocked
 
 
+def log_xsignal_blocked_skip(symbol: str) -> None:
+    sym = str(symbol or "").strip().upper()
+    if sym:
+        print(f"[X-SIGNAL] Skipping blocked symbol: {sym}")
+
+
 def _filter_xsignal_blocked_equities(
     assets: Sequence[FollowedEquity],
     *,
     log_skips: bool = True,
 ) -> list[FollowedEquity]:
     """Drop block-listed symbols before eligibility/planning (early cycle gate)."""
-    blocked, source = load_xsignal_blocked_symbols()
+    blocked, _ = load_xsignal_blocked_symbols()
     if not blocked:
         return list(assets)
     out: list[FollowedEquity] = []
@@ -182,7 +188,7 @@ def _filter_xsignal_blocked_equities(
         sym = str(asset.symbol).strip().upper()
         if sym in blocked:
             if log_skips:
-                print(f"[X-SIGNAL] Skipping blocked symbol: {sym} (from {source})")
+                log_xsignal_blocked_skip(sym)
             continue
         out.append(asset)
     return out
@@ -870,6 +876,9 @@ def try_x_signal_equity_decision(
         )
         return None
 
+    # Early cycle: load block list and drop symbols before risk/gas/plan work.
+    assets_seq = _filter_xsignal_blocked_equities(fcb.X_SIGNAL_EQUITY_TRADER.load_followed_equities())
+
     snapshot_usdt = float(balances.usdt)
     if not dry_run:
         balances = fcb.get_balances()
@@ -987,7 +996,6 @@ def try_x_signal_equity_decision(
         f"force_high_conviction = {force_high_conviction}"
     )
 
-    assets_seq = _filter_xsignal_blocked_equities(fcb.X_SIGNAL_EQUITY_TRADER.load_followed_equities())
     assets, eligible = _sorted_and_eligible_equities(
         assets_seq,
         min_strength,

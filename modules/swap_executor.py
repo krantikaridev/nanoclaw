@@ -573,6 +573,19 @@ def select_main_strategy_trade(
             message=f"🔄 Taking profit (WMATIC high: ${wmatic_value_usd:.2f})",
         )
 
+    # Small USD stack (~$5–$8): prefer controlled idle rotation before cut-loss (high token qty, low $).
+    if _profit_take_wmatic_stack_low(wmatic_value_usd) or _wmatic_in_small_rotation_value_band(
+        wmatic_value_usd
+    ):
+        idle_rotation = _main_strategy_idle_rotation_sell_decision(
+            balances,
+            current_price,
+            state=state,
+            profit_signal=profit_signal,
+        )
+        if idle_rotation is not None:
+            return idle_rotation
+
     if wmatic_value_usd < MAIN_STRATEGY_CUT_LOSS_WMATIC_USD and balances.wmatic > MAIN_STRATEGY_CUT_LOSS_MIN_WMATIC_BALANCE:
         notional = wmatic_value_usd * MAIN_STRATEGY_CUT_LOSS_SELL_FRACTION
         decision_log.log_main_strategy_decision(
@@ -768,11 +781,11 @@ _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_LOW_WM_MIN_SIGNAL = 0.60
 _MAIN_STRATEGY_IDLE_ROTATION_SELL_FRACTION_LOW = 0.35
 _MAIN_STRATEGY_IDLE_ROTATION_NOTIONAL_FLOOR_LOW = 1.35
 # May 2026: mild unrealized loss on small WMATIC stack — controlled rotation (reversible).
-_MAIN_STRATEGY_MILD_LOSS_IDLE_GAIN_MIN_PCT = -7.5
-_MAIN_STRATEGY_MILD_LOSS_IDLE_GAIN_MAX_PCT = -3.0
-_MAIN_STRATEGY_MILD_LOSS_IDLE_WM_MIN_USD = 5.5
-_MAIN_STRATEGY_MILD_LOSS_IDLE_WM_MAX_USD = 7.5
-_MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN = 3
+_MAIN_STRATEGY_MILD_LOSS_IDLE_GAIN_MIN_PCT = -8.0
+_MAIN_STRATEGY_MILD_LOSS_IDLE_GAIN_MAX_PCT = -2.5
+_MAIN_STRATEGY_MILD_LOSS_IDLE_WM_MIN_USD = 5.0
+_MAIN_STRATEGY_MILD_LOSS_IDLE_WM_MAX_USD = 8.0
+_MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN = 2
 _MAIN_STRATEGY_MILD_LOSS_IDLE_NOTIONAL_FLOOR_USD = 1.25
 _MAIN_STRATEGY_MILD_LOSS_IDLE_SELL_FRACTION = 0.30
 _MAIN_STRATEGY_MILD_LOSS_IDLE_MAX_NOTIONAL_USD = 2.25
@@ -780,6 +793,11 @@ _MAIN_STRATEGY_MILD_LOSS_IDLE_LOG = (
     "[nanoclaw] MAIN_STRATEGY mild-loss idle rotation ALLOWED | "
     "gain_pct={gain:.2f}% | wmatic_usd=${wm:.2f} | notional≈${notional:.2f} | "
     "cycles_since_exit={cycles} | capped_small_sell=True"
+)
+_MAIN_STRATEGY_IDLE_ROTATION_ALLOWED_LOG = (
+    "[nanoclaw] MAIN_STRATEGY small idle rotation ALLOWED | "
+    "wmatic_usd=${wm:.2f} | notional≈${notional:.2f} | cycles_since_exit={cycles} | "
+    "path={path} | gain_pct={gain}"
 )
 _MAIN_STRATEGY_STATUS_LOG = "[nanoclaw] MAIN_STRATEGY_STATUS"
 _MAIN_STRATEGY_OUTCOME_LOG = "[nanoclaw] MAIN_STRATEGY_OUTCOME"
@@ -1265,6 +1283,23 @@ def _main_strategy_idle_rotation_sell_decision(
     )
     long_idle = _profit_take_long_idle_active(wm_equiv, cycles)
     gain_pct = _profit_take_mild_loss_gain_pct(profit_signal)
+    path = (
+        "mild_loss_idle"
+        if mild_loss_idle
+        else "long_idle_micro"
+        if long_idle
+        else f"{tier}_stack_idle"
+    )
+    gain_s = f"{gain_pct:.2f}" if gain_pct is not None else "n/a"
+    print(
+        _MAIN_STRATEGY_IDLE_ROTATION_ALLOWED_LOG.format(
+            wm=wm_equiv,
+            notional=notional,
+            cycles=cycles,
+            path=path,
+            gain=gain_s,
+        )
+    )
     print(
         f"{runtime._nanolog()}Main strategy idle rotation | wmatic_usd=${wm_equiv:.2f} | "
         f"stack_tier={tier} | cycles_since_exit={cycles} | long_idle={long_idle} | "
@@ -1843,9 +1878,7 @@ def _x_signal_apply_blocked_symbol_filter(
     sym = _x_signal_symbol_from_decision(decision)
     if not signal_module.is_xsignal_symbol_blocked(sym):
         return decision
-    _, source = signal_module.load_xsignal_blocked_symbols()
-    src_label = source or ".xsignal_blocked_symbols"
-    print(f"[X-SIGNAL] Skipping blocked symbol: {sym} (from {src_label})")
+    signal_module.log_xsignal_blocked_skip(sym)
     if log_skip is not None:
         log_skip(f"xsignal_blocked_symbol ({sym})")
     return None
@@ -2270,6 +2303,9 @@ def determine_trade_decision(
                     print(_PROFIT_TAKE_P2_RELIEF_LOG)
                     decision_log.log_tracking_summary(state)
                     return hold_idle
+                # Execution-time P2 still needs HOLD gain_pct; return decision for min_trade_guard path.
+                decision_log.log_tracking_summary(state)
+                return hold_idle
 
     if not x_signal_rotation_first:
         xd = _resolve_x_signal_equity_decision()
@@ -2531,7 +2567,12 @@ async def main(*, dry_run: bool = False) -> None:
             profit_signal_guard: dict | None = None
             if str(decision.direction or "").strip().upper() in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:
                 should_tp, profit_signal_guard = cs_evaluate_take_profit(current_price, state)
-                if not should_tp:
+                # Keep HOLD payload for mild-loss idle rotation at execution (was cleared → P2 always failed).
+                if (
+                    not should_tp
+                    and profit_signal_guard is not None
+                    and str(profit_signal_guard.get("reason") or "").strip().upper() != "HOLD"
+                ):
                     profit_signal_guard = None
             if _x_signal_min_trade_guard_bypass(
                 decision,

@@ -11,7 +11,13 @@ This is the **intended** behavior in the repo today; adjust in `nanoclaw.config`
 3. Then the first non-empty among `RPC` → `RPC_URL` → `WEB3_PROVIDER_URI` if not already included.
 4. After env entries, built-in public Polygon URLs in fixed order (`_DEFAULT_POLYGON_PUBLIC_RPCS` in `nanoclaw/config.py`), skipping duplicates.
 
-`connect_web3()` without arguments walks that list: for each URL it builds `Web3.HTTPProvider`, calls `eth.block_number`, and returns the first client that succeeds (with a few transient retries per URL). If all fail, it raises.
+`connect_web3()` without arguments walks that list with **sticky preference** and **patient retries**:
+
+- Each URL gets **3** connect attempts (`_RPC_CONNECT_ATTEMPTS`) with **1s** between tries.
+- A URL is put on a **short cooldown** (default **20s**) only after **3** failed chain passes (`record_rpc_failure`), not on the first blip.
+- The **last successful** URL is preferred for **10 minutes** (`_RPC_STICKY_PREFER_SECONDS`).
+- If every ready URL fails, `connect_web3()` sleeps **2s** and runs a **recovery pass** (cooldowns ignored; failures on that pass do **not** increment the streak).
+- On-chain USDC reads (`signal_equity_trader`) retry each endpoint at least **3** times, then recovery, then **last known good** on-chain balance before falling back to the stale snapshot. Logs print `USDC balance source=LIVE_RPC` vs `SNAPSHOT` / `LAST_KNOWN_GOOD`.
 
 **Operator guidance:** Prefer **`RPC_ENDPOINTS`** with 2–3 HTTPS providers in priority order, and keep `RPC` / `RPC_URL` / `WEB3_PROVIDER_URI` aligned with your primary where tools still read those aliases.
 

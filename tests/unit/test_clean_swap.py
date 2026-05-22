@@ -1400,6 +1400,84 @@ def test_main_profit_take_min_trade_guard_bypassed_when_balance_relief_applies(m
     assert "[nanoclaw] Main strategy small profit take allowed (P2 relief)" in out
 
 
+def test_main_hold_mild_loss_idle_min_trade_guard_bypassed(monkeypatch, capsys):
+    """HOLD gain_pct must reach execution P2 so ~$1.7 idle rotation clears MIN_TRADE_USD."""
+    monkeypatch.setenv("POLYGON_PRIVATE_KEY", "0x" + "a" * 64)
+    state = {"profit_take_rotation": {"cycles_since_exit": 2}}
+    monkeypatch.setattr(clean_swap, "load_state", lambda: state)
+    monkeypatch.setattr(
+        clean_swap,
+        "get_balances",
+        lambda: clean_swap.Balances(usdt=80.0, wmatic=63.0, pol=1.0, usdc=30.0),
+    )
+    monkeypatch.setattr(clean_swap, "has_active_lock", lambda: False)
+    monkeypatch.setattr(clean_swap, "create_lock", lambda: None)
+    monkeypatch.setattr(clean_swap, "release_lock", lambda: None)
+    monkeypatch.setattr(clean_swap, "get_live_wmatic_price", lambda: 0.09)
+    monkeypatch.setattr(clean_swap, "write_portfolio_history_snapshot", lambda _price: None)
+    monkeypatch.setattr(clean_swap, "is_global_cooldown_active", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(clean_swap, "save_state", lambda _state: None)
+    monkeypatch.setattr(clean_swap, "get_pol_balance", lambda: 1.0)
+    monkeypatch.setattr(
+        clean_swap,
+        "get_gas_status",
+        lambda: {
+            "ok": True,
+            "gas_gwei": 20.0,
+            "max_gwei": 80.0,
+            "pol_balance": 1.0,
+            "min_pol_balance": 0.005,
+        },
+    )
+    monkeypatch.setattr(clean_swap, "MIN_TRADE_USD", 10.0)
+
+    hold_signal = {
+        "reason": "HOLD",
+        "gain_pct": -5.9,
+        "peak_gain_pct": 0.0,
+        "pullback_pct": 0.0,
+        "message": "holding",
+        "sell_fraction": 0.0,
+    }
+    logs: list[str] = []
+    monkeypatch.setattr(clean_swap, "_log_trade_skipped", lambda reason: logs.append(reason))
+    monkeypatch.setattr(
+        swap_exec,
+        "cs_evaluate_take_profit",
+        lambda *_args, **_kwargs: (False, hold_signal),
+    )
+    wm_usd = 63.0 * 0.09
+    max_notional = 2.25
+    frac = min(0.30, max_notional / wm_usd)
+    monkeypatch.setattr(
+        swap_exec,
+        "determine_trade_decision",
+        lambda *_args, **_kwargs: clean_swap.TradeDecision(
+            direction="WMATIC_TO_USDT",
+            amount_in=int(63.0 * frac * 1e18),
+            message="idle rotation",
+        ),
+    )
+
+    swap_called = {"ok": False}
+
+    async def _approve_and_swap(*_args, **_kwargs):
+        swap_called["ok"] = True
+        return "0xhash"
+
+    monkeypatch.setattr(swap_exec, "approve_and_swap", _approve_and_swap)
+    monkeypatch.setattr(clean_swap, "mark_asset_traded", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(clean_swap, "mark_wallet_traded", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(swap_exec.wallet_performance, "record_copy_exit", lambda **_kwargs: [])
+
+    asyncio.run(clean_swap.main(dry_run=False))
+
+    out = capsys.readouterr().out
+    assert swap_called["ok"]
+    assert not any("min_trade_guard" in x for x in logs)
+    assert "[nanoclaw] Main strategy small profit take allowed (P2 relief)" in out
+
+
 def test_main_records_wallet_performance_on_wmatic_to_usdc_exit(monkeypatch):
     monkeypatch.setenv("POLYGON_PRIVATE_KEY", "0x" + "a" * 64)
     monkeypatch.setattr(clean_swap, "load_state", lambda: {"last_run": 0.0})
@@ -3505,7 +3583,7 @@ def test_try_x_signal_equity_skips_blocked_symbol_before_build_plan(tmp_path, mo
     assert decision.direction == "USDC_TO_EQUITY"
     assert "WMATIC_ALPHA" not in build_order
     assert build_order == ["WETH_ALPHA"]
-    assert "[X-SIGNAL] Skipping blocked symbol: WMATIC_ALPHA (from .xsignal_blocked_symbols)" in out
+    assert "[X-SIGNAL] Skipping blocked symbol: WMATIC_ALPHA" in out
 
 
 def test_x_signal_blocked_symbol_filter_blocks_execution_path(monkeypatch, capsys):
@@ -3525,4 +3603,4 @@ def test_x_signal_blocked_symbol_filter_blocks_execution_path(monkeypatch, capsy
     filtered = swap_exec._x_signal_apply_blocked_symbol_filter(decision, log_skip=skipped.append)
     assert filtered is None
     assert skipped == ["xsignal_blocked_symbol (WETH_ALPHA)"]
-    assert "[X-SIGNAL] Skipping blocked symbol: WETH_ALPHA (from .xsignal_blocked_symbols)" in capsys.readouterr().out
+    assert "[X-SIGNAL] Skipping blocked symbol: WETH_ALPHA" in capsys.readouterr().out

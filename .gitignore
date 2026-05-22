@@ -57,6 +57,7 @@ MANIFEST
 
 # Runtime files
 bot_state.json
+.xsignal_blocked_symbols
 __pycache__/
 *.pyc
 *.log

@@ -992,6 +992,11 @@ def test_query_onchain_usdc_balance_uses_fallback_only_after_retries(monkeypatch
 def test_query_onchain_usdc_balance_tries_next_rpc_when_previous_fails(monkeypatch):
     import nanoclaw.config as nc_cfg
 
+    nc_cfg._RPC_LAST_SUCCESS = None
+    nc_cfg._RPC_LAST_SUCCESS_TS = 0.0
+    nc_cfg._RPC_ENDPOINT_FAILURE_STREAK.clear()
+    nc_cfg._RPC_ENDPOINT_COOLDOWN_UNTIL.clear()
+
     s = _build_strategy_tuned()
     _pin_usdc_env(monkeypatch)
     monkeypatch.setenv("RPC_ENDPOINTS", "https://rpc-one,https://rpc-two")
