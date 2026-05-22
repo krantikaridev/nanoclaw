@@ -851,11 +851,28 @@ def _get_latest_open_trade_core(trade_log_file: str = TRADE_LOG_FILE) -> Optiona
 get_latest_open_trade = _get_latest_open_trade_core
 
 
-def evaluate_take_profit(current_price: float, state: dict) -> Tuple[bool, Optional[dict]]:
+def evaluate_take_profit(
+    current_price: float,
+    state: dict,
+    *,
+    wmatic_balance: float | None = None,
+) -> Tuple[bool, Optional[dict]]:
     cs = importlib.import_module("clean_swap")
+    from .decision_log import log_profit_take_decision
+
     trade = cs.get_latest_open_trade()
     tracking = state.setdefault("profit_tracking", {})
     take_profit_pct, strong_signal_tp = cs._effective_take_profit_thresholds()
+
+    def _log_tp(action: str, reason: str, *, signal: float | None = None, extra: str = "") -> None:
+        log_profit_take_decision(
+            action=action,
+            reason=reason,
+            signal_strength=signal,
+            wmatic_balance=wmatic_balance,
+            extra=extra,
+            state=state,
+        )
 
     if not trade:
         tracking.clear()
@@ -881,6 +898,7 @@ def evaluate_take_profit(current_price: float, state: dict) -> Tuple[bool, Optio
     pullback_pct = ((peak_price - current_price) / peak_price) * 100 if peak_price > 0 else 0.0
 
     if gain_pct >= strong_signal_tp:
+        _log_tp("TAKE", "STRONG_TP_HIT", signal=min(1.0, gain_pct / max(strong_signal_tp, 1e-9)), extra=f"gain_pct={gain_pct:.2f}")
         return True, {
             "reason": "STRONG_TP_HIT",
             "message": (
@@ -894,6 +912,7 @@ def evaluate_take_profit(current_price: float, state: dict) -> Tuple[bool, Optio
         }
 
     if gain_pct >= take_profit_pct:
+        _log_tp("TAKE", "TP_HIT", signal=min(1.0, gain_pct / max(take_profit_pct, 1e-9)), extra=f"gain_pct={gain_pct:.2f}")
         return True, {
             "reason": "TP_HIT",
             "message": (
@@ -907,6 +926,12 @@ def evaluate_take_profit(current_price: float, state: dict) -> Tuple[bool, Optio
         }
 
     if peak_gain_pct >= take_profit_pct and pullback_pct >= cs.TRAILING_STOP_PCT:
+        _log_tp(
+            "TAKE",
+            "TRAILING_STOP_HIT",
+            signal=min(1.0, peak_gain_pct / max(take_profit_pct, 1e-9)),
+            extra=f"pullback_pct={pullback_pct:.2f}",
+        )
         return True, {
             "reason": "TRAILING_STOP_HIT",
             "message": (
@@ -919,6 +944,7 @@ def evaluate_take_profit(current_price: float, state: dict) -> Tuple[bool, Optio
             "pullback_pct": pullback_pct,
         }
 
+    _log_tp("HOLD", "HOLD", signal=max(0.0, min(1.0, gain_pct / max(take_profit_pct, 1e-9))), extra=f"gain_pct={gain_pct:.2f}")
     return False, {
         "reason": "HOLD",
         "message": (

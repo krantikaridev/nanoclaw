@@ -26,6 +26,7 @@ from nanoclaw.strategies.signal_equity_trader import (
 )
 
 from . import runtime
+from .decision_log import log_x_signal_decision
 from .runtime import (
     AUTO_POPULATE_USDC_AMOUNT,
     Balances,
@@ -57,16 +58,25 @@ def _log_x_signal_decision(
     *,
     signal: float | None = None,
     extra: str = "",
+    state: dict | None = None,
+    notional_usd: float | None = None,
+    wmatic_balance: float | None = None,
+    expected_edge_pct: float | None = None,
+    bump_symbol_counter: bool = True,
 ) -> None:
-    """Signal-Driven Rotation (May 2026): grep-friendly accept/reject line for post-hoc analysis."""
-    sym = str(symbol).strip() or "?"
-    act = str(action).strip().upper()
-    rsn = str(reason).strip() or "unknown"
-    sig_part = f" | signal={float(signal):.3f}" if signal is not None else ""
-    tail = f" | {extra.strip()}" if extra.strip() else ""
-    line = f"X-SIGNAL DECISION | symbol={sym} | action={act} | reason={rsn}{sig_part}{tail}"
-    print(f"{runtime._nanolog()}{line}")
-    logger.info(line)
+    """Delegate to ``decision_log`` — standardized fields + counters for future learning."""
+    log_x_signal_decision(
+        symbol,
+        action,
+        reason,
+        signal=signal,
+        expected_edge_pct=expected_edge_pct,
+        notional_usd=notional_usd,
+        wmatic_balance=wmatic_balance,
+        extra=extra,
+        state=state,
+        bump_symbol_counter=bump_symbol_counter,
+    )
 
 
 def _x_signal_quality_score(asset: FollowedEquity) -> float:
@@ -334,6 +344,8 @@ def _filter_x_signal_quality_noise(
     eligible: Sequence[FollowedEquity],
     *,
     force_eligible_threshold: float,
+    state: dict | None = None,
+    wmatic_balance: float | None = None,
 ) -> list[FollowedEquity]:
     """Signal-Driven Rotation (May 2026): optional weak-signal filter (env 0 = disabled)."""
     min_actionable = float(X_SIGNAL_MIN_ACTIONABLE_STRENGTH)
@@ -355,6 +367,8 @@ def _filter_x_signal_quality_noise(
                 "below_min_actionable_strength",
                 signal=float(a.signal_strength),
                 extra=f"min_actionable={min_actionable:.3f}",
+                state=state,
+                wmatic_balance=wmatic_balance,
             )
             continue
         up = float(a.upside_pct) if isinstance(a.upside_pct, (int, float)) else 0.0
@@ -365,6 +379,8 @@ def _filter_x_signal_quality_noise(
                 "below_min_upside_for_weak_signal",
                 signal=float(a.signal_strength),
                 extra=f"min_upside_pct={min_upside:.1f} upside_pct={up:.1f}",
+                state=state,
+                wmatic_balance=wmatic_balance,
             )
             continue
         kept.append(a)
@@ -757,7 +773,12 @@ def _tuned_signal_equity_trader(min_signal_strength: float) -> SignalEquityTrade
 
 
 
-def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -> Optional[TradeDecision]:
+def try_x_signal_equity_decision(
+    balances: Balances,
+    *,
+    dry_run: bool = False,
+    state: dict | None = None,
+) -> Optional[TradeDecision]:
     """Highest-priority iteration: eligible assets × SignalEquityTrader.build_plan; first plan wins."""
     decision: Optional[TradeDecision] = None
     result: Optional[str] = None
@@ -904,7 +925,12 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
         force_eligible_threshold=force_eligible_thr,
     )
     pre_filter_n = len(eligible)
-    eligible = _filter_x_signal_quality_noise(eligible, force_eligible_threshold=force_eligible_thr)
+    eligible = _filter_x_signal_quality_noise(
+        eligible,
+        force_eligible_threshold=force_eligible_thr,
+        state=state,
+        wmatic_balance=float(balances.wmatic),
+    )
     if pre_filter_n != len(eligible):
         print(
             f"{runtime._nanolog()}X-SIGNAL quality filter | kept={len(eligible)}/{pre_filter_n} "
@@ -1199,6 +1225,8 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                     "REJECT",
                     str(block),
                     signal=float(a.signal_strength),
+                    state=state,
+                    wmatic_balance=float(balances.wmatic),
                 )
                 print(
                     f"{runtime._nanolog()}X-SIGNAL PLAN SKIPPED | {sym} | signal={float(a.signal_strength):.3f} | "
@@ -1236,6 +1264,9 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                 "plan_selected",
                 signal=_winner_sig,
                 extra=f"direction={decision.direction} candidates={len(plans)}",
+                state=state,
+                notional_usd=float(decision.trade_size or 0.0),
+                wmatic_balance=float(balances.wmatic),
             )
             print(
                 f"{runtime._nanolog()}X-SIGNAL PLAN SELECTED | {_winner_sym} | "

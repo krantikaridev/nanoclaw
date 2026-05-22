@@ -124,7 +124,7 @@ FIXED_TRADE_USD_MAX = env_float("FIXED_TRADE_USD_MAX", 10.0)
 TRAILING_STOP_PCT = env_float("TRAILING_STOP_PCT", 5.0)
 TAKE_PROFIT_PCT = env_float("TAKE_PROFIT_PCT", 5.0)
 # v1 quality filter: minimum estimated net edge (% of notional after gas) for X-Signal / main entry trades.
-MIN_NET_EDGE_PCT = env_float("MIN_NET_EDGE_PCT", 1.75)
+MIN_NET_EDGE_PCT = env_float("MIN_NET_EDGE_PCT", 1.8)
 STRONG_SIGNAL_TP = env_float("STRONG_SIGNAL_TP", 12.0)
 TAKE_PROFIT_SELL_PCT = env_float("TAKE_PROFIT_SELL_PCT", 0.45)
 STRONG_TP_SELL_PCT = env_float("STRONG_TP_SELL_PCT", 0.60)

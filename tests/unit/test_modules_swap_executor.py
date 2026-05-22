@@ -1,17 +1,26 @@
 from modules.runtime import TradeDecision, Balances
 from config import MIN_NET_EDGE_PCT
 from modules.swap_executor import (
+    _MIN_NET_EDGE_PCT,
     _decision_notional_usd,
     _infer_expected_gross_edge_pct,
+    _min_net_edge_floor_pct,
     _profit_take_balance_relief_bypass_allowed,
     _reject_if_low_expected_net_edge,
     _profit_take_balance_relief_signal_strength,
     _profit_take_bump_cycle_counter,
     _profit_take_force_small_relief_eligible,
     _profit_take_record_exit,
+    _profit_take_wmatic_stack_low,
+    _main_strategy_stable_rotation_fallback,
     _MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN,
     _MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_FLOOR_USD,
     _MAIN_STRATEGY_FORCE_PROFIT_TAKE_WMATIC_USD_MIN,
+    _MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN,
+    _MAIN_STRATEGY_LOW_WMATIC_FORCE_WM_MIN_USD,
+    _MAIN_STRATEGY_LOW_WMATIC_P2_SIGNAL_MIN,
+    _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_CYCLES_MIN,
+    _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_MIN_SIGNAL,
     _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH,
     _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD,
     _resolve_x_signal_enhanced_fallback_execution,
@@ -138,7 +147,7 @@ def test_profit_take_force_small_relief_eligible_requires_cycles_and_floor():
     )
     assert not _profit_take_force_small_relief_eligible(
         direction="WMATIC_TO_USDT",
-        wm_equiv_usd=_MAIN_STRATEGY_FORCE_PROFIT_TAKE_WMATIC_USD_MIN - 0.01,
+        wm_equiv_usd=_MAIN_STRATEGY_LOW_WMATIC_FORCE_WM_MIN_USD - 0.01,
         notional_usd=3.5,
         cycles_since_exit=10,
     )
@@ -151,18 +160,18 @@ def test_profit_take_force_small_relief_eligible_requires_cycles_and_floor():
 
 
 def test_profit_take_force_small_relief_eligible_at_observed_wmatic_range():
-    """TEMPORARY SPRINT: force activates at ~$5.7 WMATIC (above $5.5 floor)."""
+    """Signal-Driven Rotation: low stack (~$5.7) force at 3 cycles; sub-$2 stack rejected."""
     assert _profit_take_force_small_relief_eligible(
         direction="WMATIC_TO_USDT",
         wm_equiv_usd=5.7,
         notional_usd=1.9,
-        cycles_since_exit=_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN,
+        cycles_since_exit=_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN,
     )
     assert not _profit_take_force_small_relief_eligible(
         direction="WMATIC_TO_USDT",
-        wm_equiv_usd=5.49,
+        wm_equiv_usd=1.5,
         notional_usd=1.9,
-        cycles_since_exit=_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN,
+        cycles_since_exit=_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN,
     )
 
 
@@ -267,19 +276,132 @@ def test_profit_take_balance_relief_bypass_rejects_weak_signal():
     )
 
 
-def test_profit_take_balance_relief_bypass_rejects_low_wmatic_stack():
+def test_profit_take_balance_relief_bypass_rejects_sub_two_dollar_wmatic_stack():
+    """Signal-Driven Rotation: low-WMATIC P2 still needs ≥ $2 stack."""
     decision = TradeDecision(
         direction="WMATIC_TO_USDT",
         amount_in=int(8 * 1_000_000_000_000_000_000),
         signal_strength=0.80,
     )
-    balances = Balances(usdt=10.0, usdc=30.0, wmatic=6.5, pol=1.0)
+    balances = Balances(usdt=10.0, usdc=30.0, wmatic=1.5, pol=1.0)
     assert not _profit_take_balance_relief_bypass_allowed(
         decision,
         balances=balances,
         current_price_usd=1.0,
         min_trade_usd=10.0,
     )
+
+
+def test_profit_take_balance_relief_bypass_accepts_low_wmatic_stack_below_seven(capsys):
+    """Signal-Driven Rotation: $5.50 WMATIC stack passes relaxed P2 wm floor ($2)."""
+    decision = TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(2.5 * 1_000_000_000_000_000_000),
+        signal_strength=0.50,
+    )
+    balances = Balances(usdt=10.0, usdc=30.0, wmatic=5.5, pol=1.0)
+    assert _profit_take_balance_relief_bypass_allowed(
+        decision,
+        balances=balances,
+        current_price_usd=1.0,
+        min_trade_usd=10.0,
+        profit_signal={"reason": "TP_HIT", "gain_pct": 3.0},
+    )
+    captured = capsys.readouterr().out
+    assert "allowed=True" in captured
+    assert "wm=$5.50" in captured
+
+
+def test_profit_take_wmatic_stack_low_boundary():
+    assert _profit_take_wmatic_stack_low(6.99)
+    assert not _profit_take_wmatic_stack_low(7.0)
+
+
+def test_profit_take_force_small_relief_low_wmatic_three_cycles():
+    assert _profit_take_force_small_relief_eligible(
+        direction="WMATIC_TO_USDT",
+        wm_equiv_usd=5.5,
+        notional_usd=_MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_FLOOR_USD,
+        cycles_since_exit=_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN,
+    )
+    assert not _profit_take_force_small_relief_eligible(
+        direction="WMATIC_TO_USDT",
+        wm_equiv_usd=_MAIN_STRATEGY_LOW_WMATIC_FORCE_WM_MIN_USD - 0.01,
+        notional_usd=_MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_FLOOR_USD,
+        cycles_since_exit=_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN,
+    )
+
+
+def test_profit_take_balance_relief_signal_strength_low_wmatic_floor():
+    decision = TradeDecision(direction="WMATIC_TO_USDT", amount_in=1, signal_strength=0.40)
+    strength = _profit_take_balance_relief_signal_strength(
+        decision,
+        {"reason": "TP_HIT", "gain_pct": 1.0},
+        wmatic_usd_equiv=5.0,
+    )
+    assert strength >= _MAIN_STRATEGY_LOW_WMATIC_P2_SIGNAL_MIN
+
+
+def test_main_strategy_stable_rotation_fallback_requires_cycles(monkeypatch):
+    state: dict = {"profit_take_rotation": {"cycles_since_exit": 2}}
+    balances = Balances(usdt=40.0, usdc=30.0, wmatic=5.0, pol=1.0)
+    monkeypatch.setattr(
+        "modules.swap_executor._facade",
+        lambda: type("C", (), {"ENABLE_X_SIGNAL_EQUITY": True})(),
+    )
+    assert _main_strategy_stable_rotation_fallback(balances, state=state) is None
+
+
+def test_main_strategy_stable_rotation_fallback_returns_xsignal_buy(monkeypatch):
+    state: dict = {
+        "profit_take_rotation": {
+            "cycles_since_exit": _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_CYCLES_MIN,
+        }
+    }
+    balances = Balances(usdt=40.0, usdc=30.0, wmatic=5.0, pol=1.0)
+    expected = TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=8_000_000,
+        trade_size=8.0,
+        signal_strength=0.80,
+        message="fallback buy",
+    )
+
+    class _Facade:
+        ENABLE_X_SIGNAL_EQUITY = True
+
+    monkeypatch.setattr("modules.swap_executor._facade", lambda: _Facade())
+    monkeypatch.setattr(
+        "modules.swap_executor.cs_try_x_signal_equity_decision",
+        lambda *_a, **_k: expected,
+    )
+    got = _main_strategy_stable_rotation_fallback(balances, state=state)
+    assert got is expected
+
+
+def test_main_strategy_stable_rotation_fallback_rejects_weak_signal(monkeypatch):
+    state: dict = {
+        "profit_take_rotation": {
+            "cycles_since_exit": _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_CYCLES_MIN,
+        }
+    }
+    balances = Balances(usdt=40.0, usdc=30.0, wmatic=5.0, pol=1.0)
+    weak = TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=8_000_000,
+        trade_size=8.0,
+        signal_strength=_MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_MIN_SIGNAL - 0.05,
+    )
+
+    class _Facade:
+        ENABLE_X_SIGNAL_EQUITY = True
+
+    monkeypatch.setattr("modules.swap_executor._facade", lambda: _Facade())
+    monkeypatch.setattr(
+        "modules.swap_executor.cs_try_x_signal_equity_decision",
+        lambda *_a, **_k: weak,
+    )
+    assert _main_strategy_stable_rotation_fallback(balances, state=state) is None
 
 
 def test_profit_take_balance_relief_bypass_accepts_notional_at_relaxed_floor(capsys):
@@ -583,21 +705,23 @@ def test_profit_take_balance_relief_bypass_small_trade_decent_balance_trailing_s
     )
 
 
-def test_profit_take_balance_relief_bypass_rejects_hold_when_wmatic_stack_small():
-    """HOLD still blocks relief when total WMATIC USD equiv is below the $7 floor."""
+def test_profit_take_balance_relief_bypass_allows_hold_on_low_wmatic_stack(capsys):
+    """Signal-Driven Rotation: HOLD ignored for scoring when stack < $7 (small rotation)."""
     decision = TradeDecision(
         direction="WMATIC_TO_USDT",
-        amount_in=int(8 * 1_000_000_000_000_000_000),
+        amount_in=int(2.5 * 1_000_000_000_000_000_000),
         signal_strength=0.90,
     )
     balances = Balances(usdt=10.0, usdc=30.0, wmatic=6.0, pol=1.0)
-    assert not _profit_take_balance_relief_bypass_allowed(
+    assert _profit_take_balance_relief_bypass_allowed(
         decision,
         balances=balances,
         current_price_usd=1.0,
         min_trade_usd=10.0,
         profit_signal={"reason": "HOLD"},
     )
+    captured = capsys.readouterr().out
+    assert "allowed=True" in captured
 
 
 def test_profit_take_balance_relief_bypass_qualifies_via_profit_signal_metrics():
@@ -772,6 +896,16 @@ def test_x_signal_equity_effective_dust_min_requires_healthy_stables(monkeypatch
     assert _x_signal_equity_effective_dust_min(b_ok) == pytest.approx(7.5)
 
 
+def test_min_net_edge_floor_pct_defaults_to_module_constant(monkeypatch):
+    monkeypatch.delattr("modules.swap_executor.cfg", "MIN_NET_EDGE_PCT", raising=False)
+    assert _min_net_edge_floor_pct() == pytest.approx(_MIN_NET_EDGE_PCT)
+
+
+def test_min_net_edge_floor_pct_uses_config_when_set(monkeypatch):
+    monkeypatch.setattr("modules.swap_executor.cfg.MIN_NET_EDGE_PCT", 2.5)
+    assert _min_net_edge_floor_pct() == pytest.approx(2.5)
+
+
 def test_estimate_expected_net_edge_pct_subtracts_gas_from_gross():
     net = estimate_expected_net_edge_pct(
         trade_usd=20.0,
@@ -836,4 +970,6 @@ def test_reject_if_low_expected_net_edge_logs_and_returns_true(monkeypatch, caps
         log_skip=_log,
     )
     assert skipped and "low_expected_edge" in skipped[0]
-    assert "[nanoclaw] Trade rejected | Low edge | expected_net=" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "[nanoclaw] Low edge rejected | expected_net=" in out
+    assert "reason=below_min_net_edge" in out

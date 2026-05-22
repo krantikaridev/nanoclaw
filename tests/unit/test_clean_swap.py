@@ -617,7 +617,13 @@ def test_determine_trade_decision_uses_xsignal_before_copy_and_main(monkeypatch)
     monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
     monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: ["0xwallet"])
 
-    sentinel = clean_swap.TradeDecision(direction="USDC_TO_EQUITY", amount_in=789, message="x-signal")
+    sentinel = clean_swap.TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=20_000_000,
+        trade_size=20.0,
+        signal_strength=0.85,
+        message="x-signal",
+    )
     monkeypatch.setattr(clean_swap, "try_x_signal_equity_decision", lambda *_args, **_kwargs: sentinel)
 
     out = clean_swap.determine_trade_decision(
@@ -639,13 +645,25 @@ def test_determine_trade_decision_defers_dust_profit_take_and_falls_through(monk
     monkeypatch.setattr(clean_swap, "MIN_TRADE_USD", 15.0)
     monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
     monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
+    monkeypatch.setattr(clean_swap, "_rotation_priority_buy_present", lambda: False)
+    monkeypatch.setattr(
+        swap_exec,
+        "_wmatic_stable_p2_relief_override_active",
+        lambda *_args, **_kwargs: False,
+    )
 
     profit_dust = clean_swap.TradeDecision(
         direction="WMATIC_TO_USDT",
         amount_in=int(5 * 1_000_000_000_000_000_000),
         message="tiny tp",
     )
-    sentinel = clean_swap.TradeDecision(direction="USDC_TO_EQUITY", amount_in=25_000_000, message="x-signal")
+    sentinel = clean_swap.TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=25_000_000,
+        trade_size=25.0,
+        signal_strength=0.85,
+        message="x-signal",
+    )
     monkeypatch.setattr(clean_swap, "build_profit_exit_decision", lambda *_args, **_kwargs: profit_dust)
     monkeypatch.setattr(clean_swap, "try_x_signal_equity_decision", lambda *_args, **_kwargs: sentinel)
 
@@ -676,6 +694,8 @@ def test_determine_trade_decision_profit_take_balance_relief_allows_small_wm_to_
     monkeypatch.setattr(clean_swap, "MIN_TRADE_USD", 10.0)
     monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
     monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
+    monkeypatch.setattr(clean_swap, "_rotation_priority_buy_present", lambda: False)
+    monkeypatch.setattr(clean_swap, "try_x_signal_equity_decision", lambda *_args, **_kwargs: None)
 
     profit_small = clean_swap.TradeDecision(
         direction="WMATIC_TO_USDT",
@@ -699,7 +719,7 @@ def test_determine_trade_decision_profit_take_balance_relief_allows_small_wm_to_
 
 
 def test_determine_trade_decision_profit_take_balance_relief_skipped_when_wm_stack_small(monkeypatch, capsys):
-    """TEMPORARY: balance-relief bypass does not apply when WMATIC USD equiv is below floor."""
+    """Signal-Driven Rotation: P2 skipped only when WMATIC USD equiv is below $2 (low-stack floor)."""
     monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))
     monkeypatch.setattr(
         clean_swap,
@@ -709,13 +729,20 @@ def test_determine_trade_decision_profit_take_balance_relief_skipped_when_wm_sta
     monkeypatch.setattr(clean_swap, "MIN_TRADE_USD", 10.0)
     monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
     monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
+    monkeypatch.setattr(clean_swap, "_rotation_priority_buy_present", lambda: False)
 
     profit_small = clean_swap.TradeDecision(
         direction="WMATIC_TO_USDT",
         amount_in=int(8 * 1_000_000_000_000_000_000),
         message="small tp",
     )
-    sentinel = clean_swap.TradeDecision(direction="USDC_TO_EQUITY", amount_in=25_000_000, message="x-signal")
+    sentinel = clean_swap.TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=25_000_000,
+        trade_size=25.0,
+        message="x-signal",
+        cooldown_asset=("", 0),
+    )
     monkeypatch.setattr(clean_swap, "build_profit_exit_decision", lambda *_args, **_kwargs: profit_small)
     monkeypatch.setattr(clean_swap, "try_x_signal_equity_decision", lambda *_args, **_kwargs: sentinel)
 
@@ -724,7 +751,7 @@ def test_determine_trade_decision_profit_take_balance_relief_skipped_when_wm_sta
 
     out = clean_swap.determine_trade_decision(
         state={},
-        balances=clean_swap.Balances(usdt=10.0, wmatic=6.5, pol=1.0, usdc=30.0),
+        balances=clean_swap.Balances(usdt=30.0, wmatic=1.5, pol=1.0, usdc=30.0),
         current_price=1.0,
     )
     captured = capsys.readouterr().out
@@ -902,6 +929,11 @@ def test_determine_trade_decision_defers_dust_main_strategy_with_no_further_fall
         message="tiny main sell",
     )
     monkeypatch.setattr(swap_exec, "select_main_strategy_trade", lambda *_args, **_kwargs: main_dust)
+    monkeypatch.setattr(
+        swap_exec,
+        "_wmatic_stable_p2_relief_override_active",
+        lambda *_args, **_kwargs: False,
+    )
 
     skipped: list[str] = []
     monkeypatch.setattr(clean_swap, "_log_trade_skipped", lambda reason: skipped.append(reason))
