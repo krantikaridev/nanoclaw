@@ -786,7 +786,15 @@ def test_infer_expected_gross_edge_pct_scales_x_signal_by_strength(monkeypatch):
     weak = TradeDecision(direction="USDC_TO_EQUITY", signal_strength=0.65)
     strong = TradeDecision(direction="USDC_TO_EQUITY", signal_strength=0.95)
     assert _infer_expected_gross_edge_pct(weak) == pytest.approx(3.0)
-    assert _infer_expected_gross_edge_pct(strong) == pytest.approx(12.0)
+    assert _infer_expected_gross_edge_pct(strong) == pytest.approx(10.5)
+
+
+def test_trade_passes_min_net_edge_respects_env_floor(monkeypatch):
+    monkeypatch.setattr("modules.swap_executor.cfg.POL_USD_PRICE", 0.5)
+    monkeypatch.setattr("modules.swap_executor.cfg.MIN_NET_EDGE_PCT", 50.0)
+    d = TradeDecision(direction="USDT_TO_WMATIC", trade_size=20.0)
+    passes, _net = trade_passes_min_net_edge(d, trade_usd=20.0, gas_gwei=40.0)
+    assert not passes
 
 
 def test_trade_passes_min_net_edge_rejects_small_weak_x_signal(monkeypatch):

@@ -62,7 +62,7 @@ def _infer_expected_gross_edge_pct(decision: TradeDecision) -> float:
     """Conservative gross upside % before gas — v1 heuristic, not a live quote."""
     direction = str(decision.direction or "").strip().upper()
     if direction == "USDC_TO_EQUITY":
-        strong_tp = float(cfg.env_float("X_SIGNAL_EQUITY_STRONG_TP_PCT", 12.0))
+        strong_tp = float(getattr(cfg, "X_SIGNAL_EQUITY_STRONG_TP_PCT", 12.0))
         strength = decision.signal_strength
         if strength is not None and float(strength) > 0:
             s = abs(float(strength))

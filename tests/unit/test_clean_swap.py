@@ -553,11 +553,12 @@ def test_determine_trade_decision_prioritizes_profit_take_over_xsignal(monkeypat
     monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
     monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
     monkeypatch.setattr(clean_swap, "_strong_x_signal_buy_present", lambda: False)
+    monkeypatch.setattr(clean_swap, "_rotation_priority_buy_present", lambda: False)
 
     sentinel = clean_swap.TradeDecision(direction="WMATIC_TO_USDT", amount_in=456, message="profit")
     monkeypatch.setattr(clean_swap, "build_profit_exit_decision", lambda *_args, **_kwargs: sentinel)
 
-    # Should never be reached because profit-take returns first.
+    # Should never be reached because profit-take returns first (no rotation priority).
     monkeypatch.setattr(
         clean_swap,
         "try_x_signal_equity_decision",
