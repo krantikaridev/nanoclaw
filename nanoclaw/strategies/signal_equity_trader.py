@@ -916,11 +916,12 @@ class SignalEquityTrader:
                 )
                 # Signal-Driven Rotation (May 2026): high-conviction bypass before dynamic min gate.
                 eff_after_gas = round(float(effective_trade_size_after_gas), 2)
+                min_eff_gate = round(_x_signal_min_effective_trade_usd(strength), 2)
                 x_signal_equity_high_conviction_effective_ok = (
                     strength > 0
                     and abs(float(strength)) >= float(_X_SIGNAL_HIGH_CONVICTION_STRENGTH)
                     and eff_after_gas >= float(_X_SIGNAL_MIN_EFFECTIVE_OVERRIDE)
-                    and eff_after_gas < float(self._MIN_EFFECTIVE_TRADE_AFTER_GAS_USD)
+                    and eff_after_gas < min_eff_gate
                 )
                 if x_signal_equity_high_conviction_effective_ok:
                     print(
@@ -933,7 +934,6 @@ class SignalEquityTrader:
                         eff_after_gas,
                         strength,
                     )
-                min_eff_gate = round(_x_signal_min_effective_trade_usd(strength), 2)
                 if (
                     not x_signal_equity_high_conviction_effective_ok
                     and eff_after_gas < min_eff_gate

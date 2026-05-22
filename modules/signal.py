@@ -1061,7 +1061,7 @@ def try_x_signal_equity_decision(balances: Balances, *, dry_run: bool = False) -
                     token_in=plan.token_in,
                     token_out=plan.token_out,
                     cooldown_asset=(sym, secs_plan),
-                    signal_strength=float(plan.signal_strength),
+                    signal_strength=float(getattr(plan, "signal_strength", a.signal_strength)),
                     x_signal_gated_execution=bool(getattr(plan, "gated_enhanced_execution", False)),
                 )
                 plans.append((decision, float(a.signal_strength), sym))

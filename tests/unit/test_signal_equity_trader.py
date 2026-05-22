@@ -1165,7 +1165,7 @@ def test_buy_blocks_when_effective_trade_after_gas_is_too_small(monkeypatch):
 
 
 def test_x_signal_buy_blocked_by_temporary_min_size_gate(monkeypatch, capsys):
-    """TEMPORARY: effective notional after gas below _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD skips BUY."""
+    """Effective below $7 high-conviction floor skips BUY even at |signal| 0.90."""
     s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
     monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 1.0)
     monkeypatch.setattr(
@@ -1173,7 +1173,7 @@ def test_x_signal_buy_blocked_by_temporary_min_size_gate(monkeypatch, capsys):
         "_compute_trade_size",
         lambda self, usdc_balance, signal_strength, usdt_balance=0.0, *, symbol="": 15.0,
     )
-    monkeypatch.setattr(s, "_estimate_gas_cost_usd", lambda _gas_gwei: 7.1)
+    monkeypatch.setattr(s, "_estimate_gas_cost_usd", lambda _gas_gwei: 8.6)
 
     plan, reason = s.build_plan_with_block_reason(
         symbol="WMATIC_ALPHA",
@@ -1300,7 +1300,7 @@ def test_x_signal_buy_blocked_when_effective_below_dynamic_gate(monkeypatch, cap
         symbol="WMATIC_ALPHA",
         token_address="0x" + "1" * 40,
         token_decimals=18,
-        signal_strength=0.75,
+        signal_strength=0.82,
         earnings_proximity_days=None,
         current_price_usd=1.0,
         usdc_balance=40.0,
