@@ -23,6 +23,7 @@ from modules.swap_executor import (
     _profit_take_long_idle_active,
     _profit_take_force_notional_floor_usd,
     _MAIN_STRATEGY_MODERATE_FORCE_CYCLES_MIN,
+    _MAIN_STRATEGY_MODERATE_P2_SIGNAL_MIN,
     _MAIN_STRATEGY_LONG_IDLE_CYCLES_LOW,
     _MAIN_STRATEGY_LONG_IDLE_NOTIONAL_FLOOR_USD,
     _main_strategy_stable_rotation_fallback,
@@ -175,7 +176,7 @@ def test_profit_take_force_small_relief_eligible_requires_cycles_and_floor():
     assert not _profit_take_force_small_relief_eligible(
         direction="WMATIC_TO_USDT",
         wm_equiv_usd=20.0,
-        notional_usd=_MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_FLOOR_USD - 0.01,
+        notional_usd=_MAIN_STRATEGY_LONG_IDLE_NOTIONAL_FLOOR_USD - 0.01,
         cycles_since_exit=10,
     )
 
@@ -626,7 +627,7 @@ def test_profit_take_balance_relief_signal_strength_boosts_healthy_wmatic_stack(
     assert strength >= _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH
 
 
-def test_profit_take_balance_relief_signal_strength_healthy_wmatic_never_below_half():
+def test_profit_take_balance_relief_signal_strength_moderate_wmatic_uses_tier_floor():
     decision = TradeDecision(
         direction="WMATIC_TO_USDT",
         amount_in=int(5 * 1_000_000_000_000_000_000),
@@ -637,7 +638,7 @@ def test_profit_take_balance_relief_signal_strength_healthy_wmatic_never_below_h
         {"reason": "MOMENTUM_FADE", "gain_pct": 0.0, "peak_gain_pct": 0.0},
         wmatic_usd_equiv=8.0,
     )
-    assert strength >= _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH
+    assert strength >= _MAIN_STRATEGY_MODERATE_P2_SIGNAL_MIN
 
 
 def test_profit_take_balance_relief_signal_strength_healthy_exit_reason_at_least_fifty_five():
