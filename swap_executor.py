@@ -738,7 +738,7 @@ async def approve_and_swap(
                 print(
                     f"{_prefix}[FALLBACK ROUTER] Swap submission/wait failed "
                     f"(attempt {attempt_idx + 1}/{len(slip_attempts)}): {tx_ex} | "
-                    f"stf={stf} | revert={revert_reason}"
+                    f"slip_bps={slip_bps} | min_out={amount_out_min} | stf={stf} | revert={revert_reason}"
                 )
                 if swap_outcome is not None:
                     swap_outcome.update(
@@ -774,7 +774,8 @@ async def approve_and_swap(
             stf = _is_stf_revert_reason(revert_reason)
             print(
                 f"{_prefix}[FALLBACK ROUTER] On-chain swap reverted (attempt {attempt_idx + 1}). "
-                f"Tx: {swap_hash.hex()} | stf={stf} | receipt={dict(receipt)} | revert={revert_reason}"
+                f"Tx: {swap_hash.hex()} | slip_bps={slip_bps} | min_out={amount_out_min} | "
+                f"fee={v3_fee} | stf={stf} | revert={revert_reason}"
             )
             if swap_outcome is not None:
                 swap_outcome.update(
