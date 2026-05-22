@@ -821,6 +821,51 @@ def test_determine_trade_decision_defers_dust_x_signal_and_falls_through_to_main
     assert "DECISION PATH: MAIN_STRATEGY" in captured
 
 
+def test_determine_trade_decision_rejects_weak_x_signal_at_default_min_net_edge(monkeypatch, capsys):
+    """Weak |signal|≈0.62 plans must not reach execution when MIN_NET_EDGE_PCT=2.0 (default)."""
+    swap_exec._MIN_NET_EDGE_POLICY_LOGGED = False
+    monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))
+    monkeypatch.setattr(clean_swap, "evaluate_take_profit", lambda *_args, **_kwargs: (False, None))
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
+    monkeypatch.setattr("modules.swap_executor.cfg.POL_USD_PRICE", 0.10)
+    monkeypatch.setattr("modules.swap_executor.cfg.MIN_NET_EDGE_PCT", 2.0)
+    monkeypatch.setattr("modules.swap_executor.cfg.NET_EDGE_PLANNING_GAS_GWEI", 120.0)
+
+    x_weak = clean_swap.TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=int(12.0 * 1_000_000),
+        trade_size=12.0,
+        signal_strength=0.62,
+        message="weak x buy",
+        token_in="0x" + "2" * 40,
+        token_out="0x" + "1" * 40,
+    )
+    main_ok = clean_swap.TradeDecision(
+        direction="USDT_TO_WMATIC",
+        amount_in=int(20 * 1_000_000),
+        trade_size=20.0,
+        message="main buy",
+    )
+    monkeypatch.setattr(clean_swap, "try_x_signal_equity_decision", lambda *_args, **_kwargs: x_weak)
+    monkeypatch.setattr(swap_exec, "select_main_strategy_trade", lambda *_args, **_kwargs: main_ok)
+
+    skipped: list[str] = []
+    monkeypatch.setattr(clean_swap, "_log_trade_skipped", lambda reason: skipped.append(reason))
+
+    out = clean_swap.determine_trade_decision(
+        state={},
+        balances=clean_swap.Balances(usdt=40.0, wmatic=5.0, pol=1.0, usdc=50.0),
+        current_price=1.0,
+    )
+
+    captured = capsys.readouterr().out
+    assert out is main_ok
+    assert any("low_expected_edge" in reason for reason in skipped)
+    assert "[nanoclaw] LOW EDGE REJECTED" in captured
+    assert "notional=$12.00" in captured
+
+
 def test_determine_trade_decision_rejects_x_signal_below_min_net_edge(monkeypatch, capsys):
     swap_exec._MIN_NET_EDGE_POLICY_LOGGED = False
     monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))

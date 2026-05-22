@@ -81,10 +81,11 @@ def _estimate_swap_gas_cost_usd(gas_gwei: float) -> float:
 
 
 def _x_signal_strength_scale(signal_strength: float) -> float:
+    """Linear 0→1 scale from eligibility floor (0.6) to full conviction (1.0); no artificial floor."""
     s = abs(float(signal_strength))
     if s < 0.6:
-        return 0.25
-    return max(0.25, min(1.0, (s - 0.6) / 0.4))
+        return 0.0
+    return min(1.0, (s - 0.6) / 0.4)
 
 
 def plan_x_signal_gross_edge_pct(
@@ -94,7 +95,8 @@ def plan_x_signal_gross_edge_pct(
     """Conservative gross edge % for X-SIGNAL USDC→equity net-edge planning (not a live quote)."""
     strong_tp = float(getattr(cfg, "X_SIGNAL_EQUITY_STRONG_TP_PCT", 12.0))
     scale = _x_signal_strength_scale(signal_strength)
-    heuristic = max(strong_tp * 0.25, strong_tp * scale)
+    # No 25%-of-TP floor — weak signals must not inherit a 3% gross cushion that clears a 2% net gate.
+    heuristic = strong_tp * scale
     if upside_pct is not None and float(upside_pct) > 0:
         capped_upside = min(float(upside_pct), strong_tp * 1.25)
         realization = 0.35 + 0.45 * scale
@@ -207,9 +209,8 @@ def _low_edge_rejection_log_line(
 ) -> str:
     notional_s = "n/a" if notional is None or float(notional) <= 0.0 else f"${float(notional):.2f}"
     return (
-        f"[nanoclaw] LOW EDGE REJECTED | expected_net={expected_net_pct:.2f}% "
-        f"| signal={signal} | notional={notional_s} | floor={floor_pct:.2f}% "
-        f"| direction={direction} | stage={stage}"
+        f"[nanoclaw] LOW EDGE REJECTED | expected_net={expected_net_pct:.2f}% | notional={notional_s} "
+        f"| floor={floor_pct:.2f}% | signal={signal} | direction={direction} | stage={stage}"
     )
 
 

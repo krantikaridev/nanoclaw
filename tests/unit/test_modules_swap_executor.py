@@ -1180,7 +1180,7 @@ def test_estimate_expected_net_edge_pct_subtracts_fee_buffer_and_gas(monkeypatch
 def test_plan_x_signal_gross_edge_pct_caps_high_upside_for_weak_signal(monkeypatch):
     monkeypatch.setattr("modules.swap_executor.cfg.env_float", lambda _k, default: 12.0)
     weak_high_upside = plan_x_signal_gross_edge_pct(0.62, upside_pct=22.0)
-    assert weak_high_upside == pytest.approx(3.0)
+    assert weak_high_upside == pytest.approx(0.6)
     strong = plan_x_signal_gross_edge_pct(0.95, upside_pct=22.0)
     assert strong == pytest.approx(10.5)
 
@@ -1196,7 +1196,7 @@ def test_infer_expected_gross_edge_pct_scales_x_signal_by_strength(monkeypatch):
     monkeypatch.setattr("modules.swap_executor.cfg.env_float", lambda _k, default: 12.0)
     weak = TradeDecision(direction="USDC_TO_EQUITY", signal_strength=0.65)
     strong = TradeDecision(direction="USDC_TO_EQUITY", signal_strength=0.95)
-    assert _infer_expected_gross_edge_pct(weak) == pytest.approx(3.0)
+    assert _infer_expected_gross_edge_pct(weak) == pytest.approx(0.6)
     assert _infer_expected_gross_edge_pct(strong) == pytest.approx(10.5)
 
 
@@ -1236,8 +1236,23 @@ def test_trade_passes_min_net_edge_allows_main_strategy_buy(monkeypatch):
     assert net >= MIN_NET_EDGE_PCT
 
 
+def test_trade_passes_min_net_edge_rejects_weak_x_at_default_floor(monkeypatch):
+    """Weak X-SIGNAL (~0.6% gross) must fail the active 2.0% net floor at typical notionals."""
+    monkeypatch.setattr("modules.swap_executor.cfg.POL_USD_PRICE", 0.10)
+    monkeypatch.setattr("modules.swap_executor.cfg.MIN_NET_EDGE_PCT", 2.0)
+    d = TradeDecision(
+        direction="USDC_TO_EQUITY",
+        trade_size=12.0,
+        signal_strength=0.62,
+        expected_gross_edge_pct=plan_x_signal_gross_edge_pct(0.62, upside_pct=22.0),
+    )
+    passes, net = trade_passes_min_net_edge(d, trade_usd=12.0, gas_gwei=120.0)
+    assert not passes
+    assert net < 2.0
+
+
 def test_trade_passes_min_net_edge_rejects_weak_x_below_floor(monkeypatch):
-    """Weak X-SIGNAL (~3% gross) nets ~2.2% at 120 gwei — blocked when floor is 2.5%."""
+    """Weak X-SIGNAL blocked when floor is above achievable net at planning gas."""
     monkeypatch.setattr("modules.swap_executor.cfg.POL_USD_PRICE", 0.10)
     monkeypatch.setattr("modules.swap_executor.cfg.MIN_NET_EDGE_PCT", 2.5)
     monkeypatch.setattr("modules.swap_executor.cfg.MIN_NET_EDGE_FEE_BUFFER_PCT", MIN_NET_EDGE_FEE_BUFFER_PCT)
@@ -1278,7 +1293,8 @@ def test_reject_if_low_expected_net_edge_logs_and_returns_true(monkeypatch, caps
     out = capsys.readouterr().out
     assert "[nanoclaw] LOW EDGE REJECTED" in out
     assert "expected_net=" in out
-    assert "signal=0.620" in out
+    assert "notional=$5.00" in out
+    assert "floor=" in out
     assert "direction=USDC_TO_EQUITY" in out
     assert "stage=planning" in out
 
