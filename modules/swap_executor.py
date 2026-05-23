@@ -2097,7 +2097,8 @@ def _x_signal_apply_blocked_symbol_filter(
     sym = _x_signal_symbol_from_decision(decision)
     if not signal_module.is_xsignal_symbol_blocked(sym):
         return decision
-    signal_module.log_xsignal_blocked_skip(sym)
+    _, source = signal_module.load_xsignal_blocked_symbols()
+    signal_module.log_xsignal_blocked_skip(sym, source=source)
     if log_skip is not None:
         log_skip(f"xsignal_blocked_symbol ({sym})")
     return None

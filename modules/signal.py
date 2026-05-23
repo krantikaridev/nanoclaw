@@ -136,16 +136,45 @@ def _xsignal_repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def _xsignal_block_list_search_roots() -> list[Path]:
+    """Candidate directories for ``.xsignal_blocked_symbols`` (repo root, cwd, followed_equities dir)."""
+    roots: list[Path] = []
+    seen: set[str] = set()
+
+    def _add(root: Path) -> None:
+        try:
+            key = str(root.resolve())
+        except OSError:
+            key = str(root)
+        if key not in seen:
+            seen.add(key)
+            roots.append(root)
+
+    _add(_xsignal_repo_root())
+    _add(Path.cwd())
+    try:
+        fe = Path(_cs_mod().FOLLOWED_EQUITIES_PATH)
+        if not fe.is_absolute():
+            fe = Path.cwd() / fe
+        _add(fe.parent)
+    except Exception:
+        pass
+    return roots
+
+
+def _find_xsignal_block_list_path() -> Path | None:
+    for root in _xsignal_block_list_search_roots():
+        for name in _XSIGNAL_BLOCKED_FILE_NAMES:
+            candidate = root / name
+            if candidate.is_file():
+                return candidate
+    return None
+
+
 def load_xsignal_blocked_symbols() -> tuple[frozenset[str], str]:
-    """Load blocked symbols from repo-root block list (mtime-cached per cycle)."""
+    """Load blocked symbols from ``.xsignal_blocked_symbols`` (mtime-cached per cycle)."""
     global _XSIGNAL_BLOCKED_CACHE
-    root = _xsignal_repo_root()
-    path: Path | None = None
-    for name in _XSIGNAL_BLOCKED_FILE_NAMES:
-        candidate = root / name
-        if candidate.is_file():
-            path = candidate
-            break
+    path = _find_xsignal_block_list_path()
     if path is None:
         return frozenset(), ""
     mtime = float(path.stat().st_mtime)
@@ -168,10 +197,12 @@ def is_xsignal_symbol_blocked(symbol: str) -> bool:
     return str(symbol or "").strip().upper() in blocked
 
 
-def log_xsignal_blocked_skip(symbol: str) -> None:
+def log_xsignal_blocked_skip(symbol: str, *, source: str = "") -> None:
     sym = str(symbol or "").strip().upper()
-    if sym:
-        print(f"[X-SIGNAL] Skipping blocked symbol: {sym}")
+    if not sym:
+        return
+    src = source or ".xsignal_blocked_symbols"
+    print(f"[X-SIGNAL] Skipping blocked symbol: {sym} (from {src})")
 
 
 def _filter_xsignal_blocked_equities(
@@ -180,7 +211,7 @@ def _filter_xsignal_blocked_equities(
     log_skips: bool = True,
 ) -> list[FollowedEquity]:
     """Drop block-listed symbols before eligibility/planning (early cycle gate)."""
-    blocked, _ = load_xsignal_blocked_symbols()
+    blocked, source = load_xsignal_blocked_symbols()
     if not blocked:
         return list(assets)
     out: list[FollowedEquity] = []
@@ -188,7 +219,7 @@ def _filter_xsignal_blocked_equities(
         sym = str(asset.symbol).strip().upper()
         if sym in blocked:
             if log_skips:
-                log_xsignal_blocked_skip(sym)
+                log_xsignal_blocked_skip(sym, source=source)
             continue
         out.append(asset)
     return out
@@ -519,7 +550,10 @@ def strong_buy_detector() -> bool:
     min_strength = cs._effective_equity_signal_min(cfg)
     strong_thr = cs.X_SIGNAL_STRONG_THRESHOLD
     fe_thr = cs.X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD
-    assets_seq = cs.X_SIGNAL_EQUITY_TRADER.load_followed_equities()
+    assets_seq = _filter_xsignal_blocked_equities(
+        cs.X_SIGNAL_EQUITY_TRADER.load_followed_equities(),
+        log_skips=False,
+    )
     _, eligible = _sorted_and_eligible_equities(
         assets_seq,
         min_strength,
@@ -550,7 +584,10 @@ def rotation_priority_detector() -> bool:
     rot_thr = float(getattr(cs, "X_SIGNAL_ROTATION_PRIORITY_THRESHOLD", X_SIGNAL_ROTATION_PRIORITY_THRESHOLD))
     fe_thr = float(cs.X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD)
     rot_min_upside = float(getattr(cs, "X_SIGNAL_ROTATION_MIN_UPSIDE_PCT", X_SIGNAL_ROTATION_MIN_UPSIDE_PCT))
-    assets_seq = cs.X_SIGNAL_EQUITY_TRADER.load_followed_equities()
+    assets_seq = _filter_xsignal_blocked_equities(
+        cs.X_SIGNAL_EQUITY_TRADER.load_followed_equities(),
+        log_skips=False,
+    )
     _, eligible = _sorted_and_eligible_equities(
         assets_seq,
         min_strength,

@@ -3504,7 +3504,7 @@ def test_load_xsignal_blocked_symbols_reads_block_file(tmp_path, monkeypatch):
     from modules import signal as signal_module
 
     (tmp_path / ".xsignal_blocked_symbols").write_text("WMATIC_ALPHA\n# ignore\n\n")
-    monkeypatch.setattr(signal_module, "_xsignal_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(signal_module, "_xsignal_block_list_search_roots", lambda: [tmp_path])
     signal_module._XSIGNAL_BLOCKED_CACHE = None
 
     blocked, source = signal_module.load_xsignal_blocked_symbols()
@@ -3512,11 +3512,22 @@ def test_load_xsignal_blocked_symbols_reads_block_file(tmp_path, monkeypatch):
     assert source == ".xsignal_blocked_symbols"
 
 
+def test_load_xsignal_blocked_symbols_missing_file_graceful(tmp_path, monkeypatch):
+    from modules import signal as signal_module
+
+    monkeypatch.setattr(signal_module, "_xsignal_block_list_search_roots", lambda: [tmp_path])
+    signal_module._XSIGNAL_BLOCKED_CACHE = None
+
+    blocked, source = signal_module.load_xsignal_blocked_symbols()
+    assert blocked == frozenset()
+    assert source == ""
+
+
 def test_try_x_signal_equity_skips_blocked_symbol_before_build_plan(tmp_path, monkeypatch, capsys):
     from modules import signal as signal_module
 
     (tmp_path / ".xsignal_blocked_symbols").write_text("WMATIC_ALPHA\n")
-    monkeypatch.setattr(signal_module, "_xsignal_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(signal_module, "_xsignal_block_list_search_roots", lambda: [tmp_path])
     signal_module._XSIGNAL_BLOCKED_CACHE = None
 
     class _Plan:
@@ -3583,7 +3594,8 @@ def test_try_x_signal_equity_skips_blocked_symbol_before_build_plan(tmp_path, mo
     assert decision.direction == "USDC_TO_EQUITY"
     assert "WMATIC_ALPHA" not in build_order
     assert build_order == ["WETH_ALPHA"]
-    assert "[X-SIGNAL] Skipping blocked symbol: WMATIC_ALPHA" in out
+    assert "ELIGIBLE | WMATIC_ALPHA" not in out
+    assert "[X-SIGNAL] Skipping blocked symbol: WMATIC_ALPHA (from .xsignal_blocked_symbols)" in out
 
 
 def test_x_signal_blocked_symbol_filter_blocks_execution_path(monkeypatch, capsys):
@@ -3603,4 +3615,4 @@ def test_x_signal_blocked_symbol_filter_blocks_execution_path(monkeypatch, capsy
     filtered = swap_exec._x_signal_apply_blocked_symbol_filter(decision, log_skip=skipped.append)
     assert filtered is None
     assert skipped == ["xsignal_blocked_symbol (WETH_ALPHA)"]
-    assert "[X-SIGNAL] Skipping blocked symbol: WETH_ALPHA" in capsys.readouterr().out
+    assert "[X-SIGNAL] Skipping blocked symbol: WETH_ALPHA (from .xsignal_blocked_symbols)" in capsys.readouterr().out
