@@ -352,6 +352,32 @@ def test_update_control_survives_evaluate_failure_without_prior_snapshot(
     assert written["last_updated"].endswith("Z")
 
 
+def test_risk_payload_respects_operator_pause_lock(tmp_path: Path, monkeypatch):
+    out_path = tmp_path / "control.json"
+    out_path.write_text(
+        '{"paused": false, "operator_pause_lock": true, "reason": "manual unpause", '
+        '"max_copy_trade_pct": 0.08}\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(control, "CONTROL_JSON_PATH", out_path)
+    monkeypatch.setattr(
+        control,
+        "evaluate_risk",
+        lambda: {
+            "paused": True,
+            "max_copy_trade_pct": 0.02,
+            "reason": "Critical low balance (test)",
+            "usdt_balance": 5.0,
+            "wmatic_balance": 5.0,
+        },
+    )
+    control.update_control()
+    written = json.loads(out_path.read_text(encoding="utf-8"))
+    assert written["paused"] is False
+    assert written["operator_pause_lock"] is True
+    assert written["reason"] == "manual unpause"
+
+
 def test_update_control_failure_heartbeat_preserves_existing_reason(
     tmp_path: Path, monkeypatch
 ):

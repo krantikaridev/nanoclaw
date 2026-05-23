@@ -429,6 +429,14 @@ def _sandbox_root_for_nanoup(tmp_path: Path) -> Path:
         "#!/usr/bin/env python3\nprint('nanoenv_apply placeholder')\n",
         encoding="utf-8",
     )
+    shutil.copy2(
+        REPO_ROOT / "scripts" / "preserve_runtime_state.py",
+        scripts / "preserve_runtime_state.py",
+    )
+    nanoclaw_dst = root / "nanoclaw"
+    nanoclaw_dst.mkdir(exist_ok=True)
+    shutil.copy2(REPO_ROOT / "nanoclaw" / "__init__.py", nanoclaw_dst / "__init__.py")
+    shutil.copy2(REPO_ROOT / "nanoclaw" / "runtime_state.py", nanoclaw_dst / "runtime_state.py")
     (root / "clean_swap.py").write_text("print('bot placeholder')\n", encoding="utf-8")
     (root / ".env").write_text("A=1\n", encoding="utf-8")
     (root / ".env.example").write_text("A=2\n", encoding="utf-8")
@@ -555,7 +563,8 @@ def test_nanoup_preserves_control_json_when_pull_overwrites(tmp_path: Path):
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    assert "preserved operator control.json" in result.stdout
+    assert "control.json restored from operator snapshot" in result.stdout
     restored = control_path.read_text(encoding="utf-8")
-    assert '"paused": false' in restored.replace(" ", "")
+    assert '"paused":false' in restored.replace(" ", "").lower()
     assert "manual unpause" in restored
+    assert (root / ".runtime" / "control.json.bak").is_file()

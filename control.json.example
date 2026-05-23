@@ -1,0 +1,8 @@
+{
+  "paused": false,
+  "operator_pause_lock": false,
+  "max_copy_trade_pct": 0.08,
+  "force_defensive": false,
+  "reason": "Template — copy to control.json or let nanoup seed on first run",
+  "last_updated": ""
+}

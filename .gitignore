@@ -59,6 +59,7 @@ MANIFEST
 bot_state.json
 # Operator / external-layer control plane (paused, copy caps). Never commit — nanoup preserves local copy.
 control.json
+.runtime/
 .xsignal_blocked_symbols
 __pycache__/
 *.pyc

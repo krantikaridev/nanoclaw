@@ -192,6 +192,8 @@ The previous issue where **USDT-only** rules paused the bot despite **healthy US
 
 **Fallback behavior**: If `control.json` is missing, empty, or invalid, `load_cycle_control()` returns safe defaults (`paused=false`, no max override). The bot falls back to `.env` configuration.
 
+**Manual unpause (stable across `nanoup`)**: Set `"paused": false` and `"operator_pause_lock": true` in `control.json`. The external layer will refresh balances and copy caps but will **not** flip `paused` back to `true` until you clear the lock. `nanoup` never deletes this file — it restores from `.runtime/control.json.bak`.
+
 ## Troubleshooting
 
 - **RPC or balance read failures**: The layer logs a WARNING, keeps the **last successful** `paused`/`reason` state when possible, and still bumps `last_updated` (heartbeat). The bot continues running. Verify with `nc-health` and check RPC URLs / `WALLET` in `.env`.

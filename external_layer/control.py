@@ -24,6 +24,8 @@ try:
 except ImportError:
     from risk_checker import evaluate_risk
 
+from nanoclaw.runtime_state import OPERATOR_PAUSE_LOCK_KEY
+
 # Resolved project root: parent of ``external_layer/``
 CONTROL_JSON_PATH = Path(__file__).resolve().parent.parent / "control.json"
 
@@ -138,6 +140,20 @@ def _optional_json_balance(val: object) -> float | None:
     return None
 
 
+def _apply_operator_pause_lock(payload: dict[str, object]) -> dict[str, object]:
+    """Keep operator ``paused`` when ``operator_pause_lock`` is set in existing ``control.json``."""
+    existing = _load_full_control_dict()
+    if not _parse_bool(existing.get(OPERATOR_PAUSE_LOCK_KEY), default=False):
+        return payload
+    merged = dict(payload)
+    merged["paused"] = _parse_bool(existing.get("paused"), default=bool(payload.get("paused")))
+    merged[OPERATOR_PAUSE_LOCK_KEY] = True
+    reason = existing.get("reason")
+    if isinstance(reason, str) and reason.strip():
+        merged["reason"] = reason.strip()
+    return merged
+
+
 def _risk_to_control_payload(risk: dict[str, bool | str | float]) -> dict[str, object]:
     """Build the JSON payload for ``control.json`` (includes live balances when known)."""
     raw_pct = risk.get("max_copy_trade_pct")
@@ -167,7 +183,7 @@ def _risk_to_control_payload(risk: dict[str, bool | str | float]) -> dict[str, o
         payload["stable_usd"] = s
     if w is not None:
         payload["wmatic_balance"] = w
-    return payload
+    return _apply_operator_pause_lock(payload)
 
 
 def _load_full_control_dict() -> dict[str, object]:
@@ -196,6 +212,8 @@ def _heartbeat_payload_after_failure(*, snap: CycleControlSnapshot) -> dict[str,
         "force_defensive": force_defensive,
         "last_updated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
+    if _parse_bool(existing.get(OPERATOR_PAUSE_LOCK_KEY), default=False):
+        payload[OPERATOR_PAUSE_LOCK_KEY] = True
     reason = existing.get("reason")
     if isinstance(reason, str) and reason:
         payload["reason"] = reason
