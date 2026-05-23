@@ -525,7 +525,7 @@ def test_x_signal_buy_paths_block_when_topup_reports_success_but_pol_remains_low
     )
 
     assert decision is None
-    assert tuned_trader.build_plan_calls == 1  # Called but POL check fails inside
+    assert tuned_trader.build_plan_calls == 0  # BUY paths short-circuit when POL stays low after top-up
 
 
 def test_determine_trade_decision_prioritizes_protection_first(monkeypatch):
