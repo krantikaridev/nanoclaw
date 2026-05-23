@@ -54,6 +54,8 @@ POL_USD_PRICE = cfg.POL_USD_PRICE
 MIN_POL_FOR_GAS = cfg.MIN_POL_FOR_GAS
 AUTO_TOPUP_POL = cfg.AUTO_TOPUP_POL
 POL_TOPUP_AMOUNT = cfg.POL_TOPUP_AMOUNT
+POL_AUTO_TOPUP_COOLDOWN_SECONDS = cfg.POL_AUTO_TOPUP_COOLDOWN_SECONDS
+POL_MIN_BALANCE_FOR_TOPUP_TX = cfg.POL_MIN_BALANCE_FOR_TOPUP_TX
 COPY_TRADE_PCT = cfg.COPY_TRADE_PCT
 MAX_GWEI = cfg.MAX_GWEI
 MIN_TRADE_USD = cfg.MIN_TRADE_USD
@@ -330,23 +332,107 @@ def get_pol_balance(
     return protector.get_pol_balance(wallet_address)
 
 
+_AUTO_POL_FAILURE_STATE: dict[str, float] = {
+    "next_retry_ts": 0.0,
+    "consecutive_failures": 0.0,
+}
+
+
+def _pol_topup_min_usdt_swap() -> float:
+    return max(5.0, float(MIN_TRADE_USD))
+
+
+def maybe_auto_topup_pol(
+    min_pol: Optional[float] = None,
+    *,
+    context: str = "cycle",
+    force: bool = False,
+) -> bool:
+    """Proactive POL maintenance: top up when below ``min_pol`` (defaults to MIN_POL_FOR_GAS)."""
+    floor = float(MIN_POL_FOR_GAS if min_pol is None else min_pol)
+    current_pol = float(get_pol_balance())
+
+    if not AUTO_TOPUP_POL:
+        print(
+            f"{_nanolog()}AUTO-POL skipped — disabled (AUTO_TOPUP_POL=false, context={context}) "
+            f"| pol≈{current_pol:.4f} | floor={floor:.4f}"
+        )
+        return current_pol >= floor
+
+    if current_pol >= floor:
+        print(
+            f"{_nanolog()}AUTO-POL skipped — POL sufficient (context={context}) "
+            f"| pol≈{current_pol:.4f} | floor={floor:.4f}"
+        )
+        return True
+
+    now_ts = time.time()
+    backoff_until = float(_AUTO_POL_FAILURE_STATE.get("next_retry_ts", 0.0) or 0.0)
+    if not force and backoff_until > now_ts:
+        remain_s = max(0.0, backoff_until - now_ts)
+        print(
+            f"{_nanolog()}AUTO-POL skipped — failure cooldown (context={context}) "
+            f"| pol≈{current_pol:.4f} | floor={floor:.4f} | retry_in≈{remain_s:.0f}s"
+        )
+        return False
+
+    print(
+        f"{_nanolog()}AUTO-POL consider (context={context}) "
+        f"| pol≈{current_pol:.4f} | floor={floor:.4f}"
+    )
+    ok = ensure_pol_for_trade(min_pol=floor)
+    if ok:
+        _AUTO_POL_FAILURE_STATE["next_retry_ts"] = 0.0
+        _AUTO_POL_FAILURE_STATE["consecutive_failures"] = 0.0
+        return True
+
+    cooldown_s = max(0, int(POL_AUTO_TOPUP_COOLDOWN_SECONDS))
+    if cooldown_s > 0:
+        prev = int(_AUTO_POL_FAILURE_STATE.get("consecutive_failures", 0.0) or 0.0)
+        _AUTO_POL_FAILURE_STATE["consecutive_failures"] = float(prev + 1)
+        _AUTO_POL_FAILURE_STATE["next_retry_ts"] = now_ts + float(cooldown_s)
+        print(
+            f"{_nanolog()}AUTO-POL backoff set (context={context}) "
+            f"| failures={prev + 1} | cooldown_s={cooldown_s}"
+        )
+    return False
+
+
 def ensure_pol_for_trade(min_pol: float = 0.025) -> bool:
     current_pol = float(get_pol_balance())
-    if current_pol >= float(min_pol):
+    floor = float(min_pol)
+    if current_pol >= floor:
+        print(
+            f"{_nanolog()}AUTO-POL skipped — POL sufficient "
+            f"| pol≈{current_pol:.4f} | floor={floor:.4f}"
+        )
         return True
+
+    min_pol_for_tx = float(POL_MIN_BALANCE_FOR_TOPUP_TX)
+    if current_pol < min_pol_for_tx:
+        print(
+            f"{_nanolog()}AUTO-POL skipped — POL too low to broadcast top-up txs "
+            f"(pol≈{current_pol:.6f} < {min_pol_for_tx:.4f}); send native POL manually once, "
+            f"then AUTO-POL can unwrap WMATIC"
+        )
+        return False
 
     key, _key_source = cfg.resolve_private_key(log_success=True)
     if not key:
         print(f"{_nanolog()}AUTO-POL skipped — no private key")
         return False
 
-    print(f"🔄 AUTO-POL | Topping up 0.03 POL (current: {current_pol})")
     target_pol = float(POL_TOPUP_AMOUNT)
-    needed_pol = max(0.0, float(min_pol) - current_pol)
+    needed_pol = max(0.0, floor - current_pol)
     # Ensure we target enough unwrap to clear the runtime min_pol floor, not just POL_TOPUP_AMOUNT.
     desired_topup_pol = max(target_pol, needed_pol + 0.002)
+    print(
+        f"🔄 AUTO-POL | Topping up ~{desired_topup_pol:.4f} POL "
+        f"(current≈{current_pol:.4f}, floor={floor:.4f})"
+    )
     balances = get_balances()
     usdt_swap_amount = min(8.0, float(balances.usdt) * 0.95)
+    min_usdt_swap = _pol_topup_min_usdt_swap()
 
     async def _swap_usdt_to_wmatic(amount_units: int) -> bool:
         if amount_units <= 0:
@@ -362,15 +448,28 @@ def ensure_pol_for_trade(min_pol: float = 0.025) -> bool:
     def _run(coro):
         return asyncio.run(coro)
 
-    if balances.wmatic < desired_topup_pol and usdt_swap_amount >= 6.0:
+    if balances.wmatic < desired_topup_pol and usdt_swap_amount >= min_usdt_swap:
+        print(
+            f"{_nanolog()}AUTO-POL | USDT→WMATIC leg | usdt≈${usdt_swap_amount:.2f} "
+            f"(min_swap=${min_usdt_swap:.2f})"
+        )
         ok = _run(_swap_usdt_to_wmatic(int(usdt_swap_amount * 1_000_000)))
         if not ok:
             print(f"{_nanolog()}AUTO-POL warn — USDT→WMATIC leg failed, trying WMATIC unwrap fallback")
         balances = get_balances()
+    elif balances.wmatic < desired_topup_pol:
+        print(
+            f"{_nanolog()}AUTO-POL skipped USDT→WMATIC — "
+            f"usdt≈${usdt_swap_amount:.2f} below min_swap=${min_usdt_swap:.2f}; "
+            f"wmatic≈{float(balances.wmatic):.4f}"
+        )
 
     unwrap_pol = min(desired_topup_pol, float(balances.wmatic) * 0.95)
     if unwrap_pol <= 0:
-        print(f"{_nanolog()}AUTO-POL skipped — insufficient WMATIC/USDT for top-up")
+        print(
+            f"{_nanolog()}AUTO-POL skipped — insufficient WMATIC/USDT for top-up "
+            f"(wmatic≈{float(balances.wmatic):.4f}, usdt≈${float(balances.usdt):.2f})"
+        )
         return False
 
     try:
@@ -405,12 +504,15 @@ def ensure_pol_for_trade(min_pol: float = 0.025) -> bool:
             print(f"{_nanolog()}AUTO-POL failed — WMATIC unwrap reverted")
             return False
         final_pol = float(get_pol_balance())
-        if final_pol >= float(min_pol):
-            print("✅ AUTO-POL | Top-up successful")
+        if final_pol >= floor:
+            print(
+                f"✅ AUTO-POL | Top-up successful "
+                f"(pol≈{final_pol:.4f}, floor={floor:.4f}, unwrap≈{unwrap_pol:.4f})"
+            )
             return True
         print(
             f"{_nanolog()}AUTO-POL failed — POL still low "
-            f"(pol≈{final_pol:.4f}, need≥{float(min_pol):.4f})"
+            f"(pol≈{final_pol:.4f}, need≥{floor:.4f})"
         )
         return False
     except Exception as e:

@@ -107,9 +107,13 @@ PER_WALLET_COOLDOWN = env_int("PER_WALLET_COOLDOWN", 180)
 COPY_TRADING_ENABLED = env_bool("COPY_TRADING_ENABLED", True)
 
 POL_USD_PRICE = env_float("POL_USD_PRICE", 0.10)
-MIN_POL_FOR_GAS = env_float("MIN_POL_FOR_GAS", 0.005)
+MIN_POL_FOR_GAS = env_float("MIN_POL_FOR_GAS", 0.15)
 AUTO_TOPUP_POL = env_bool("AUTO_TOPUP_POL", True)
 POL_TOPUP_AMOUNT = env_float("POL_TOPUP_AMOUNT", 0.03)
+# Backoff after a failed AUTO-POL attempt (seconds) to avoid tight retry loops.
+POL_AUTO_TOPUP_COOLDOWN_SECONDS = env_int("POL_AUTO_TOPUP_COOLDOWN_SECONDS", 300)
+# Minimum native POL required to broadcast unwrap/swap legs (below this, send POL manually once).
+POL_MIN_BALANCE_FOR_TOPUP_TX = env_float("POL_MIN_BALANCE_FOR_TOPUP_TX", 0.006)
 COPY_TRADE_PCT = env_float("COPY_TRADE_PCT", 0.28)
 DEFAULT_MAX_COPY_RATIO = env_float("DEFAULT_MAX_COPY_RATIO", 0.20)
 MAX_GWEI = env_float("MAX_GWEI", 80.0)

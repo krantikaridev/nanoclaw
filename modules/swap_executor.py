@@ -2841,6 +2841,13 @@ async def main(*, dry_run: bool = False) -> None:
         f"WMATIC: {balances.wmatic:.2f} | POL: {balances.pol:.2f}"
     )
 
+    if not dry_run and cs.AUTO_TOPUP_POL:
+        await asyncio.to_thread(
+            cs.maybe_auto_topup_pol,
+            float(cs.MIN_POL_FOR_GAS),
+            context="cycle_start",
+        )
+
     if cs.has_active_lock():
         print("⛔ Lock active — skipping")
         return
@@ -2965,8 +2972,10 @@ async def main(*, dry_run: bool = False) -> None:
         if pol_now < float(cs.MIN_POL_FOR_GAS):
             if cs.AUTO_TOPUP_POL:
                 topup_ok = await asyncio.to_thread(
-                    cs.ensure_pol_for_trade,
+                    cs.maybe_auto_topup_pol,
                     float(cs.MIN_POL_FOR_GAS),
+                    context="pre_trade",
+                    force=True,
                 )
                 if not topup_ok:
                     cs._log_trade_skipped(f"POL low (auto top-up failed; need {cs.MIN_POL_FOR_GAS:.4f})")

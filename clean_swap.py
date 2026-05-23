@@ -111,6 +111,7 @@ can_trade_asset = runtime.can_trade_asset
 can_trade_wallet = runtime.can_trade_wallet
 create_lock = runtime.create_lock
 ensure_pol_for_trade = runtime.ensure_pol_for_trade
+maybe_auto_topup_pol = runtime.maybe_auto_topup_pol
 evaluate_take_profit = runtime.evaluate_take_profit
 get_balances = runtime.get_balances
 get_gas_status = runtime.get_gas_status

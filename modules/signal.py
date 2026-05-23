@@ -1220,33 +1220,45 @@ def try_x_signal_equity_decision(
         if not dry_run and has_strong_buy:
             balances = fcb.get_balances()
             if float(balances.pol) < float(fcb.MIN_POL_FOR_GAS):
+                pol_floor = float(fcb.MIN_POL_FOR_GAS)
+                pol_block_reason: str | None = None
                 if fcb.AUTO_TOPUP_POL:
-                    if fcb.ensure_pol_for_trade(min_pol=float(fcb.MIN_POL_FOR_GAS)):
-                        balances = fcb.get_balances()
-                        if float(balances.pol) >= float(fcb.MIN_POL_FOR_GAS):
-                            # POL recovered; BUY path remains eligible.
-                            pass
-                        else:
-                            print(
-                                f"{runtime._nanolog()}AUTO-POL reported success but POL still low "
-                                f"(pol≈{float(balances.pol):.4f} < {fcb.MIN_POL_FOR_GAS:.4f}) — BUY paths skipped"
-                            )
-                            fcb._log_trade_skipped(
-                                f"POL low for BUY path after top-up (pol={float(balances.pol):.4f}, min={fcb.MIN_POL_FOR_GAS:.4f})"
-                            )
+                    topup_ok = fcb.maybe_auto_topup_pol(
+                        min_pol=pol_floor,
+                        context="x_signal_prep",
+                        force=True,
+                    )
+                    balances = fcb.get_balances()
+                    if topup_ok and float(balances.pol) >= pol_floor:
+                        pass
+                    elif topup_ok:
+                        pol_block_reason = (
+                            f"POL low for BUY path after top-up "
+                            f"(pol={float(balances.pol):.4f}, min={pol_floor:.4f})"
+                        )
+                        print(
+                            f"{runtime._nanolog()}AUTO-POL reported success but POL still low "
+                            f"(pol≈{float(balances.pol):.4f} < {pol_floor:.4f}) — BUY paths skipped"
+                        )
                     else:
+                        pol_block_reason = (
+                            f"POL low for BUY path (pol={float(balances.pol):.4f}, min={pol_floor:.4f})"
+                        )
                         print(
                             f"{runtime._nanolog()}AUTO-POL failed during X-SIGNAL prep "
-                            f"(pol<{fcb.MIN_POL_FOR_GAS:.4f}) — BUY paths skipped"
+                            f"(pol<{pol_floor:.4f}) — BUY paths skipped"
                         )
                 else:
+                    pol_block_reason = (
+                        f"POL low for BUY path (pol={float(balances.pol):.4f}, min={pol_floor:.4f})"
+                    )
                     print(
-                        f"{runtime._nanolog()}POL low (pol≈{float(balances.pol):.4f} < {fcb.MIN_POL_FOR_GAS:.4f}) "
+                        f"{runtime._nanolog()}POL low (pol≈{float(balances.pol):.4f} < {pol_floor:.4f}) "
                         f"and AUTO_TOPUP_POL=false — BUY paths skipped"
                     )
-                    fcb._log_trade_skipped(
-                        f"POL low for BUY path (pol={float(balances.pol):.4f}, min={fcb.MIN_POL_FOR_GAS:.4f})"
-                    )
+                if pol_block_reason:
+                    fcb._log_trade_skipped(pol_block_reason)
+                    return None
 
         eligible_ordered = _order_eligible_x_signal_candidates(
             eligible,

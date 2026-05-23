@@ -500,7 +500,11 @@ def test_x_signal_buy_paths_block_when_topup_reports_success_but_pol_remains_low
 
     tuned_trader = _LowPolTunedTrader()
     monkeypatch.setattr(clean_swap, "_tuned_signal_equity_trader", lambda min_strength: tuned_trader)
-    monkeypatch.setattr(clean_swap, "ensure_pol_for_trade", lambda min_pol=0.005: True)
+    monkeypatch.setattr(
+        clean_swap,
+        "maybe_auto_topup_pol",
+        lambda min_pol=0.005, context="test", force=False: True,
+    )
 
     balances_sequence = [
         clean_swap.Balances(usdt=40.0, wmatic=10.0, pol=0.001, usdc=20.0),
