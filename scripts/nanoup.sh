@@ -50,11 +50,32 @@ AUTOSTASH="${NANOUP_AUTOSTASH:-0}"
 STASH_NAME=""
 DID_STASH=0
 
+# control.json is user-controlled runtime state (external layer + manual unpause).
+# Never let git pull or stash reset it — see nanoclaw/runtime_state.py.
+CONTROL_JSON_BACKUP=""
+_preserve_control_json() {
+  if [[ -f control.json ]]; then
+    CONTROL_JSON_BACKUP="$(mktemp "${TMPDIR:-/tmp}/nanoclaw-control.XXXXXX")"
+    cp control.json "${CONTROL_JSON_BACKUP}"
+  fi
+}
+_restore_control_json() {
+  if [[ -n "${CONTROL_JSON_BACKUP}" && -f "${CONTROL_JSON_BACKUP}" ]]; then
+    cp "${CONTROL_JSON_BACKUP}" control.json
+    rm -f "${CONTROL_JSON_BACKUP}"
+    CONTROL_JSON_BACKUP=""
+    echo "✅ nanoup: preserved operator control.json (not reset by git pull)"
+  fi
+}
+
+_preserve_control_json
+
 if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
   if [[ "${AUTOSTASH}" == "1" ]]; then
     STASH_NAME="nanoup-auto-stash-$(date -u +%Y%m%dT%H%M%SZ)"
     echo "⚠️ nanoup: local changes detected; auto-stashing as '${STASH_NAME}'"
-    git stash push --include-untracked -m "${STASH_NAME}" >/dev/null
+    # Exclude control.json: operator pause/unpause must survive stash/pop cycles.
+    git stash push --include-untracked -m "${STASH_NAME}" -- . ':(exclude)control.json' >/dev/null
     DID_STASH=1
   else
     echo "❌ nanoup: local changes detected. Commit/stash first, or run:"
@@ -82,7 +103,10 @@ if [[ "${DID_STASH}" -eq 1 ]]; then
   echo "✅ nanoup: restored stashed local changes"
 fi
 
+_restore_control_json
+
 # Keep runtime .env aligned with latest template keys while preserving stage secrets/runtime values.
+# (Does not touch control.json — that file is operator runtime state, not env config.)
 if [[ ! -f "scripts/nanoenv_apply.py" ]]; then
   echo "❌ nanoup: scripts/nanoenv_apply.py missing; cannot safely sync .env from .env.example"
   exit 1

@@ -19,7 +19,7 @@ For operators and agents, **`AI_CONTEXT.md`** on branch **`V2`** is the authorit
 
 | Command | What it does |
 |---------|----------------|
-| `nanoup` | Safe update + restart (recommended), including `.env` apply from `.env.example` with secret/runtime-key preserve; ends with **`nanohealth`** (Polygon RPC + chain `137`); repo script: **`scripts/nanoup.sh`** |
+| `nanoup` | Safe update + restart (recommended), including `.env` apply from `.env.example` with secret/runtime-key preserve; **never resets `control.json`** (operator pause state); ends with **`nanohealth`** (Polygon RPC + chain `137`); repo script: **`scripts/nanoup.sh`** |
 | `nanohealth` | **`python scripts/nanohealth.py`**: RPC gate via **`connect_web3()`**; exit `1` if unhealthy |
 | `nanostatus` | PnL/status report from `real_cron.log` via `scripts/pnl_report.py` (forwards CLI flags, e.g. `--reset-session`) |
 | `nanopnl` | PnL view with current balance, baseline/session %, and 24h delta (best-effort from `portfolio_history.csv`) |
@@ -140,6 +140,7 @@ For ROI-first iteration, review deltas in:
 - **Template**: `.env.example` (committed; sanitized defaults and comments)
 - **Runtime**: `.env` (not committed; secrets and machine values)
 - **`nanoup`** merges `.env.example` → `.env`, preserving secrets and RPC-related keys only (see `nanoclaw/env_sync.py`). Other keys take template values on each deploy—**promote VM tuning by updating `.env.example`**, then pull/`nanoup`, or edit `.env` after `nanoup` knowing the next `nanoup` may reset non-preserved keys.
+- **`control.json`** is **gitignored** and **backed up/restored around `git pull`** in `nanoup` — manual `"paused": false` (or external-layer writes) are not overwritten by deploys. It is not part of env sync.
 - **External layer**: operator/agent control JSON is **`control.json`** at the repo root (written via `external_layer/control.py`, or VM helper **`./start_external.sh`**). Each live bot cycle loads it in **`modules/swap_executor.main`** and passes overrides into **`determine_trade_decision`** (`paused`, tiered **`max_copy_trade_pct`**, optional **`reason`**); copy trades use **`max_copy_trade_pct`** from the file when present, otherwise **`COPY_TRADE_PCT`** from `.env`. See **`external_layer/README.md`**.
 - VM steps (RPC placeholders, **`MAX_GWEI`**, probe snippet): **`docs/readme-vm-update.md`**. Send USDC on Polygon to the bot (**beginner**): **`docs/OPERATOR_SEND_USDC_POLYGON.md`**.
 

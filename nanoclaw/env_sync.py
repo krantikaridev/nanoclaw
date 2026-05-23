@@ -20,6 +20,9 @@ ENV_SYNC_EXCLUDED_KEYS = (
 )
 
 _EXCLUDED_KEYS_SET = frozenset(ENV_SYNC_EXCLUDED_KEYS)
+# ``nanoenv_apply`` / ``nanoup`` env sync only merges ``.env`` — never ``control.json``.
+# Operator runtime JSON is listed in ``nanoclaw.runtime_state.NANOUP_PRESERVE_RUNTIME_FILES``.
+
 ENV_APPLY_PRESERVE_KEYS = (
     *ENV_SYNC_EXCLUDED_KEYS,
     "TELEGRAM_CHAT_ID",

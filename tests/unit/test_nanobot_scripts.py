@@ -502,3 +502,60 @@ def test_nanoup_runs_env_apply_before_bot_restart(tmp_path: Path):
 
     steps = [line.strip() for line in order_log.read_text(encoding="utf-8").splitlines() if line.strip()]
     assert steps == ["NANOENV_APPLY_CALLED", "CLEAN_SWAP_CALLED"]
+
+
+def test_nanoup_preserves_control_json_when_pull_overwrites(tmp_path: Path):
+    """git pull must not reset operator pause state in control.json."""
+    _require_bash()
+    root = _sandbox_root_for_nanoup(tmp_path)
+    control_path = root / "control.json"
+    control_path.write_text('{"paused": false, "reason": "manual unpause"}\n', encoding="utf-8")
+
+    git_stub = root / "bin" / "git"
+    git_stub.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        "if [[ \"${1:-}\" == \"rev-parse\" && \"${2:-}\" == \"--is-inside-work-tree\" ]]; then\n"
+        "  echo true\n"
+        "  exit 0\n"
+        "fi\n"
+        "if [[ \"${1:-}\" == \"rev-parse\" && \"${2:-}\" == \"--abbrev-ref\" ]]; then\n"
+        "  echo V2\n"
+        "  exit 0\n"
+        "fi\n"
+        "if [[ \"${1:-}\" == \"status\" ]]; then\n"
+        "  exit 0\n"
+        "fi\n"
+        "if [[ \"${1:-}\" == \"pull\" ]]; then\n"
+        "  echo '{\"paused\": true, \"reason\": \"Low balance protection\"}' > control.json\n"
+        "  exit 0\n"
+        "fi\n"
+        "if [[ \"${1:-}\" == \"fetch\" || \"${1:-}\" == \"config\" || \"${1:-}\" == \"stash\" ]]; then\n"
+        "  exit 0\n"
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    git_stub.chmod(git_stub.stat().st_mode | stat.S_IXUSR)
+
+    order_log = root / "order.log"
+    env = {
+        **os.environ,
+        "NANOCLAW_ROOT": str(root),
+        "PATH": f"{root / 'bin'}{os.pathsep}{os.environ.get('PATH', '')}",
+        "NANO_TEST_ORDER_LOG": str(order_log),
+    }
+
+    result = subprocess.run(
+        ["bash", str(root / "scripts" / "nanoup.sh")],
+        cwd=root,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "preserved operator control.json" in result.stdout
+    restored = control_path.read_text(encoding="utf-8")
+    assert '"paused": false' in restored.replace(" ", "")
+    assert "manual unpause" in restored
