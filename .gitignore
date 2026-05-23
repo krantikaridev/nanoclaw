@@ -70,3 +70,5 @@ __pycache__/
 !real_cron.log
 portfolio_session_baseline.json
 
+control.json
+control.json

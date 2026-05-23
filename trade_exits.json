@@ -958,5 +958,13 @@
     "amount_usd": 8.0,
     "tx_hash": "pending",
     "status": "OPEN"
+  },
+  {
+    "timestamp": "2026-05-23T18:30:24.519569",
+    "buy_price": 0.090047,
+    "target_price": 0.097251,
+    "amount_usd": 10.0,
+    "tx_hash": "pending",
+    "status": "OPEN"
   }
 ]
