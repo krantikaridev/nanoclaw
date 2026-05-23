@@ -1475,7 +1475,7 @@ def test_main_hold_mild_loss_idle_min_trade_guard_bypassed(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert swap_called["ok"]
     assert not any("min_trade_guard" in x for x in logs)
-    assert "[nanoclaw] Main strategy small profit take allowed (P2 relief)" in out
+    assert "[Main Strategy] Mild-loss rotation executing (bypassed min_notional for recovery)" in out
 
 
 def test_main_records_wallet_performance_on_wmatic_to_usdc_exit(monkeypatch):
