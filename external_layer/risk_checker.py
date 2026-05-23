@@ -16,9 +16,9 @@ _MODERATE_WMATIC = 65.0
 # REVERSIBLE travel tune (2026-05-09): when USDT+USDC ≥ this, ease pause frequency (WMATIC floor)
 # and keep copy caps ≥ ~4.5% instead of falling to the 2% streak clamp so often.
 _TRAVEL_HIGH_STABLE_USD = 95.0
-# TEMPORARY (2026-05-23): lowered from 45 → 10 so ~28 WMATIC does not auto-pause rotation
-# while the gas stack is low but dollar stables are healthy. Revert when WMATIC is topped up.
-_CRITICAL_WMATIC_WHEN_STABLE_HIGH = 10.0
+# TEMPORARY (2026-05-23): lowered from 45 → 10 so low WMATIC does not auto-pause rotation
+# while USDT+USDC runway is above the critical stable floor ($60). Revert when WMATIC is topped up.
+_CRITICAL_WMATIC_WHEN_STABLE_OK = 10.0
 _TRAVEL_RELAX_MIN_COPY_PCT = 0.045
 
 # Copy-trade cap bounds written to ``control.json`` (fraction of portfolio logic).
@@ -120,7 +120,7 @@ def evaluate_risk(
 
     Rules (stable runway = USDT + USDC; WMATIC gas runway):
     - stable_usd < 60 or WMATIC below tier threshold → paused, cap 0.02
-      (threshold is 50 when stable_usd < $95, else 10 — TEMPORARY WMATIC floor 2026-05-23).
+      (WMATIC floor is 50 only when stable_usd < $60; else 10 — TEMPORARY 2026-05-23).
     - Else stable_usd < 100 or WMATIC < 65 → not paused, cap 0.03 (raised to ≥4.5% if stables ≥ $95)
     - Else → not paused, cap 0.06 (same ≥4.5% floor when stables ≥ $95)
     """
@@ -134,10 +134,12 @@ def evaluate_risk(
     stable_usd = usdt + usdc
 
     global _FORCE_MIN_UNTIL_TS, _CLAMP_STREAK_MIN_STABLE_USD
+    # TEMPORARY (2026-05-23): use the $10 WMATIC floor whenever stables clear critical ($60),
+    # not only at the $95 travel-relax tier — avoids constant auto-pause during rotation.
     wmatic_pause_threshold = (
         _CRITICAL_WMATIC
-        if stable_usd < _TRAVEL_HIGH_STABLE_USD
-        else _CRITICAL_WMATIC_WHEN_STABLE_HIGH
+        if stable_usd < _CRITICAL_STABLE_USD
+        else _CRITICAL_WMATIC_WHEN_STABLE_OK
     )
     critical = stable_usd < _CRITICAL_STABLE_USD or wmatic < wmatic_pause_threshold
     moderate = stable_usd < _MODERATE_STABLE_USD or wmatic < _MODERATE_WMATIC

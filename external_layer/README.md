@@ -39,7 +39,7 @@ Risk tier is determined by **either** **`stable_usd` (USDT + combined USDC)** **
 ### Travel / high-stables adjustments (reversible, 2026-05-09)
 
 - When **`stable_usd` ≥ 95** and **not Critical**: `evaluate_risk` raises **`max_copy_trade_pct` to at least `0.045` (4.5%)**, including during the “defensive clamp” window after three protected-tier reads (that window uses **2%** only when **`stable_usd` < 95**).
-- **WMATIC critical pause** uses a **$10** floor (TEMPORARY 2026-05-23; was **$45**) when **`stable_usd` ≥ 95**, so brief MATIC dips do not pause entries while dollar stables are ample.
+- **WMATIC critical pause** uses a **$10** floor (TEMPORARY 2026-05-23; was **$45**) when **`stable_usd` ≥ 60**, so low WMATIC does not pause entries while dollar stables are above the critical runway.
 - **Manual unpause without lock**: when **`paused: false`** is set in `control.json` and **`stable_usd` ≥ 60**, the external layer will **not** re-pause for WMATIC-only critical tiers (stable depletion still forces pause). For a durable override across restarts, use **`operator_pause_lock: true`** (see below).
 
 ### Additional defensive clamp logic

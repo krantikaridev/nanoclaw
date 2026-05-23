@@ -101,14 +101,25 @@ def test_evaluate_risk_low_usdt():
 
 
 def test_evaluate_risk_low_wmatic():
+    """WMATIC-only critical pause uses the $10 TEMPORARY floor when stables ≥ $60."""
     out = risk_checker.evaluate_risk(
-        usdt_balance=40.0, usdc_balance=50.0, wmatic_balance=49.0
+        usdt_balance=40.0, usdc_balance=50.0, wmatic_balance=8.0
     )
     assert out["paused"] is True
     assert out["max_copy_trade_pct"] == 0.02
     assert out["usdt_balance"] == 40.0
     assert out["stable_usd"] == pytest.approx(90.0)
-    assert out["wmatic_balance"] == 49.0
+    assert out["wmatic_balance"] == 8.0
+
+
+def test_evaluate_risk_moderate_wmatic_does_not_pause_when_stables_ok():
+    """~28 WMATIC with healthy stables must not force critical pause (rotation sprint)."""
+    out = risk_checker.evaluate_risk(
+        usdt_balance=40.0, usdc_balance=50.0, wmatic_balance=28.0
+    )
+    assert out["paused"] is False
+    assert out["stable_usd"] == pytest.approx(90.0)
+    assert out["wmatic_balance"] == 28.0
 
 
 def test_evaluate_risk_high_stables_relaxes_wmatic_pause_threshold():
