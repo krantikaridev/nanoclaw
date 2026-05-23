@@ -622,6 +622,8 @@ def test_wmatic_stable_p2_relief_mild_loss_idle_bypass_log(capsys):
     )
     out = capsys.readouterr().out
     assert _MAIN_STRATEGY_MILD_LOSS_ROTATION_MIN_NOTIONAL_BYPASS_LOG in out
+    assert "MILD-LOSS RECOVERY BYPASS ACTIVE" in out
+    assert "path=p2_override" in out
     assert "P2 RELIEF OVERRIDE ACTIVE" not in out
 
 
@@ -725,6 +727,102 @@ def test_mild_loss_rotation_min_notional_bypass_rejects_outside_loss_band():
         profit_signal={"reason": "HOLD", "gain_pct": 2.0},
         state=state,
     )
+
+
+def test_mild_loss_rotation_min_notional_bypass_nine_dollar_stack():
+    """~$9 WMATIC stack (extended mild-loss band) clears MIN_TRADE_USD for ~$1.7 recovery sell."""
+    state: dict = {}
+    for _ in range(_MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN):
+        _profit_take_bump_cycle_counter(state)
+    price = 0.90
+    wmatic_qty = 10.0
+    wm_usd = wmatic_qty * price
+    assert wm_usd + 1e-9 <= 10.0
+    frac = min(0.30, 2.25 / wm_usd)
+    notional = wm_usd * frac
+    assert 1.4 <= notional <= 2.25
+    hold_signal = {
+        "reason": "HOLD",
+        "gain_pct": -4.2,
+        "peak_gain_pct": 0.0,
+        "pullback_pct": 0.0,
+    }
+    decision = TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(wmatic_qty * frac * 1e18),
+    )
+    balances = Balances(usdt=80.0, usdc=30.0, wmatic=wmatic_qty, pol=1.0)
+    assert _main_strategy_mild_loss_rotation_min_notional_bypass_allowed(
+        decision,
+        balances=balances,
+        current_price_usd=price,
+        min_trade_usd=10.0,
+        profit_signal=hold_signal,
+        state=state,
+    )
+
+
+def test_mild_loss_rotation_min_notional_bypass_rejects_above_ten_dollar_stack():
+    """Stacks above $10 stay on standard MIN_TRADE_USD — mild-loss bypass is isolated."""
+    state: dict = {}
+    for _ in range(_MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN):
+        _profit_take_bump_cycle_counter(state)
+    price = 1.0
+    wmatic_qty = 11.0
+    hold_signal = {"reason": "HOLD", "gain_pct": -3.0}
+    decision = TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(2.0 * 1e18),
+    )
+    assert not _main_strategy_mild_loss_rotation_min_notional_bypass_allowed(
+        decision,
+        balances=Balances(usdt=80.0, wmatic=wmatic_qty, pol=1.0, usdc=30.0),
+        current_price_usd=price,
+        min_trade_usd=10.0,
+        profit_signal=hold_signal,
+        state=state,
+    )
+
+
+def test_wmatic_stable_p2_relief_mild_loss_idle_not_deferred_on_x_signal(monkeypatch, capsys):
+    """Mild-loss idle recovery bypasses X-Signal P2 defer (not only fast path)."""
+    from modules.swap_executor import (
+        _wmatic_stable_p2_relief_override_active,
+        _profit_take_bump_cycle_counter,
+    )
+
+    monkeypatch.setattr(
+        "modules.swap_executor._signal_driven_rotation_x_signal_first",
+        lambda: True,
+    )
+    state: dict = {}
+    _profit_take_bump_cycle_counter(state)
+    price = 0.70
+    wmatic_qty = 8.0
+    wm_usd = wmatic_qty * price
+    frac = min(0.30, 2.25 / wm_usd)
+    hold_signal = {
+        "reason": "HOLD",
+        "gain_pct": -5.9,
+        "peak_gain_pct": 0.0,
+        "pullback_pct": 0.0,
+    }
+    decision = TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(wmatic_qty * frac * 1e18),
+    )
+    balances = Balances(usdt=80.0, usdc=30.0, wmatic=wmatic_qty, pol=1.0)
+    assert _wmatic_stable_p2_relief_override_active(
+        decision,
+        balances=balances,
+        current_price_usd=price,
+        min_trade_usd=10.0,
+        profit_signal=hold_signal,
+        state=state,
+    )
+    out = capsys.readouterr().out
+    assert "P2 WMATIC→stable deferred" not in out
+    assert "MILD-LOSS RECOVERY BYPASS ACTIVE" in out
 
 
 def test_main_strategy_mild_loss_idle_rotation_after_one_cycle(capsys):

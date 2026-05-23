@@ -784,7 +784,7 @@ _MAIN_STRATEGY_IDLE_ROTATION_NOTIONAL_FLOOR_LOW = 1.35
 _MAIN_STRATEGY_MILD_LOSS_IDLE_GAIN_MIN_PCT = -7.0
 _MAIN_STRATEGY_MILD_LOSS_IDLE_GAIN_MAX_PCT = -1.0
 _MAIN_STRATEGY_MILD_LOSS_IDLE_WM_MIN_USD = 5.0
-_MAIN_STRATEGY_MILD_LOSS_IDLE_WM_MAX_USD = 8.0
+_MAIN_STRATEGY_MILD_LOSS_IDLE_WM_MAX_USD = 10.0
 _MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN = 1
 _MAIN_STRATEGY_MILD_LOSS_IDLE_NOTIONAL_FLOOR_USD = 1.25
 _MAIN_STRATEGY_MILD_LOSS_IDLE_SELL_FRACTION = 0.30
@@ -815,6 +815,11 @@ _MAIN_STRATEGY_MILD_LOSS_FAST_LOG = (
 # May 2026: sub-MIN_TRADE_USD recovery sells (~$1.25–$2.25) for mild-loss idle rotation only.
 _MAIN_STRATEGY_MILD_LOSS_ROTATION_MIN_NOTIONAL_BYPASS_LOG = (
     "[Main Strategy] Mild-loss rotation executing (bypassed min_notional for recovery)"
+)
+_MAIN_STRATEGY_MILD_LOSS_RECOVERY_BYPASS_ACTIVE_LOG = (
+    "[nanoclaw] MILD-LOSS RECOVERY BYPASS ACTIVE | path={path} | WMATIC=${wm:.2f} | "
+    "notional=${notional:.2f} | gain_pct={gain}% | cycles_since_exit={cycles} | "
+    "bypassing min_notional=${min_trade:.2f}"
 )
 _MAIN_STRATEGY_STATUS_LOG = "[nanoclaw] MAIN_STRATEGY_STATUS"
 _MAIN_STRATEGY_OUTCOME_LOG = "[nanoclaw] MAIN_STRATEGY_OUTCOME"
@@ -874,6 +879,56 @@ def _wmatic_in_small_rotation_value_band(wm_equiv_usd: float) -> bool:
     )
 
 
+def _main_strategy_mild_loss_rotation_min_notional_bypass_allowed(
+    decision: TradeDecision,
+    *,
+    balances: Balances,
+    current_price_usd: float,
+    min_trade_usd: float,
+    profit_signal: dict | None = None,
+    state: dict | None = None,
+) -> bool:
+    """Allow mild-loss idle recovery below global MIN_TRADE_USD (isolated from standard P2 $2 floor).
+
+    Qualifies when WMATIC is in the $5–$10 mild-loss band, unrealized gain is ~-7% to -1%,
+    and idle rotation is active (fast path, 1+ cycles since exit, or long-idle micro rotation).
+    """
+    direction = str(decision.direction or "").strip().upper()
+    if direction not in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:
+        return False
+    eff_min = float(min_trade_usd)
+    if eff_min <= 0.0:
+        return False
+    notional_usd = _decision_notional_usd(decision, current_price_usd=current_price_usd)
+    if notional_usd is None or notional_usd + 1e-9 >= eff_min:
+        return False
+    wm_equiv_usd = float(balances.wmatic) * float(current_price_usd)
+    if not _wmatic_in_small_rotation_value_band(wm_equiv_usd):
+        return False
+    if _profit_take_mild_loss_gain_pct(profit_signal) is None:
+        return False
+    cycles_since_exit = _profit_take_cycles_since_exit(state)
+    mild_loss_fast = _main_strategy_mild_loss_fast_rotation_eligible(
+        profit_signal,
+        wm_equiv_usd,
+        float(balances.wmatic),
+        balances,
+    )
+    mild_loss_idle = _main_strategy_mild_loss_idle_context(
+        profit_signal,
+        wm_equiv_usd,
+        cycles_since_exit,
+        balances=balances,
+        wmatic_qty=float(balances.wmatic),
+    )
+    if not (mild_loss_idle or mild_loss_fast):
+        return False
+    floor_usd = float(_MAIN_STRATEGY_MILD_LOSS_IDLE_NOTIONAL_FLOOR_USD)
+    if notional_usd + 1e-9 < floor_usd:
+        return False
+    return True
+
+
 def _main_strategy_mild_loss_fast_rotation_eligible(
     profit_signal: dict | None,
     wm_equiv_usd: float,
@@ -914,54 +969,54 @@ def _main_strategy_mild_loss_idle_context(
     return int(cycles_since_exit) >= int(_MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN)
 
 
-def _main_strategy_mild_loss_rotation_min_notional_bypass_allowed(
-    decision: TradeDecision,
+def _main_strategy_mild_loss_recovery_overrides_x_signal_p2_defer(
+    profit_signal: dict | None,
+    wm_equiv_usd: float,
     *,
     balances: Balances,
-    current_price_usd: float,
-    min_trade_usd: float,
-    profit_signal: dict | None = None,
-    state: dict | None = None,
+    state: dict | None,
 ) -> bool:
-    """Allow mild-loss idle recovery below global MIN_TRADE_USD (isolated from standard P2 $2 floor).
-
-    Qualifies when WMATIC is in the $5–$8 mild-loss band, unrealized gain is ~-7% to -1%,
-    and idle rotation is active (fast path, 1+ cycles since exit, or long-idle micro rotation).
-    """
-    direction = str(decision.direction or "").strip().upper()
-    if direction not in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:
-        return False
-    eff_min = float(min_trade_usd)
-    if eff_min <= 0.0:
-        return False
-    notional_usd = _decision_notional_usd(decision, current_price_usd=current_price_usd)
-    if notional_usd is None or notional_usd + 1e-9 >= eff_min:
-        return False
-    wm_equiv_usd = float(balances.wmatic) * float(current_price_usd)
-    if not _wmatic_in_small_rotation_value_band(wm_equiv_usd):
-        return False
-    if _profit_take_mild_loss_gain_pct(profit_signal) is None:
-        return False
-    cycles_since_exit = _profit_take_cycles_since_exit(state)
-    mild_loss_fast = _main_strategy_mild_loss_fast_rotation_eligible(
+    """Mild-loss idle/fast recovery may bypass X-Signal P2 defer (same as fast path)."""
+    if _main_strategy_mild_loss_fast_rotation_eligible(
         profit_signal,
         wm_equiv_usd,
         float(balances.wmatic),
         balances,
-    )
-    mild_loss_idle = _main_strategy_mild_loss_idle_context(
+    ):
+        return True
+    return _main_strategy_mild_loss_idle_context(
         profit_signal,
         wm_equiv_usd,
-        cycles_since_exit,
+        _profit_take_cycles_since_exit(state),
         balances=balances,
         wmatic_qty=float(balances.wmatic),
     )
-    if not (mild_loss_idle or mild_loss_fast):
-        return False
-    floor_usd = float(_MAIN_STRATEGY_MILD_LOSS_IDLE_NOTIONAL_FLOOR_USD)
-    if notional_usd + 1e-9 < floor_usd:
-        return False
-    return True
+
+
+def _log_mild_loss_recovery_min_notional_bypass(
+    *,
+    wm_equiv_usd: float,
+    notional_usd: float,
+    min_trade_usd: float,
+    profit_signal: dict | None = None,
+    state: dict | None = None,
+    path: str,
+) -> None:
+    """Structured log when a small mild-loss recovery rotation clears MIN_TRADE_USD."""
+    gain = _profit_take_mild_loss_gain_pct(profit_signal)
+    gain_s = f"{gain:.2f}" if gain is not None else "n/a"
+    cycles = _profit_take_cycles_since_exit(state)
+    print(
+        _MAIN_STRATEGY_MILD_LOSS_RECOVERY_BYPASS_ACTIVE_LOG.format(
+            path=path,
+            wm=wm_equiv_usd,
+            notional=notional_usd,
+            gain=gain_s,
+            cycles=cycles,
+            min_trade=min_trade_usd,
+        )
+    )
+    print(_MAIN_STRATEGY_MILD_LOSS_ROTATION_MIN_NOTIONAL_BYPASS_LOG)
 
 
 # May 2026 sprint: floor for standard profit-take reasons so modest gains still clear P2 relief.
@@ -1881,13 +1936,13 @@ def _wmatic_stable_p2_relief_override_active(
     ``MIN_TRADE_USD`` gate. When True, caller must return the decision immediately.
     """
     wm_equiv_for_fast = float(balances.wmatic) * float(current_price_usd)
-    mild_loss_fast_p2 = _main_strategy_mild_loss_fast_rotation_eligible(
+    mild_loss_recovery_p2 = _main_strategy_mild_loss_recovery_overrides_x_signal_p2_defer(
         profit_signal,
         wm_equiv_for_fast,
-        float(balances.wmatic),
-        balances,
+        balances=balances,
+        state=state,
     )
-    if _signal_driven_rotation_x_signal_first() and not mild_loss_fast_p2:
+    if _signal_driven_rotation_x_signal_first() and not mild_loss_recovery_p2:
         print(
             f"{runtime._nanolog()}Signal-Driven Rotation: P2 WMATIC→stable deferred — "
             "strong X-Signal BUY has cycle priority"
@@ -1904,7 +1959,15 @@ def _wmatic_stable_p2_relief_override_active(
         profit_signal=profit_signal,
         state=state,
     ):
-        print(_MAIN_STRATEGY_MILD_LOSS_ROTATION_MIN_NOTIONAL_BYPASS_LOG)
+        notional_usd = _decision_notional_usd(decision, current_price_usd=current_price_usd)
+        _log_mild_loss_recovery_min_notional_bypass(
+            wm_equiv_usd=float(balances.wmatic) * float(current_price_usd),
+            notional_usd=float(notional_usd or 0.0),
+            min_trade_usd=min_trade_usd,
+            profit_signal=profit_signal,
+            state=state,
+            path="p2_override",
+        )
         return True
     if not _profit_take_balance_relief_bypass_allowed(
         decision,
@@ -2518,7 +2581,18 @@ def determine_trade_decision(
             float(balances.wmatic),
             balances,
         )
-        if not _signal_driven_rotation_x_signal_first() or hold_fast_rotation:
+        hold_mild_loss_idle = _main_strategy_mild_loss_idle_context(
+            profit_signal,
+            wm_hold_usd,
+            _profit_take_cycles_since_exit(state),
+            balances=balances,
+            wmatic_qty=float(balances.wmatic),
+        )
+        if (
+            not _signal_driven_rotation_x_signal_first()
+            or hold_fast_rotation
+            or hold_mild_loss_idle
+        ):
             hold_idle = _main_strategy_idle_rotation_sell_decision(
                 balances,
                 current_price,
@@ -2843,7 +2917,14 @@ async def main(*, dry_run: bool = False) -> None:
                 profit_signal=profit_signal_guard,
                 state=state,
             ):
-                print(_MAIN_STRATEGY_MILD_LOSS_ROTATION_MIN_NOTIONAL_BYPASS_LOG)
+                _log_mild_loss_recovery_min_notional_bypass(
+                    wm_equiv_usd=float(balances.wmatic) * float(current_price),
+                    notional_usd=float(decision_notional_usd),
+                    min_trade_usd=min_trade_usd,
+                    profit_signal=profit_signal_guard,
+                    state=state,
+                    path="execution",
+                )
             elif _profit_take_balance_relief_bypass_allowed(
                 decision,
                 balances=balances,
