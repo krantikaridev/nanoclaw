@@ -112,11 +112,13 @@ def test_evaluate_risk_low_wmatic():
 
 
 def test_evaluate_risk_high_stables_relaxes_wmatic_pause_threshold():
-    """When USDT+USDC ≥ $95, WMATIC must dip below $45 (not $50) to pause."""
-    out = risk_checker.evaluate_risk(usdt_balance=100.0, usdc_balance=0.0, wmatic_balance=48.0)
-    assert out["paused"] is False
-    assert out["stable_usd"] == pytest.approx(100.0)
-    assert out["max_copy_trade_pct"] == pytest.approx(0.045)
+    """When USDT+USDC ≥ $95, WMATIC must dip below $10 (TEMPORARY floor) to pause."""
+    out = risk_checker.evaluate_risk(usdt_balance=100.0, usdc_balance=0.0, wmatic_balance=8.0)
+    assert out["paused"] is True
+    out_ok = risk_checker.evaluate_risk(usdt_balance=100.0, usdc_balance=0.0, wmatic_balance=28.0)
+    assert out_ok["paused"] is False
+    assert out_ok["stable_usd"] == pytest.approx(100.0)
+    assert out_ok["max_copy_trade_pct"] == pytest.approx(0.045)
 
 
 def test_evaluate_risk_at_critical_floor_is_moderate_not_critical():
@@ -376,6 +378,53 @@ def test_risk_payload_respects_operator_pause_lock(tmp_path: Path, monkeypatch):
     assert written["paused"] is False
     assert written["operator_pause_lock"] is True
     assert written["reason"] == "manual unpause"
+
+
+def test_risk_payload_honors_manual_unpause_without_lock(tmp_path: Path, monkeypatch):
+    out_path = tmp_path / "control.json"
+    out_path.write_text(
+        '{"paused": false, "reason": "manual unpause for rotation"}\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(control, "CONTROL_JSON_PATH", out_path)
+    monkeypatch.setattr(
+        control,
+        "evaluate_risk",
+        lambda: {
+            "paused": True,
+            "max_copy_trade_pct": 0.02,
+            "reason": "Critical low balance: trading paused; copy trades capped at 2% (WMATIC<10)",
+            "usdt_balance": 100.0,
+            "usdc_balance": 0.0,
+            "stable_usd": 100.0,
+            "wmatic_balance": 28.58,
+        },
+    )
+    control.update_control()
+    written = json.loads(out_path.read_text(encoding="utf-8"))
+    assert written["paused"] is False
+    assert "manual unpause honored" in str(written.get("reason", ""))
+
+
+def test_risk_payload_manual_unpause_does_not_override_stable_critical(tmp_path: Path, monkeypatch):
+    out_path = tmp_path / "control.json"
+    out_path.write_text('{"paused": false, "reason": "manual unpause"}\n', encoding="utf-8")
+    monkeypatch.setattr(control, "CONTROL_JSON_PATH", out_path)
+    monkeypatch.setattr(
+        control,
+        "evaluate_risk",
+        lambda: {
+            "paused": True,
+            "max_copy_trade_pct": 0.02,
+            "reason": "Critical low balance (test)",
+            "usdt_balance": 5.0,
+            "stable_usd": 5.0,
+            "wmatic_balance": 100.0,
+        },
+    )
+    control.update_control()
+    written = json.loads(out_path.read_text(encoding="utf-8"))
+    assert written["paused"] is True
 
 
 def test_update_control_failure_heartbeat_preserves_existing_reason(

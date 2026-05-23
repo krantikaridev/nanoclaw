@@ -140,6 +140,43 @@ def _optional_json_balance(val: object) -> float | None:
     return None
 
 
+# Matches ``risk_checker._CRITICAL_STABLE_USD`` — stables below this still force pause.
+_STABLE_USD_FORCE_PAUSE = 60.0
+
+
+def _apply_manual_unpause_over_wmatic(
+    payload: dict[str, object], risk: dict[str, bool | str | float]
+) -> dict[str, object]:
+    """Honor operator ``paused: false`` over WMATIC-only auto-pause when stables are OK.
+
+    TEMPORARY (2026-05-23): allows Main Strategy rotation while WMATIC is below the
+    travel floor but USDT+USDC runway is healthy. Critical stable depletion still pauses.
+    ``operator_pause_lock`` continues to handle explicit long-lived operator overrides.
+    """
+    if not payload.get("paused"):
+        return payload
+    existing = _load_full_control_dict()
+    if _parse_bool(existing.get("paused"), default=False):
+        return payload
+    if _parse_bool(existing.get(OPERATOR_PAUSE_LOCK_KEY), default=False):
+        return payload
+    stable = risk.get("stable_usd")
+    if not isinstance(stable, (int, float)) or float(stable) < _STABLE_USD_FORCE_PAUSE:
+        return payload
+    merged = dict(payload)
+    merged["paused"] = False
+    base = merged.get("reason")
+    suffix = (
+        f"; manual unpause honored (WMATIC-only, stables≥{_STABLE_USD_FORCE_PAUSE:.0f}; "
+        "TEMPORARY 2026-05-23)"
+    )
+    if isinstance(base, str) and base.strip():
+        merged["reason"] = base.strip() + suffix
+    else:
+        merged["reason"] = f"Manual unpause honored over WMATIC auto-pause{suffix}"
+    return merged
+
+
 def _apply_operator_pause_lock(payload: dict[str, object]) -> dict[str, object]:
     """Keep operator ``paused`` when ``operator_pause_lock`` is set in existing ``control.json``."""
     existing = _load_full_control_dict()
@@ -183,7 +220,7 @@ def _risk_to_control_payload(risk: dict[str, bool | str | float]) -> dict[str, o
         payload["stable_usd"] = s
     if w is not None:
         payload["wmatic_balance"] = w
-    return _apply_operator_pause_lock(payload)
+    return _apply_operator_pause_lock(_apply_manual_unpause_over_wmatic(payload, risk))
 
 
 def _load_full_control_dict() -> dict[str, object]:

@@ -16,7 +16,9 @@ _MODERATE_WMATIC = 65.0
 # REVERSIBLE travel tune (2026-05-09): when USDT+USDC ≥ this, ease pause frequency (WMATIC floor)
 # and keep copy caps ≥ ~4.5% instead of falling to the 2% streak clamp so often.
 _TRAVEL_HIGH_STABLE_USD = 95.0
-_CRITICAL_WMATIC_WHEN_STABLE_HIGH = 45.0
+# TEMPORARY (2026-05-23): lowered from 45 → 10 so ~28 WMATIC does not auto-pause rotation
+# while the gas stack is low but dollar stables are healthy. Revert when WMATIC is topped up.
+_CRITICAL_WMATIC_WHEN_STABLE_HIGH = 10.0
 _TRAVEL_RELAX_MIN_COPY_PCT = 0.045
 
 # Copy-trade cap bounds written to ``control.json`` (fraction of portfolio logic).
@@ -118,7 +120,7 @@ def evaluate_risk(
 
     Rules (stable runway = USDT + USDC; WMATIC gas runway):
     - stable_usd < 60 or WMATIC below tier threshold → paused, cap 0.02
-      (threshold is 50 when stable_usd < $95, else 45 — reversible travel tune 2026-05-09).
+      (threshold is 50 when stable_usd < $95, else 10 — TEMPORARY WMATIC floor 2026-05-23).
     - Else stable_usd < 100 or WMATIC < 65 → not paused, cap 0.03 (raised to ≥4.5% if stables ≥ $95)
     - Else → not paused, cap 0.06 (same ≥4.5% floor when stables ≥ $95)
     """
