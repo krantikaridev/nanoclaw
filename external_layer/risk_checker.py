@@ -24,6 +24,9 @@ _TRAVEL_RELAX_MIN_COPY_PCT = 0.045
 # Copy-trade cap bounds written to ``control.json`` (fraction of portfolio logic).
 _MIN_COPY_PCT = 0.02
 _MAX_COPY_PCT = 0.10
+_CLAMP_DURATION_SEC = 10 * 60
+_CLAMP_STREAK_LEN = 3
+_CLAMP_LOG_PREFIX = "[EXTERNAL][DEFENSIVE_CLAMP]"
 
 
 def _clamp_copy_pct(pct: float) -> float:
@@ -44,6 +47,143 @@ _RECENT_PROTECTION_EVALS: deque[tuple[float, bool, float]] = deque(maxlen=5)
 _FORCE_MIN_UNTIL_TS: float = 0.0
 # Worst ``stable_usd`` seen while the streak clamp timer is active (for early release vs tier).
 _CLAMP_STREAK_MIN_STABLE_USD: float | None = None
+
+# Previous-cycle snapshot for clamp observability (edge-triggered ON/OFF/RELAX logs).
+_CLAMP_LOG_PREV: dict[str, bool] = {
+    "timer_active": False,
+    "overlay_active": False,
+}
+
+
+def _reset_clamp_log_state() -> None:
+    """Clear clamp log edge state (unit tests)."""
+    _CLAMP_LOG_PREV["timer_active"] = False
+    _CLAMP_LOG_PREV["overlay_active"] = False
+
+
+def _protected_streak_label(recent: list[tuple[float, bool, float]]) -> str:
+    n = sum(1 for _, is_prot, _ in recent if is_prot)
+    return f"{n}/{_CLAMP_STREAK_LEN}"
+
+
+def _log_defensive_clamp(event: str, **fields: object) -> None:
+    """Stdout trace for operators; matches ``[EXTERNAL]`` control-layer prefix."""
+    bits = [f"{_CLAMP_LOG_PREFIX} {event}"]
+    for key, val in fields.items():
+        if val is None:
+            continue
+        if isinstance(val, float):
+            if key.endswith("_pct"):
+                bits.append(f"{key}={val:.4f}")
+            elif key == "wmatic_balance":
+                bits.append(f"{key}={val:.4f}")
+            elif key == "timer_remaining_s":
+                bits.append(f"{key}={val:.0f}")
+            else:
+                bits.append(f"{key}={val:.2f}")
+        elif isinstance(val, bool):
+            bits.append(f"{key}={'true' if val else 'false'}")
+        else:
+            bits.append(f"{key}={val}")
+    print(" | ".join(bits), flush=True)
+
+
+def _emit_defensive_clamp_observability(
+    *,
+    now: float,
+    stable_usd: float,
+    wmatic: float,
+    critical: bool,
+    moderate: bool,
+    protected: bool,
+    recent: list[tuple[float, bool, float]],
+    force_min: bool,
+    until_ts: float,
+    streak_min_stable: float | None,
+    tier_pct: float,
+    max_pct: float,
+    overlay_active: bool,
+    early_release: bool,
+    timer_armed_this_eval: bool,
+    timer_cleared_this_eval: bool,
+    clear_reason: str | None,
+    reason: str,
+) -> None:
+    prev_timer = bool(_CLAMP_LOG_PREV["timer_active"])
+    prev_overlay = bool(_CLAMP_LOG_PREV["overlay_active"])
+    remain_s = max(0.0, float(until_ts) - float(now)) if force_min else 0.0
+    common: dict[str, object] = {
+        "stable_usd": stable_usd,
+        "wmatic_balance": wmatic,
+        "protected_streak": _protected_streak_label(recent),
+        "protected": protected,
+        "critical": critical,
+        "moderate": moderate,
+    }
+
+    if timer_armed_this_eval:
+        _log_defensive_clamp(
+            "ON",
+            detail="timer_armed",
+            timer_remaining_s=remain_s,
+            streak_min_stable=streak_min_stable,
+            **common,
+        )
+
+    if timer_cleared_this_eval and (prev_timer or prev_overlay):
+        _log_defensive_clamp(
+            "OFF",
+            detail=clear_reason or "timer_cleared",
+            max_copy_trade_pct=max_pct,
+            tier_cap_pct=tier_pct,
+            **common,
+        )
+
+    if overlay_active and not prev_overlay:
+        reduced = max_pct < tier_pct - 1e-9
+        _log_defensive_clamp(
+            "ON",
+            detail="clamp_overlay",
+            max_copy_trade_pct=max_pct,
+            tier_cap_pct=tier_pct,
+            timer_remaining_s=remain_s,
+            streak_min_stable=streak_min_stable,
+            early_release=False,
+            **common,
+        )
+        if reduced:
+            _log_defensive_clamp(
+                "CAP_REDUCED",
+                max_copy_trade_pct=max_pct,
+                tier_cap_pct=tier_pct,
+                delta_pct=tier_pct - max_pct,
+                reason_snippet="defensive clamp active",
+                **common,
+            )
+    elif overlay_active and prev_overlay:
+        _log_defensive_clamp(
+            "STAY",
+            max_copy_trade_pct=max_pct,
+            tier_cap_pct=tier_pct,
+            timer_remaining_s=remain_s,
+            streak_min_stable=streak_min_stable,
+            reason=reason,
+            **common,
+        )
+    elif prev_overlay and not overlay_active:
+        relax_detail = "early_release" if early_release else "overlay_cleared"
+        _log_defensive_clamp(
+            "RELAX" if early_release else "OFF",
+            detail=relax_detail,
+            max_copy_trade_pct=max_pct,
+            tier_cap_pct=tier_pct,
+            streak_min_stable=streak_min_stable,
+            **common,
+        )
+
+    _CLAMP_LOG_PREV["timer_active"] = bool(force_min)
+    _CLAMP_LOG_PREV["overlay_active"] = bool(overlay_active)
+
 
 # Minimal ERC-20 ``balanceOf`` ABI for USDT / WMATIC reads.
 _ERC20_BALANCE_ABI: list[dict[str, Any]] = [
@@ -150,22 +290,49 @@ def evaluate_risk(
     protected = critical or moderate
     _RECENT_PROTECTION_EVALS.append((now, protected, stable_usd))
     recent = list(_RECENT_PROTECTION_EVALS)[-3:]
-    # Arm the streak clamp only while stable runway is still below the Moderate USD
-    # threshold; once stable_usd >= _MODERATE_STABLE_USD, drop the timer so we do not
-    # keep a 2% cap (and misleading "clamp" reason) after total stables have recovered.
-    if len(recent) == 3 and all(is_protected for _, is_protected, _ in recent):
-        if stable_usd < _MODERATE_STABLE_USD:
-            _FORCE_MIN_UNTIL_TS = max(_FORCE_MIN_UNTIL_TS, now + 10 * 60)
+
+    prev_until_ts = float(_FORCE_MIN_UNTIL_TS)
+    timer_cleared_this_eval = False
+    clear_reason: str | None = None
+
+    # Recovery: clear clamp timer before arming so travel-band stables are not stuck for 10m.
+    if stable_usd >= _MODERATE_STABLE_USD:
+        if prev_until_ts > now:
+            timer_cleared_this_eval = True
+            clear_reason = "healthy_stable_runway"
+        _FORCE_MIN_UNTIL_TS = 0.0
+        _CLAMP_STREAK_MIN_STABLE_USD = None
+    elif stable_usd >= _TRAVEL_HIGH_STABLE_USD and not critical:
+        if prev_until_ts > now:
+            timer_cleared_this_eval = True
+            clear_reason = "travel_stable_recovery"
+        _FORCE_MIN_UNTIL_TS = 0.0
+        _CLAMP_STREAK_MIN_STABLE_USD = None
+
+    timer_armed_this_eval = False
+    # Arm only in true stress band (<$95 stables) or while still critical; do not extend in travel band.
+    if len(recent) == _CLAMP_STREAK_LEN and all(
+        is_protected for _, is_protected, _ in recent
+    ):
+        if stable_usd < _MODERATE_STABLE_USD and (
+            stable_usd < _TRAVEL_HIGH_STABLE_USD or critical
+        ):
+            if stable_usd < _TRAVEL_HIGH_STABLE_USD:
+                _FORCE_MIN_UNTIL_TS = max(
+                    _FORCE_MIN_UNTIL_TS, now + _CLAMP_DURATION_SEC
+                )
+            elif _FORCE_MIN_UNTIL_TS <= now:
+                _FORCE_MIN_UNTIL_TS = now + _CLAMP_DURATION_SEC
+            if _FORCE_MIN_UNTIL_TS > prev_until_ts:
+                timer_armed_this_eval = True
             streak_cand = min(s for _, _, s in recent)
-            # Keep the worst stable seen for this cooldown so rolling the deque cannot
-            # erase a prior critical dip and re-trigger the full 2% clamp spuriously.
             if _CLAMP_STREAK_MIN_STABLE_USD is None:
                 _CLAMP_STREAK_MIN_STABLE_USD = streak_cand
             else:
-                _CLAMP_STREAK_MIN_STABLE_USD = min(_CLAMP_STREAK_MIN_STABLE_USD, streak_cand)
-    if stable_usd >= _MODERATE_STABLE_USD:
-        _FORCE_MIN_UNTIL_TS = 0.0
-        _CLAMP_STREAK_MIN_STABLE_USD = None
+                _CLAMP_STREAK_MIN_STABLE_USD = min(
+                    _CLAMP_STREAK_MIN_STABLE_USD, streak_cand
+                )
+
     force_min = now < _FORCE_MIN_UNTIL_TS
     if not force_min:
         _CLAMP_STREAK_MIN_STABLE_USD = None
@@ -192,14 +359,16 @@ def evaluate_risk(
     # Full 2% streak clamp still prevents whiplash after repeated protected reads, but if
     # total stables have recovered into a strictly better runway tier than the worst
     # stable level in that arming streak (e.g. critical → moderate), keep the tier cap
-    # (3% / 6%) instead of forcing 2% until stable_usd hits 85 or the timer expires.
+    # (3% / 6%) instead of forcing 2% until the timer expires or travel recovery clears it.
+    tier_pct = float(max_pct)
+    overlay_active = False
+    early_release = False
     if force_min and max_pct > _MIN_COPY_PCT:
         streak_min = _CLAMP_STREAK_MIN_STABLE_USD
         early_release = streak_min is not None and _stable_runway_tier_rank(
             stable_usd
         ) > _stable_runway_tier_rank(streak_min)
         if not early_release:
-            # REVERSIBLE: below $95 stables, keep legacy 2% streak clamp; at/above, floor at 4.5%.
             streak_floor = (
                 _TRAVEL_RELAX_MIN_COPY_PCT
                 if stable_usd >= _TRAVEL_HIGH_STABLE_USD
@@ -207,10 +376,32 @@ def evaluate_risk(
             )
             max_pct = _clamp_copy_pct(streak_floor)
             reason = f"{reason}; defensive clamp active (recent low-balance streak)"
+            overlay_active = True
 
     # Healthy runway: never write a copy cap below 4.5% unless we are in true critical pause.
     if stable_usd >= _TRAVEL_HIGH_STABLE_USD and not critical:
         max_pct = _clamp_copy_pct(max(float(max_pct), _TRAVEL_RELAX_MIN_COPY_PCT))
+
+    _emit_defensive_clamp_observability(
+        now=now,
+        stable_usd=stable_usd,
+        wmatic=wmatic,
+        critical=critical,
+        moderate=moderate,
+        protected=protected,
+        recent=recent,
+        force_min=force_min,
+        until_ts=float(_FORCE_MIN_UNTIL_TS),
+        streak_min_stable=_CLAMP_STREAK_MIN_STABLE_USD,
+        tier_pct=tier_pct,
+        max_pct=float(max_pct),
+        overlay_active=overlay_active,
+        early_release=early_release,
+        timer_armed_this_eval=timer_armed_this_eval,
+        timer_cleared_this_eval=timer_cleared_this_eval,
+        clear_reason=clear_reason,
+        reason=reason,
+    )
 
     return {
         "paused": paused,

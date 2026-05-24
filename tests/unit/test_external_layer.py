@@ -17,11 +17,13 @@ def _reset_control_last_successful_risk():
     risk_checker._RECENT_PROTECTION_EVALS.clear()
     risk_checker._FORCE_MIN_UNTIL_TS = 0.0
     risk_checker._CLAMP_STREAK_MIN_STABLE_USD = None
+    risk_checker._reset_clamp_log_state()
     yield
     control._last_successful_risk = None
     risk_checker._RECENT_PROTECTION_EVALS.clear()
     risk_checker._FORCE_MIN_UNTIL_TS = 0.0
     risk_checker._CLAMP_STREAK_MIN_STABLE_USD = None
+    risk_checker._reset_clamp_log_state()
 
 
 def test_control_command_defaults():
@@ -197,6 +199,39 @@ def test_evaluate_risk_recent_streak_forces_min_for_10_minutes(monkeypatch):
     assert recovered["max_copy_trade_pct"] == 0.06
 
 
+def test_defensive_clamp_logs_on_overlay(capsys):
+    risk_checker.evaluate_risk(usdt_balance=94.0, wmatic_balance=100.0)
+    risk_checker.evaluate_risk(usdt_balance=94.0, wmatic_balance=100.0)
+    risk_checker.evaluate_risk(usdt_balance=94.0, wmatic_balance=100.0)
+    out = capsys.readouterr().out
+    assert "[EXTERNAL][DEFENSIVE_CLAMP] ON" in out
+    assert "detail=timer_armed" in out or "detail=clamp_overlay" in out
+    assert "stable_usd=94.00" in out
+    assert "protected_streak=3/3" in out
+    assert "[EXTERNAL][DEFENSIVE_CLAMP] CAP_REDUCED" in out
+    assert "tier_cap_pct=0.0300" in out
+    assert "max_copy_trade_pct=0.0200" in out
+
+
+def test_defensive_clamp_logs_travel_recovery_off(monkeypatch, capsys):
+    t = {"now": 5_000_000.0}
+
+    def fake_time():
+        return t["now"]
+
+    monkeypatch.setattr(risk_checker.time, "time", fake_time)
+    risk_checker.evaluate_risk(usdt_balance=94.0, wmatic_balance=100.0)
+    t["now"] += 1
+    risk_checker.evaluate_risk(usdt_balance=94.0, wmatic_balance=100.0)
+    t["now"] += 1
+    risk_checker.evaluate_risk(usdt_balance=94.0, wmatic_balance=100.0)
+    capsys.readouterr()
+    risk_checker.evaluate_risk(usdt_balance=96.0, wmatic_balance=100.0)
+    out = capsys.readouterr().out
+    assert "[EXTERNAL][DEFENSIVE_CLAMP] OFF" in out
+    assert "detail=travel_stable_recovery" in out
+
+
 def test_evaluate_risk_streak_all_moderate_stable_still_clamps_to_two_pct(monkeypatch):
     """Below $95 combined stables, three protected reads still tighten to the 2% streak floor."""
     t = {"now": 2_000_000.0}
@@ -214,7 +249,8 @@ def test_evaluate_risk_streak_all_moderate_stable_still_clamps_to_two_pct(monkey
     assert "defensive clamp" in str(out3.get("reason", "")).lower()
 
 
-def test_evaluate_risk_streak_at_high_stables_uses_four_point_five_floor(monkeypatch):
+def test_evaluate_risk_streak_at_high_stables_skips_clamp_in_travel_band(monkeypatch):
+    """Stables ≥ $95 (not critical): no streak arm — tier cap 4.5% only, no clamp overlay."""
     t = {"now": 2_100_000.0}
 
     def fake_time():
@@ -227,7 +263,7 @@ def test_evaluate_risk_streak_at_high_stables_uses_four_point_five_floor(monkeyp
     t["now"] += 1
     out3 = risk_checker.evaluate_risk(usdt_balance=99.0, wmatic_balance=100.0)
     assert out3["max_copy_trade_pct"] == 0.045
-    assert "defensive clamp" in str(out3.get("reason", "")).lower()
+    assert "defensive clamp" not in str(out3.get("reason", "")).lower()
 
 
 def test_evaluate_risk_streak_clamp_releases_when_stable_tier_beats_streak_worst(monkeypatch):

@@ -44,10 +44,11 @@ Risk tier is determined by **either** **`stable_usd` (USDT + combined USDC)** **
 
 ### Additional defensive clamp logic
 - The layer tracks the last several risk evaluations (using a short rolling window).
-- If the **last 3 evaluations** were in a protected tier (Critical or Moderate), it activates a **temporary defensive clamp**: forces `max_copy_trade_pct = 2%` for approximately **10 minutes**, even if the current balances would otherwise allow 3% or 6%.
-- **Clamp adjustment:** when **`stable_usd` recovers to ≥ 85**, the timer clears and the 2% streak clamp stops immediately (no need to wait the full ~10 minutes); if combined stables are still below **85** but the **stable-runway tier** (critical vs moderate bands on total stables) is **strictly better** than the worst stable level in the arming streak, the layer keeps the **tier** copy cap (e.g. 3% in moderate) instead of forcing 2%.
-- Reason string includes: `"defensive clamp active (recent low-balance streak)"`.
-- This adds a form of hysteresis to avoid rapid toggling when balances hover near thresholds.
+- If the **last 3 evaluations** were in a protected tier (Critical or Moderate) **and** stables are **&lt; $95** (or still Critical), it arms a **10-minute** clamp timer. Streak arming does **not** run in the travel band (**`stable_usd` ≥ 95**, not critical).
+- While the timer is active, copy cap may drop to **2%** (&lt; $95) or **4.5%** (≥ $95) with reason suffix `"defensive clamp active (recent low-balance streak)"`.
+- **Recovery:** timer clears immediately when **`stable_usd` ≥ 95** (travel) or **≥ 100** (healthy); timer is **not extended** while stables stay ≥ $95. **Tier early release** still applies when stable runway improves vs the worst level in the arming streak (e.g. critical → moderate keeps 3% without the clamp overlay).
+- **Observability:** stdout lines prefixed with **`[EXTERNAL][DEFENSIVE_CLAMP]`** — events `ON`, `STAY`, `OFF`, `RELAX`, and `CAP_REDUCED` (includes `stable_usd`, `wmatic_balance`, `protected_streak`, caps, timer).
+- This adds hysteresis to avoid rapid toggling when balances hover near thresholds.
 
 **Why these numbers?**  
 They were chosen to leave headroom for gas fees (WMATIC/MATIC on Polygon), potential exit transactions, and a small buffer for recovery. The values were **slightly loosened from stricter initial thresholds** after early testing showed excessive pausing.
@@ -158,7 +159,7 @@ You can extend with additional helpers (e.g. `nc-ext-restart`) following the `nc
 |--------------------------------|---------------------------------------------|--------------------|
 | `paused: true` + reason mentions Critical | Total stables (USDT+USDC) or WMATIC below critical threshold | Monitor recovery; top up stables or WMATIC on-chain if prolonged. |
 | `max_copy_trade_pct: 0.03`     | Moderate tier active                        | Normal during mild stress; watch for improvement. |
-| `reason` contains "defensive clamp" | Recent streak of low-balance readings      | Temporary; relaxes after ~10 min, or immediately once **`stable_usd` ≥ 85**. |
+| `reason` contains "defensive clamp" | Recent streak of low-balance readings      | Temporary; relaxes after ~10 min, on **`stable_usd` ≥ 95**, or tier early release. Watch **`[EXTERNAL][DEFENSIVE_CLAMP]`** logs. |
 | `last_updated` not advancing   | External layer stopped or RPC failure      | Restart with `nc-ext-start`; check logs and `nanohealth`. |
 
 ## Current known limitations
