@@ -85,6 +85,9 @@ class ClampPolicy:
     recovery_stable_usd: float = 95.0
     healthy_stable_usd: float = 100.0
     recovery_wmatic: float = 65.0
+    # WMATIC floor to lift copy cap toward ``travel_release_copy_pct`` when stables are in travel band.
+    travel_recovery_wmatic: float = 28.0
+    travel_release_copy_pct: float = 0.06
     streak_floor_pct: float = 0.02
     travel_floor_pct: float = 0.045
     min_copy_pct: float = 0.02
@@ -145,6 +148,15 @@ def load_risk_policy() -> ExternalRiskPolicy:
             "EXTERNAL_CLAMP_HEALTHY_STABLE_USD", tier.moderate_stable_usd, min_val=1.0
         ),
         recovery_wmatic=_env_float("EXTERNAL_CLAMP_RECOVERY_WMATIC", 65.0, min_val=0.0),
+        travel_recovery_wmatic=_env_float(
+            "EXTERNAL_CLAMP_TRAVEL_RECOVERY_WMATIC", 28.0, min_val=0.0
+        ),
+        travel_release_copy_pct=_env_float(
+            "EXTERNAL_CLAMP_TRAVEL_RELEASE_COPY_PCT",
+            tier.tier_healthy_copy_pct,
+            min_val=0.01,
+            max_val=0.10,
+        ),
         streak_floor_pct=_env_float(
             "EXTERNAL_CLAMP_STREAK_FLOOR_PCT", 0.02, min_val=0.01, max_val=0.10
         ),
@@ -191,7 +203,9 @@ def log_risk_policy_once() -> None:
         f"clamp_streak_evals={c.streak_evals} "
         f"clamp_duration_sec={c.duration_sec:.0f} "
         f"recovery_stable_usd={c.recovery_stable_usd:.0f} "
-        f"healthy_stable_usd={c.healthy_stable_usd:.0f}",
+        f"healthy_stable_usd={c.healthy_stable_usd:.0f} "
+        f"travel_recovery_wmatic={c.travel_recovery_wmatic:.0f} "
+        f"travel_release_copy_pct={c.travel_release_copy_pct:.4f}",
         flush=True,
     )
 

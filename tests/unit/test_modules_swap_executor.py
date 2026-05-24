@@ -34,7 +34,9 @@ from modules.swap_executor import (
     _MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_FLOOR_USD,
     _MAIN_STRATEGY_FORCE_PROFIT_TAKE_WMATIC_USD_MIN,
     _MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN,
+    _MAIN_STRATEGY_LOW_WMATIC_FORCE_NOTIONAL_FLOOR_USD,
     _MAIN_STRATEGY_LOW_WMATIC_FORCE_WM_MIN_USD,
+    _MAIN_STRATEGY_MODERATE_FORCE_NOTIONAL_FLOOR_USD,
     _MAIN_STRATEGY_LOW_WMATIC_P2_SIGNAL_MIN,
     _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_CYCLES_MIN,
     _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_LOW_WM_CYCLES_MIN,
@@ -187,11 +189,13 @@ def test_profit_take_force_small_relief_eligible_requires_cycles_and_floor():
 
 
 def test_profit_take_force_small_relief_eligible_at_observed_wmatic_range():
-    """Signal-Driven Rotation: low stack (~$5.7) force at 3 cycles; sub-$2 stack rejected."""
+    """Signal-Driven Rotation: low stack (~$5.7) force at 5 cycles; sub-$2 stack rejected."""
+    wm = 5.7
+    force_notional = _profit_take_force_notional_floor_usd(wm)
     assert _profit_take_force_small_relief_eligible(
         direction="WMATIC_TO_USDT",
-        wm_equiv_usd=5.7,
-        notional_usd=1.9,
+        wm_equiv_usd=wm,
+        notional_usd=force_notional,
         cycles_since_exit=_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN,
     )
     assert not _profit_take_force_small_relief_eligible(
@@ -229,11 +233,12 @@ def test_profit_take_balance_relief_bypass_force_weak_signal_after_idle_cycles(c
 
 
 def test_profit_take_balance_relief_bypass_force_below_standard_p2_floors(capsys):
-    """TEMPORARY SPRINT FIX - May 2026: force path bypasses $7 wm / $2 notional / weak signal."""
+    """TEMPORARY SPRINT FIX - May 2026: force path bypasses wm / notional / weak signal gates."""
     state: dict = {}
-    for _ in range(_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN):
+    for _ in range(_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN):
         _profit_take_bump_cycle_counter(state)
-    notional = 1.9
+    wm = 6.8
+    notional = _profit_take_force_notional_floor_usd(wm)
     decision = TradeDecision(
         direction="WMATIC_TO_USDT",
         amount_in=int(notional * 1_000_000_000_000_000_000),
@@ -243,25 +248,25 @@ def test_profit_take_balance_relief_bypass_force_below_standard_p2_floors(capsys
         decision,
         balances=Balances(usdt=10.0, wmatic=6.8, pol=1.0, usdc=30.0),
         current_price_usd=1.0,
-        min_trade_usd=10.0,
+        min_trade_usd=15.0,
         profit_signal={"reason": "HOLD"},
         state=state,
     )
     captured = capsys.readouterr().out
     assert "FORCE small profit take | WMATIC=$6.80 low_stack" in captured
-    assert "no exit for 4 cycles" in captured
+    assert "no exit for 5 cycles" in captured
     assert f"notional=${notional:.2f}" in captured
     assert "bypassing min_notional" in captured
     assert "force_no_exit_cycles" in captured
 
 
 def test_profit_take_balance_relief_bypass_force_at_observed_wmatic_range(capsys):
-    """TEMPORARY SPRINT: full bypass path when WMATIC ~$5.7 and idle 4+ cycles."""
+    """TEMPORARY SPRINT: full bypass path when WMATIC ~$5.7 and idle 5+ cycles."""
     state: dict = {}
-    for _ in range(_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN):
+    for _ in range(_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN):
         _profit_take_bump_cycle_counter(state)
-    notional = 1.9
     wmatic_usd = 5.7
+    notional = _profit_take_force_notional_floor_usd(wmatic_usd)
     decision = TradeDecision(
         direction="WMATIC_TO_USDT",
         amount_in=int(notional * 1_000_000_000_000_000_000),
@@ -271,7 +276,7 @@ def test_profit_take_balance_relief_bypass_force_at_observed_wmatic_range(capsys
         decision,
         balances=Balances(usdt=10.0, wmatic=wmatic_usd, pol=1.0, usdc=30.0),
         current_price_usd=1.0,
-        min_trade_usd=10.0,
+        min_trade_usd=15.0,
         profit_signal={"reason": "HOLD"},
         state=state,
     )
@@ -322,7 +327,7 @@ def test_profit_take_balance_relief_bypass_rejects_sub_two_dollar_wmatic_stack()
 
 
 def test_profit_take_balance_relief_bypass_accepts_low_wmatic_stack_below_seven(capsys):
-    """Signal-Driven Rotation: $5.50 WMATIC stack passes low-tier P2 at $5 notional floor."""
+    """Signal-Driven Rotation: $5.50 WMATIC stack passes low-tier P2 at raised notional floor."""
     floor = _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD
     decision = TradeDecision(
         direction="WMATIC_TO_USDT",
@@ -348,16 +353,18 @@ def test_profit_take_wmatic_stack_low_boundary():
 
 
 def test_profit_take_force_small_relief_low_wmatic_two_cycles():
+    wm = 5.5
+    force_notional = _profit_take_force_notional_floor_usd(wm)
     assert _profit_take_force_small_relief_eligible(
         direction="WMATIC_TO_USDT",
-        wm_equiv_usd=5.5,
-        notional_usd=_MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_FLOOR_USD,
+        wm_equiv_usd=wm,
+        notional_usd=force_notional,
         cycles_since_exit=_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN,
     )
     assert not _profit_take_force_small_relief_eligible(
         direction="WMATIC_TO_USDT",
         wm_equiv_usd=_MAIN_STRATEGY_LOW_WMATIC_FORCE_WM_MIN_USD - 0.01,
-        notional_usd=_MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_FLOOR_USD,
+        notional_usd=force_notional,
         cycles_since_exit=_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN - 1,
     )
 
@@ -370,15 +377,30 @@ def test_profit_take_stack_tier_and_moderate_thresholds():
     assert not _profit_take_wmatic_stack_moderate(5.0)
     assert _profit_take_force_small_relief_eligible(
         direction="WMATIC_TO_USDT",
-        wm_equiv_usd=10.0,
-        notional_usd=_MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_FLOOR_USD,
+        wm_equiv_usd=12.0,
+        notional_usd=_MAIN_STRATEGY_MODERATE_FORCE_NOTIONAL_FLOOR_USD,
         cycles_since_exit=_MAIN_STRATEGY_MODERATE_FORCE_CYCLES_MIN,
     )
     assert not _profit_take_force_small_relief_eligible(
         direction="WMATIC_TO_USDT",
-        wm_equiv_usd=10.0,
-        notional_usd=_MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_FLOOR_USD,
+        wm_equiv_usd=12.0,
+        notional_usd=_MAIN_STRATEGY_MODERATE_FORCE_NOTIONAL_FLOOR_USD,
         cycles_since_exit=_MAIN_STRATEGY_MODERATE_FORCE_CYCLES_MIN - 1,
+    )
+
+
+def test_profit_take_force_notional_floor_tiered():
+    assert (
+        _profit_take_force_notional_floor_usd(5.0)
+        == _MAIN_STRATEGY_LOW_WMATIC_FORCE_NOTIONAL_FLOOR_USD
+    )
+    assert (
+        _profit_take_force_notional_floor_usd(10.0)
+        == _MAIN_STRATEGY_MODERATE_FORCE_NOTIONAL_FLOOR_USD
+    )
+    assert (
+        _profit_take_force_notional_floor_usd(20.0)
+        == _MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_FLOOR_USD
     )
 
 
@@ -394,7 +416,17 @@ def test_profit_take_long_idle_lowers_notional_floor():
         direction="WMATIC_TO_USDT",
         wm_equiv_usd=wm,
         notional_usd=1.36,
-        cycles_since_exit=_MAIN_STRATEGY_LONG_IDLE_CYCLES_LOW,
+        cycles_since_exit=_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN,
+    )
+
+
+def test_profit_take_long_idle_healthy_stack_uses_force_floor_not_micro():
+    wm = 20.0
+    cycles = 8
+    assert _profit_take_long_idle_active(wm, cycles)
+    assert (
+        _profit_take_force_notional_floor_usd(wm, cycles_since_exit=cycles)
+        == _MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_FLOOR_USD
     )
 
 
@@ -515,20 +547,18 @@ def test_main_strategy_idle_rotation_sell_not_before_cycle_threshold():
     assert _main_strategy_idle_rotation_sell_decision(balances, 1.0, state=state) is None
     eligible, note = _main_strategy_idle_rotation_eligibility(balances, 1.0, state)
     assert not eligible
-    assert "idle_cycles=0/1" in note
+    assert "idle_cycles=0/" in note
 
 
-def test_main_strategy_mild_loss_fast_rotation_zero_cycles(capsys):
-    """~63 WMATIC @ ~$0.09, -5.99% HOLD → fast path without waiting for idle cycles."""
+def test_main_strategy_mild_loss_fast_skipped_when_capped_below_rotation_min():
+    """$5–$10 mild-loss band: 30% cap cannot reach $8 rotation floor → no micro exit."""
     from modules.swap_executor import (
-        _MAIN_STRATEGY_MILD_LOSS_FAST_LOG,
         _main_strategy_idle_rotation_sell_decision,
+        _profit_take_bump_cycle_counter,
     )
 
-    state: dict = {"profit_take_rotation": {"cycles_since_exit": 0}}
-    price = 0.09
-    wmatic_qty = 63.0
-    balances = Balances(usdt=80.0, usdc=30.0, wmatic=wmatic_qty, pol=1.0)
+    state: dict = {}
+    _profit_take_bump_cycle_counter(state)
     hold_signal = {
         "reason": "HOLD",
         "gain_pct": -5.99,
@@ -537,22 +567,12 @@ def test_main_strategy_mild_loss_fast_rotation_zero_cycles(capsys):
         "message": "holding",
     }
     decision = _main_strategy_idle_rotation_sell_decision(
-        balances,
-        price,
+        Balances(usdt=80.0, usdc=30.0, wmatic=63.0, pol=1.0),
+        0.09,
         state=state,
         profit_signal=hold_signal,
     )
-    assert decision is not None
-    assert decision.direction == "WMATIC_TO_USDT"
-    wm_usd = wmatic_qty * price
-    max_notional = 2.25
-    expected_frac = min(0.30, max_notional / wm_usd)
-    assert decision.amount_in == int(wmatic_qty * expected_frac * 1e18)
-    out = capsys.readouterr().out
-    assert _MAIN_STRATEGY_MILD_LOSS_FAST_LOG.split("|")[0].strip() in out
-    assert "reason=accelerate_recovery" in out
-    assert "mild_loss_fast=True" in out
-    assert "path=mild_loss_fast" in out
+    assert decision is None
 
 
 def test_main_strategy_mild_loss_fast_rotation_requires_healthy_usdt():
@@ -596,15 +616,13 @@ def test_main_strategy_mild_loss_fast_rotation_requires_wmatic_qty_above_ten():
 
 
 def test_wmatic_stable_p2_relief_mild_loss_idle_bypass_log(capsys):
-    """Mild-loss idle ~$1.7 notional uses recovery bypass log, not standard P2 relief."""
+    """Mild-loss bypass for $8–$9.99 notional when stack is in mild-loss band."""
     from modules.swap_executor import _wmatic_stable_p2_relief_override_active
 
     state: dict = {}
     _profit_take_bump_cycle_counter(state)
     price = 0.70
     wmatic_qty = 8.0
-    wm_usd = wmatic_qty * price
-    frac = min(0.30, 2.25 / wm_usd)
     hold_signal = {
         "reason": "HOLD",
         "gain_pct": -5.9,
@@ -613,7 +631,7 @@ def test_wmatic_stable_p2_relief_mild_loss_idle_bypass_log(capsys):
     }
     decision = TradeDecision(
         direction="WMATIC_TO_USDT",
-        amount_in=int(wmatic_qty * frac * 1e18),
+        trade_size=9.0,
     )
     balances = Balances(usdt=80.0, usdc=30.0, wmatic=wmatic_qty, pol=1.0)
     assert _wmatic_stable_p2_relief_override_active(
@@ -631,8 +649,8 @@ def test_wmatic_stable_p2_relief_mild_loss_idle_bypass_log(capsys):
     assert "P2 RELIEF OVERRIDE ACTIVE" not in out
 
 
-def test_wmatic_stable_p2_relief_not_deferred_on_mild_loss_fast(monkeypatch, capsys):
-    """Fast mild-loss rotation must clear P2 even when X-Signal rotation has priority."""
+def test_wmatic_stable_p2_relief_not_deferred_on_mild_loss_band_bypass(monkeypatch, capsys):
+    """Mild-loss bypass ($8–$9.99) clears P2 defer when X-Signal rotation has priority."""
     from modules.swap_executor import (
         _wmatic_stable_p2_relief_override_active,
         _profit_take_bump_cycle_counter,
@@ -644,14 +662,11 @@ def test_wmatic_stable_p2_relief_not_deferred_on_mild_loss_fast(monkeypatch, cap
     )
     state: dict = {}
     _profit_take_bump_cycle_counter(state)
-    balances = Balances(usdt=80.0, usdc=30.0, wmatic=63.0, pol=1.0)
-    price = 0.09
-    wm_usd = 63.0 * price
-    max_notional = 2.25
-    frac = min(0.30, max_notional / wm_usd)
+    balances = Balances(usdt=80.0, usdc=30.0, wmatic=8.0, pol=1.0)
+    price = 0.70
     decision = TradeDecision(
         direction="WMATIC_TO_USDT",
-        amount_in=int(63.0 * frac * 1e18),
+        trade_size=9.0,
         signal_strength=0.0,
     )
     hold_signal = {
@@ -673,16 +688,12 @@ def test_wmatic_stable_p2_relief_not_deferred_on_mild_loss_fast(monkeypatch, cap
 
 
 def test_mild_loss_rotation_min_notional_bypass_below_global_min(capsys):
-    """~$1.5 recover_mild_loss exit clears MIN_TRADE_USD without standard P2 $2 floor."""
+    """$8–$9.99 mild-loss exit clears MIN_TRADE_USD ($10) via recovery bypass."""
     state: dict = {}
     for _ in range(_MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN):
         _profit_take_bump_cycle_counter(state)
     price = 0.70
     wmatic_qty = 8.0
-    wm_usd = wmatic_qty * price
-    frac = min(0.30, 2.25 / wm_usd)
-    notional = wm_usd * frac
-    assert notional + 1e-9 < 2.0
     hold_signal = {
         "reason": "HOLD",
         "gain_pct": -5.9,
@@ -691,7 +702,7 @@ def test_mild_loss_rotation_min_notional_bypass_below_global_min(capsys):
     }
     decision = TradeDecision(
         direction="WMATIC_TO_USDT",
-        amount_in=int(wmatic_qty * frac * 1e18),
+        trade_size=9.0,
     )
     balances = Balances(usdt=80.0, usdc=30.0, wmatic=wmatic_qty, pol=1.0)
     assert _main_strategy_mild_loss_rotation_min_notional_bypass_allowed(
@@ -734,7 +745,7 @@ def test_mild_loss_rotation_min_notional_bypass_rejects_outside_loss_band():
 
 
 def test_mild_loss_rotation_min_notional_bypass_nine_dollar_stack():
-    """~$9 WMATIC stack (extended mild-loss band) clears MIN_TRADE_USD for ~$1.7 recovery sell."""
+    """~$9 WMATIC stack in mild-loss band clears MIN_TRADE_USD via $8–$9.99 bypass."""
     state: dict = {}
     for _ in range(_MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN):
         _profit_take_bump_cycle_counter(state)
@@ -742,9 +753,6 @@ def test_mild_loss_rotation_min_notional_bypass_nine_dollar_stack():
     wmatic_qty = 10.0
     wm_usd = wmatic_qty * price
     assert wm_usd + 1e-9 <= 10.0
-    frac = min(0.30, 2.25 / wm_usd)
-    notional = wm_usd * frac
-    assert 1.4 <= notional <= 2.25
     hold_signal = {
         "reason": "HOLD",
         "gain_pct": -4.2,
@@ -753,7 +761,7 @@ def test_mild_loss_rotation_min_notional_bypass_nine_dollar_stack():
     }
     decision = TradeDecision(
         direction="WMATIC_TO_USDT",
-        amount_in=int(wmatic_qty * frac * 1e18),
+        trade_size=9.0,
     )
     balances = Balances(usdt=80.0, usdc=30.0, wmatic=wmatic_qty, pol=1.0)
     assert _main_strategy_mild_loss_rotation_min_notional_bypass_allowed(
@@ -802,9 +810,6 @@ def test_wmatic_stable_p2_relief_mild_loss_idle_not_deferred_on_x_signal(monkeyp
     state: dict = {}
     _profit_take_bump_cycle_counter(state)
     price = 0.70
-    wmatic_qty = 8.0
-    wm_usd = wmatic_qty * price
-    frac = min(0.30, 2.25 / wm_usd)
     hold_signal = {
         "reason": "HOLD",
         "gain_pct": -5.9,
@@ -813,9 +818,9 @@ def test_wmatic_stable_p2_relief_mild_loss_idle_not_deferred_on_x_signal(monkeyp
     }
     decision = TradeDecision(
         direction="WMATIC_TO_USDT",
-        amount_in=int(wmatic_qty * frac * 1e18),
+        trade_size=9.0,
     )
-    balances = Balances(usdt=80.0, usdc=30.0, wmatic=wmatic_qty, pol=1.0)
+    balances = Balances(usdt=80.0, usdc=30.0, wmatic=8.0, pol=1.0)
     assert _wmatic_stable_p2_relief_override_active(
         decision,
         balances=balances,
@@ -829,22 +834,17 @@ def test_wmatic_stable_p2_relief_mild_loss_idle_not_deferred_on_x_signal(monkeyp
     assert "MILD-LOSS RECOVERY BYPASS ACTIVE" in out
 
 
-def test_main_strategy_mild_loss_idle_rotation_after_one_cycle(capsys):
-    """~$5.6 stack, -5.9% HOLD → mild-loss idle (not fast path) after 1 idle cycle."""
+def test_main_strategy_mild_loss_idle_skipped_when_sell_below_rotation_min():
+    """~$5.6 stack cannot reach $8 rotation min at 30% sell fraction."""
     from modules.swap_executor import (
-        _MAIN_STRATEGY_IDLE_ROTATION_ALLOWED_LOG,
         _MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN,
-        _MAIN_STRATEGY_MILD_LOSS_IDLE_LOG,
-        _MAIN_STRATEGY_SMALL_IDLE_ROTATION_TRIGGERED_LOG,
         _profit_take_bump_cycle_counter,
+        _main_strategy_idle_rotation_sell_decision,
     )
 
     state: dict = {}
     for _ in range(_MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN):
         _profit_take_bump_cycle_counter(state)
-    price = 0.70
-    wmatic_qty = 8.0
-    balances = Balances(usdt=80.0, usdc=30.0, wmatic=wmatic_qty, pol=1.0)
     hold_signal = {
         "reason": "HOLD",
         "gain_pct": -5.9,
@@ -853,31 +853,20 @@ def test_main_strategy_mild_loss_idle_rotation_after_one_cycle(capsys):
         "message": "holding",
     }
     decision = _main_strategy_idle_rotation_sell_decision(
-        balances,
-        price,
+        Balances(usdt=80.0, usdc=30.0, wmatic=8.0, pol=1.0),
+        0.70,
         state=state,
         profit_signal=hold_signal,
     )
-    assert decision is not None
-    assert decision.direction == "WMATIC_TO_USDT"
-    wm_usd = wmatic_qty * price
-    max_notional = 2.25
-    expected_frac = min(0.30, max_notional / wm_usd)
-    assert decision.amount_in == int(wmatic_qty * expected_frac * 1e18)
-    out = capsys.readouterr().out
-    assert _MAIN_STRATEGY_SMALL_IDLE_ROTATION_TRIGGERED_LOG.split("|")[0].strip() in out
-    assert "reason=recover_mild_loss" in out
-    assert _MAIN_STRATEGY_MILD_LOSS_IDLE_LOG.split("|")[0].strip() in out
-    assert _MAIN_STRATEGY_IDLE_ROTATION_ALLOWED_LOG.split("|")[0].strip() in out
-    assert "path=mild_loss_idle" in out
-    assert "mild_loss_idle=True" in out
+    assert decision is None
 
 
 def test_main_strategy_mild_loss_idle_rotation_at_minus_seven_pct():
-    """-7% HOLD in mild-loss band triggers after one idle cycle (~$5.7 stack)."""
+    """-7% HOLD in mild-loss band still blocked when capped notional < rotation min."""
     from modules.swap_executor import (
         _MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN,
         _profit_take_bump_cycle_counter,
+        _main_strategy_idle_rotation_sell_decision,
     )
 
     state: dict = {}
@@ -896,8 +885,7 @@ def test_main_strategy_mild_loss_idle_rotation_at_minus_seven_pct():
         state=state,
         profit_signal=hold_signal,
     )
-    assert decision is not None
-    assert decision.direction == "WMATIC_TO_USDT"
+    assert decision is None
 
 
 def test_select_main_strategy_idle_rotation_before_cut_loss_high_token_count():
@@ -948,9 +936,9 @@ def test_profit_take_balance_relief_bypass_accepts_notional_at_p2_floor(capsys):
     assert "allowed=True" in captured
 
 
-def test_profit_take_balance_relief_bypass_rejects_sub_five_notional(capsys):
-    """May 2026: ~$2–$3 micro profit takes blocked at $5 P2 relief floor."""
-    for notional in (2.05, 2.88, 3.38, 3.6):
+def test_profit_take_balance_relief_bypass_rejects_sub_eight_notional(capsys):
+    """May 2026: ~$2–$7 micro profit takes blocked at $8 P2 relief floor."""
+    for notional in (2.05, 2.88, 3.38, 3.6, 5.0, 7.5):
         decision = TradeDecision(
             direction="WMATIC_TO_USDT",
             amount_in=int(notional * 1_000_000_000_000_000_000),
@@ -1034,7 +1022,7 @@ def test_profit_take_balance_relief_signal_strength_ignores_hold_when_wmatic_hea
 
 
 def test_profit_take_balance_relief_bypass_allows_small_exit_with_hold_and_healthy_stack(capsys):
-    """May 2026: HOLD ignored for scoring; notional must meet $5 P2 floor on healthy stack."""
+    """May 2026: HOLD ignored for scoring; notional must meet $8 P2 floor on healthy stack."""
     floor = _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD
     decision = TradeDecision(
         direction="WMATIC_TO_USDT",
@@ -1157,9 +1145,10 @@ def test_profit_take_balance_relief_signal_strength_strong_exit_outranks_tp_hit(
 
 def test_profit_take_balance_relief_bypass_small_trade_decent_balance_trailing_stop():
     """TEMPORARY sprint: sub-MIN notional qualifies when WMATIC stack is healthy + strong exit."""
+    floor = _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD
     decision = TradeDecision(
         direction="WMATIC_TO_USDT",
-        amount_in=int(5 * 1_000_000_000_000_000_000),
+        amount_in=int(floor * 1_000_000_000_000_000_000),
     )
     balances = Balances(usdt=10.0, usdc=30.0, wmatic=12.0, pol=1.0)
     assert _profit_take_balance_relief_bypass_allowed(
@@ -1197,9 +1186,10 @@ def test_profit_take_balance_relief_bypass_allows_hold_on_low_wmatic_stack(capsy
 
 
 def test_profit_take_balance_relief_bypass_qualifies_via_profit_signal_metrics():
+    floor = _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD
     decision = TradeDecision(
         direction="WMATIC_TO_USDT",
-        amount_in=int(7 * 1_000_000_000_000_000_000),
+        amount_in=int(floor * 1_000_000_000_000_000_000),
     )
     balances = Balances(usdt=10.0, usdc=30.0, wmatic=15.0, pol=1.0)
     assert _profit_take_balance_relief_bypass_allowed(
@@ -1557,10 +1547,11 @@ def test_plan_main_strategy_gross_edge_pct_uses_take_profit_fraction(monkeypatch
 
 
 def test_infer_expected_gross_edge_pct_scales_x_signal_by_strength(monkeypatch):
-    monkeypatch.setattr("modules.swap_executor.cfg.env_float", lambda _k, default: 12.0)
+    monkeypatch.setattr("modules.swap_executor.cfg.X_SIGNAL_EQUITY_STRONG_TP_PCT", 12.0)
     weak = TradeDecision(direction="USDC_TO_EQUITY", signal_strength=0.65)
     strong = TradeDecision(direction="USDC_TO_EQUITY", signal_strength=0.95)
-    assert _infer_expected_gross_edge_pct(weak) == pytest.approx(0.6)
+    # Linear scale from 0.6 floor: 0.65 → 12.5% of strong_tp; 0.95 → 87.5%.
+    assert _infer_expected_gross_edge_pct(weak) == pytest.approx(1.5)
     assert _infer_expected_gross_edge_pct(strong) == pytest.approx(10.5)
 
 
@@ -1690,9 +1681,13 @@ def test_select_main_strategy_rejects_buy_below_min_net_edge(monkeypatch, capsys
     skipped: list[str] = []
     monkeypatch.setattr(clean_swap, "_log_trade_skipped", lambda reason: skipped.append(reason))
 
+    state: dict = {}
+    for _ in range(6):
+        _profit_take_bump_cycle_counter(state)
     decision = select_main_strategy_trade(
         clean_swap.Balances(usdt=80.0, wmatic=20.0, pol=1.0),
         current_price=0.75,
+        state=state,
     )
 
     assert not decision.should_execute

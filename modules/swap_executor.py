@@ -14,6 +14,8 @@ from config import (
     MAIN_STRATEGY_CUT_LOSS_MIN_WMATIC_BALANCE,
     MAIN_STRATEGY_CUT_LOSS_SELL_FRACTION,
     MAIN_STRATEGY_CUT_LOSS_WMATIC_USD,
+    MAIN_STRATEGY_ACCUMULATE_COOLDOWN_CYCLES,
+    MAIN_STRATEGY_ACCUMULATE_MAX_WMATIC_USD,
     MAIN_STRATEGY_MIN_USDT_RESERVE,
     MAIN_STRATEGY_RESERVE_SELL_FRACTION,
     MAIN_STRATEGY_TP_TRIGGER_WMATIC_USD,
@@ -615,6 +617,21 @@ def select_main_strategy_trade(
     if idle_rotation is not None:
         return idle_rotation
 
+    defer_accum = _main_strategy_accumulate_deferred_reason(wmatic_value_usd, state)
+    if defer_accum is not None:
+        decision_log.log_main_strategy_decision(
+            action="REJECT",
+            reason="accumulate_deferred_anti_churn",
+            direction="USDT_TO_WMATIC",
+            wmatic_balance=float(balances.wmatic),
+            wmatic_usd=wmatic_value_usd,
+            extra=defer_accum,
+            state=state,
+        )
+        return TradeDecision(
+            message=f"ℹ️ Main WMATIC buy deferred ({defer_accum})",
+        )
+
     gross_edge = plan_main_strategy_gross_edge_pct()
     buy_decision = TradeDecision(
         direction="USDT_TO_WMATIC",
@@ -725,13 +742,12 @@ def _defer_if_dust(
     return True
 
 
-# TEMPORARY SPRINT FIX - May 2026: P2 profit-take relief for capital rotation.
-# Small WMATIC→stable exits (~$3.38–$3.99) were hard-blocked by MIN_TRADE_USD / dust defer
-# (`main_strategy_dust_deferred`) even when the stack was healthy. Revert after sprint window.
-_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 7.0
-# Gas guard: P2 relief notional floor (raised May 2026 from $2.0 to stop $2.70 micro exits).
-_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 5.0
-_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH = 0.55
+# P2 / force / idle rotation thresholds — env-tunable via config.py (MAIN_STRATEGY_* in .env).
+_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = float(cfg.MAIN_STRATEGY_P2_WM_MIN_USD)
+_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = float(
+    cfg.MAIN_STRATEGY_ROTATION_MIN_NOTIONAL_USD
+)
+_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH = float(cfg.MAIN_STRATEGY_P2_SIGNAL_MIN)
 _PROFIT_TAKE_P2_RELIEF_LOG = "[nanoclaw] Main strategy small profit take allowed (P2 relief)"
 _PROFIT_TAKE_P2_RELIEF_CHECK_LOG = "[nanoclaw] P2 relief check"
 _PROFIT_TAKE_P2_RELIEF_OVERRIDE_ACTIVE_LOG = (
@@ -739,57 +755,58 @@ _PROFIT_TAKE_P2_RELIEF_OVERRIDE_ACTIVE_LOG = (
     "bypassing min_notional"
 )
 
-# TEMPORARY SPRINT FIX - May 2026: keep capital rotation active when profit-take sizes stay
-# small and borderline exits would otherwise sit idle for many cycles (revert after sprint).
-# TEMPORARY SPRINT: Lowered force threshold to $5.5 so it can activate when WMATIC is in current observed range (~$5.7)
-_MAIN_STRATEGY_FORCE_PROFIT_TAKE_WMATIC_USD_MIN = 5.5
-_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN = 4
-_MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_FLOOR_USD = 5.0
+# Aggressive gas protection (May 2026): unified rotation notional floors — default $8 healthy / $10 low+moderate.
+_MAIN_STRATEGY_FORCE_PROFIT_TAKE_WMATIC_USD_MIN = float(cfg.MAIN_STRATEGY_FORCE_WM_MIN_USD)
+_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN = int(cfg.MAIN_STRATEGY_FORCE_CYCLES_MIN)
+_MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_FLOOR_USD = float(cfg.MAIN_STRATEGY_FORCE_NOTIONAL_FLOOR_USD)
 _PROFIT_TAKE_FORCE_SMALL_LOG = (
     "[nanoclaw] FORCE small profit take | WMATIC=${wm:.2f} {stack_label}, "
     "no exit for {cycles} cycles | notional=${notional:.2f} | bypassing min_notional"
 )
 
-# Signal-Driven Rotation (May 2026): reduce over-reliance on high WMATIC — tiered P2/force/idle paths.
-# Low (< $7): smallest stacks still rotate via micro exits. Moderate ($7–$15): between low and healthy.
-_MAIN_STRATEGY_LOW_WMATIC_USD_THRESHOLD = 7.0
-_MAIN_STRATEGY_MODERATE_WMATIC_USD_THRESHOLD = 15.0
-_MAIN_STRATEGY_LOW_WMATIC_P2_WM_MIN_USD = 5.0
-_MAIN_STRATEGY_LOW_WMATIC_P2_SIGNAL_MIN = 0.45
-_MAIN_STRATEGY_LOW_WMATIC_FORCE_WM_MIN_USD = 5.0
-_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN = 3
-# Moderate tier: stricter than low to avoid $2.7–$3.75 micro exits when stack is $7–$15.
-_MAIN_STRATEGY_MODERATE_P2_WM_MIN_USD = 7.0
-_MAIN_STRATEGY_MODERATE_P2_SIGNAL_MIN = 0.50
-_MAIN_STRATEGY_MODERATE_FORCE_WM_MIN_USD = 7.0
-_MAIN_STRATEGY_MODERATE_FORCE_CYCLES_MIN = 4
-# Long idle: many cycles without WMATIC→stable profit — allow micro rotation / force (gas-safe floor).
-_MAIN_STRATEGY_LONG_IDLE_CYCLES_LOW = 3
-_MAIN_STRATEGY_LONG_IDLE_CYCLES_MODERATE = 6
-_MAIN_STRATEGY_LONG_IDLE_CYCLES_HEALTHY = 8
-_MAIN_STRATEGY_LONG_IDLE_NOTIONAL_FLOOR_USD = 1.35
-_MAIN_STRATEGY_LONG_IDLE_FORCE_WM_MIN_USD = 1.5
+_MAIN_STRATEGY_LOW_WMATIC_USD_THRESHOLD = float(cfg.MAIN_STRATEGY_LOW_WM_USD_THRESHOLD)
+_MAIN_STRATEGY_MODERATE_WMATIC_USD_THRESHOLD = float(cfg.MAIN_STRATEGY_MODERATE_WM_USD_THRESHOLD)
+_MAIN_STRATEGY_LOW_WMATIC_P2_WM_MIN_USD = float(cfg.MAIN_STRATEGY_LOW_P2_WM_MIN_USD)
+_MAIN_STRATEGY_LOW_WMATIC_P2_SIGNAL_MIN = float(cfg.MAIN_STRATEGY_LOW_P2_SIGNAL_MIN)
+_MAIN_STRATEGY_LOW_WMATIC_FORCE_WM_MIN_USD = float(cfg.MAIN_STRATEGY_LOW_FORCE_WM_MIN_USD)
+_MAIN_STRATEGY_LOW_WMATIC_FORCE_NOTIONAL_FLOOR_USD = float(cfg.MAIN_STRATEGY_LOW_ROTATION_MIN_NOTIONAL_USD)
+_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN = int(cfg.MAIN_STRATEGY_LOW_FORCE_CYCLES_MIN)
+_MAIN_STRATEGY_MODERATE_P2_WM_MIN_USD = float(cfg.MAIN_STRATEGY_MODERATE_P2_WM_MIN_USD)
+_MAIN_STRATEGY_MODERATE_P2_SIGNAL_MIN = float(cfg.MAIN_STRATEGY_MODERATE_P2_SIGNAL_MIN)
+_MAIN_STRATEGY_MODERATE_FORCE_WM_MIN_USD = float(cfg.MAIN_STRATEGY_MODERATE_FORCE_WM_MIN_USD)
+_MAIN_STRATEGY_MODERATE_FORCE_CYCLES_MIN = int(cfg.MAIN_STRATEGY_MODERATE_FORCE_CYCLES_MIN)
+_MAIN_STRATEGY_MODERATE_FORCE_NOTIONAL_FLOOR_USD = float(cfg.MAIN_STRATEGY_MODERATE_ROTATION_MIN_NOTIONAL_USD)
+_MAIN_STRATEGY_DUST_DEFER_NOTIONAL_USD = float(cfg.MAIN_STRATEGY_DUST_DEFER_NOTIONAL_USD)
+_MAIN_STRATEGY_LONG_IDLE_CYCLES_LOW = int(cfg.MAIN_STRATEGY_LONG_IDLE_CYCLES_LOW)
+_MAIN_STRATEGY_LONG_IDLE_CYCLES_MODERATE = int(cfg.MAIN_STRATEGY_LONG_IDLE_CYCLES_MODERATE)
+_MAIN_STRATEGY_LONG_IDLE_CYCLES_HEALTHY = int(cfg.MAIN_STRATEGY_LONG_IDLE_CYCLES_HEALTHY)
+_MAIN_STRATEGY_LONG_IDLE_NOTIONAL_FLOOR_USD = float(cfg.MAIN_STRATEGY_LONG_IDLE_NOTIONAL_FLOOR_USD)
+_MAIN_STRATEGY_LONG_IDLE_FORCE_WM_MIN_USD = float(cfg.MAIN_STRATEGY_LONG_IDLE_FORCE_WM_MIN_USD)
+_MAIN_STRATEGY_IDLE_ROTATION_SELL_FRACTION_HEALTHY = float(
+    cfg.MAIN_STRATEGY_IDLE_ROTATION_SELL_FRACTION_HEALTHY
+)
 _MAIN_STRATEGY_LONG_IDLE_LOG = "[nanoclaw] MAIN_STRATEGY long idle fallback"
 
-# Signal-Driven Rotation (May 2026): after idle WMATIC→stable cycles, rotate a small stable slice via X-SIGNAL.
 _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_CYCLES_MIN = 6
 _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_MIN_STABLE_USD = 50.0
 _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_MIN_SIGNAL = 0.75
-# Relaxed fallback when WMATIC stack is low — still rotates stables without waiting for a large WMATIC exit.
 _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_LOW_WM_CYCLES_MIN = 3
 _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_LOW_WM_MIN_STABLE_USD = 30.0
 _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_LOW_WM_MIN_SIGNAL = 0.60
-_MAIN_STRATEGY_IDLE_ROTATION_SELL_FRACTION_LOW = 0.35
-_MAIN_STRATEGY_IDLE_ROTATION_NOTIONAL_FLOOR_LOW = 1.35
-# May 2026: mild unrealized loss on small WMATIC stack — controlled rotation (reversible).
-_MAIN_STRATEGY_MILD_LOSS_IDLE_GAIN_MIN_PCT = -7.0
-_MAIN_STRATEGY_MILD_LOSS_IDLE_GAIN_MAX_PCT = -1.0
-_MAIN_STRATEGY_MILD_LOSS_IDLE_WM_MIN_USD = 5.0
-_MAIN_STRATEGY_MILD_LOSS_IDLE_WM_MAX_USD = 10.0
-_MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN = 1
-_MAIN_STRATEGY_MILD_LOSS_IDLE_NOTIONAL_FLOOR_USD = 1.25
+_MAIN_STRATEGY_IDLE_ROTATION_SELL_FRACTION_LOW = float(cfg.MAIN_STRATEGY_IDLE_ROTATION_SELL_FRACTION_LOW)
+_MAIN_STRATEGY_IDLE_ROTATION_NOTIONAL_FLOOR_LOW = float(cfg.MAIN_STRATEGY_IDLE_ROTATION_NOTIONAL_FLOOR_LOW)
+
+# Mild-loss rotation: same $ floor as P2/force; disabled when capped sell cannot reach rotation min.
+_MAIN_STRATEGY_MILD_LOSS_IDLE_GAIN_MIN_PCT = float(cfg.MAIN_STRATEGY_MILD_LOSS_IDLE_GAIN_MIN_PCT)
+_MAIN_STRATEGY_MILD_LOSS_IDLE_GAIN_MAX_PCT = float(cfg.MAIN_STRATEGY_MILD_LOSS_IDLE_GAIN_MAX_PCT)
+_MAIN_STRATEGY_MILD_LOSS_IDLE_WM_MIN_USD = float(cfg.MAIN_STRATEGY_MILD_LOSS_IDLE_WM_MIN_USD)
+_MAIN_STRATEGY_MILD_LOSS_IDLE_WM_MAX_USD = float(cfg.MAIN_STRATEGY_MILD_LOSS_IDLE_WM_MAX_USD)
+_MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN = int(cfg.MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN)
+_MAIN_STRATEGY_MILD_LOSS_IDLE_NOTIONAL_FLOOR_USD = float(cfg.MAIN_STRATEGY_ROTATION_MIN_NOTIONAL_USD)
 _MAIN_STRATEGY_MILD_LOSS_IDLE_SELL_FRACTION = 0.30
-_MAIN_STRATEGY_MILD_LOSS_IDLE_MAX_NOTIONAL_USD = 2.25
+_MAIN_STRATEGY_MILD_LOSS_IDLE_MAX_NOTIONAL_USD = float(cfg.MAIN_STRATEGY_MILD_LOSS_MAX_NOTIONAL_USD)
+_MAIN_STRATEGY_MILD_LOSS_FAST_WM_MIN_QTY = float(cfg.MAIN_STRATEGY_MILD_LOSS_FAST_WM_MIN_QTY)
+_MAIN_STRATEGY_MILD_LOSS_FAST_MAX_NOTIONAL_USD = float(cfg.MAIN_STRATEGY_MILD_LOSS_MAX_NOTIONAL_USD)
 _MAIN_STRATEGY_MILD_LOSS_IDLE_LOG = (
     "[nanoclaw] MAIN_STRATEGY mild-loss idle rotation ALLOWED | "
     "gain_pct={gain:.2f}% | wmatic_usd=${wm:.2f} | notional≈${notional:.2f} | "
@@ -804,16 +821,10 @@ _MAIN_STRATEGY_SMALL_IDLE_ROTATION_TRIGGERED_LOG = (
     "[Main Strategy] Small idle rotation triggered | WMATIC=${wm:.2f} | "
     "notional=${notional:.2f} | reason={reason}"
 )
-# ===== TEMPORARY: mild-loss fast rotation (May 2026 — remove when drawdown recovers) =====
-# Next-cycle micro sell when HOLD is mildly underwater, token qty is high, and USDT reserve is healthy.
-_MAIN_STRATEGY_MILD_LOSS_FAST_WM_MIN_QTY = 10.0
-_MAIN_STRATEGY_MILD_LOSS_FAST_MAX_NOTIONAL_USD = 2.75
 _MAIN_STRATEGY_MILD_LOSS_FAST_LOG = (
     "[Main Strategy] Mild-loss fast rotation | WMATIC=${wm:.2f} | "
     "notional=${notional:.2f} | reason=accelerate_recovery"
 )
-# ===== END TEMPORARY mild-loss fast rotation =====
-# May 2026: sub-MIN_TRADE_USD recovery sells (~$1.25–$2.25) for mild-loss idle rotation only.
 _MAIN_STRATEGY_MILD_LOSS_ROTATION_MIN_NOTIONAL_BYPASS_LOG = (
     "[Main Strategy] Mild-loss rotation executing (bypassed min_notional for recovery)"
 )
@@ -889,11 +900,14 @@ def _main_strategy_mild_loss_rotation_min_notional_bypass_allowed(
     profit_signal: dict | None = None,
     state: dict | None = None,
 ) -> bool:
-    """Allow mild-loss idle recovery below global MIN_TRADE_USD (isolated from standard P2 $2 floor).
+    """Allow mild-loss recovery below global MIN_TRADE_USD when notional is in the $8–$9.99 window.
 
     Qualifies when WMATIC is in the $5–$10 mild-loss band, unrealized gain is ~-7% to -1%,
-    and idle rotation is active (fast path, 1+ cycles since exit, or long-idle micro rotation).
+    and ``cycles_since_exit`` meets ``MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN``. Does not
+    re-open sub-$8 auto-generated idle sells (those fail ``_main_strategy_mild_loss_idle_context``).
     """
+    if not _main_strategy_mild_loss_enabled():
+        return False
     direction = str(decision.direction or "").strip().upper()
     if direction not in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:
         return False
@@ -908,26 +922,16 @@ def _main_strategy_mild_loss_rotation_min_notional_bypass_allowed(
         return False
     if _profit_take_mild_loss_gain_pct(profit_signal) is None:
         return False
-    cycles_since_exit = _profit_take_cycles_since_exit(state)
-    mild_loss_fast = _main_strategy_mild_loss_fast_rotation_eligible(
-        profit_signal,
-        wm_equiv_usd,
-        float(balances.wmatic),
-        balances,
-    )
-    mild_loss_idle = _main_strategy_mild_loss_idle_context(
-        profit_signal,
-        wm_equiv_usd,
-        cycles_since_exit,
-        balances=balances,
-        wmatic_qty=float(balances.wmatic),
-    )
-    if not (mild_loss_idle or mild_loss_fast):
+    if int(_profit_take_cycles_since_exit(state)) < int(_MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN):
         return False
     floor_usd = float(_MAIN_STRATEGY_MILD_LOSS_IDLE_NOTIONAL_FLOOR_USD)
     if notional_usd + 1e-9 < floor_usd:
         return False
     return True
+
+
+def _main_strategy_mild_loss_enabled() -> bool:
+    return bool(getattr(cfg, "MAIN_STRATEGY_MILD_LOSS_ENABLED", True))
 
 
 def _main_strategy_mild_loss_fast_rotation_eligible(
@@ -936,14 +940,23 @@ def _main_strategy_mild_loss_fast_rotation_eligible(
     wmatic_qty: float,
     balances: Balances,
 ) -> bool:
-    """TEMPORARY: mild-loss band + high token qty + healthy USDT — rotate on this cycle (cycles=0)."""
+    """Mild-loss band + high token qty + healthy USDT — rotate after min idle cycle if notional ≥ rotation floor."""
+    if not _main_strategy_mild_loss_enabled():
+        return False
     if _profit_take_mild_loss_gain_pct(profit_signal) is None:
         return False
     if not _wmatic_in_small_rotation_value_band(wm_equiv_usd):
         return False
     if float(wmatic_qty) + 1e-9 <= float(_MAIN_STRATEGY_MILD_LOSS_FAST_WM_MIN_QTY):
         return False
-    return float(balances.usdt) + 1e-9 >= float(MAIN_STRATEGY_MIN_USDT_RESERVE)
+    if float(balances.usdt) + 1e-9 < float(MAIN_STRATEGY_MIN_USDT_RESERVE):
+        return False
+    rot_min = float(_MAIN_STRATEGY_MILD_LOSS_IDLE_NOTIONAL_FLOOR_USD)
+    cap = min(
+        float(_MAIN_STRATEGY_MILD_LOSS_FAST_MAX_NOTIONAL_USD),
+        float(wm_equiv_usd) * float(_MAIN_STRATEGY_MILD_LOSS_IDLE_SELL_FRACTION),
+    )
+    return cap + 1e-9 >= rot_min
 
 
 def _main_strategy_mild_loss_idle_context(
@@ -954,7 +967,9 @@ def _main_strategy_mild_loss_idle_context(
     balances: Balances | None = None,
     wmatic_qty: float | None = None,
 ) -> bool:
-    """Small stack + mild unrealized loss + idle cycles (or fast path) → safe micro rotation."""
+    """Small stack + mild unrealized loss + idle cycles (or fast path) when sell notional ≥ rotation floor."""
+    if not _main_strategy_mild_loss_enabled():
+        return False
     if _profit_take_mild_loss_gain_pct(profit_signal) is None:
         return False
     if not _wmatic_in_small_rotation_value_band(wm_equiv_usd):
@@ -967,7 +982,14 @@ def _main_strategy_mild_loss_idle_context(
         )
     ):
         return True
-    return int(cycles_since_exit) >= int(_MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN)
+    if int(cycles_since_exit) < int(_MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN):
+        return False
+    rot_min = float(_MAIN_STRATEGY_MILD_LOSS_IDLE_NOTIONAL_FLOOR_USD)
+    cap = min(
+        float(_MAIN_STRATEGY_MILD_LOSS_IDLE_MAX_NOTIONAL_USD),
+        float(wm_equiv_usd) * float(_MAIN_STRATEGY_MILD_LOSS_IDLE_SELL_FRACTION),
+    )
+    return cap + 1e-9 >= rot_min
 
 
 def _main_strategy_mild_loss_recovery_overrides_x_signal_p2_defer(
@@ -977,20 +999,15 @@ def _main_strategy_mild_loss_recovery_overrides_x_signal_p2_defer(
     balances: Balances,
     state: dict | None,
 ) -> bool:
-    """Mild-loss idle/fast recovery may bypass X-Signal P2 defer (same as fast path)."""
-    if _main_strategy_mild_loss_fast_rotation_eligible(
-        profit_signal,
-        wm_equiv_usd,
-        float(balances.wmatic),
-        balances,
-    ):
-        return True
-    return _main_strategy_mild_loss_idle_context(
-        profit_signal,
-        wm_equiv_usd,
-        _profit_take_cycles_since_exit(state),
-        balances=balances,
-        wmatic_qty=float(balances.wmatic),
+    """Mild-loss recovery may bypass X-Signal P2 defer when HOLD is in band and cycles qualify."""
+    if not _main_strategy_mild_loss_enabled():
+        return False
+    if _profit_take_mild_loss_gain_pct(profit_signal) is None:
+        return False
+    if not _wmatic_in_small_rotation_value_band(wm_equiv_usd):
+        return False
+    return int(_profit_take_cycles_since_exit(state)) >= int(
+        _MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN
     )
 
 
@@ -1221,6 +1238,24 @@ def _profit_take_record_exit(state: dict) -> None:
     d["cycles_since_exit"] = 0
 
 
+def _main_strategy_accumulate_deferred_reason(
+    wmatic_value_usd: float,
+    state: dict | None,
+) -> str | None:
+    """Return a defer reason when USDT→WMATIC would add churn; ``None`` if accumulate is OK."""
+    cooldown = int(getattr(cfg, "MAIN_STRATEGY_ACCUMULATE_COOLDOWN_CYCLES", 0) or 0)
+    if cooldown > 0:
+        cycles = _profit_take_cycles_since_exit(state)
+        if cycles < cooldown:
+            return (
+                f"accumulate_cooldown ({cycles}/{cooldown} cycles since WMATIC→stable exit)"
+            )
+    cap = float(getattr(cfg, "MAIN_STRATEGY_ACCUMULATE_MAX_WMATIC_USD", 0.0) or 0.0)
+    if cap > 0.0 and float(wmatic_value_usd) + 1e-9 >= cap:
+        return f"wmatic_at_or_above_cap (${wmatic_value_usd:.2f} >= ${cap:.2f})"
+    return None
+
+
 def _profit_take_wmatic_stack_low(wm_equiv_usd: float) -> bool:
     """Signal-Driven Rotation (May 2026): stack below $7 — use relaxed P2/force thresholds."""
     return float(wm_equiv_usd) + 1e-9 < float(_MAIN_STRATEGY_LOW_WMATIC_USD_THRESHOLD)
@@ -1306,12 +1341,16 @@ def _profit_take_force_notional_floor_usd(
     *,
     cycles_since_exit: int = 0,
 ) -> float:
-    base = float(_MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_FLOOR_USD)
-    if _profit_take_wmatic_stack_low(wm_equiv_usd):
-        base = float(_MAIN_STRATEGY_IDLE_ROTATION_NOTIONAL_FLOOR_LOW)
-    if _profit_take_long_idle_active(wm_equiv_usd, cycles_since_exit):
+    tier = _profit_take_stack_tier(wm_equiv_usd)
+    if _profit_take_wmatic_stack_low(wm_equiv_usd) and _profit_take_long_idle_active(
+        wm_equiv_usd, cycles_since_exit
+    ):
         return float(_MAIN_STRATEGY_LONG_IDLE_NOTIONAL_FLOOR_USD)
-    return base
+    if tier == "low":
+        return float(_MAIN_STRATEGY_LOW_WMATIC_FORCE_NOTIONAL_FLOOR_USD)
+    if tier == "moderate":
+        return float(_MAIN_STRATEGY_MODERATE_FORCE_NOTIONAL_FLOOR_USD)
+    return float(_MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_FLOOR_USD)
 
 
 def _main_strategy_stable_rotation_fallback_params(
@@ -1339,7 +1378,7 @@ def _main_strategy_idle_cycles_required(
 ) -> int:
     """Idle cycles before WMATIC→stable micro rotation (tiered; mild-loss / $5–$8 fast path)."""
     if mild_loss_fast:
-        return 0
+        return 1
     if mild_loss_idle:
         return int(_MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN)
     if _wmatic_in_small_rotation_value_band(wm_equiv_usd):
@@ -1368,6 +1407,8 @@ def _main_strategy_idle_rotation_sell_fraction(
     if _profit_take_wmatic_stack_low(wm_equiv_usd):
         # ~32% on a ~$5.7 stack clears the $1.50 low-stack notional floor for idle rotation.
         return float(_MAIN_STRATEGY_IDLE_ROTATION_SELL_FRACTION_LOW)
+    if _profit_take_stack_tier(wm_equiv_usd) == "healthy":
+        return float(_MAIN_STRATEGY_IDLE_ROTATION_SELL_FRACTION_HEALTHY)
     return float(MAIN_STRATEGY_RESERVE_SELL_FRACTION)
 
 
@@ -1729,8 +1770,8 @@ def _profit_take_force_small_relief_eligible(
 ) -> bool:
     """TEMPORARY SPRINT FIX - May 2026: force small profit take when stack + idle cycles qualify.
 
-    Signal-Driven Rotation (May 2026): tiered wm/cycle floors; long idle lowers notional to $1.35.
-    Reduces over-reliance on high WMATIC balance for capital rotation.
+    Signal-Driven Rotation (May 2026): tiered wm/cycle/notional floors ($8–$10 moderate+;
+    $1.35 long-idle micro only when stack < $7). Reduces WMATIC-centric churn.
     """
     dir_u = str(direction or "").strip().upper()
     if dir_u not in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:
@@ -1815,9 +1856,9 @@ def _profit_take_balance_relief_bypass_allowed(
 
     Trade notional may be below ``MIN_TRADE_USD`` as long as total WMATIC USD equivalent is healthy
     (capital rotation — lock small gains back into stables without waiting for a large sell).
-    After ``_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN`` cycles without a WMATIC→stable exit, a
-    healthy stack (≥ $5.5 WMATIC, notional ≥ $1.8) can force-allow a small take and bypass the
-    standard P2 wm/notional/signal gates (still below ``MIN_TRADE_USD``).
+    After tiered idle cycles without a WMATIC→stable exit, stack/notional meet tiered force
+    floors (healthy **≥ $8**, low/moderate **≥ $10**; long-idle low stack **≥ $1.35**) and
+    force-allow a sub-``MIN_TRADE_USD`` take — bypassing standard P2 wm/notional/signal gates.
     Emits ``[nanoclaw] P2 relief check`` on every WMATIC→stable evaluation (pass/fail + reason).
     """
     direction = str(decision.direction or "").strip().upper()
@@ -2764,7 +2805,20 @@ def determine_trade_decision(
             if main_dust_min_usd >= eff_main_min_usd:
                 print(_PROFIT_TAKE_P2_RELIEF_LOG)
             return main_decision
-    if entries_paused and main_dir in _CONTROL_PAUSE_BLOCK_ENTRIES:
+        if main_dust_min_usd >= eff_main_min_usd:
+            main_dust_min_usd = float(_MAIN_STRATEGY_DUST_DEFER_NOTIONAL_USD)
+    main_msg_l = str(main_decision.message or "").lower()
+    main_entry_blocked = (
+        main_dir in _CONTROL_PAUSE_BLOCK_ENTRIES
+        or (
+            not main_dir
+            and (
+                "main wmatic buy deferred" in main_msg_l
+                or "buying wmatic" in main_msg_l
+            )
+        )
+    )
+    if entries_paused and main_entry_blocked:
         cs._log_trade_skipped("control.json paused=True — skipping main-strategy entry trade")
         return TradeDecision(message="ℹ️ Paused via control.json (no new entries this cycle)")
     if main_decision.should_execute and main_dir == "USDT_TO_WMATIC":

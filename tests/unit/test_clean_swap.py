@@ -329,9 +329,18 @@ def test_select_main_strategy_prefers_usdt_reserve_protection():
 
 
 def test_select_main_strategy_buys_when_balances_are_healthy():
+    from modules.swap_executor import (
+        MAIN_STRATEGY_ACCUMULATE_COOLDOWN_CYCLES,
+        _profit_take_bump_cycle_counter,
+    )
+
+    state: dict = {}
+    for _ in range(MAIN_STRATEGY_ACCUMULATE_COOLDOWN_CYCLES):
+        _profit_take_bump_cycle_counter(state)
     decision = clean_swap.select_main_strategy_trade(
         clean_swap.Balances(usdt=80.0, wmatic=20.0, pol=1.0),
         current_price=0.75,
+        state=state,
     )
 
     assert decision.direction == "USDT_TO_WMATIC"
@@ -358,6 +367,39 @@ def test_select_main_strategy_cuts_loss_when_wmatic_value_is_low_and_size_is_lar
     assert decision.direction == "WMATIC_TO_USDT"
     assert decision.amount_in == int(60.0 * 0.28 * 1e18)
     assert "Cutting loss" in decision.message
+
+
+def test_select_main_strategy_defers_accumulate_during_post_exit_cooldown():
+    from modules.swap_executor import _profit_take_bump_cycle_counter
+
+    state: dict = {}
+    _profit_take_bump_cycle_counter(state)
+    decision = clean_swap.select_main_strategy_trade(
+        clean_swap.Balances(usdt=80.0, wmatic=10.0, pol=1.0),
+        current_price=0.75,
+        state=state,
+    )
+    assert decision.direction is None
+    assert "accumulate_cooldown" in decision.message
+
+
+def test_select_main_strategy_defers_accumulate_when_wmatic_above_cap(monkeypatch):
+    from modules.swap_executor import (
+        MAIN_STRATEGY_ACCUMULATE_COOLDOWN_CYCLES,
+        _profit_take_bump_cycle_counter,
+    )
+
+    monkeypatch.setattr("modules.swap_executor.cfg.MAIN_STRATEGY_ACCUMULATE_MAX_WMATIC_USD", 18.0)
+    state: dict = {}
+    for _ in range(MAIN_STRATEGY_ACCUMULATE_COOLDOWN_CYCLES):
+        _profit_take_bump_cycle_counter(state)
+    decision = clean_swap.select_main_strategy_trade(
+        clean_swap.Balances(usdt=80.0, wmatic=30.0, pol=1.0),
+        current_price=0.75,
+        state=state,
+    )
+    assert decision.direction is None
+    assert "wmatic_at_or_above_cap" in decision.message
 
 
 def test_select_main_strategy_idle_rotation_over_accumulate_when_low_wmatic():
@@ -1103,6 +1145,57 @@ def test_determine_trade_decision_defers_dust_main_strategy_with_no_further_fall
     assert "MAIN_STRATEGY DUST DEFER" in captured
 
 
+def test_determine_trade_decision_main_strategy_dust_defer_uses_eight_dollar_floor(monkeypatch, capsys):
+    """Aggressive gas protection: WMATIC→stable between $8 and MIN_TRADE_USD passes dust defer."""
+    monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))
+    monkeypatch.setattr(clean_swap, "evaluate_take_profit", lambda *_args, **_kwargs: (False, None))
+    monkeypatch.setattr(clean_swap, "MIN_TRADE_USD", 15.0)
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", False)
+    monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
+
+    dust_floor = swap_exec._MAIN_STRATEGY_DUST_DEFER_NOTIONAL_USD
+    main_ok = clean_swap.TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(dust_floor * 1_000_000_000_000_000_000),
+        message="borderline main sell",
+        signal_strength=0.80,
+    )
+    monkeypatch.setattr(swap_exec, "select_main_strategy_trade", lambda *_args, **_kwargs: main_ok)
+    monkeypatch.setattr(
+        swap_exec,
+        "_wmatic_stable_p2_relief_override_active",
+        lambda *_args, **_kwargs: False,
+    )
+
+    skipped: list[str] = []
+    monkeypatch.setattr(clean_swap, "_log_trade_skipped", lambda reason: skipped.append(reason))
+
+    out = clean_swap.determine_trade_decision(
+        state={},
+        balances=clean_swap.Balances(usdt=40.0, wmatic=20.0, pol=1.0, usdc=30.0),
+        current_price=1.0,
+    )
+
+    assert out is main_ok
+    assert not any("main_strategy_dust_deferred" in reason for reason in skipped)
+
+    main_dust = clean_swap.TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int((dust_floor - 1.0) * 1_000_000_000_000_000_000),
+        message="sub-floor main sell",
+    )
+    monkeypatch.setattr(swap_exec, "select_main_strategy_trade", lambda *_args, **_kwargs: main_dust)
+
+    out_deferred = clean_swap.determine_trade_decision(
+        state={},
+        balances=clean_swap.Balances(usdt=40.0, wmatic=20.0, pol=1.0, usdc=30.0),
+        current_price=1.0,
+    )
+
+    assert out_deferred.should_execute is False
+    assert any("main_strategy_dust_deferred" in reason for reason in skipped)
+
+
 def test_determine_trade_decision_main_strategy_balance_relief_before_dust_defer(monkeypatch, capsys):
     """TEMPORARY: P2 relief precedes MAIN_STRATEGY dust defer for small WMATIC→stable exits."""
     monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))
@@ -1124,9 +1217,10 @@ def test_determine_trade_decision_main_strategy_balance_relief_before_dust_defer
     monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", False)
     monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
 
+    p2_floor = swap_exec._MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD
     main_small = clean_swap.TradeDecision(
         direction="WMATIC_TO_USDT",
-        amount_in=int(4 * 1_000_000_000_000_000_000),
+        amount_in=int(p2_floor * 1_000_000_000_000_000_000),
         message="small main exit",
         signal_strength=0.75,
     )
@@ -1147,7 +1241,7 @@ def test_determine_trade_decision_main_strategy_balance_relief_before_dust_defer
     assert "[nanoclaw] P2 relief check" in captured
     assert "[nanoclaw] P2 RELIEF OVERRIDE ACTIVE" in captured
     assert "bypassing min_notional" in captured
-    assert "notional=$4.00" in captured
+    assert f"notional=${p2_floor:.2f}" in captured
     assert "[nanoclaw] Main strategy small profit take allowed (P2 relief)" in captured
 
 
@@ -1173,9 +1267,10 @@ def test_determine_trade_decision_main_strategy_balance_relief_with_hold_snapsho
     monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", False)
     monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
 
+    p2_floor = swap_exec._MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD
     main_small = clean_swap.TradeDecision(
         direction="WMATIC_TO_USDT",
-        amount_in=int(3.99 * 1_000_000_000_000_000_000),
+        amount_in=int(p2_floor * 1_000_000_000_000_000_000),
         message="small main exit",
         signal_strength=0.75,
     )
@@ -1195,7 +1290,7 @@ def test_determine_trade_decision_main_strategy_balance_relief_with_hold_snapsho
     assert not any("main_strategy_dust_deferred" in reason for reason in skipped)
     assert "[nanoclaw] P2 RELIEF OVERRIDE ACTIVE" in captured
     assert "bypassing min_notional" in captured
-    assert "notional=$3.99" in captured
+    assert f"notional=${p2_floor:.2f}" in captured
 
 
 def test_main_skips_cycle_on_global_cooldown_and_logs_reason(monkeypatch):
@@ -1374,12 +1469,14 @@ def test_main_profit_take_min_trade_guard_bypassed_when_balance_relief_applies(m
         "cs_evaluate_take_profit",
         lambda *_args, **_kwargs: (True, {"reason": "TP_HIT", "message": "tp", "sell_fraction": 0.12}),
     )
+    p2_floor = swap_exec._MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD
+    wmatic_price = 2.0
     monkeypatch.setattr(
         swap_exec,
         "determine_trade_decision",
         lambda *_args, **_kwargs: clean_swap.TradeDecision(
             direction="WMATIC_TO_USDT",
-            amount_in=int(4 * 1_000_000_000_000_000_000),
+            amount_in=int((p2_floor / wmatic_price) * 1_000_000_000_000_000_000),
             message="small profit take",
             signal_strength=0.75,
         ),
@@ -1405,14 +1502,14 @@ def test_main_profit_take_min_trade_guard_bypassed_when_balance_relief_applies(m
 
 
 def test_main_hold_mild_loss_idle_min_trade_guard_bypassed(monkeypatch, capsys):
-    """HOLD gain_pct must reach execution P2 so ~$1.7 idle rotation clears MIN_TRADE_USD."""
+    """HOLD mild-loss: $8–$9.99 notional bypasses MIN_TRADE_USD at execution."""
     monkeypatch.setenv("POLYGON_PRIVATE_KEY", "0x" + "a" * 64)
     state = {"profit_take_rotation": {"cycles_since_exit": 2}}
     monkeypatch.setattr(clean_swap, "load_state", lambda: state)
     monkeypatch.setattr(
         clean_swap,
         "get_balances",
-        lambda: clean_swap.Balances(usdt=80.0, wmatic=63.0, pol=1.0, usdc=30.0),
+        lambda: clean_swap.Balances(usdt=80.0, wmatic=8.0, pol=1.0, usdc=30.0),
     )
     monkeypatch.setattr(clean_swap, "has_active_lock", lambda: False)
     monkeypatch.setattr(clean_swap, "create_lock", lambda: None)
@@ -1450,18 +1547,17 @@ def test_main_hold_mild_loss_idle_min_trade_guard_bypassed(monkeypatch, capsys):
         "cs_evaluate_take_profit",
         lambda *_args, **_kwargs: (False, hold_signal),
     )
-    wm_usd = 63.0 * 0.09
-    max_notional = 2.25
-    frac = min(0.30, max_notional / wm_usd)
-    monkeypatch.setattr(
-        swap_exec,
-        "determine_trade_decision",
-        lambda *_args, **_kwargs: clean_swap.TradeDecision(
-            direction="WMATIC_TO_USDT",
-            amount_in=int(63.0 * frac * 1e18),
-            message="idle rotation",
-        ),
+    wmatic_qty = 8.0
+    price = 0.70
+    notional = 9.0
+    trade_decision = clean_swap.TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(wmatic_qty * (notional / (wmatic_qty * price)) * 1e18),
+        trade_size=notional,
+        message="idle rotation",
     )
+    monkeypatch.setattr(clean_swap, "determine_trade_decision", lambda *_a, **_k: trade_decision)
+    monkeypatch.setattr(swap_exec, "determine_trade_decision", lambda *_a, **_k: trade_decision)
 
     swap_called = {"ok": False}
 
@@ -1512,12 +1608,14 @@ def test_main_records_wallet_performance_on_wmatic_to_usdc_exit(monkeypatch):
         },
     )
 
+    p2_floor = swap_exec._MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD
+    wmatic_price = 2.0
     monkeypatch.setattr(
         swap_exec,
         "determine_trade_decision",
         lambda *_args, **_kwargs: clean_swap.TradeDecision(
             direction="WMATIC_TO_USDC",
-            amount_in=int(4 * 1_000_000_000_000_000_000),
+            amount_in=int((p2_floor / wmatic_price) * 1_000_000_000_000_000_000),
             message="wmatic to usdc exit",
         ),
     )

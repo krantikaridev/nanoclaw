@@ -136,7 +136,11 @@ def test_evaluate_risk_high_stables_relaxes_wmatic_pause_threshold():
     out_ok = risk_checker.evaluate_risk(usdt_balance=100.0, usdc_balance=0.0, wmatic_balance=28.0)
     assert out_ok["paused"] is False
     assert out_ok["stable_usd"] == pytest.approx(100.0)
-    assert out_ok["max_copy_trade_pct"] == pytest.approx(0.045)
+    assert out_ok["max_copy_trade_pct"] == pytest.approx(0.06)
+    out_travel_floor = risk_checker.evaluate_risk(
+        usdt_balance=100.0, usdc_balance=0.0, wmatic_balance=20.0
+    )
+    assert out_travel_floor["max_copy_trade_pct"] == pytest.approx(0.045)
 
 
 def test_evaluate_risk_at_critical_floor_is_moderate_not_critical():
@@ -152,7 +156,9 @@ def test_evaluate_risk_at_critical_floor_is_moderate_not_critical():
 def test_evaluate_risk_moderate_tier():
     out = risk_checker.evaluate_risk(usdt_balance=99.0, wmatic_balance=100.0)
     assert out["paused"] is False
-    assert out["max_copy_trade_pct"] == 0.045
+    assert out["max_copy_trade_pct"] == 0.06
+    out_low_wm = risk_checker.evaluate_risk(usdt_balance=99.0, wmatic_balance=20.0)
+    assert out_low_wm["max_copy_trade_pct"] == 0.045
 
 
 def test_evaluate_risk_full_health_threshold():
@@ -255,7 +261,7 @@ def test_evaluate_risk_streak_all_moderate_stable_still_clamps_to_two_pct(monkey
 
 
 def test_evaluate_risk_streak_at_high_stables_skips_clamp_in_travel_band(monkeypatch):
-    """Stables ≥ $95 (not critical): no streak arm — tier cap 4.5% only, no clamp overlay."""
+    """Stables ≥ $95 (not critical): no streak arm — travel release up to 6%, no clamp overlay."""
     t = {"now": 2_100_000.0}
 
     def fake_time():
@@ -267,8 +273,38 @@ def test_evaluate_risk_streak_at_high_stables_skips_clamp_in_travel_band(monkeyp
     risk_checker.evaluate_risk(usdt_balance=99.0, wmatic_balance=100.0)
     t["now"] += 1
     out3 = risk_checker.evaluate_risk(usdt_balance=99.0, wmatic_balance=100.0)
-    assert out3["max_copy_trade_pct"] == 0.045
+    assert out3["max_copy_trade_pct"] == 0.06
     assert "defensive clamp" not in str(out3.get("reason", "")).lower()
+
+
+def test_clamp_timer_clears_at_travel_stables_even_when_wmatic_critical(monkeypatch):
+    """Stables >= $95 must drop streak timer even if WMATIC < $10 still pauses entries."""
+    t = {"now": 4_000_000.0}
+
+    def fake_time():
+        return t["now"]
+
+    monkeypatch.setattr(risk_checker.time, "time", fake_time)
+    for _ in range(3):
+        risk_checker.evaluate_risk(usdt_balance=94.0, wmatic_balance=100.0)
+        t["now"] += 1
+    paused_high_stables = risk_checker.evaluate_risk(
+        usdt_balance=100.0, usdc_balance=0.0, wmatic_balance=8.0
+    )
+    assert paused_high_stables["paused"] is True
+    assert paused_high_stables["stable_usd"] == pytest.approx(100.0)
+    assert "defensive clamp" not in str(paused_high_stables.get("reason", "")).lower()
+    assert paused_high_stables["max_copy_trade_pct"] == 0.02
+
+
+def test_travel_release_raises_cap_when_stables_and_wmatic_reasonable(monkeypatch):
+    """Stables in travel band + WMATIC >= travel_recovery_wmatic → up to 6%, not 4.5% only."""
+    out = risk_checker.evaluate_risk(
+        usdt_balance=96.0, usdc_balance=0.0, wmatic_balance=30.0
+    )
+    assert out["paused"] is False
+    assert out["max_copy_trade_pct"] == pytest.approx(0.06)
+    assert "defensive clamp" not in str(out.get("reason", "")).lower()
 
 
 def test_evaluate_risk_streak_clamp_releases_when_stable_tier_beats_streak_worst(monkeypatch):

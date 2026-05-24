@@ -290,16 +290,19 @@ def evaluate_risk(
     timer_cleared_this_eval = False
     clear_reason: str | None = None
 
-    if stable_usd >= clamp.healthy_stable_usd and wmatic >= clamp.recovery_wmatic:
+    # Clear streak timer when stables reach travel band — even if WMATIC still triggers
+    # critical pause (e.g. stables $100, WMATIC < $10). Otherwise the clamp overlay can
+    # outlive stable recovery until WMATIC is replenished.
+    if stable_usd >= clamp.recovery_stable_usd:
         if prev_until_ts > now:
             timer_cleared_this_eval = True
-            clear_reason = "healthy_stable_runway"
-        _FORCE_MIN_UNTIL_TS = 0.0
-        _CLAMP_STREAK_MIN_STABLE_USD = None
-    elif stable_usd >= clamp.recovery_stable_usd and not critical:
-        if prev_until_ts > now:
-            timer_cleared_this_eval = True
-            clear_reason = "travel_stable_recovery"
+            if (
+                stable_usd >= clamp.healthy_stable_usd
+                and wmatic >= clamp.recovery_wmatic
+            ):
+                clear_reason = "healthy_stable_runway"
+            else:
+                clear_reason = "travel_stable_recovery"
         _FORCE_MIN_UNTIL_TS = 0.0
         _CLAMP_STREAK_MIN_STABLE_USD = None
 
@@ -357,6 +360,13 @@ def evaluate_risk(
         early_release = streak_min is not None and _stable_runway_tier_rank(
             stable_usd
         ) > _stable_runway_tier_rank(streak_min)
+        if early_release and stable_usd >= clamp.recovery_stable_usd:
+            if prev_until_ts > now:
+                timer_cleared_this_eval = True
+                clear_reason = clear_reason or "early_release_stable_runway"
+            _FORCE_MIN_UNTIL_TS = 0.0
+            _CLAMP_STREAK_MIN_STABLE_USD = None
+            force_min = False
         if not early_release:
             streak_floor = (
                 clamp.travel_floor_pct
@@ -369,6 +379,10 @@ def evaluate_risk(
 
     if stable_usd >= tier.travel_stable_usd and not critical:
         max_pct = _clamp_copy_pct(max(float(max_pct), tier.travel_min_copy_pct))
+        if wmatic + 1e-9 >= clamp.travel_recovery_wmatic:
+            max_pct = _clamp_copy_pct(
+                max(float(max_pct), float(clamp.travel_release_copy_pct))
+            )
 
     _emit_defensive_clamp_observability(
         now=now,

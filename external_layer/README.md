@@ -52,7 +52,9 @@ Tier and defensive-clamp knobs are loaded from **`EXTERNAL_RISK_*`** and **`EXTE
 | `EXTERNAL_CLAMP_DURATION_SEC` | `600` | Clamp timer length (seconds) |
 | `EXTERNAL_CLAMP_RECOVERY_STABLE_USD` | `95` | Clear timer when stables recover (travel) |
 | `EXTERNAL_CLAMP_HEALTHY_STABLE_USD` | `100` | Full healthy clear (with `EXTERNAL_CLAMP_RECOVERY_WMATIC`) |
-| `EXTERNAL_CLAMP_RECOVERY_WMATIC` | `65` | WMATIC floor for healthy timer clear |
+| `EXTERNAL_CLAMP_RECOVERY_WMATIC` | `65` | WMATIC floor for healthy timer clear (log label) |
+| `EXTERNAL_CLAMP_TRAVEL_RECOVERY_WMATIC` | `28` | WMATIC floor for travel-band cap release toward 6% |
+| `EXTERNAL_CLAMP_TRAVEL_RELEASE_COPY_PCT` | `0.06` | Max copy % when travel stables + reasonable WMATIC |
 | `EXTERNAL_RISK_TRAVEL_STABLE_USD` | `95` | Travel band; default for arm/recovery stable USD |
 
 Implementation: **`external_layer/clamp_policy.py`** (loader) and **`external_layer/risk_checker.py`** (logic).
@@ -61,7 +63,7 @@ Implementation: **`external_layer/clamp_policy.py`** (loader) and **`external_la
 - The layer tracks the last several risk evaluations (using a short rolling window).
 - If the **last 3 evaluations** were in a protected tier (Critical or Moderate) **and** stables are **&lt; $95** (or still Critical), it arms a **10-minute** clamp timer. Streak arming does **not** run in the travel band (**`stable_usd` ≥ 95**, not critical).
 - While the timer is active, copy cap may drop to **2%** (&lt; $95) or **4.5%** (≥ $95) with reason suffix `"defensive clamp active (recent low-balance streak)"`.
-- **Recovery:** timer clears immediately when **`stable_usd` ≥ 95** (travel) or **≥ 100** (healthy); timer is **not extended** while stables stay ≥ $95. **Tier early release** still applies when stable runway improves vs the worst level in the arming streak (e.g. critical → moderate keeps 3% without the clamp overlay).
+- **Recovery:** timer clears immediately when **`stable_usd` ≥ 95** (travel), including while **WMATIC-only critical pause** is still active (stables recovered but gas token depleted). Full healthy logging uses **≥ 100** stables and **`EXTERNAL_CLAMP_RECOVERY_WMATIC`** (default 65). Timer is **not extended** while stables stay ≥ $95. **Tier early release** still applies when stable runway improves vs the worst level in the arming streak; at **`stable_usd` ≥ 95** early release also clears the timer. When stables are in the travel band and **WMATIC ≥ `EXTERNAL_CLAMP_TRAVEL_RECOVERY_WMATIC`** (default **28**), cap can reach **`EXTERNAL_CLAMP_TRAVEL_RELEASE_COPY_PCT`** (default **6%**), not only the 4.5% travel floor.
 - **Observability:** stdout lines prefixed with **`[EXTERNAL][DEFENSIVE_CLAMP]`** — events `ON`, `STAY`, `OFF`, `RELAX`, and `CAP_REDUCED` (includes `stable_usd`, `wmatic_balance`, `protected_streak`, caps, timer).
 - This adds hysteresis to avoid rapid toggling when balances hover near thresholds.
 
