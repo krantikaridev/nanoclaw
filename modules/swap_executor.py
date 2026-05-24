@@ -1496,6 +1496,16 @@ def _main_strategy_idle_rotation_eligibility(
         )
     if int(balances.wmatic * fraction * 1e18) <= 0:
         return False, "zero_amount_in"
+    if (
+        bool(getattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", False))
+        and not mild_loss_idle
+        and not mild_loss_fast
+    ):
+        recovery_min_notional = float(
+            getattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_IDLE_MIN_NOTIONAL_USD", 5.0)
+        )
+        if notional + 1e-9 < recovery_min_notional:
+            return False, f"pnl_recovery_micro_rotation_paused_${notional:.2f}_lt_${recovery_min_notional:.2f}"
     if mild_loss_idle:
         if mild_loss_fast:
             return True, "eligible_mild_loss_fast_rotation"

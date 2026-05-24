@@ -1325,6 +1325,37 @@ def test_x_signal_min_effective_trade_usd_dynamic(monkeypatch):
     assert strategy_module._x_signal_min_effective_trade_usd(0.92) == 12.0
     assert strategy_module._x_signal_min_effective_trade_usd(0.82) == 14.0
     assert strategy_module._x_signal_min_effective_trade_usd(0.70) == 15.0
+    assert strategy_module._x_signal_min_effective_trade_usd(0.82, usdc_balance=18.0) == 10.0
+    assert strategy_module._x_signal_min_effective_trade_usd(0.92, usdc_balance=18.0) == 10.0
+
+
+def test_x_signal_limited_usdc_passes_when_effective_meets_capped_gate(monkeypatch, capsys):
+    """Stage-like: USDC ~$18, |signal| 0.83, effective ~$10.3 clears $10 limited-USDC gate."""
+    s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
+    monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 1.0)
+    monkeypatch.setattr(
+        SignalEquityTrader,
+        "_compute_trade_size",
+        lambda self, usdc_balance, signal_strength, usdt_balance=0.0, *, symbol="": 11.0,
+    )
+    monkeypatch.setattr(s, "_estimate_gas_cost_usd", lambda _gas_gwei: 0.71)
+
+    plan, reason = s.build_plan_with_block_reason(
+        symbol="WBTC_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=8,
+        signal_strength=0.83,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=18.66,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+        upside_pct=22.0,
+    )
+    assert plan is not None
+    assert reason is None
+    assert "below min effective size gate" not in capsys.readouterr().out
 
 
 def test_low_effective_after_gas_still_blocks_when_effective_below_override(monkeypatch):

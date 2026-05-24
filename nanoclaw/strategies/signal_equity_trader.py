@@ -59,16 +59,29 @@ _X_SIGNAL_MIN_EFFECTIVE_OVERRIDE = 7.0
 _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD_BASE = 12.0
 
 
-def _x_signal_min_effective_trade_usd(signal_strength: float) -> float:
+def _x_signal_min_effective_trade_usd(
+    signal_strength: float,
+    *,
+    usdc_balance: float | None = None,
+) -> float:
     """Effective notional (after gas) required for USDC→equity BUY; scales with |signal|."""
     s = abs(float(signal_strength))
     if s >= float(_X_SIGNAL_VERY_STRONG_STRENGTH):
-        return _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD_BASE
-    if s >= _X_SIGNAL_HIGH_CONVICTION_STRENGTH:
-        return _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD_BASE
-    if s >= float(_X_SIGNAL_VERY_STRONG_STRENGTH) - 0.10:  # 0.80 tier
-        return 14.0
-    return 15.0
+        gate = _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD_BASE
+    elif s >= _X_SIGNAL_HIGH_CONVICTION_STRENGTH:
+        gate = _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD_BASE
+    elif s >= float(_X_SIGNAL_VERY_STRONG_STRENGTH) - 0.10:  # 0.80 tier
+        gate = 14.0
+    else:
+        gate = 15.0
+    if usdc_balance is not None:
+        usdc_safe = float(cfg.env_float("X_SIGNAL_USDC_SAFE_FLOOR", 20.0))
+        if float(usdc_balance) + 1e-9 < usdc_safe:
+            limited_gate = float(
+                cfg.env_float("X_SIGNAL_LIMITED_USDC_MIN_EFFECTIVE_GATE_USD", 10.0)
+            )
+            gate = min(gate, limited_gate)
+    return gate
 
 
 # Back-compat alias for tests/docs that patch a single constant.
@@ -1005,10 +1018,22 @@ class SignalEquityTrader:
                 )
                 # Signal-Driven Rotation (May 2026): high-conviction bypass before dynamic min gate.
                 eff_after_gas = round(float(effective_trade_size_after_gas), 2)
-                min_eff_gate = round(_x_signal_min_effective_trade_usd(strength), 2)
+                min_eff_gate = round(
+                    _x_signal_min_effective_trade_usd(strength, usdc_balance=effective_usdc_balance),
+                    2,
+                )
+                usdc_safe_floor = float(cfg.env_float("X_SIGNAL_USDC_SAFE_FLOOR", 20.0))
+                limited_usdc = float(effective_usdc_balance) + 1e-9 < usdc_safe_floor
                 x_signal_equity_high_conviction_effective_ok = (
                     strength > 0
-                    and abs(float(strength)) >= float(_X_SIGNAL_HIGH_CONVICTION_STRENGTH)
+                    and (
+                        abs(float(strength)) >= float(_X_SIGNAL_HIGH_CONVICTION_STRENGTH)
+                        or (
+                            limited_usdc
+                            and abs(float(strength)) + 1e-9
+                            >= float(_X_SIGNAL_VERY_STRONG_STRENGTH) - 0.10
+                        )
+                    )
                     and eff_after_gas >= float(_X_SIGNAL_MIN_EFFECTIVE_OVERRIDE)
                     and eff_after_gas < min_eff_gate
                 )

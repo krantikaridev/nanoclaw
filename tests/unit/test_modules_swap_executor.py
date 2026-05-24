@@ -1,6 +1,7 @@
 import time
 
 from modules.runtime import TradeDecision, Balances
+import config as cfg
 from config import MIN_NET_EDGE_FEE_BUFFER_PCT, MIN_NET_EDGE_PCT
 from modules import swap_executor as swap_exec_mod
 from modules.swap_executor import (
@@ -531,7 +532,8 @@ def test_main_strategy_stable_rotation_fallback_rejects_weak_signal(monkeypatch)
     assert _main_strategy_stable_rotation_fallback(balances, 1.0, state=state) is None
 
 
-def test_main_strategy_idle_rotation_sell_after_low_wmatic_idle_cycles():
+def test_main_strategy_idle_rotation_sell_after_low_wmatic_idle_cycles(monkeypatch):
+    monkeypatch.setattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", False)
     state: dict = {}
     for _ in range(_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN):
         _profit_take_bump_cycle_counter(state)
@@ -540,6 +542,18 @@ def test_main_strategy_idle_rotation_sell_after_low_wmatic_idle_cycles():
     assert decision is not None
     assert decision.direction == "WMATIC_TO_USDT"
     assert decision.amount_in == int(5.7 * 0.35 * 1e18)
+
+
+def test_main_strategy_idle_rotation_blocked_in_pnl_recovery_mode(monkeypatch):
+    monkeypatch.setattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", True)
+    state: dict = {}
+    for _ in range(_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN):
+        _profit_take_bump_cycle_counter(state)
+    balances = Balances(usdt=80.0, usdc=30.0, wmatic=5.7, pol=1.0)
+    assert _main_strategy_idle_rotation_sell_decision(balances, 1.0, state=state) is None
+    eligible, note = _main_strategy_idle_rotation_eligibility(balances, 1.0, state)
+    assert not eligible
+    assert "pnl_recovery_micro_rotation_paused" in note
 
 
 def test_main_strategy_idle_rotation_sell_not_before_cycle_threshold():
@@ -889,8 +903,9 @@ def test_main_strategy_mild_loss_idle_rotation_at_minus_seven_pct():
     assert decision is None
 
 
-def test_select_main_strategy_idle_rotation_before_cut_loss_high_token_count():
+def test_select_main_strategy_idle_rotation_before_cut_loss_high_token_count(monkeypatch):
     """63 WMATIC @ ~$0.09 (~$5.7) must idle-rotate, not cut-loss churn, after 1 idle cycle."""
+    monkeypatch.setattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", False)
     from modules.swap_executor import (
         _MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN,
         _profit_take_bump_cycle_counter,
