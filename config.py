@@ -107,13 +107,23 @@ PER_WALLET_COOLDOWN = env_int("PER_WALLET_COOLDOWN", 180)
 COPY_TRADING_ENABLED = env_bool("COPY_TRADING_ENABLED", True)
 
 POL_USD_PRICE = env_float("POL_USD_PRICE", 0.10)
-MIN_POL_FOR_GAS = env_float("MIN_POL_FOR_GAS", 0.15)
+# Code floor: stale VM .env values like 0.005 skip AUTO-POL until swaps fail on gas.
+_MIN_POL_FOR_GAS_ENV = env_float("MIN_POL_FOR_GAS", 0.15)
+MIN_POL_FOR_GAS = max(0.12, float(_MIN_POL_FOR_GAS_ENV))
 AUTO_TOPUP_POL = env_bool("AUTO_TOPUP_POL", True)
 POL_TOPUP_AMOUNT = env_float("POL_TOPUP_AMOUNT", 0.03)
 # Backoff after a failed AUTO-POL attempt (seconds) to avoid tight retry loops.
 POL_AUTO_TOPUP_COOLDOWN_SECONDS = env_int("POL_AUTO_TOPUP_COOLDOWN_SECONDS", 300)
 # Minimum native POL required to broadcast unwrap/swap legs (below this, send POL manually once).
 POL_MIN_BALANCE_FOR_TOPUP_TX = env_float("POL_MIN_BALANCE_FOR_TOPUP_TX", 0.006)
+# Dynamic POL reserve: estimate swap gas at urgent gwei × multiplier (fixes stale low MIN_POL_FOR_GAS on VM).
+POL_SWAP_GAS_UNITS = env_int("POL_SWAP_GAS_UNITS", 450_000)
+POL_APPROVE_GAS_UNITS = env_int("POL_APPROVE_GAS_UNITS", 85_000)
+POL_UNWRAP_GAS_UNITS = env_int("POL_UNWRAP_GAS_UNITS", 140_000)
+POL_GAS_RESERVE_MULTIPLIER = env_float("POL_GAS_RESERVE_MULTIPLIER", 1.30)
+POL_GAS_RESERVE_BUFFER_POL = env_float("POL_GAS_RESERVE_BUFFER_POL", 0.005)
+# Startup: skip force-max approve when allowance already sufficient; never crash on low POL.
+FORCE_STARTUP_MAX_APPROVE = env_bool("FORCE_STARTUP_MAX_APPROVE", True)
 COPY_TRADE_PCT = env_float("COPY_TRADE_PCT", 0.28)
 DEFAULT_MAX_COPY_RATIO = env_float("DEFAULT_MAX_COPY_RATIO", 0.20)
 MAX_GWEI = env_float("MAX_GWEI", 80.0)
@@ -291,8 +301,9 @@ MAIN_STRATEGY_CUT_LOSS_MIN_WMATIC_BALANCE = env_float("MAIN_STRATEGY_CUT_LOSS_MI
 MAIN_STRATEGY_RESERVE_SELL_FRACTION = env_float("MAIN_STRATEGY_RESERVE_SELL_FRACTION", 0.45)
 MAIN_STRATEGY_CUT_LOSS_SELL_FRACTION = env_float("MAIN_STRATEGY_CUT_LOSS_SELL_FRACTION", 0.28)
 # Anti-churn: skip USDT→WMATIC for N cycles after a WMATIC→stable exit; skip when stack ≥ cap USD.
-MAIN_STRATEGY_ACCUMULATE_COOLDOWN_CYCLES = env_int("MAIN_STRATEGY_ACCUMULATE_COOLDOWN_CYCLES", 6)
-MAIN_STRATEGY_ACCUMULATE_MAX_WMATIC_USD = env_float("MAIN_STRATEGY_ACCUMULATE_MAX_WMATIC_USD", 22.0)
+# TEMPORARY PnL recovery (May 2026): defaults tightened vs 6 / 22 — revert when portfolio stabilizes.
+MAIN_STRATEGY_ACCUMULATE_COOLDOWN_CYCLES = env_int("MAIN_STRATEGY_ACCUMULATE_COOLDOWN_CYCLES", 8)
+MAIN_STRATEGY_ACCUMULATE_MAX_WMATIC_USD = env_float("MAIN_STRATEGY_ACCUMULATE_MAX_WMATIC_USD", 18.0)
 # Rotation / gas-protection (modules.swap_executor — P2, force, idle, dust defer, mild-loss)
 MAIN_STRATEGY_ROTATION_MIN_NOTIONAL_USD = env_float("MAIN_STRATEGY_ROTATION_MIN_NOTIONAL_USD", 8.0)
 MAIN_STRATEGY_LOW_ROTATION_MIN_NOTIONAL_USD = env_float("MAIN_STRATEGY_LOW_ROTATION_MIN_NOTIONAL_USD", 10.0)

@@ -42,6 +42,7 @@ from modules.swap_executor import (
     _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_LOW_WM_CYCLES_MIN,
     _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_LOW_WM_MIN_SIGNAL,
     _MAIN_STRATEGY_STABLE_ROTATION_FALLBACK_MIN_SIGNAL,
+    MAIN_STRATEGY_ACCUMULATE_COOLDOWN_CYCLES,
     _main_strategy_idle_rotation_sell_decision,
     _main_strategy_idle_rotation_eligibility,
     _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH,
@@ -1682,7 +1683,7 @@ def test_select_main_strategy_rejects_buy_below_min_net_edge(monkeypatch, capsys
     monkeypatch.setattr(clean_swap, "_log_trade_skipped", lambda reason: skipped.append(reason))
 
     state: dict = {}
-    for _ in range(6):
+    for _ in range(MAIN_STRATEGY_ACCUMULATE_COOLDOWN_CYCLES):
         _profit_take_bump_cycle_counter(state)
     decision = select_main_strategy_trade(
         clean_swap.Balances(usdt=80.0, wmatic=20.0, pol=1.0),

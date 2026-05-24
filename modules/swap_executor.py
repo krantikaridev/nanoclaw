@@ -14,8 +14,6 @@ from config import (
     MAIN_STRATEGY_CUT_LOSS_MIN_WMATIC_BALANCE,
     MAIN_STRATEGY_CUT_LOSS_SELL_FRACTION,
     MAIN_STRATEGY_CUT_LOSS_WMATIC_USD,
-    MAIN_STRATEGY_ACCUMULATE_COOLDOWN_CYCLES,
-    MAIN_STRATEGY_ACCUMULATE_MAX_WMATIC_USD,
     MAIN_STRATEGY_MIN_USDT_RESERVE,
     MAIN_STRATEGY_RESERVE_SELL_FRACTION,
     MAIN_STRATEGY_TP_TRIGGER_WMATIC_USD,
@@ -632,6 +630,28 @@ def select_main_strategy_trade(
             message=f"ℹ️ Main WMATIC buy deferred ({defer_accum})",
         )
 
+    accumulate_size_multiplier = 1.0
+    # Soft brake: reduce buy aggression when WMATIC is already elevated
+    if wmatic_value_usd > 70:
+        # Temporarily buy smaller size when stack is high
+        accumulate_size_multiplier = 0.65
+    if accumulate_size_multiplier < 1.0:
+        trade_size = trade_size * accumulate_size_multiplier
+
+    # Optional hard gate (uncomment if you want stronger control)
+    # if wmatic_value_usd > 90:
+    #     decision_log.log_main_strategy_decision(
+    #         action="REJECT",
+    #         reason="accumulation_paused_for_recovery",
+    #         direction="USDT_TO_WMATIC",
+    #         wmatic_balance=float(balances.wmatic),
+    #         wmatic_usd=wmatic_value_usd,
+    #         state=state,
+    #     )
+    #     return TradeDecision(
+    #         message="ℹ️ Main WMATIC buy paused (accumulation_paused_for_recovery)",
+    #     )
+
     gross_edge = plan_main_strategy_gross_edge_pct()
     buy_decision = TradeDecision(
         direction="USDT_TO_WMATIC",
@@ -1238,19 +1258,28 @@ def _profit_take_record_exit(state: dict) -> None:
     d["cycles_since_exit"] = 0
 
 
+# === TEMPORARY PnL RECOVERY MODE (May 24, 2026) ===
+# Reduce aggressive WMATIC accumulation while we stabilize the portfolio.
+# Revert once total > $110 and stable_usd stays healthy.
+_MAIN_STRATEGY_ACCUMULATE_MAX_WMATIC_USD = 18.0  # was 22
+_MAIN_STRATEGY_ACCUMULATE_COOLDOWN_CYCLES = 8  # was 6 (wait longer after exits)
+MAIN_STRATEGY_ACCUMULATE_MAX_WMATIC_USD = _MAIN_STRATEGY_ACCUMULATE_MAX_WMATIC_USD
+MAIN_STRATEGY_ACCUMULATE_COOLDOWN_CYCLES = _MAIN_STRATEGY_ACCUMULATE_COOLDOWN_CYCLES
+
+
 def _main_strategy_accumulate_deferred_reason(
     wmatic_value_usd: float,
     state: dict | None,
 ) -> str | None:
     """Return a defer reason when USDT→WMATIC would add churn; ``None`` if accumulate is OK."""
-    cooldown = int(getattr(cfg, "MAIN_STRATEGY_ACCUMULATE_COOLDOWN_CYCLES", 0) or 0)
+    cooldown = int(_MAIN_STRATEGY_ACCUMULATE_COOLDOWN_CYCLES)
     if cooldown > 0:
         cycles = _profit_take_cycles_since_exit(state)
         if cycles < cooldown:
             return (
                 f"accumulate_cooldown ({cycles}/{cooldown} cycles since WMATIC→stable exit)"
             )
-    cap = float(getattr(cfg, "MAIN_STRATEGY_ACCUMULATE_MAX_WMATIC_USD", 0.0) or 0.0)
+    cap = float(_MAIN_STRATEGY_ACCUMULATE_MAX_WMATIC_USD)
     if cap > 0.0 and float(wmatic_value_usd) + 1e-9 >= cap:
         return f"wmatic_at_or_above_cap (${wmatic_value_usd:.2f} >= ${cap:.2f})"
     return None
@@ -3024,26 +3053,32 @@ async def main(*, dry_run: bool = False) -> None:
             return
 
         pol_now = float(cs.get_pol_balance())
-        if pol_now < float(cs.MIN_POL_FOR_GAS):
+        pol_floor = float(cs.effective_pol_floor(urgent=True))
+        if pol_now < pol_floor:
             if cs.AUTO_TOPUP_POL:
                 topup_ok = await asyncio.to_thread(
                     cs.maybe_auto_topup_pol,
-                    float(cs.MIN_POL_FOR_GAS),
+                    pol_floor,
                     context="pre_trade",
                     force=True,
                 )
-                if not topup_ok:
-                    cs._log_trade_skipped(f"POL low (auto top-up failed; need {cs.MIN_POL_FOR_GAS:.4f})")
-                    print(f"{runtime._nanolog()}AUTO-POL failed — trade blocked (pol<{cs.MIN_POL_FOR_GAS:.3f})")
+                pol_now = float(cs.get_pol_balance())
+                if not topup_ok or pol_now < pol_floor:
+                    cs._log_trade_skipped(f"POL low (auto top-up failed; need {pol_floor:.4f})")
+                    print(
+                        f"{runtime._nanolog()}AUTO-POL failed — trade blocked "
+                        f"(pol≈{pol_now:.4f} < floor≈{pol_floor:.4f})"
+                    )
                     return
             else:
-                cs._log_trade_skipped(f"POL low (have {pol_now:.4f}, need {cs.MIN_POL_FOR_GAS:.4f})")
+                cs._log_trade_skipped(f"POL low (have {pol_now:.4f}, need {pol_floor:.4f})")
                 print(
-                    f"{runtime._nanolog()}POL low (pol≈{pol_now:.4f} < {cs.MIN_POL_FOR_GAS:.4f}) "
+                    f"{runtime._nanolog()}POL low (pol≈{pol_now:.4f} < {pol_floor:.4f}) "
                     "and AUTO_TOPUP_POL=false — trade blocked"
                 )
                 return
 
+        gas_status = cs.get_gas_status(urgent=True, min_pol=pol_floor)
         if not gas_status["ok"]:
             gas_gwei = float(gas_status.get("gas_gwei") or 0.0)
             if gas_gwei <= 400.0:

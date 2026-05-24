@@ -92,6 +92,22 @@ def test_merge_env_from_example_preserves_wallet_from_existing_env():
     assert "SWAP_SLIPPAGE_BPS=99\n" in out
 
 
+def test_merge_env_from_example_overwrites_stale_min_pol_for_gas_from_template():
+    """Stage clean-start: nanoup must replace dangerous 0.005 with template 0.15."""
+    current = "MIN_POL_FOR_GAS=0.005\nAUTO_TOPUP_POL=true\n"
+    template = "MIN_POL_FOR_GAS=0.15\nAUTO_TOPUP_POL=true\n"
+
+    out = merge_env_from_example(
+        current,
+        template,
+        preserve_keys=ENV_APPLY_PRESERVE_KEYS,
+        keep_extra_keys=False,
+    )
+
+    assert "MIN_POL_FOR_GAS=0.15\n" in out
+    assert "MIN_POL_FOR_GAS=0.005" not in out
+
+
 def test_merge_env_from_example_appends_extra_keys_when_requested():
     current = "A=old\nEXTRA_KEY=123\n"
     template = "A=new\nB=2\n"
@@ -112,7 +128,7 @@ def test_merge_env_from_example_appends_extra_keys_when_requested():
 def test_env_apply_preserve_keys_include_rpc_runtime_keys():
     keys = set(ENV_APPLY_PRESERVE_KEYS)
     assert "WALLET" in keys
-    assert "MIN_POL_FOR_GAS" in keys
+    assert "MIN_POL_FOR_GAS" not in keys
     assert "ANKR_RPC_KEY" in keys
     assert "RPC_ENDPOINTS" in keys
     assert "RPC" in keys

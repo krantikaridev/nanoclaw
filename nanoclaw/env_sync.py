@@ -28,8 +28,6 @@ ENV_APPLY_PRESERVE_KEYS = (
     "TELEGRAM_CHAT_ID",
     # Never clobber custody / trading identity when applying the template (template may hold a placeholder).
     "WALLET",
-    # Stage may raise POL floor so AUTO-POL runs before swap-sized gas needs; preserve operator value.
-    "MIN_POL_FOR_GAS",
     # Preserve stage-specific RPC runtime selection when applying template.
     "RPC_ENDPOINTS",
     "RPC",

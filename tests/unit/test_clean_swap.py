@@ -278,7 +278,7 @@ def test_build_protection_exit_decision_includes_fluctuation_context(monkeypatch
     monkeypatch.setattr(
         protection,
         "get_last_fluctuation_context",
-        lambda: {
+        lambda **_kw: {
             "usdt": 22.5,
             "wmatic": 55.0,
             "usdt_threshold": 30.0,
@@ -389,7 +389,7 @@ def test_select_main_strategy_defers_accumulate_when_wmatic_above_cap(monkeypatc
         _profit_take_bump_cycle_counter,
     )
 
-    monkeypatch.setattr("modules.swap_executor.cfg.MAIN_STRATEGY_ACCUMULATE_MAX_WMATIC_USD", 18.0)
+    monkeypatch.setattr("modules.swap_executor._MAIN_STRATEGY_ACCUMULATE_MAX_WMATIC_USD", 18.0)
     state: dict = {}
     for _ in range(MAIN_STRATEGY_ACCUMULATE_COOLDOWN_CYCLES):
         _profit_take_bump_cycle_counter(state)
@@ -400,6 +400,60 @@ def test_select_main_strategy_defers_accumulate_when_wmatic_above_cap(monkeypatc
     )
     assert decision.direction is None
     assert "wmatic_at_or_above_cap" in decision.message
+
+
+def test_select_main_strategy_accumulate_soft_brake_reduces_size_when_wmatic_above_70(
+    monkeypatch,
+):
+    """PnL recovery: WMATIC stack > $70 → accumulate size × 0.65 (not at or below $70)."""
+    import clean_swap
+    from modules.swap_executor import (
+        MAIN_STRATEGY_ACCUMULATE_COOLDOWN_CYCLES,
+        _profit_take_bump_cycle_counter,
+    )
+
+    # Default TP (~$52) would sell before accumulate; raise so $50–$75 reaches the buy path.
+    monkeypatch.setattr("modules.swap_executor.MAIN_STRATEGY_TP_TRIGGER_WMATIC_USD", 100.0)
+    monkeypatch.setattr("modules.swap_executor._MAIN_STRATEGY_ACCUMULATE_MAX_WMATIC_USD", 200.0)
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", False)
+    monkeypatch.setattr(
+        "modules.swap_executor._main_strategy_idle_rotation_sell_decision",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "modules.swap_executor._reject_if_low_expected_net_edge",
+        lambda *_args, **_kwargs: False,
+    )
+
+    def _state_past_cooldown() -> dict:
+        state: dict = {}
+        for _ in range(MAIN_STRATEGY_ACCUMULATE_COOLDOWN_CYCLES):
+            _profit_take_bump_cycle_counter(state)
+        return state
+
+    full_size = clean_swap.select_main_strategy_trade(
+        clean_swap.Balances(usdt=80.0, wmatic=50.0, pol=1.0),
+        current_price=1.0,
+        state=_state_past_cooldown(),
+    )
+    at_threshold = clean_swap.select_main_strategy_trade(
+        clean_swap.Balances(usdt=80.0, wmatic=70.0, pol=1.0),
+        current_price=1.0,
+        state=_state_past_cooldown(),
+    )
+    soft_braked = clean_swap.select_main_strategy_trade(
+        clean_swap.Balances(usdt=80.0, wmatic=75.0, pol=1.0),
+        current_price=1.0,
+        state=_state_past_cooldown(),
+    )
+
+    assert full_size.direction == "USDT_TO_WMATIC"
+    assert at_threshold.direction == "USDT_TO_WMATIC"
+    assert soft_braked.direction == "USDT_TO_WMATIC"
+    assert full_size.trade_size > 0
+    assert full_size.trade_size == at_threshold.trade_size
+    assert soft_braked.trade_size == full_size.trade_size * 0.65
+    assert soft_braked.amount_in == int(soft_braked.trade_size * 1_000_000)
 
 
 def test_select_main_strategy_idle_rotation_over_accumulate_when_low_wmatic():
@@ -1336,7 +1390,7 @@ def test_main_skips_small_stable_in_trade_when_below_min_trade_usd(monkeypatch, 
     monkeypatch.setattr(
         clean_swap,
         "get_gas_status",
-        lambda: {
+        lambda **_kw: {
             "ok": True,
             "gas_gwei": 20.0,
             "max_gwei": 80.0,
@@ -1392,7 +1446,7 @@ def test_main_skips_small_wmatic_exit_when_below_min_trade_usd(monkeypatch, caps
     monkeypatch.setattr(
         clean_swap,
         "get_gas_status",
-        lambda: {
+        lambda **_kw: {
             "ok": True,
             "gas_gwei": 20.0,
             "max_gwei": 80.0,
@@ -1452,7 +1506,7 @@ def test_main_profit_take_min_trade_guard_bypassed_when_balance_relief_applies(m
     monkeypatch.setattr(
         clean_swap,
         "get_gas_status",
-        lambda: {
+        lambda **_kw: {
             "ok": True,
             "gas_gwei": 20.0,
             "max_gwei": 80.0,
@@ -1523,7 +1577,7 @@ def test_main_hold_mild_loss_idle_min_trade_guard_bypassed(monkeypatch, capsys):
     monkeypatch.setattr(
         clean_swap,
         "get_gas_status",
-        lambda: {
+        lambda **_kw: {
             "ok": True,
             "gas_gwei": 20.0,
             "max_gwei": 80.0,
@@ -1606,7 +1660,7 @@ def test_main_records_wallet_performance_on_wmatic_to_usdc_exit(monkeypatch):
     monkeypatch.setattr(
         clean_swap,
         "get_gas_status",
-        lambda: {
+        lambda **_kw: {
             "ok": True,
             "gas_gwei": 20.0,
             "max_gwei": 80.0,

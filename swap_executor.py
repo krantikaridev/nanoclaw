@@ -47,36 +47,107 @@ ROUTER = Web3.to_checksum_address(ROUTER)
 UNISWAP_V3_ROUTER = Web3.to_checksum_address(UNISWAP_V3_SWAP_ROUTER)
 UNISWAP_V3_QUOTER = Web3.to_checksum_address(UNISWAP_V3_QUOTER)
 
-def _force_max_approval(w3, private_key, router_address, token_address="0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"):
-    """One-time startup MAX approval helper for stubborn Polygon RPC lag."""
-    from web3 import Web3
-    import time
-    account = w3.eth.account.from_key(private_key)
-    wallet = account.address
+def _erc20_allowance(w3, token_address: str, owner: str, spender: str) -> int:
     token = w3.eth.contract(
         address=Web3.to_checksum_address(token_address),
         abi=[
-            {"constant": False, "inputs": [{"name": "_spender", "type": "address"}, {"name": "_value", "type": "uint256"}], "name": "approve", "outputs": [{"name": "", "type": "bool"}], "type": "function"},
-            {"constant": True, "inputs": [{"name": "_owner", "type": "address"}, {"name": "_spender", "type": "address"}], "name": "allowance", "outputs": [{"name": "", "type": "uint256"}], "type": "function"}
-        ]
+            {
+                "constant": True,
+                "inputs": [
+                    {"name": "_owner", "type": "address"},
+                    {"name": "_spender", "type": "address"},
+                ],
+                "name": "allowance",
+                "outputs": [{"name": "", "type": "uint256"}],
+                "type": "function",
+            }
+        ],
     )
-    MAX = (1 << 256) - 1
+    return int(token.functions.allowance(
+        Web3.to_checksum_address(owner),
+        Web3.to_checksum_address(spender),
+    ).call())
+
+
+def ensure_startup_router_approval(
+    w3,
+    private_key,
+    router_address,
+    token_address="0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+    *,
+    force: bool = False,
+    min_allowance: int = 10**24,
+) -> bool:
+    """Ensure router ERC20 allowance; skip when sufficient or POL too low (never crash startup)."""
+    from web3 import Web3
+
+    account = w3.eth.account.from_key(private_key)
+    wallet = account.address
+    router = Web3.to_checksum_address(router_address)
+    token_addr = Web3.to_checksum_address(token_address)
+    allowance = _erc20_allowance(w3, token_addr, wallet, router)
+    if not force and allowance >= int(min_allowance):
+        print(
+            f"[FORCE-MAX-APPROVE] Skipped — allowance sufficient "
+            f"(allowance={allowance}, min={min_allowance})"
+        )
+        return True
+
+    approve_gas_units = int(getattr(cfg, "POL_APPROVE_GAS_UNITS", 85_000))
+    gas_price = int(w3.eth.gas_price)
+    pol_balance = float(w3.from_wei(w3.eth.get_balance(wallet), "ether"))
+    approve_cost_pol = (approve_gas_units * gas_price / 1e18) * 1.10
+    if pol_balance + 1e-12 < approve_cost_pol:
+        print(
+            f"[FORCE-MAX-APPROVE] Skipped — insufficient POL for approve "
+            f"(pol≈{pol_balance:.6f}, need≈{approve_cost_pol:.6f})"
+        )
+        return False
+
+    token = w3.eth.contract(
+        address=token_addr,
+        abi=[
+            {
+                "constant": False,
+                "inputs": [
+                    {"name": "_spender", "type": "address"},
+                    {"name": "_value", "type": "uint256"},
+                ],
+                "name": "approve",
+                "outputs": [{"name": "", "type": "bool"}],
+                "type": "function",
+            }
+        ],
+    )
+    max_uint = (1 << 256) - 1
     print(f"[FORCE-MAX-APPROVE] Forcing fresh MAX approval for router {router_address}")
-    tx = token.functions.approve(router_address, MAX).build_transaction({
+    tx = token.functions.approve(router, max_uint).build_transaction({
         "from": wallet,
         "nonce": w3.eth.get_transaction_count(wallet),
-        "gas": 80000,
-        "gasPrice": int(w3.eth.gas_price * 2.2),
+        "gas": approve_gas_units,
+        "gasPrice": gas_price,
     })
     signed = w3.eth.account.sign_transaction(tx, private_key)
     tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
     print(f"[FORCE-MAX-APPROVE] Sent: {tx_hash.hex()}")
     receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=180)
     if receipt.status == 1:
-        time.sleep(8)  # ← Increased to 8 seconds for maximum propagation safety
+        time.sleep(8)
         print("[FORCE-MAX-APPROVE] ✅ Fresh MAX confirmed + fully propagated (ready for swap)")
-    else:
-        print("[FORCE-MAX-APPROVE] ❌ Approval tx failed")
+        return True
+    print("[FORCE-MAX-APPROVE] ❌ Approval tx failed")
+    return False
+
+
+def _force_max_approval(w3, private_key, router_address, token_address="0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"):
+    """Backward-compatible wrapper — prefer ``ensure_startup_router_approval``."""
+    return ensure_startup_router_approval(
+        w3,
+        private_key,
+        router_address,
+        token_address=token_address,
+        force=True,
+    )
 
 def _fallback_router_slippage_bps() -> int:
     """Slippage for QuickSwap-style router when 1inch is not used (typically looser than primary)."""

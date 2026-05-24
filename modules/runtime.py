@@ -56,8 +56,14 @@ AUTO_TOPUP_POL = cfg.AUTO_TOPUP_POL
 POL_TOPUP_AMOUNT = cfg.POL_TOPUP_AMOUNT
 POL_AUTO_TOPUP_COOLDOWN_SECONDS = cfg.POL_AUTO_TOPUP_COOLDOWN_SECONDS
 POL_MIN_BALANCE_FOR_TOPUP_TX = cfg.POL_MIN_BALANCE_FOR_TOPUP_TX
+POL_SWAP_GAS_UNITS = cfg.POL_SWAP_GAS_UNITS
+POL_APPROVE_GAS_UNITS = cfg.POL_APPROVE_GAS_UNITS
+POL_UNWRAP_GAS_UNITS = cfg.POL_UNWRAP_GAS_UNITS
+POL_GAS_RESERVE_MULTIPLIER = cfg.POL_GAS_RESERVE_MULTIPLIER
+POL_GAS_RESERVE_BUFFER_POL = cfg.POL_GAS_RESERVE_BUFFER_POL
 COPY_TRADE_PCT = cfg.COPY_TRADE_PCT
 MAX_GWEI = cfg.MAX_GWEI
+URGENT_GWEI = cfg.URGENT_GWEI
 MIN_TRADE_USD = cfg.MIN_TRADE_USD
 FIXED_TRADE_USD_MIN = cfg.FIXED_TRADE_USD_MIN
 FIXED_TRADE_USD_MAX = cfg.FIXED_TRADE_USD_MAX
@@ -342,14 +348,59 @@ def _pol_topup_min_usdt_swap() -> float:
     return max(5.0, float(MIN_TRADE_USD))
 
 
+def estimate_pol_gas_cost_pol(
+    *,
+    gas_units: int,
+    gas_gwei: float | None = None,
+    multiplier: float = 1.0,
+) -> float:
+    """Native POL cost for ``gas_units`` at ``gas_gwei`` (defaults to live network price)."""
+    gwei = float(gas_gwei if gas_gwei is not None else GAS_PROTECTOR.get_gas_price_gwei())
+    return (int(gas_units) * gwei * 1e9 / 1e18) * float(multiplier)
+
+
+def effective_pol_floor(*, urgent: bool = True, gas_gwei: float | None = None) -> float:
+    """Operating POL floor: max(static MIN_POL_FOR_GAS, dynamic swap-gas reserve at urgent gwei)."""
+    gwei = float(gas_gwei if gas_gwei is not None else GAS_PROTECTOR.get_gas_price_gwei())
+    if urgent:
+        gwei = max(gwei, float(URGENT_GWEI))
+    dynamic = (
+        estimate_pol_gas_cost_pol(
+            gas_units=int(POL_SWAP_GAS_UNITS),
+            gas_gwei=gwei,
+            multiplier=float(POL_GAS_RESERVE_MULTIPLIER),
+        )
+        + float(POL_GAS_RESERVE_BUFFER_POL)
+    )
+    return max(float(MIN_POL_FOR_GAS), dynamic)
+
+
+def _pol_operating_floor(explicit_min: float | None = None, *, urgent: bool = True) -> float:
+    static = float(MIN_POL_FOR_GAS if explicit_min is None else explicit_min)
+    return max(static, effective_pol_floor(urgent=urgent))
+
+
+def pol_can_broadcast_tx(*, gas_units: int, pol_balance: float | None = None) -> bool:
+    pol = float(pol_balance if pol_balance is not None else get_pol_balance())
+    need = estimate_pol_gas_cost_pol(gas_units=int(gas_units), multiplier=1.05)
+    return pol + 1e-12 >= need
+
+
+def _pol_min_for_topup_broadcast() -> float:
+    return max(
+        float(POL_MIN_BALANCE_FOR_TOPUP_TX),
+        estimate_pol_gas_cost_pol(gas_units=int(POL_UNWRAP_GAS_UNITS), multiplier=1.05),
+    )
+
+
 def maybe_auto_topup_pol(
     min_pol: Optional[float] = None,
     *,
     context: str = "cycle",
     force: bool = False,
 ) -> bool:
-    """Proactive POL maintenance: top up when below ``min_pol`` (defaults to MIN_POL_FOR_GAS)."""
-    floor = float(MIN_POL_FOR_GAS if min_pol is None else min_pol)
+    """Proactive POL maintenance: top up when below operating floor (static + dynamic gas reserve)."""
+    floor = _pol_operating_floor(min_pol, urgent=True)
     current_pol = float(get_pol_balance())
 
     if not AUTO_TOPUP_POL:
@@ -400,7 +451,7 @@ def maybe_auto_topup_pol(
 
 def ensure_pol_for_trade(min_pol: float = 0.025) -> bool:
     current_pol = float(get_pol_balance())
-    floor = float(min_pol)
+    floor = _pol_operating_floor(float(min_pol), urgent=True)
     if current_pol >= floor:
         print(
             f"{_nanolog()}AUTO-POL skipped — POL sufficient "
@@ -408,7 +459,7 @@ def ensure_pol_for_trade(min_pol: float = 0.025) -> bool:
         )
         return True
 
-    min_pol_for_tx = float(POL_MIN_BALANCE_FOR_TOPUP_TX)
+    min_pol_for_tx = _pol_min_for_topup_broadcast()
     if current_pol < min_pol_for_tx:
         print(
             f"{_nanolog()}AUTO-POL skipped — POL too low to broadcast top-up txs "
@@ -422,10 +473,9 @@ def ensure_pol_for_trade(min_pol: float = 0.025) -> bool:
         print(f"{_nanolog()}AUTO-POL skipped — no private key")
         return False
 
-    target_pol = float(POL_TOPUP_AMOUNT)
     needed_pol = max(0.0, floor - current_pol)
-    # Ensure we target enough unwrap to clear the runtime min_pol floor, not just POL_TOPUP_AMOUNT.
-    desired_topup_pol = max(target_pol, needed_pol + 0.002)
+    # Target enough unwrap to clear the dynamic operating floor, not just POL_TOPUP_AMOUNT.
+    desired_topup_pol = max(float(POL_TOPUP_AMOUNT), needed_pol + 0.002)
     print(
         f"🔄 AUTO-POL | Topping up ~{desired_topup_pol:.4f} POL "
         f"(current≈{current_pol:.4f}, floor={floor:.4f})"
@@ -524,11 +574,13 @@ def get_gas_status(
     urgent: bool = False,
     protector: GasProtector = GAS_PROTECTOR,
     wallet_address: str = WALLET,
+    min_pol: Optional[float] = None,
 ) -> dict:
+    pol_floor = float(min_pol if min_pol is not None else effective_pol_floor(urgent=urgent))
     return protector.get_safe_status(
         address=wallet_address,
         urgent=urgent,
-        min_pol=MIN_POL_FOR_GAS,
+        min_pol=pol_floor,
     )
 
 

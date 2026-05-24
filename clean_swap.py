@@ -21,7 +21,7 @@ from config import UNISWAP_V3_SWAP_ROUTER
 import config as cfg
 from copy_trading import get_target_wallets
 from nanoclaw.strategies.signal_equity_trader import EquityTradePlan, FollowedEquity
-from swap_executor import _force_max_approval
+from swap_executor import ensure_startup_router_approval
 
 from constants import ERC20_ABI, LOG_PREFIX, USDC, USDT, WALLET, WMATIC
 from modules import runtime
@@ -112,6 +112,7 @@ can_trade_wallet = runtime.can_trade_wallet
 create_lock = runtime.create_lock
 ensure_pol_for_trade = runtime.ensure_pol_for_trade
 maybe_auto_topup_pol = runtime.maybe_auto_topup_pol
+effective_pol_floor = runtime.effective_pol_floor
 evaluate_take_profit = runtime.evaluate_take_profit
 get_balances = runtime.get_balances
 get_gas_status = runtime.get_gas_status
@@ -245,9 +246,21 @@ if __name__ == "__main__":
         print(f"❌ {exc}")
         raise SystemExit(2) from exc
     print(f"{LOG_PREFIX} Private key resolved from {startup_key_source}")
-    print("🚀 Running one-time max approval at startup...")
-    _force_max_approval(w3, startup_key, UNISWAP_V3_SWAP_ROUTER)
-    print("✅ Startup approval complete. Bot ready.")
+    if runtime.AUTO_TOPUP_POL:
+        print("🔄 Startup POL bootstrap (AUTO-POL before approvals)...")
+        runtime.maybe_auto_topup_pol(context="startup", force=True)
+    if cfg.FORCE_STARTUP_MAX_APPROVE:
+        print("🚀 Ensuring router token approval at startup...")
+        approved = ensure_startup_router_approval(w3, startup_key, UNISWAP_V3_SWAP_ROUTER)
+        if approved:
+            print("✅ Startup approval complete. Bot ready.")
+        else:
+            print(
+                f"{LOG_PREFIX} Startup approval skipped or deferred (low POL / allowance OK) — "
+                "continuing; AUTO-POL will retry next cycle"
+            )
+    else:
+        print(f"{LOG_PREFIX} FORCE_STARTUP_MAX_APPROVE=false — skipping startup approval")
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--dry-run",
