@@ -211,6 +211,28 @@ X_SIGNAL_USDC_SAFE_FLOOR = env_float("X_SIGNAL_USDC_SAFE_FLOOR", 20.0)
 X_SIGNAL_LIMITED_USDC_MIN_EFFECTIVE_GATE_USD = env_float(
     "X_SIGNAL_LIMITED_USDC_MIN_EFFECTIVE_GATE_USD", 10.0
 )
+# Signal-Driven Rotation effective-size tiers (after gas, USDC→equity BUY).
+X_SIGNAL_MIN_EFFECTIVE_TRADE_USD_BASE = env_float("X_SIGNAL_MIN_EFFECTIVE_TRADE_USD_BASE", 12.0)
+X_SIGNAL_MIN_EFFECTIVE_TRADE_USD_MEDIUM_TIER = env_float(
+    "X_SIGNAL_MIN_EFFECTIVE_TRADE_USD_MEDIUM_TIER", 14.0
+)
+X_SIGNAL_MIN_EFFECTIVE_TRADE_USD_WEAK_TIER = env_float(
+    "X_SIGNAL_MIN_EFFECTIVE_TRADE_USD_WEAK_TIER", 15.0
+)
+# PnL recovery: cap effective gate so ~$10 dynamic sizing is not blocked at $14+ tiers.
+X_SIGNAL_RECOVERY_EFFECTIVE_GATE_ENABLED = env_bool("X_SIGNAL_RECOVERY_EFFECTIVE_GATE_ENABLED", True)
+# Recovery cap (after gas); default $9 leaves headroom vs ~$10 sizing + gas while staying above $8 hard floor.
+X_SIGNAL_RECOVERY_MIN_EFFECTIVE_GATE_USD = env_float("X_SIGNAL_RECOVERY_MIN_EFFECTIVE_GATE_USD", 9.0)
+# Boost recovery BUY notional so effective_after_gas reliably clears the recovery cap.
+X_SIGNAL_RECOVERY_GAS_BUFFER_USD = env_float("X_SIGNAL_RECOVERY_GAS_BUFFER_USD", 1.25)
+# Relax when control.json max_copy_trade_pct is at/below this defensive tier (0 = env-only trigger).
+X_SIGNAL_RECOVERY_MAX_COPY_PCT_THRESHOLD = env_float(
+    "X_SIGNAL_RECOVERY_MAX_COPY_PCT_THRESHOLD", 0.06
+)
+# Relax when control.json stable_usd (USDT+USDC) is below this runway (aligns with moderate tier).
+X_SIGNAL_RECOVERY_STABLE_USD_MAX = env_float("X_SIGNAL_RECOVERY_STABLE_USD_MAX", 100.0)
+# Relax when session PnL (portfolio_history vs portfolio_session_baseline.json) is negative.
+X_SIGNAL_RECOVERY_SESSION_PNL_ENABLED = env_bool("X_SIGNAL_RECOVERY_SESSION_PNL_ENABLED", True)
 X_SIGNAL_AUTO_USDC_TARGET = env_float("X_SIGNAL_AUTO_USDC_TARGET", 25.0)
 X_SIGNAL_AUTO_USDC_TOPUP_ENABLED = env_bool("X_SIGNAL_AUTO_USDC_TOPUP_ENABLED", True)
 X_SIGNAL_AUTO_USDC_MIN_SWAP_USD = env_float("X_SIGNAL_AUTO_USDC_MIN_SWAP_USD", 8.0)
@@ -263,6 +285,9 @@ X_SIGNAL_SMALL_HIGH_CONVICTION_FALLBACK_RETRY_BPS = env_int(
     "X_SIGNAL_SMALL_HIGH_CONVICTION_FALLBACK_RETRY_BPS",
     10000,
 )
+# ~$10 gated trades: use small-tier execution (8000/10000, 50 min_out) when |signal| >= this at/below max notional.
+X_SIGNAL_SMALL_GATED_MIN_STRENGTH = env_float("X_SIGNAL_SMALL_GATED_MIN_STRENGTH", 0.80)
+X_SIGNAL_SMALL_GATED_MAX_NOTIONAL_USD = env_float("X_SIGNAL_SMALL_GATED_MAX_NOTIONAL_USD", 12.0)
 # Signal-driven execution quality (May 2026): X-SIGNAL USDC→equity gated BUY — fallback router only.
 X_SIGNAL_GATED_TRADE_FALLBACK_PRIMARY_BPS = env_int(
     "X_SIGNAL_GATED_TRADE_FALLBACK_PRIMARY_BPS",
@@ -304,6 +329,11 @@ X_SIGNAL_HIGH_CONVICTION_PRIMARY_RELIEF_BPS = env_int("X_SIGNAL_HIGH_CONVICTION_
 X_SIGNAL_FALLBACK_REQUOTE_DELAY_SECONDS = env_float("X_SIGNAL_FALLBACK_REQUOTE_DELAY_SECONDS", 1.5)
 # Prefer 0.3% V3 pool when its quote is within this many bps of the best tier (stabler path for equities).
 X_SIGNAL_STABLE_FEE_PREFER_BPS = env_int("X_SIGNAL_STABLE_FEE_PREFER_BPS", 75)
+# X-SIGNAL quoting: try QuoterV2 before legacy QuoterV1 (Polygon); fallback to V2 router when V3 pools missing.
+X_SIGNAL_QUOTE_PREFER_QUOTER_V2 = env_bool("X_SIGNAL_QUOTE_PREFER_QUOTER_V2", True)
+X_SIGNAL_V2_ROUTER_FALLBACK_ENABLED = env_bool("X_SIGNAL_V2_ROUTER_FALLBACK_ENABLED", True)
+# Small USDC→equity trades (raw 6-dec amount): probe 0.3% fee tier before 0.05%/1%.
+X_SIGNAL_SMALL_TRADE_USDC_RAW = env_int("X_SIGNAL_SMALL_TRADE_USDC_RAW", 15_000_000)
 # Fallback slippage for USDC→equity X-SIGNAL that missed gated/small tiers (still ramps on router).
 X_SIGNAL_DEFAULT_FALLBACK_PRIMARY_BPS = env_int("X_SIGNAL_DEFAULT_FALLBACK_PRIMARY_BPS", 7000)
 X_SIGNAL_DEFAULT_FALLBACK_RETRY_BPS = env_int("X_SIGNAL_DEFAULT_FALLBACK_RETRY_BPS", 11000)
@@ -322,8 +352,22 @@ MAIN_STRATEGY_ACCUMULATE_MAX_WMATIC_USD = env_float("MAIN_STRATEGY_ACCUMULATE_MA
 # TEMPORARY PnL recovery (May 2026): pause sub-$5 idle micro-rotations; tighten accumulate defaults above.
 MAIN_STRATEGY_PNL_RECOVERY_MODE = env_bool("MAIN_STRATEGY_PNL_RECOVERY_MODE", True)
 MAIN_STRATEGY_PNL_RECOVERY_IDLE_MIN_NOTIONAL_USD = env_float(
-    "MAIN_STRATEGY_PNL_RECOVERY_IDLE_MIN_NOTIONAL_USD", 5.0
+    "MAIN_STRATEGY_PNL_RECOVERY_IDLE_MIN_NOTIONAL_USD", 8.0
 )
+# Recovery: minimum notional for long-idle micro / force-small P2 paths (replaces $1.35 floor).
+MAIN_STRATEGY_PNL_RECOVERY_ROTATION_MIN_NOTIONAL_USD = env_float(
+    "MAIN_STRATEGY_PNL_RECOVERY_ROTATION_MIN_NOTIONAL_USD", 8.0
+)
+# Recovery: extra idle cycles before low-stack / long-idle micro rotations.
+MAIN_STRATEGY_PNL_RECOVERY_LONG_IDLE_CYCLE_BONUS = env_int(
+    "MAIN_STRATEGY_PNL_RECOVERY_LONG_IDLE_CYCLE_BONUS", 3
+)
+# Recovery strictness also when control.json max_copy_trade_pct is at/below this tier (0 = env-only).
+MAIN_STRATEGY_RECOVERY_MAX_COPY_PCT_THRESHOLD = env_float(
+    "MAIN_STRATEGY_RECOVERY_MAX_COPY_PCT_THRESHOLD", 0.06
+)
+# Optional operator alias; X-SIGNAL recovery gate also honors this when set true independently.
+PNL_RECOVERY_MODE = env_bool("PNL_RECOVERY_MODE", False)
 # Rotation / gas-protection (modules.swap_executor — P2, force, idle, dust defer, mild-loss)
 MAIN_STRATEGY_ROTATION_MIN_NOTIONAL_USD = env_float("MAIN_STRATEGY_ROTATION_MIN_NOTIONAL_USD", 8.0)
 MAIN_STRATEGY_LOW_ROTATION_MIN_NOTIONAL_USD = env_float("MAIN_STRATEGY_LOW_ROTATION_MIN_NOTIONAL_USD", 10.0)

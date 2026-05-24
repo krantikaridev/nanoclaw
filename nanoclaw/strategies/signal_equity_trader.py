@@ -54,33 +54,165 @@ _X_SIGNAL_MIN_SIZE_OVERRIDE = 7.5
 _X_SIGNAL_MIN_EFFECTIVE_OVERRIDE = 7.0
 
 # Signal-Driven Rotation (May 2026): dynamic effective-size floor for X-SIGNAL equity BUYs.
-# Base lowered from 18.0 → 12.0 so high-conviction external signals rotate capital faster;
-# weaker signals keep a higher floor to limit fallback-router gas waste.
-_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD_BASE = 12.0
+# Tier defaults live in config.py / .env; module constant kept for tests that patch a single value.
+_X_SIGNAL_MIN_EFFECTIVE_TRADE_USD_BASE = float(
+    getattr(cfg, "X_SIGNAL_MIN_EFFECTIVE_TRADE_USD_BASE", 12.0)
+)
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_CONTROL_JSON_PATH = _REPO_ROOT / "control.json"
+_SESSION_BASELINE_PATH = _REPO_ROOT / "portfolio_session_baseline.json"
+_PORTFOLIO_HISTORY_PATH = _REPO_ROOT / "portfolio_history.csv"
+
+
+@dataclass(frozen=True)
+class _XSignalRecoveryGateContext:
+    active: bool
+    reason: str | None = None
+
+
+def _parse_control_json_float(val: object) -> float | None:
+    if val is None or isinstance(val, bool):
+        return None
+    if isinstance(val, (int, float)):
+        out = float(val)
+        return out if math.isfinite(out) else None
+    if isinstance(val, str):
+        try:
+            out = float(val.strip())
+            return out if math.isfinite(out) else None
+        except ValueError:
+            return None
+    return None
+
+
+def _read_control_json_fields() -> tuple[float | None, float | None]:
+    """Best-effort (stable_usd, max_copy_trade_pct) from repo-root control.json."""
+    try:
+        raw = _CONTROL_JSON_PATH.read_text(encoding="utf-8").strip()
+        if not raw:
+            return None, None
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            return None, None
+        return (
+            _parse_control_json_float(data.get("stable_usd")),
+            _parse_control_json_float(data.get("max_copy_trade_pct")),
+        )
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return None, None
+
+
+def _read_session_baseline_total() -> float | None:
+    try:
+        raw = _SESSION_BASELINE_PATH.read_text(encoding="utf-8").strip()
+        if not raw:
+            return None
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            return None
+        return _parse_control_json_float(data.get("session_start_total"))
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return None
+
+
+def _read_latest_portfolio_total() -> float | None:
+    if not _PORTFOLIO_HISTORY_PATH.is_file():
+        return None
+    latest: float | None = None
+    try:
+        import csv
+
+        with _PORTFOLIO_HISTORY_PATH.open("r", encoding="utf-8", newline="") as fh:
+            for row in csv.DictReader(fh):
+                tv = _parse_control_json_float(row.get("total_value"))
+                if tv is not None:
+                    latest = tv
+    except OSError:
+        return None
+    return latest
+
+
+def _x_signal_session_pnl_negative() -> bool:
+    if not bool(getattr(cfg, "X_SIGNAL_RECOVERY_SESSION_PNL_ENABLED", True)):
+        return False
+    baseline = _read_session_baseline_total()
+    current = _read_latest_portfolio_total()
+    if baseline is None or current is None:
+        return False
+    return float(current) + 1e-9 < float(baseline)
+
+
+def _pnl_recovery_mode_active() -> bool:
+    """Shared PnL recovery posture — MAIN_STRATEGY env and optional PNL_RECOVERY_MODE alias."""
+    if bool(getattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", False)):
+        return True
+    return bool(getattr(cfg, "PNL_RECOVERY_MODE", False))
+
+
+def _x_signal_recovery_gate_context() -> _XSignalRecoveryGateContext:
+    """Portfolio posture signals that cap the effective-size gate during recovery."""
+    if not bool(getattr(cfg, "X_SIGNAL_RECOVERY_EFFECTIVE_GATE_ENABLED", True)):
+        return _XSignalRecoveryGateContext(active=False)
+    if _pnl_recovery_mode_active():
+        reason = (
+            "PNL_RECOVERY_MODE"
+            if bool(getattr(cfg, "PNL_RECOVERY_MODE", False))
+            and not bool(getattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", False))
+            else "MAIN_STRATEGY_PNL_RECOVERY_MODE"
+        )
+        return _XSignalRecoveryGateContext(active=True, reason=reason)
+    stable_usd, max_copy_pct = _read_control_json_fields()
+    stable_max = float(getattr(cfg, "X_SIGNAL_RECOVERY_STABLE_USD_MAX", 100.0))
+    if stable_usd is not None and float(stable_usd) + 1e-9 < stable_max:
+        return _XSignalRecoveryGateContext(
+            active=True,
+            reason=f"stable_usd={float(stable_usd):.2f}<{stable_max:.0f}",
+        )
+    threshold = float(getattr(cfg, "X_SIGNAL_RECOVERY_MAX_COPY_PCT_THRESHOLD", 0.06))
+    if threshold > 0.0 and max_copy_pct is not None and float(max_copy_pct) + 1e-9 <= threshold:
+        return _XSignalRecoveryGateContext(
+            active=True,
+            reason=f"max_copy_trade_pct={float(max_copy_pct):.4f}<={threshold:.4f}",
+        )
+    if _x_signal_session_pnl_negative():
+        return _XSignalRecoveryGateContext(active=True, reason="session_pnl_negative")
+    return _XSignalRecoveryGateContext(active=False)
+
+
+def _x_signal_recovery_gate_relaxation_active() -> bool:
+    """True when portfolio is in defensive/recovery posture — align gate with ~$10 dynamic sizing."""
+    return _x_signal_recovery_gate_context().active
 
 
 def _x_signal_min_effective_trade_usd(
     signal_strength: float,
     *,
     usdc_balance: float | None = None,
+    recovery_gate: bool | None = None,
 ) -> float:
     """Effective notional (after gas) required for USDC→equity BUY; scales with |signal|."""
     s = abs(float(signal_strength))
-    if s >= float(_X_SIGNAL_VERY_STRONG_STRENGTH):
-        gate = _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD_BASE
-    elif s >= _X_SIGNAL_HIGH_CONVICTION_STRENGTH:
-        gate = _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD_BASE
+    base_gate = float(getattr(cfg, "X_SIGNAL_MIN_EFFECTIVE_TRADE_USD_BASE", 12.0))
+    medium_gate = float(getattr(cfg, "X_SIGNAL_MIN_EFFECTIVE_TRADE_USD_MEDIUM_TIER", 14.0))
+    weak_gate = float(getattr(cfg, "X_SIGNAL_MIN_EFFECTIVE_TRADE_USD_WEAK_TIER", 15.0))
+    if s >= float(_X_SIGNAL_VERY_STRONG_STRENGTH) or s >= _X_SIGNAL_HIGH_CONVICTION_STRENGTH:
+        gate = base_gate
     elif s >= float(_X_SIGNAL_VERY_STRONG_STRENGTH) - 0.10:  # 0.80 tier
-        gate = 14.0
+        gate = medium_gate
     else:
-        gate = 15.0
+        gate = weak_gate
+    limited_cap = float(getattr(cfg, "X_SIGNAL_LIMITED_USDC_MIN_EFFECTIVE_GATE_USD", 10.0))
     if usdc_balance is not None:
         usdc_safe = float(cfg.env_float("X_SIGNAL_USDC_SAFE_FLOOR", 20.0))
         if float(usdc_balance) + 1e-9 < usdc_safe:
-            limited_gate = float(
-                cfg.env_float("X_SIGNAL_LIMITED_USDC_MIN_EFFECTIVE_GATE_USD", 10.0)
-            )
-            gate = min(gate, limited_gate)
+            gate = min(gate, limited_cap)
+    recovery_active = (
+        recovery_gate if recovery_gate is not None else _x_signal_recovery_gate_relaxation_active()
+    )
+    if recovery_active:
+        recovery_cap = float(getattr(cfg, "X_SIGNAL_RECOVERY_MIN_EFFECTIVE_GATE_USD", 9.0))
+        gate = min(gate, recovery_cap)
     return gate
 
 
@@ -754,6 +886,33 @@ class SignalEquityTrader:
                 print("[nanoclaw-av] X-SIGNAL boosted sizing for very strong signal")
                 logger.info("[nanoclaw-av] X-SIGNAL boosted sizing for very strong signal")
                 sized = boosted
+        # Recovery: lift notional so effective_after_gas clears the relaxed recovery gate + gas buffer.
+        if (
+            float(signal_strength) > 0
+            and _x_signal_recovery_gate_relaxation_active()
+            and abs(float(signal_strength)) + 1e-9 >= float(_X_SIGNAL_VERY_STRONG_STRENGTH) - 0.10
+        ):
+            recovery_cap = float(getattr(cfg, "X_SIGNAL_RECOVERY_MIN_EFFECTIVE_GATE_USD", 9.0))
+            gas_buf = float(getattr(cfg, "X_SIGNAL_RECOVERY_GAS_BUFFER_USD", 1.25))
+            min_notional = recovery_cap + gas_buf
+            if float(sized) + 1e-9 < min_notional:
+                lifted = min(
+                    float(min_notional),
+                    float(usdc_balance),
+                    float(self.config.max_trade_usdc),
+                )
+                if lifted > float(sized):
+                    print(
+                        "[nanoclaw-av] X-SIGNAL recovery sizing boost | "
+                        f"${float(sized):.2f} → ${lifted:.2f} (target effective≥${recovery_cap:.2f} after gas)"
+                    )
+                    logger.info(
+                        "[nanoclaw-av] X-SIGNAL recovery sizing boost %.2f→%.2f cap=%.2f",
+                        float(sized),
+                        lifted,
+                        recovery_cap,
+                    )
+                    sized = lifted
         _lp = (LOG_PREFIX or "").strip() or "[nanoclaw]"
         print(f"{_lp} DYNAMIC SIZING | Size=${sized:.2f} | Signal={float(signal_strength):.2f}")
         return max(0.0, float(sized))
@@ -1017,25 +1176,36 @@ class SignalEquityTrader:
                     f"required_expected>${min_expected_profit_usd:.2f} | effective_after_gas=${effective_trade_size_after_gas:.2f}"
                 )
                 # Signal-Driven Rotation (May 2026): high-conviction bypass before dynamic min gate.
-                eff_after_gas = round(float(effective_trade_size_after_gas), 2)
+                eff_raw = float(effective_trade_size_after_gas)
+                eff_after_gas = round(eff_raw, 2)
                 min_eff_gate = round(
                     _x_signal_min_effective_trade_usd(strength, usdc_balance=effective_usdc_balance),
                     2,
                 )
                 usdc_safe_floor = float(cfg.env_float("X_SIGNAL_USDC_SAFE_FLOOR", 20.0))
                 limited_usdc = float(effective_usdc_balance) + 1e-9 < usdc_safe_floor
+                recovery_ctx = _x_signal_recovery_gate_context()
+                recovery_gate_active = recovery_ctx.active
+                if recovery_gate_active and recovery_ctx.reason:
+                    logger.debug(
+                        "x_signal recovery effective gate active reason=%s capped_gate=%.2f",
+                        recovery_ctx.reason,
+                        float(
+                            getattr(cfg, "X_SIGNAL_RECOVERY_MIN_EFFECTIVE_GATE_USD", 10.0)
+                        ),
+                    )
                 x_signal_equity_high_conviction_effective_ok = (
                     strength > 0
                     and (
                         abs(float(strength)) >= float(_X_SIGNAL_HIGH_CONVICTION_STRENGTH)
                         or (
-                            limited_usdc
+                            (limited_usdc or recovery_gate_active)
                             and abs(float(strength)) + 1e-9
                             >= float(_X_SIGNAL_VERY_STRONG_STRENGTH) - 0.10
                         )
                     )
-                    and eff_after_gas >= float(_X_SIGNAL_MIN_EFFECTIVE_OVERRIDE)
-                    and eff_after_gas < min_eff_gate
+                    and eff_raw >= float(_X_SIGNAL_MIN_EFFECTIVE_OVERRIDE)
+                    and eff_raw + 1e-9 < min_eff_gate
                 )
                 if x_signal_equity_high_conviction_effective_ok:
                     print(
@@ -1050,12 +1220,17 @@ class SignalEquityTrader:
                     )
                 if (
                     not x_signal_equity_high_conviction_effective_ok
-                    and eff_after_gas < min_eff_gate
+                    and eff_raw + 1e-9 < min_eff_gate
                 ):
                     print(
                         f"[nanoclaw] X-SIGNAL skipped | below min effective size gate | "
                         f"sym={sym} | signal={strength:.2f} | effective=${eff_after_gas:.2f} | "
                         f"min=${min_eff_gate:.2f} (Signal-Driven Rotation)"
+                        + (
+                            f" | recovery={recovery_ctx.reason}"
+                            if recovery_gate_active and recovery_ctx.reason
+                            else ""
+                        )
                     )
                     logger.debug(
                         "build_plan block sym=%s reason=temporary_min_size_gate effective=%s "

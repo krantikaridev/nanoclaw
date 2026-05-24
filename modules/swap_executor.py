@@ -22,6 +22,7 @@ from nanoclaw.strategies.signal_equity_trader import (
     _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD,
     _X_SIGNAL_MIN_SIZE_OVERRIDE,
     _x_signal_min_effective_trade_usd,
+    _x_signal_recovery_gate_relaxation_active,
 )
 from nanoclaw.strategies.usdc_copy import USDCopyStrategy
 from swap_executor import _x_signal_fallback_slippage_ramp, approve_and_swap
@@ -860,6 +861,51 @@ _STABLE_ROTATION_FALLBACK_LOG = (
     "stables=${stable:.2f} | X-SIGNAL BUY eligible"
 )
 
+
+def _pnl_recovery_mode_active() -> bool:
+    """Shared recovery posture for main-strategy rotation guards."""
+    if bool(getattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", False)):
+        return True
+    return bool(getattr(cfg, "PNL_RECOVERY_MODE", False))
+
+
+def _main_strategy_rotation_recovery_strict() -> bool:
+    """True when idle/P2/mild-loss paths should use stricter notional + cycle floors."""
+    if _pnl_recovery_mode_active():
+        return True
+    threshold = float(getattr(cfg, "MAIN_STRATEGY_RECOVERY_MAX_COPY_PCT_THRESHOLD", 0.06))
+    if threshold <= 0.0:
+        return False
+    try:
+        mcp = load_cycle_control().max_copy_trade_pct
+        if mcp is not None and float(mcp) + 1e-9 <= threshold:
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _recovery_rotation_min_notional_usd() -> float:
+    """Minimum WMATIC→stable notional during recovery (blocks $2–$5 gas-negative micro exits)."""
+    return float(getattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_IDLE_MIN_NOTIONAL_USD", 8.0))
+
+
+def _recovery_long_idle_notional_floor_usd() -> float:
+    """Long-idle micro floor — raised from $1.35 during recovery."""
+    base = float(_MAIN_STRATEGY_LONG_IDLE_NOTIONAL_FLOOR_USD)
+    if not _main_strategy_rotation_recovery_strict():
+        return base
+    recovery_floor = float(getattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_ROTATION_MIN_NOTIONAL_USD", 8.0))
+    return max(base, recovery_floor)
+
+
+def _recovery_idle_cycle_bonus() -> int:
+    """Extra cycles before low-stack / long-idle micro rotations during recovery."""
+    if not _main_strategy_rotation_recovery_strict():
+        return 0
+    return max(0, int(getattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_LONG_IDLE_CYCLE_BONUS", 3)))
+
+
 # CRITICAL (Signal-Driven Rotation profitability): on-chain fill rate for X-SIGNAL USDC→equity BUYs.
 # Without reliable fallback execution + STF backoff, selected signals burn gas and never rotate capital.
 # Signal-driven execution quality (May 2026): small high-conviction X-SIGNAL (~$11) — fallback slippage + min_out.
@@ -925,6 +971,7 @@ def _main_strategy_mild_loss_rotation_min_notional_bypass_allowed(
     Qualifies when WMATIC is in the $5–$10 mild-loss band, unrealized gain is ~-7% to -1%,
     and ``cycles_since_exit`` meets ``MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN``. Does not
     re-open sub-$8 auto-generated idle sells (those fail ``_main_strategy_mild_loss_idle_context``).
+    Blocked during recovery strict mode when notional would stay below the recovery floor.
     """
     if not _main_strategy_mild_loss_enabled():
         return False
@@ -947,6 +994,10 @@ def _main_strategy_mild_loss_rotation_min_notional_bypass_allowed(
     floor_usd = float(_MAIN_STRATEGY_MILD_LOSS_IDLE_NOTIONAL_FLOOR_USD)
     if notional_usd + 1e-9 < floor_usd:
         return False
+    if _main_strategy_rotation_recovery_strict():
+        recovery_min = _recovery_rotation_min_notional_usd()
+        if notional_usd + 1e-9 < recovery_min:
+            return False
     return True
 
 
@@ -961,6 +1012,9 @@ def _main_strategy_mild_loss_fast_rotation_eligible(
     balances: Balances,
 ) -> bool:
     """Mild-loss band + high token qty + healthy USDT — rotate after min idle cycle if notional ≥ rotation floor."""
+    # Recovery: disable 1-cycle fast path — gas-negative micro exits are worse than waiting.
+    if _main_strategy_rotation_recovery_strict():
+        return False
     if not _main_strategy_mild_loss_enabled():
         return False
     if _profit_take_mild_loss_gain_pct(profit_signal) is None:
@@ -1310,10 +1364,12 @@ def _profit_take_stack_tier(wm_equiv_usd: float) -> str:
 def _profit_take_long_idle_cycles_min(wm_equiv_usd: float) -> int:
     tier = _profit_take_stack_tier(wm_equiv_usd)
     if tier == "low":
-        return int(_MAIN_STRATEGY_LONG_IDLE_CYCLES_LOW)
-    if tier == "moderate":
-        return int(_MAIN_STRATEGY_LONG_IDLE_CYCLES_MODERATE)
-    return int(_MAIN_STRATEGY_LONG_IDLE_CYCLES_HEALTHY)
+        base = int(_MAIN_STRATEGY_LONG_IDLE_CYCLES_LOW)
+    elif tier == "moderate":
+        base = int(_MAIN_STRATEGY_LONG_IDLE_CYCLES_MODERATE)
+    else:
+        base = int(_MAIN_STRATEGY_LONG_IDLE_CYCLES_HEALTHY)
+    return base + _recovery_idle_cycle_bonus()
 
 
 def _profit_take_long_idle_active(wm_equiv_usd: float, cycles_since_exit: int) -> bool:
@@ -1359,10 +1415,12 @@ def _profit_take_force_wm_min_usd(
 def _profit_take_force_cycles_min(wm_equiv_usd: float) -> int:
     tier = _profit_take_stack_tier(wm_equiv_usd)
     if tier == "low":
-        return int(_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN)
-    if tier == "moderate":
-        return int(_MAIN_STRATEGY_MODERATE_FORCE_CYCLES_MIN)
-    return int(_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN)
+        base = int(_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN)
+    elif tier == "moderate":
+        base = int(_MAIN_STRATEGY_MODERATE_FORCE_CYCLES_MIN)
+    else:
+        base = int(_MAIN_STRATEGY_FORCE_PROFIT_TAKE_CYCLES_MIN)
+    return base + _recovery_idle_cycle_bonus()
 
 
 def _profit_take_force_notional_floor_usd(
@@ -1374,7 +1432,7 @@ def _profit_take_force_notional_floor_usd(
     if _profit_take_wmatic_stack_low(wm_equiv_usd) and _profit_take_long_idle_active(
         wm_equiv_usd, cycles_since_exit
     ):
-        return float(_MAIN_STRATEGY_LONG_IDLE_NOTIONAL_FLOOR_USD)
+        return _recovery_long_idle_notional_floor_usd()
     if tier == "low":
         return float(_MAIN_STRATEGY_LOW_WMATIC_FORCE_NOTIONAL_FLOOR_USD)
     if tier == "moderate":
@@ -1406,13 +1464,14 @@ def _main_strategy_idle_cycles_required(
     mild_loss_fast: bool = False,
 ) -> int:
     """Idle cycles before WMATIC→stable micro rotation (tiered; mild-loss / $5–$8 fast path)."""
+    bonus = _recovery_idle_cycle_bonus()
     if mild_loss_fast:
-        return 1
+        return 1 + bonus
     if mild_loss_idle:
-        return int(_MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN)
+        return int(_MAIN_STRATEGY_MILD_LOSS_IDLE_CYCLES_MIN) + bonus
     if _wmatic_in_small_rotation_value_band(wm_equiv_usd):
-        return int(_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN)
-    return _profit_take_force_cycles_min(wm_equiv_usd)
+        return int(_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN) + bonus
+    return _profit_take_force_cycles_min(wm_equiv_usd) + bonus
 
 
 def _main_strategy_idle_rotation_sell_fraction(
@@ -1496,16 +1555,13 @@ def _main_strategy_idle_rotation_eligibility(
         )
     if int(balances.wmatic * fraction * 1e18) <= 0:
         return False, "zero_amount_in"
-    if (
-        bool(getattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", False))
-        and not mild_loss_idle
-        and not mild_loss_fast
-    ):
-        recovery_min_notional = float(
-            getattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_IDLE_MIN_NOTIONAL_USD", 5.0)
-        )
+    # Recovery: block all sub-floor idle/mild-loss/P2 micro rotations (including former $1.35 long-idle path).
+    if _main_strategy_rotation_recovery_strict():
+        recovery_min_notional = _recovery_rotation_min_notional_usd()
         if notional + 1e-9 < recovery_min_notional:
-            return False, f"pnl_recovery_micro_rotation_paused_${notional:.2f}_lt_${recovery_min_notional:.2f}"
+            return False, (
+                f"pnl_recovery_micro_rotation_paused_${notional:.2f}_lt_${recovery_min_notional:.2f}"
+            )
     if mild_loss_idle:
         if mild_loss_fast:
             return True, "eligible_mild_loss_fast_rotation"
@@ -1847,6 +1903,9 @@ def _profit_take_force_small_relief_eligible(
         return False
     if notional_usd + 1e-9 < floor_usd:
         return False
+    if _main_strategy_rotation_recovery_strict():
+        if notional_usd + 1e-9 < _recovery_rotation_min_notional_usd():
+            return False
     return cycles_since_exit >= cycles_min
 
 
@@ -2248,22 +2307,43 @@ def _x_signal_apply_blocked_symbol_filter(
     return None
 
 
+def _x_signal_small_high_conviction_min_strength(
+    decision_notional_usd: float | None,
+) -> float:
+    """Minimum |signal| for small-tier fallback (looser for ~$10 gated trades and recovery)."""
+    base = float(_X_SIGNAL_HIGH_CONVICTION_STRENGTH)
+    small_max = float(getattr(cfg, "X_SIGNAL_SMALL_GATED_MAX_NOTIONAL_USD", 12.0))
+    small_min = float(getattr(cfg, "X_SIGNAL_SMALL_GATED_MIN_STRENGTH", 0.80))
+    if (
+        decision_notional_usd is not None
+        and float(decision_notional_usd) + 1e-9 <= small_max
+        and small_min + 1e-9 < base
+    ):
+        return min(base, small_min)
+    if _x_signal_recovery_gate_relaxation_active():
+        return float(_X_SIGNAL_VERY_STRONG_STRENGTH) - 0.10
+    return base
+
+
 def _x_signal_small_high_conviction_relaxed_slippage(
     decision: TradeDecision,
     *,
     decision_notional_usd: float | None,
 ) -> tuple[int, int] | None:
-    """Signal-driven execution quality (May 2026): high fallback slippage for small USDC→equity X-SIGNAL (>=0.85)."""
+    """High fallback slippage for small USDC→equity X-SIGNAL (>=0.85, or >=0.80 at <=$12 notional)."""
     if str(decision.direction or "").strip().upper() != "USDC_TO_EQUITY":
         return None
     strength = decision.signal_strength
     if strength is None or float(strength) <= 0:
         return None
-    if abs(float(strength)) + 1e-9 < _X_SIGNAL_HIGH_CONVICTION_STRENGTH:
+    min_strength = _x_signal_small_high_conviction_min_strength(decision_notional_usd)
+    if abs(float(strength)) + 1e-9 < min_strength:
         return None
     if decision_notional_usd is None:
         return None
-    if decision_notional_usd + 1e-9 > float(_X_SIGNAL_SMALL_HIGH_CONVICTION_MAX_NOTIONAL_USD):
+    if decision_notional_usd + 1e-9 > float(
+        getattr(cfg, "X_SIGNAL_SMALL_GATED_MAX_NOTIONAL_USD", _X_SIGNAL_SMALL_HIGH_CONVICTION_MAX_NOTIONAL_USD)
+    ):
         return None
     return (
         int(cfg.X_SIGNAL_SMALL_HIGH_CONVICTION_FALLBACK_PRIMARY_BPS),
@@ -3135,7 +3215,7 @@ async def main(*, dry_run: bool = False) -> None:
                 f"notional=${decision_notional_usd:.2f} | signal={decision.signal_strength} | "
                 f"fallback_slip={fallback_slip_bps}/{fallback_slip_retry_bps} bps | "
                 f"slippage_ramp={'→'.join(str(b) for b in ramp)} | "
-                f"min_out_extra={mo_extra} bps | v3_fee=stable_prefer(500,3000,10000)"
+                f"min_out_extra={mo_extra} bps | quote=v3_stable_prefer+quoter_v2+v2_fallback"
             )
 
         swap_outcome: dict = {}
@@ -3194,9 +3274,11 @@ async def main(*, dry_run: bool = False) -> None:
                 mo_extra_used = swap_outcome.get("min_out_extra_bps")
                 print(
                     f"{_X_SIGNAL_STF_LOG} | EXEC FAILED | sym={x_sym} | stf={stf_flag} | "
+                    f"notional=${float(decision_notional_usd or 0):.2f} | signal={decision.signal_strength} | "
                     f"slippage_bps={slip_used} | min_out={min_out_used} | "
                     f"min_out_extra_bps={mo_extra_used} | fee_tier={fee_used} | "
-                    f"revert={str(swap_outcome.get('revert_reason') or 'unknown')[:160]}"
+                    f"amount_in={decision.amount_in} | "
+                    f"revert={str(swap_outcome.get('revert_reason') or 'unknown')[:200]}"
                 )
             if str(decision.direction or "").strip().upper() in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:
                 decision_log.record_profit_take_execution(state, success=False, reason="swap_failed")

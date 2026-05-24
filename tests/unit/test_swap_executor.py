@@ -120,6 +120,23 @@ def test_best_quote_path_accepts_explicit_slippage_bps(monkeypatch):
     assert min_out == 975
 
 
+def test_log_x_signal_quote_failure_includes_stage_and_tokens(capsys):
+    swap_executor._log_x_signal_quote_failure(
+        stage="pre_flight",
+        slippage_bps=8000,
+        token_in="0x" + "a" * 40,
+        token_out="0x" + "b" * 40,
+        amount_in=10_290_000,
+        exc=RuntimeError("no pool"),
+    )
+    out = capsys.readouterr().out
+    assert "X-SIGNAL quote failed" in out
+    assert "stage=pre_flight" in out
+    assert "slip_bps=8000" in out
+    assert "amount_in=10290000" in out
+    assert "RuntimeError" in out
+
+
 def test_x_signal_fallback_slippage_ramp_three_steps_when_gap_large():
     # Retry capped at 9999 bps (same as approve_and_swap fallback path).
     ramp = swap_executor._x_signal_fallback_slippage_ramp(8000, 9800)
@@ -172,6 +189,39 @@ def test_is_stf_revert_reason_detects_common_patterns():
     assert swap_executor._is_stf_revert_reason("Too little received")
     assert swap_executor._is_stf_revert_reason("0x3610c973")
     assert not swap_executor._is_stf_revert_reason("insufficient allowance")
+
+
+def test_x_signal_fee_tier_order_small_trade_prefers_3000_first():
+    assert swap_executor._x_signal_fee_tier_order(10_290_000) == (3000, 500, 10000)
+    assert swap_executor._x_signal_fee_tier_order(20_000_000) == (500, 3000, 10000)
+
+
+def test_x_signal_quote_best_route_falls_back_to_v2_router(monkeypatch):
+    def _v3_fail(*_a, **_k):
+        raise RuntimeError("no v3 pool")
+
+    def _v2_ok(_w3, **_kwargs):
+        path = [swap_executor.USDC, swap_executor.WMATIC, "0x" + "c" * 40]
+        return path, 5000, 4800
+
+    monkeypatch.setattr(swap_executor, "_quote_uniswap_v3_best_fee_single", _v3_fail)
+    monkeypatch.setattr(swap_executor, "_quote_v2_router_best", lambda _w3, **kw: swap_executor._FallbackQuote(
+        mode="v2",
+        expected_out=5000,
+        amount_out_min=4800,
+        v2_path=[swap_executor.USDC, swap_executor.WMATIC, kw["token_out"]],
+        quoter="v2_router",
+    ))
+    quote = swap_executor._x_signal_quote_best_route(
+        object(),
+        token_in=swap_executor.USDC,
+        token_out="0x" + "c" * 40,
+        amount_in=10_290_000,
+        slippage_bps=8000,
+    )
+    assert quote.mode == "v2"
+    assert quote.expected_out == 5000
+    assert quote.v2_path is not None and len(quote.v2_path) >= 2
 
 
 def test_quote_uniswap_v3_best_fee_single_picks_highest_output(monkeypatch):

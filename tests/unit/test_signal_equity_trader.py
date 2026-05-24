@@ -2,6 +2,7 @@ import json
 
 import pytest
 
+import config as cfg
 from nanoclaw.strategies import signal_equity_trader as strategy_module
 from nanoclaw.strategies.signal_equity_trader import SignalEquityTrader
 from nanoclaw.utils.gas_protector import GasProtector
@@ -651,6 +652,8 @@ def test_x_signal_very_strong_boosts_usdc_to_equity_trade_size(monkeypatch, caps
     """TEMPORARY: abs(signal)>=0.90 lifts dynamic BUY size toward ~$9.25 when band would be lower."""
     from modules import runtime as rt
 
+    monkeypatch.setattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", False)
+    monkeypatch.setattr(cfg, "X_SIGNAL_RECOVERY_EFFECTIVE_GATE_ENABLED", False)
     monkeypatch.setattr(rt, "FIXED_TRADE_USD_MIN", 8.0, raising=False)
     monkeypatch.setattr(rt, "FIXED_TRADE_USD_MAX", 8.0, raising=False)
     s = _build_strategy_tuned(strong_signal_threshold=0.90)
@@ -1293,7 +1296,8 @@ def test_x_signal_buy_passes_at_twelve_dollar_gate_with_high_conviction(monkeypa
 
 
 def test_x_signal_buy_blocked_when_effective_below_dynamic_gate(monkeypatch, capsys):
-    """Effective ~$13.9 blocked at $15 dynamic gate when |signal| < 0.85."""
+    """Effective ~$13.9 blocked at $15 dynamic gate when |signal| < 0.85 (recovery off)."""
+    monkeypatch.setattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", False)
     s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
     monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 1.0)
     monkeypatch.setattr(
@@ -1322,11 +1326,66 @@ def test_x_signal_buy_blocked_when_effective_below_dynamic_gate(monkeypatch, cap
 
 
 def test_x_signal_min_effective_trade_usd_dynamic(monkeypatch):
+    monkeypatch.setattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", False)
     assert strategy_module._x_signal_min_effective_trade_usd(0.92) == 12.0
     assert strategy_module._x_signal_min_effective_trade_usd(0.82) == 14.0
     assert strategy_module._x_signal_min_effective_trade_usd(0.70) == 15.0
     assert strategy_module._x_signal_min_effective_trade_usd(0.82, usdc_balance=18.0) == 10.0
     assert strategy_module._x_signal_min_effective_trade_usd(0.92, usdc_balance=18.0) == 10.0
+
+
+def test_x_signal_min_effective_trade_usd_recovery_cap(monkeypatch):
+    monkeypatch.setattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", True)
+    assert strategy_module._x_signal_min_effective_trade_usd(0.83, usdc_balance=40.0) == 9.0
+    assert strategy_module._x_signal_min_effective_trade_usd(0.81, usdc_balance=40.0) == 9.0
+    monkeypatch.setattr(cfg, "X_SIGNAL_RECOVERY_EFFECTIVE_GATE_ENABLED", False)
+    assert strategy_module._x_signal_min_effective_trade_usd(0.83, usdc_balance=40.0) == 14.0
+
+
+def test_x_signal_recovery_gate_relaxation_from_low_copy_pct(monkeypatch, tmp_path):
+    control_path = tmp_path / "control.json"
+    control_path.write_text(
+        json.dumps({"max_copy_trade_pct": 0.03, "stable_usd": 120.0}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(strategy_module, "_CONTROL_JSON_PATH", control_path)
+    monkeypatch.setattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", False)
+    ctx = strategy_module._x_signal_recovery_gate_context()
+    assert ctx.active is True
+    assert "max_copy_trade_pct" in (ctx.reason or "")
+    assert strategy_module._x_signal_min_effective_trade_usd(0.83, usdc_balance=40.0) == 9.0
+
+
+def test_x_signal_recovery_gate_relaxation_from_low_stable_usd(monkeypatch, tmp_path):
+    control_path = tmp_path / "control.json"
+    control_path.write_text(json.dumps({"stable_usd": 82.0, "max_copy_trade_pct": 0.08}), encoding="utf-8")
+    monkeypatch.setattr(strategy_module, "_CONTROL_JSON_PATH", control_path)
+    monkeypatch.setattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", False)
+    ctx = strategy_module._x_signal_recovery_gate_context()
+    assert ctx.active is True
+    assert "stable_usd" in (ctx.reason or "")
+
+
+def test_x_signal_recovery_gate_relaxation_from_negative_session_pnl(monkeypatch, tmp_path):
+    baseline_path = tmp_path / "portfolio_session_baseline.json"
+    baseline_path.write_text(
+        json.dumps({"session_start_total": 120.0, "session_started_at": "2026-05-01T00:00:00+00:00"}),
+        encoding="utf-8",
+    )
+    history_path = tmp_path / "portfolio_history.csv"
+    history_path.write_text(
+        "timestamp,total_value\n2026-05-25T10:00:00+00:00,110.0\n",
+        encoding="utf-8",
+    )
+    control_path = tmp_path / "control.json"
+    control_path.write_text(json.dumps({"stable_usd": 120.0, "max_copy_trade_pct": 0.08}), encoding="utf-8")
+    monkeypatch.setattr(strategy_module, "_SESSION_BASELINE_PATH", baseline_path)
+    monkeypatch.setattr(strategy_module, "_PORTFOLIO_HISTORY_PATH", history_path)
+    monkeypatch.setattr(strategy_module, "_CONTROL_JSON_PATH", control_path)
+    monkeypatch.setattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", False)
+    ctx = strategy_module._x_signal_recovery_gate_context()
+    assert ctx.active is True
+    assert ctx.reason == "session_pnl_negative"
 
 
 def test_x_signal_limited_usdc_passes_when_effective_meets_capped_gate(monkeypatch, capsys):
@@ -1356,6 +1415,48 @@ def test_x_signal_limited_usdc_passes_when_effective_meets_capped_gate(monkeypat
     assert plan is not None
     assert reason is None
     assert "below min effective size gate" not in capsys.readouterr().out
+
+
+def test_x_signal_recovery_passes_083_signal_with_healthy_usdc(monkeypatch, capsys):
+    """Recovery cap: USDC above safe floor, |signal| 0.83, effective ~$10.3 clears $9 gate."""
+    monkeypatch.setattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", True)
+    monkeypatch.setattr(cfg, "X_SIGNAL_RECOVERY_MIN_EFFECTIVE_GATE_USD", 9.0)
+    s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
+    monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 1.0)
+    monkeypatch.setattr(
+        SignalEquityTrader,
+        "_compute_trade_size",
+        lambda self, usdc_balance, signal_strength, usdt_balance=0.0, *, symbol="": 11.0,
+    )
+    monkeypatch.setattr(s, "_estimate_gas_cost_usd", lambda _gas_gwei: 0.71)
+
+    plan, reason = s.build_plan_with_block_reason(
+        symbol="WBTC_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=8,
+        signal_strength=0.83,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=40.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+        upside_pct=22.0,
+    )
+    assert plan is not None
+    assert reason is None
+    assert "below min effective size gate" not in capsys.readouterr().out
+
+
+def test_x_signal_recovery_sizing_boost_lifts_notional(monkeypatch, capsys):
+    """Recovery boost lifts notional toward cap+buffer so effective clears relaxed gate."""
+    monkeypatch.setattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", True)
+    monkeypatch.setattr(cfg, "X_SIGNAL_RECOVERY_MIN_EFFECTIVE_GATE_USD", 9.0)
+    monkeypatch.setattr(cfg, "X_SIGNAL_RECOVERY_GAS_BUFFER_USD", 1.25)
+    s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
+    size = s._compute_trade_size(40.0, 0.83, usdt_balance=0.0, symbol="WBTC_ALPHA")
+    assert size == pytest.approx(10.25)
+    assert "recovery sizing boost" in capsys.readouterr().out
 
 
 def test_low_effective_after_gas_still_blocks_when_effective_below_override(monkeypatch):

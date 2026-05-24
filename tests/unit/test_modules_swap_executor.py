@@ -161,7 +161,8 @@ def test_profit_take_balance_relief_bypass_rejects_sub_floor_notional(capsys):
     assert f"floor=${_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD:.2f}" in captured
 
 
-def test_profit_take_force_small_relief_eligible_requires_cycles_and_floor():
+def test_profit_take_force_small_relief_eligible_requires_cycles_and_floor(monkeypatch):
+    monkeypatch.setattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", False)
     force_notional = _MAIN_STRATEGY_FORCE_PROFIT_TAKE_NOTIONAL_FLOOR_USD
     assert not _profit_take_force_small_relief_eligible(
         direction="WMATIC_TO_USDT",
@@ -190,8 +191,9 @@ def test_profit_take_force_small_relief_eligible_requires_cycles_and_floor():
     )
 
 
-def test_profit_take_force_small_relief_eligible_at_observed_wmatic_range():
+def test_profit_take_force_small_relief_eligible_at_observed_wmatic_range(monkeypatch):
     """Signal-Driven Rotation: low stack (~$5.7) force at 5 cycles; sub-$2 stack rejected."""
+    monkeypatch.setattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", False)
     wm = 5.7
     force_notional = _profit_take_force_notional_floor_usd(wm)
     assert _profit_take_force_small_relief_eligible(
@@ -354,7 +356,8 @@ def test_profit_take_wmatic_stack_low_boundary():
     assert not _profit_take_wmatic_stack_low(7.0)
 
 
-def test_profit_take_force_small_relief_low_wmatic_two_cycles():
+def test_profit_take_force_small_relief_low_wmatic_two_cycles(monkeypatch):
+    monkeypatch.setattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", False)
     wm = 5.5
     force_notional = _profit_take_force_notional_floor_usd(wm)
     assert _profit_take_force_small_relief_eligible(
@@ -406,7 +409,8 @@ def test_profit_take_force_notional_floor_tiered():
     )
 
 
-def test_profit_take_long_idle_lowers_notional_floor():
+def test_profit_take_long_idle_lowers_notional_floor(monkeypatch):
+    monkeypatch.setattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", False)
     wm = 5.7
     assert not _profit_take_long_idle_active(wm, _MAIN_STRATEGY_LONG_IDLE_CYCLES_LOW - 1)
     assert _profit_take_long_idle_active(wm, _MAIN_STRATEGY_LONG_IDLE_CYCLES_LOW)
@@ -422,7 +426,8 @@ def test_profit_take_long_idle_lowers_notional_floor():
     )
 
 
-def test_profit_take_long_idle_healthy_stack_uses_force_floor_not_micro():
+def test_profit_take_long_idle_healthy_stack_uses_force_floor_not_micro(monkeypatch):
+    monkeypatch.setattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", False)
     wm = 20.0
     cycles = 8
     assert _profit_take_long_idle_active(wm, cycles)
@@ -546,14 +551,60 @@ def test_main_strategy_idle_rotation_sell_after_low_wmatic_idle_cycles(monkeypat
 
 def test_main_strategy_idle_rotation_blocked_in_pnl_recovery_mode(monkeypatch):
     monkeypatch.setattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", True)
+    monkeypatch.setattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_IDLE_MIN_NOTIONAL_USD", 8.0)
     state: dict = {}
-    for _ in range(_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN):
+    for _ in range(int(_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN) + 3):
         _profit_take_bump_cycle_counter(state)
     balances = Balances(usdt=80.0, usdc=30.0, wmatic=5.7, pol=1.0)
     assert _main_strategy_idle_rotation_sell_decision(balances, 1.0, state=state) is None
     eligible, note = _main_strategy_idle_rotation_eligibility(balances, 1.0, state)
     assert not eligible
-    assert "pnl_recovery_micro_rotation_paused" in note
+    assert "below_$8.00" in note or "pnl_recovery_micro_rotation_paused" in note
+
+
+def test_recovery_strict_raises_long_idle_notional_floor(monkeypatch):
+    from modules.swap_executor import (
+        _recovery_long_idle_notional_floor_usd,
+        _profit_take_force_notional_floor_usd,
+    )
+
+    monkeypatch.setattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", True)
+    wm = 5.7
+    cycles = int(_MAIN_STRATEGY_LONG_IDLE_CYCLES_LOW) + int(
+        cfg.MAIN_STRATEGY_PNL_RECOVERY_LONG_IDLE_CYCLE_BONUS
+    )
+    assert _recovery_long_idle_notional_floor_usd() == pytest.approx(8.0)
+    assert (
+        _profit_take_force_notional_floor_usd(wm, cycles_since_exit=cycles)
+        == pytest.approx(8.0)
+    )
+
+
+def test_recovery_strict_disables_mild_loss_fast(monkeypatch):
+    from modules.swap_executor import _main_strategy_mild_loss_fast_rotation_eligible
+
+    monkeypatch.setattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", True)
+    hold_signal = {"reason": "HOLD", "gain_pct": -5.0}
+    balances = Balances(usdt=80.0, usdc=30.0, wmatic=63.0, pol=1.0)
+    assert not _main_strategy_mild_loss_fast_rotation_eligible(
+        hold_signal, 5.67, 63.0, balances
+    )
+
+
+def test_recovery_strict_adds_idle_cycle_bonus(monkeypatch):
+    from modules.swap_executor import (
+        _main_strategy_idle_cycles_required,
+        _profit_take_long_idle_cycles_min,
+        _recovery_idle_cycle_bonus,
+    )
+
+    monkeypatch.setattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", True)
+    monkeypatch.setattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_LONG_IDLE_CYCLE_BONUS", 3)
+    assert _recovery_idle_cycle_bonus() == 3
+    assert _profit_take_long_idle_cycles_min(5.7) == int(cfg.MAIN_STRATEGY_LONG_IDLE_CYCLES_LOW) + 3
+    assert _main_strategy_idle_cycles_required(5.7, mild_loss_idle=False, mild_loss_fast=False) == (
+        int(_MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN) + 3
+    )
 
 
 def test_main_strategy_idle_rotation_sell_not_before_cycle_threshold():
@@ -1276,6 +1327,60 @@ def test_x_signal_small_high_conviction_relaxed_slippage_rejects_large_notional(
     assert _x_signal_small_high_conviction_relaxed_slippage(decision, decision_notional_usd=20.0) is None
 
 
+def test_x_signal_small_high_conviction_relaxed_slippage_recovery_080_tier(monkeypatch):
+    """Recovery: |signal| 0.83 at ~$11 notional uses small tier (looser min_out vs gated)."""
+    monkeypatch.setattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", True)
+    monkeypatch.setattr(
+        "modules.swap_executor.cfg.X_SIGNAL_SMALL_HIGH_CONVICTION_FALLBACK_PRIMARY_BPS",
+        8000,
+    )
+    monkeypatch.setattr(
+        "modules.swap_executor.cfg.X_SIGNAL_SMALL_HIGH_CONVICTION_FALLBACK_RETRY_BPS",
+        10000,
+    )
+    decision = TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=11_000_000,
+        trade_size=11.0,
+        signal_strength=0.83,
+    )
+    slip = _x_signal_small_high_conviction_relaxed_slippage(decision, decision_notional_usd=11.0)
+    assert slip == (8000, 10000)
+
+
+def test_x_signal_small_high_conviction_relaxed_slippage_083_at_10_notional(monkeypatch):
+    """Gated-eligible ~$10 trades (|signal| 0.83) use small tier, not 9500 gated slippage."""
+    monkeypatch.setattr(
+        "modules.swap_executor.cfg.X_SIGNAL_SMALL_GATED_MIN_STRENGTH",
+        0.80,
+    )
+    monkeypatch.setattr(
+        "modules.swap_executor.cfg.X_SIGNAL_SMALL_GATED_MAX_NOTIONAL_USD",
+        12.0,
+    )
+    monkeypatch.setattr(
+        "modules.swap_executor.cfg.X_SIGNAL_SMALL_HIGH_CONVICTION_FALLBACK_PRIMARY_BPS",
+        8000,
+    )
+    monkeypatch.setattr(
+        "modules.swap_executor.cfg.X_SIGNAL_SMALL_HIGH_CONVICTION_FALLBACK_RETRY_BPS",
+        10000,
+    )
+    decision = TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=10_290_000,
+        trade_size=10.29,
+        signal_strength=0.83,
+        x_signal_gated_execution=True,
+    )
+    slip = _x_signal_small_high_conviction_relaxed_slippage(decision, decision_notional_usd=10.29)
+    assert slip == (8000, 10000)
+    resolved = _resolve_x_signal_enhanced_fallback_execution(decision, decision_notional_usd=10.29)
+    assert resolved is not None
+    assert resolved[0:2] == (8000, 10000)
+    assert resolved[2] is not None and resolved[2] < 100
+
+
 def test_x_signal_gated_trade_relaxed_slippage_for_usdc_to_equity_at_min_gate(monkeypatch):
     monkeypatch.setattr(
         "modules.swap_executor.cfg.X_SIGNAL_GATED_TRADE_FALLBACK_PRIMARY_BPS",
@@ -1295,7 +1400,10 @@ def test_x_signal_gated_trade_relaxed_slippage_for_usdc_to_equity_at_min_gate(mo
     assert slip == (9000, 12000)
 
 
-def test_x_signal_gated_trade_relaxed_slippage_rejects_below_min_gate():
+def test_x_signal_gated_trade_relaxed_slippage_rejects_below_min_gate(monkeypatch):
+    monkeypatch.setattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", False)
+    monkeypatch.setattr(cfg, "PNL_RECOVERY_MODE", False)
+    monkeypatch.setattr(cfg, "X_SIGNAL_RECOVERY_EFFECTIVE_GATE_ENABLED", False)
     decision = TradeDecision(
         direction="USDC_TO_EQUITY",
         amount_in=11_000_000,
@@ -1344,6 +1452,9 @@ def test_resolve_x_signal_enhanced_fallback_prefers_small_over_gated(monkeypatch
 
 
 def test_resolve_x_signal_enhanced_fallback_default_tier_when_not_gated(monkeypatch):
+    monkeypatch.setattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", False)
+    monkeypatch.setattr(cfg, "PNL_RECOVERY_MODE", False)
+    monkeypatch.setattr(cfg, "X_SIGNAL_RECOVERY_EFFECTIVE_GATE_ENABLED", False)
     monkeypatch.setattr(
         "modules.swap_executor.cfg.X_SIGNAL_DEFAULT_FALLBACK_PRIMARY_BPS",
         7000,
