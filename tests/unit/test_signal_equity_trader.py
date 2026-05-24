@@ -1513,8 +1513,15 @@ def test_load_followed_equities_skips_bad_rows(tmp_path):
     assert out[0].symbol == "OK"
 
 
-def test_build_plan_with_block_reason_skips_wbtc_link_alpha_even_if_loaded_elsewhere():
-    """Hard skip in plan builder so a stray caller cannot hit balance reads for WBTC/LINK."""
+def test_build_plan_with_block_reason_skips_wbtc_link_alpha_when_env_skip_set(monkeypatch):
+    """Plan builder honors X_SIGNAL_TEMP_SKIP_SYMBOLS when set."""
+    from nanoclaw.strategies import signal_equity_trader as set_mod
+
+    monkeypatch.setattr(
+        set_mod,
+        "X_SIGNAL_TEMP_SKIP_SYMBOLS",
+        frozenset({"WBTC_ALPHA", "LINK_ALPHA"}),
+    )
     s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
     for sym in ("WBTC_ALPHA", "LINK_ALPHA"):
         _, reason = s.build_plan_with_block_reason(
@@ -1532,8 +1539,15 @@ def test_build_plan_with_block_reason_skips_wbtc_link_alpha_even_if_loaded_elsew
         assert reason == "temporary_skip_balance_workaround"
 
 
-def test_load_followed_equities_temporary_skip_wbtc_link_alpha(tmp_path):
-    """WBTC_ALPHA / LINK_ALPHA are temporarily omitted from the followed-equities load list."""
+def test_load_followed_equities_temporary_skip_wbtc_link_alpha_when_env_set(tmp_path, monkeypatch):
+    """WBTC_ALPHA / LINK_ALPHA omitted from load list when X_SIGNAL_TEMP_SKIP_SYMBOLS is set."""
+    from nanoclaw.strategies import signal_equity_trader as set_mod
+
+    monkeypatch.setattr(
+        set_mod,
+        "X_SIGNAL_TEMP_SKIP_SYMBOLS",
+        frozenset({"WBTC_ALPHA", "LINK_ALPHA"}),
+    )
     p = tmp_path / "fe.json"
     p.write_text(
         json.dumps(

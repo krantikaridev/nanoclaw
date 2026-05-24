@@ -55,9 +55,12 @@ wheels/
 *.egg
 MANIFEST
 
-# Runtime files
+# Runtime files (never commit — nanoup preserves local copies where noted)
 bot_state.json
-# Operator / external-layer control plane (paused, copy caps). Never commit — nanoup preserves local copy.
+trade_exits.json
+wallet_performance.json
+portfolio_session_baseline.json
+# Operator / external-layer control plane (paused, copy caps).
 control.json
 .runtime/
 .xsignal_blocked_symbols
@@ -68,7 +71,3 @@ __pycache__/
 # Runtime artifacts intentionally tracked (manual commits only)
 !portfolio_history.csv
 !real_cron.log
-portfolio_session_baseline.json
-
-control.json
-control.json

@@ -3688,6 +3688,23 @@ def test_load_xsignal_blocked_symbols_missing_file_graceful(tmp_path, monkeypatc
     assert source == ""
 
 
+def test_filter_xsignal_blocked_equities_ignores_block_when_all_assets_blocked(tmp_path, monkeypatch, capsys):
+    from modules import signal as signal_module
+    from nanoclaw.strategies.signal_equity_trader import FollowedEquity
+
+    (tmp_path / ".xsignal_blocked_symbols").write_text("WBTC_ALPHA\nLINK_ALPHA\n")
+    monkeypatch.setattr(signal_module, "_xsignal_block_list_search_roots", lambda: [tmp_path])
+    signal_module._XSIGNAL_BLOCKED_CACHE = None
+
+    assets = [
+        FollowedEquity("WBTC_ALPHA", "0x" + "1" * 40, 8),
+        FollowedEquity("LINK_ALPHA", "0x" + "2" * 40, 18),
+    ]
+    out = signal_module._filter_xsignal_blocked_equities(assets, log_skips=False)
+    assert len(out) == 2
+    assert "ignoring blocks this cycle" in capsys.readouterr().out
+
+
 def test_try_x_signal_equity_skips_blocked_symbol_before_build_plan(tmp_path, monkeypatch, capsys):
     from modules import signal as signal_module
 

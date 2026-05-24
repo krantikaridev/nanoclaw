@@ -73,6 +73,7 @@ if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
     # Exclude control.json: operator pause/unpause must survive stash/pop cycles.
     git stash push -m "${STASH_NAME}" -- . \
       ':(exclude)control.json' \
+      ':(exclude)trade_exits.json' \
       ':(exclude).runtime' \
       ':(exclude).env' \
       >/dev/null 2>&1 || {

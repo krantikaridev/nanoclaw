@@ -222,6 +222,12 @@ def _filter_xsignal_blocked_equities(
                 log_xsignal_blocked_skip(sym, source=source)
             continue
         out.append(asset)
+    if not out and assets:
+        print(
+            "[X-SIGNAL] WARNING: block list would remove all followed assets; "
+            "ignoring blocks this cycle (trim .xsignal_blocked_symbols)"
+        )
+        return list(assets)
     return out
 
 

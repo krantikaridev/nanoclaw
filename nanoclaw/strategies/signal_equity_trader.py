@@ -25,6 +25,7 @@ from config import (
     X_SIGNAL_FORCE_HIGH_CONVICTION_THRESHOLD,
     X_SIGNAL_MAX_EARNINGS_DAYS,
     X_SIGNAL_STRONG_THRESHOLD,
+    X_SIGNAL_TEMP_SKIP_SYMBOLS,
     X_SIGNAL_USDC_MIN,
     env_str,
 )
@@ -88,10 +89,6 @@ def x_signal_gated_enhanced_execution_bps(signal_strength: float | None = None) 
 # TEMPORARY: Slightly larger USDC→equity sizing for very strong X-SIGNAL (target ~$9–$9.5)
 _X_SIGNAL_VERY_STRONG_STRENGTH = 0.90
 _X_SIGNAL_VERY_STRONG_SIZE_TARGET = 9.25
-
-# TEMPORARY WORKAROUND - Remove after balance issues on WBTC/LINK are fixed
-_X_SIGNAL_EQUITY_TEMP_SKIP_SYMBOLS = frozenset({"WBTC_ALPHA", "LINK_ALPHA"})
-
 
 @dataclass(frozen=True)
 class FollowedEquity:
@@ -367,8 +364,7 @@ class SignalEquityTrader:
             if not isinstance(item, dict):
                 continue
             symbol = str(item.get("symbol", "")).strip()
-            # TEMPORARY WORKAROUND - Remove after balance issues on WBTC/LINK are fixed
-            if symbol in _X_SIGNAL_EQUITY_TEMP_SKIP_SYMBOLS:
+            if symbol.upper() in X_SIGNAL_TEMP_SKIP_SYMBOLS:
                 continue
             env_key = str(item.get("env_token_address", symbol)).strip() or symbol
             explicit_address = item.get("address")
@@ -825,8 +821,7 @@ class SignalEquityTrader:
             logger.debug("build_plan block reason=invalid_symbol_or_token sym=%r token=%r", symbol, token_address)
             return None, "invalid_symbol_or_token"
 
-        # TEMPORARY WORKAROUND - Remove after balance issues on WBTC/LINK are fixed
-        if sym in _X_SIGNAL_EQUITY_TEMP_SKIP_SYMBOLS:
+        if sym.upper() in X_SIGNAL_TEMP_SKIP_SYMBOLS:
             print(f"[nanoclaw] BLOCK: {sym} | temporary_skip_balance_workaround")
             logger.debug("build_plan block sym=%s reason=temporary_skip_balance_workaround", sym)
             return None, "temporary_skip_balance_workaround"

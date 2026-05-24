@@ -1,0 +1,9 @@
+# One symbol per line — blocks X-SIGNAL eligibility/planning for that asset only.
+# Copy to .xsignal_blocked_symbols (gitignored) to enable. Lines starting with # are ignored.
+#
+# Do not block every asset in followed_equities.json — if the block list would remove all
+# assets, nanoclaw ignores blocks for that cycle and logs a WARNING.
+#
+# Example (uncomment to use):
+# WMATIC_ALPHA
+# WETH_ALPHA
