@@ -20,8 +20,10 @@ for _p in (_REPO_ROOT, _THIS_DIR):
 
 # Prefer package-relative import; fall back after direct script execution (no parent package).
 try:
+    from .clamp_policy import log_risk_policy_once
     from .risk_checker import evaluate_risk
 except ImportError:
+    from clamp_policy import log_risk_policy_once
     from risk_checker import evaluate_risk
 
 from nanoclaw.runtime_state import OPERATOR_PAUSE_LOCK_KEY
@@ -140,8 +142,12 @@ def _optional_json_balance(val: object) -> float | None:
     return None
 
 
-# Matches ``risk_checker._CRITICAL_STABLE_USD`` — stables below this still force pause.
-_STABLE_USD_FORCE_PAUSE = 60.0
+def _critical_stable_floor() -> float:
+    try:
+        from .clamp_policy import get_risk_policy
+    except ImportError:
+        from clamp_policy import get_risk_policy
+    return float(get_risk_policy().tier.critical_stable_usd)
 
 
 def _apply_manual_unpause_over_wmatic(
@@ -161,13 +167,14 @@ def _apply_manual_unpause_over_wmatic(
     if _parse_bool(existing.get(OPERATOR_PAUSE_LOCK_KEY), default=False):
         return payload
     stable = risk.get("stable_usd")
-    if not isinstance(stable, (int, float)) or float(stable) < _STABLE_USD_FORCE_PAUSE:
+    floor = _critical_stable_floor()
+    if not isinstance(stable, (int, float)) or float(stable) < floor:
         return payload
     merged = dict(payload)
     merged["paused"] = False
     base = merged.get("reason")
     suffix = (
-        f"; manual unpause honored (WMATIC-only, stables≥{_STABLE_USD_FORCE_PAUSE:.0f}; "
+        f"; manual unpause honored (WMATIC-only, stables≥{floor:.0f}; "
         "TEMPORARY 2026-05-23)"
     )
     if isinstance(base, str) and base.strip():
@@ -381,6 +388,7 @@ def _run_control_loop(interval_seconds: float = 30.0) -> None:
 
 if __name__ == "__main__":
     # Runnable as: ``python external_layer/control.py`` — writes ``control.json`` periodically.
+    log_risk_policy_once()
     print(
         "External Risk Layer started. Updating control.json every 30s...",
         flush=True,

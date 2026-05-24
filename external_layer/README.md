@@ -42,6 +42,21 @@ Risk tier is determined by **either** **`stable_usd` (USDT + combined USDC)** **
 - **WMATIC critical pause** uses a **$10** floor (TEMPORARY 2026-05-23; was **$45**) when **`stable_usd` ≥ 60**, so low WMATIC does not pause entries while dollar stables are above the critical runway.
 - **Manual unpause without lock**: when **`paused: false`** is set in `control.json` and **`stable_usd` ≥ 60**, the external layer will **not** re-pause for WMATIC-only critical tiers (stable depletion still forces pause). For a durable override across restarts, use **`operator_pause_lock: true`** (see below).
 
+### Policy configuration (``.env``)
+
+Tier and defensive-clamp knobs are loaded from **`EXTERNAL_RISK_*`** and **`EXTERNAL_CLAMP_*`** in the repo-root **``.env``** (see **``.env.example``**). Only the external-layer process reads them; restart **`nc-ext`** after changes. On startup you should see one line: **`[EXTERNAL] risk_policy | ...`**.
+
+| Variable | Default | Role |
+|----------|---------|------|
+| `EXTERNAL_CLAMP_STREAK_EVALS` | `3` | Protected evaluations in a row before arming clamp |
+| `EXTERNAL_CLAMP_DURATION_SEC` | `600` | Clamp timer length (seconds) |
+| `EXTERNAL_CLAMP_RECOVERY_STABLE_USD` | `95` | Clear timer when stables recover (travel) |
+| `EXTERNAL_CLAMP_HEALTHY_STABLE_USD` | `100` | Full healthy clear (with `EXTERNAL_CLAMP_RECOVERY_WMATIC`) |
+| `EXTERNAL_CLAMP_RECOVERY_WMATIC` | `65` | WMATIC floor for healthy timer clear |
+| `EXTERNAL_RISK_TRAVEL_STABLE_USD` | `95` | Travel band; default for arm/recovery stable USD |
+
+Implementation: **`external_layer/clamp_policy.py`** (loader) and **`external_layer/risk_checker.py`** (logic).
+
 ### Additional defensive clamp logic
 - The layer tracks the last several risk evaluations (using a short rolling window).
 - If the **last 3 evaluations** were in a protected tier (Critical or Moderate) **and** stables are **&lt; $95** (or still Critical), it arms a **10-minute** clamp timer. Streak arming does **not** run in the travel band (**`stable_usd` ≥ 95**, not critical).

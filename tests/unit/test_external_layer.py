@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from external_layer import clamp_policy
 from external_layer import control
 from external_layer import risk_checker
 
@@ -18,12 +19,16 @@ def _reset_control_last_successful_risk():
     risk_checker._FORCE_MIN_UNTIL_TS = 0.0
     risk_checker._CLAMP_STREAK_MIN_STABLE_USD = None
     risk_checker._reset_clamp_log_state()
+    clamp_policy.reload_risk_policy_for_tests()
+    risk_checker._reset_protection_eval_deque()
     yield
     control._last_successful_risk = None
     risk_checker._RECENT_PROTECTION_EVALS.clear()
     risk_checker._FORCE_MIN_UNTIL_TS = 0.0
     risk_checker._CLAMP_STREAK_MIN_STABLE_USD = None
     risk_checker._reset_clamp_log_state()
+    clamp_policy.reload_risk_policy_for_tests()
+    risk_checker._reset_protection_eval_deque()
 
 
 def test_control_command_defaults():
