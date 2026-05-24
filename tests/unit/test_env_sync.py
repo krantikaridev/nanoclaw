@@ -1,4 +1,5 @@
 from nanoclaw.env_sync import (
+    ENV_APPLY_FORCE_TEMPLATE_KEYS,
     ENV_APPLY_PRESERVE_KEYS,
     compute_env_sync_diff,
     merge_env_from_example,
@@ -106,6 +107,25 @@ def test_merge_env_from_example_overwrites_stale_min_pol_for_gas_from_template()
 
     assert "MIN_POL_FOR_GAS=0.15\n" in out
     assert "MIN_POL_FOR_GAS=0.005" not in out
+
+
+def test_merge_env_from_example_force_template_overrides_explicit_preserve_key():
+    current = "MIN_POL_FOR_GAS=0.005\nCUSTOM_KEEP=stage\n"
+    template = "MIN_POL_FOR_GAS=0.15\nCUSTOM_KEEP=template\n"
+
+    out = merge_env_from_example(
+        current,
+        template,
+        preserve_keys=(*ENV_APPLY_PRESERVE_KEYS, "MIN_POL_FOR_GAS", "CUSTOM_KEEP"),
+        keep_extra_keys=False,
+    )
+
+    assert "MIN_POL_FOR_GAS=0.15\n" in out
+    assert "CUSTOM_KEEP=stage\n" in out
+
+
+def test_env_apply_force_template_keys_include_min_pol_for_gas():
+    assert "MIN_POL_FOR_GAS" in ENV_APPLY_FORCE_TEMPLATE_KEYS
 
 
 def test_merge_env_from_example_appends_extra_keys_when_requested():

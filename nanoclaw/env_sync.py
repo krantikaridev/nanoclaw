@@ -35,6 +35,10 @@ ENV_APPLY_PRESERVE_KEYS = (
     "WEB3_PROVIDER_URI",
     "RPC_FALLBACKS",
 )
+# Always take template value on nanoup — even if an older preserve list or --preserve-key included these.
+ENV_APPLY_FORCE_TEMPLATE_KEYS = (
+    "MIN_POL_FOR_GAS",
+)
 _ENV_ASSIGNMENT_RE = re.compile(r"^([^\s=#]+)\s*=\s*(.*)$")
 _ENV_KEY_RE = re.compile(r"^([A-Z][A-Z0-9_]*)=", re.MULTILINE)
 
@@ -122,6 +126,7 @@ def merge_env_from_example(
     - Optionally appends keys that exist only in `.env` (`keep_extra_keys=True`).
     """
     preserve_set = {str(key).strip() for key in preserve_keys if str(key).strip()}
+    force_template_set = {str(key).strip() for key in ENV_APPLY_FORCE_TEMPLATE_KEYS if str(key).strip()}
     current_order, current_values = _parse_env_assignments(env_content)
     merged_lines: list[str] = []
     template_keys_seen: set[str] = set()
@@ -134,7 +139,11 @@ def merge_env_from_example(
         key = str(match.group(1)).strip()
         template_value = str(match.group(2))
         template_keys_seen.add(key)
-        if key in preserve_set and key in current_values:
+        if (
+            key not in force_template_set
+            and key in preserve_set
+            and key in current_values
+        ):
             merged_lines.append(f"{key}={current_values[key]}")
             continue
         merged_lines.append(f"{key}={template_value}")

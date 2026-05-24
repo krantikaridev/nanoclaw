@@ -71,7 +71,13 @@ if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
     STASH_NAME="nanoup-auto-stash-$(date -u +%Y%m%dT%H%M%SZ)"
     echo "⚠️ nanoup: local changes detected; auto-stashing as '${STASH_NAME}'"
     # Exclude control.json: operator pause/unpause must survive stash/pop cycles.
-    git stash push --include-untracked -m "${STASH_NAME}" -- . ':(exclude)control.json' ':(exclude).runtime' >/dev/null
+    git stash push -m "${STASH_NAME}" -- . \
+      ':(exclude)control.json' \
+      ':(exclude).runtime' \
+      ':(exclude).env' \
+      >/dev/null 2>&1 || {
+      echo "⚠️ nanoup: git stash skipped or empty (continuing)"
+    }
     DID_STASH=1
   else
     echo "❌ nanoup: local changes detected. Commit/stash first, or run:"
@@ -109,6 +115,15 @@ if [[ ! -f "scripts/nanoenv_apply.py" ]]; then
 fi
 echo "🔄 nanoup: syncing .env from .env.example (preserving secrets/runtime keys)"
 python scripts/nanoenv_apply.py --write
+MIN_POL_NOW="$(grep -E '^MIN_POL_FOR_GAS=' .env 2>/dev/null | tail -1 | cut -d= -f2- || true)"
+if [[ -n "${MIN_POL_NOW}" ]]; then
+  echo "✅ nanoup: MIN_POL_FOR_GAS=${MIN_POL_NOW} (from template merge)"
+  if awk -v v="${MIN_POL_NOW}" 'BEGIN { exit !(v+0 < 0.12) }'; then
+    echo "⚠️ nanoup: MIN_POL_FOR_GAS=${MIN_POL_NOW} is below 0.12 — run: python scripts/nanoenv_apply.py --write"
+  fi
+else
+  echo "⚠️ nanoup: MIN_POL_FOR_GAS not found in .env after sync"
+fi
 
 nohup python clean_swap.py >>real_cron.log 2>&1 &
 echo "✅ nanoup: bot started (tail -f real_cron.log)"

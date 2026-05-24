@@ -88,11 +88,22 @@ def main() -> int:
         print(f"backup created: {backup_path}", file=sys.stderr)
 
     env_path.write_text(merged, encoding="utf-8")
+    min_pol = _read_env_assignment(merged, "MIN_POL_FOR_GAS")
     print(
         f"wrote {env_path} from {template_path} (preserved keys: {', '.join(preserve_keys)})",
         file=sys.stderr,
     )
+    if min_pol is not None:
+        print(f"MIN_POL_FOR_GAS={min_pol} (template merge)", file=sys.stderr)
     return 0
+
+
+def _read_env_assignment(content: str, key: str) -> str | None:
+    prefix = f"{key}="
+    for line in content.splitlines():
+        if line.startswith(prefix):
+            return line[len(prefix):]
+    return None
 
 
 if __name__ == "__main__":
