@@ -246,6 +246,8 @@ X_SIGNAL_EQUITY_COOLDOWN_SECONDS = env_int(
 X_SIGNAL_EQUITY_STRONG_TP_PCT = env_float("X_SIGNAL_EQUITY_STRONG_TP_PCT", 12.0)
 # Optional per-symbol skip (balance-read workaround). Empty = trade all followed_equities assets.
 X_SIGNAL_TEMP_SKIP_SYMBOLS = env_symbol_frozenset("X_SIGNAL_TEMP_SKIP_SYMBOLS", "")
+# TEMPORARY (May 2026): WBTC_* BUY min notional while Polygon WBTC liquidity is poor; 0 disables.
+X_SIGNAL_WBTC_MIN_NOTIONAL_USD = env_float("X_SIGNAL_WBTC_MIN_NOTIONAL_USD", 25.0)
 X_SIGNAL_EQUITY_SELL_FRACTION = env_float("X_SIGNAL_EQUITY_SELL_FRACTION", 0.55)
 # REVERSIBLE travel tune (2026-05-09): X-SIGNAL-only dust/exec floor when combined stables ≥ ~$80 (see swap_executor + signal_equity_trader).
 X_SIGNAL_EQUITY_DUST_MIN_USD = env_float("X_SIGNAL_EQUITY_DUST_MIN_USD", 7.5)

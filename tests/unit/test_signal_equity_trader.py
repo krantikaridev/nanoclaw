@@ -1390,6 +1390,7 @@ def test_x_signal_recovery_gate_relaxation_from_negative_session_pnl(monkeypatch
 
 def test_x_signal_limited_usdc_passes_when_effective_meets_capped_gate(monkeypatch, capsys):
     """Stage-like: USDC ~$18, |signal| 0.83, effective ~$10.3 clears $10 limited-USDC gate."""
+    monkeypatch.setattr(cfg, "X_SIGNAL_WBTC_MIN_NOTIONAL_USD", 0.0)
     s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
     monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 1.0)
     monkeypatch.setattr(
@@ -1421,6 +1422,7 @@ def test_x_signal_recovery_passes_083_signal_with_healthy_usdc(monkeypatch, caps
     """Recovery cap: USDC above safe floor, |signal| 0.83, effective ~$10.3 clears $9 gate."""
     monkeypatch.setattr(cfg, "MAIN_STRATEGY_PNL_RECOVERY_MODE", True)
     monkeypatch.setattr(cfg, "X_SIGNAL_RECOVERY_MIN_EFFECTIVE_GATE_USD", 9.0)
+    monkeypatch.setattr(cfg, "X_SIGNAL_WBTC_MIN_NOTIONAL_USD", 0.0)
     s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
     monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 1.0)
     monkeypatch.setattr(
@@ -1457,6 +1459,94 @@ def test_x_signal_recovery_sizing_boost_lifts_notional(monkeypatch, capsys):
     size = s._compute_trade_size(40.0, 0.83, usdt_balance=0.0, symbol="WBTC_ALPHA")
     assert size == pytest.approx(10.25)
     assert "recovery sizing boost" in capsys.readouterr().out
+
+
+def test_x_signal_wbtc_blocked_by_temporary_liquidity_min_notional(monkeypatch, capsys):
+    """TEMPORARY WBTC gate: typical ~$11 sizing blocked when min notional is $25."""
+    monkeypatch.setattr(cfg, "X_SIGNAL_WBTC_MIN_NOTIONAL_USD", 25.0)
+    s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
+    monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 1.0)
+    monkeypatch.setattr(
+        SignalEquityTrader,
+        "_compute_trade_size",
+        lambda self, usdc_balance, signal_strength, usdt_balance=0.0, *, symbol="": 11.0,
+    )
+
+    plan, reason = s.build_plan_with_block_reason(
+        symbol="WBTC_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=8,
+        signal_strength=0.83,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=40.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+        upside_pct=22.0,
+    )
+    assert plan is None
+    assert reason == "temporary_wbtc_liquidity_min_notional"
+    out = capsys.readouterr().out
+    assert "WBTC liquidity min notional (TEMPORARY)" in out
+
+
+def test_x_signal_wbtc_min_notional_does_not_block_link_alpha(monkeypatch):
+    """LINK_ALPHA and other assets ignore X_SIGNAL_WBTC_MIN_NOTIONAL_USD."""
+    monkeypatch.setattr(cfg, "X_SIGNAL_WBTC_MIN_NOTIONAL_USD", 25.0)
+    s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
+    monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 1.0)
+    monkeypatch.setattr(
+        SignalEquityTrader,
+        "_compute_trade_size",
+        lambda self, usdc_balance, signal_strength, usdt_balance=0.0, *, symbol="": 11.0,
+    )
+    monkeypatch.setattr(s, "_estimate_gas_cost_usd", lambda _gas_gwei: 0.71)
+
+    plan, reason = s.build_plan_with_block_reason(
+        symbol="LINK_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.83,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=40.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+        upside_pct=22.0,
+    )
+    assert plan is not None
+    assert reason is None
+
+
+def test_x_signal_wbtc_min_notional_disabled_when_env_zero(monkeypatch):
+    """X_SIGNAL_WBTC_MIN_NOTIONAL_USD=0 disables the temporary WBTC gate."""
+    monkeypatch.setattr(cfg, "X_SIGNAL_WBTC_MIN_NOTIONAL_USD", 0.0)
+    s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
+    monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 1.0)
+    monkeypatch.setattr(
+        SignalEquityTrader,
+        "_compute_trade_size",
+        lambda self, usdc_balance, signal_strength, usdt_balance=0.0, *, symbol="": 11.0,
+    )
+    monkeypatch.setattr(s, "_estimate_gas_cost_usd", lambda _gas_gwei: 0.71)
+
+    plan, reason = s.build_plan_with_block_reason(
+        symbol="WBTC_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=8,
+        signal_strength=0.83,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=40.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+        upside_pct=22.0,
+    )
+    assert plan is not None
+    assert reason is None
 
 
 def test_low_effective_after_gas_still_blocks_when_effective_below_override(monkeypatch):

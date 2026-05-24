@@ -185,6 +185,21 @@ def _x_signal_recovery_gate_relaxation_active() -> bool:
     return _x_signal_recovery_gate_context().active
 
 
+def _x_signal_is_wbtc_symbol(symbol: str) -> bool:
+    return "WBTC" in str(symbol).strip().upper()
+
+
+def _x_signal_wbtc_liquidity_min_notional_usd() -> float | None:
+    """TEMPORARY (May 2026): raise min BUY notional for WBTC_* while Polygon WBTC liquidity is poor.
+
+    Set ``X_SIGNAL_WBTC_MIN_NOTIONAL_USD=0`` to disable without code changes.
+    """
+    floor = float(getattr(cfg, "X_SIGNAL_WBTC_MIN_NOTIONAL_USD", 25.0))
+    if floor <= 0.0:
+        return None
+    return floor
+
+
 def _x_signal_min_effective_trade_usd(
     signal_strength: float,
     *,
@@ -1134,6 +1149,25 @@ class SignalEquityTrader:
                     print(f"[nanoclaw] BLOCK: {sym} | invalid_trade_size (computed=${trade_size:.2f}, available=${usdc_balance:.2f})")
                     logger.debug("build_plan block sym=%s reason=invalid_trade_size", sym)
                     return None, "invalid_trade_size"
+                wbtc_min = (
+                    _x_signal_wbtc_liquidity_min_notional_usd()
+                    if _x_signal_is_wbtc_symbol(sym)
+                    else None
+                )
+                if wbtc_min is not None and float(trade_size) + 1e-9 < wbtc_min:
+                    print(
+                        f"[nanoclaw] X-SIGNAL skipped | WBTC liquidity min notional (TEMPORARY) | "
+                        f"sym={sym} | computed=${float(trade_size):.2f} | min=${wbtc_min:.2f} | "
+                        f"set X_SIGNAL_WBTC_MIN_NOTIONAL_USD=0 to disable"
+                    )
+                    logger.debug(
+                        "build_plan block sym=%s reason=temporary_wbtc_liquidity_min_notional "
+                        "trade_size=%s min=%s",
+                        sym,
+                        trade_size,
+                        wbtc_min,
+                    )
+                    return None, "temporary_wbtc_liquidity_min_notional"
                 min_sz = float(self.config.min_trade_usdc)
                 if trade_size < min_sz:
                     print(
