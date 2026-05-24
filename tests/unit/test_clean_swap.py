@@ -1514,7 +1514,8 @@ def test_main_hold_mild_loss_idle_min_trade_guard_bypassed(monkeypatch, capsys):
     monkeypatch.setattr(clean_swap, "has_active_lock", lambda: False)
     monkeypatch.setattr(clean_swap, "create_lock", lambda: None)
     monkeypatch.setattr(clean_swap, "release_lock", lambda: None)
-    monkeypatch.setattr(clean_swap, "get_live_wmatic_price", lambda: 0.09)
+    wmatic_price = 9.0 / 8.0  # $9 WMATIC stack in mild-loss band ($5–$10)
+    monkeypatch.setattr(clean_swap, "get_live_wmatic_price", lambda: wmatic_price)
     monkeypatch.setattr(clean_swap, "write_portfolio_history_snapshot", lambda _price: None)
     monkeypatch.setattr(clean_swap, "is_global_cooldown_active", lambda *_args, **_kwargs: False)
     monkeypatch.setattr(clean_swap, "save_state", lambda _state: None)
@@ -1548,11 +1549,10 @@ def test_main_hold_mild_loss_idle_min_trade_guard_bypassed(monkeypatch, capsys):
         lambda *_args, **_kwargs: (False, hold_signal),
     )
     wmatic_qty = 8.0
-    price = 0.70
     notional = 9.0
     trade_decision = clean_swap.TradeDecision(
         direction="WMATIC_TO_USDT",
-        amount_in=int(wmatic_qty * (notional / (wmatic_qty * price)) * 1e18),
+        amount_in=int(wmatic_qty * (notional / (wmatic_qty * wmatic_price)) * 1e18),
         trade_size=notional,
         message="idle rotation",
     )
@@ -1569,6 +1569,13 @@ def test_main_hold_mild_loss_idle_min_trade_guard_bypassed(monkeypatch, capsys):
     monkeypatch.setattr(clean_swap, "mark_asset_traded", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(clean_swap, "mark_wallet_traded", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(swap_exec.wallet_performance, "record_copy_exit", lambda **_kwargs: [])
+    monkeypatch.setattr(swap_exec, "_reject_if_low_expected_net_edge", lambda *_a, **_k: False)
+    monkeypatch.setattr(swap_exec, "load_cycle_control", lambda: swap_exec.CycleControlSnapshot())
+    monkeypatch.setattr(
+        swap_exec,
+        "cs_evaluate_take_profit",
+        lambda *_args, **_kwargs: (False, hold_signal),
+    )
 
     asyncio.run(clean_swap.main(dry_run=False))
 
