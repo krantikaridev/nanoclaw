@@ -729,8 +729,8 @@ def _defer_if_dust(
 # Small WMATIC→stable exits (~$3.38–$3.99) were hard-blocked by MIN_TRADE_USD / dust defer
 # (`main_strategy_dust_deferred`) even when the stack was healthy. Revert after sprint window.
 _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_WMATIC_USD_MIN = 7.0
-# Temporary aggressive floor for sprint - lowered to $2.0 to allow currently observed small profit takes (~$2.05)
-_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 2.0
+# Gas guard: P2 relief notional floor (raised May 2026 from $2.0 to stop $2.70 micro exits).
+_MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_NOTIONAL_FLOOR_USD = 5.0
 _MAIN_STRATEGY_PROFIT_TAKE_BALANCE_RELIEF_MIN_SIGNAL_STRENGTH = 0.55
 _PROFIT_TAKE_P2_RELIEF_LOG = "[nanoclaw] Main strategy small profit take allowed (P2 relief)"
 _PROFIT_TAKE_P2_RELIEF_CHECK_LOG = "[nanoclaw] P2 relief check"
@@ -758,10 +758,11 @@ _MAIN_STRATEGY_LOW_WMATIC_P2_WM_MIN_USD = 5.0
 _MAIN_STRATEGY_LOW_WMATIC_P2_SIGNAL_MIN = 0.45
 _MAIN_STRATEGY_LOW_WMATIC_FORCE_WM_MIN_USD = 5.0
 _MAIN_STRATEGY_LOW_WMATIC_FORCE_CYCLES_MIN = 3
-_MAIN_STRATEGY_MODERATE_P2_WM_MIN_USD = 4.0
+# Moderate tier: stricter than low to avoid $2.7–$3.75 micro exits when stack is $7–$15.
+_MAIN_STRATEGY_MODERATE_P2_WM_MIN_USD = 7.0
 _MAIN_STRATEGY_MODERATE_P2_SIGNAL_MIN = 0.50
-_MAIN_STRATEGY_MODERATE_FORCE_WM_MIN_USD = 4.0
-_MAIN_STRATEGY_MODERATE_FORCE_CYCLES_MIN = 3
+_MAIN_STRATEGY_MODERATE_FORCE_WM_MIN_USD = 7.0
+_MAIN_STRATEGY_MODERATE_FORCE_CYCLES_MIN = 4
 # Long idle: many cycles without WMATIC→stable profit — allow micro rotation / force (gas-safe floor).
 _MAIN_STRATEGY_LONG_IDLE_CYCLES_LOW = 3
 _MAIN_STRATEGY_LONG_IDLE_CYCLES_MODERATE = 6
