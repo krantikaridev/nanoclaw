@@ -182,7 +182,7 @@ def test_load_followed_equities_keeps_per_asset_min_signal_strength(tmp_path):
                 "assets": [
                     {
                         "symbol": "LINK",
-                        "address": "0x53E0bca35eC356BD5ddDFebBD1Fc0fF03FaBad39",
+                        "address": "0x53E0bca35eC356Bd5DdDFebbD1Fc0FD03FaBad39",
                         "decimals": 18,
                         "signal_strength": 0.80,
                         "min_signal_strength": 0.75,
@@ -1679,6 +1679,36 @@ def test_sell_blocked_zero_equity():
         can_trade_asset=lambda *_a, **_k: True,
     )
     assert reason == "zero_equity_balance"
+
+
+def test_followed_equities_json_uses_canonical_polygon_token_addresses():
+    """Production followed_equities.json must use canonical Polygon token addresses.
+
+    Regression guard: a single-hex-char typo in LINK_ALPHA (`0fF03` instead of `0FD03`)
+    caused every USDC->LINK quote to revert `0x` on all V3 fee tiers + V2 router because
+    the address pointed at a nonexistent contract. The `_addr_probe` log truncation
+    `0x53e0bCa3...ABAd39` hid the middle bytes so the bug was invisible in logs.
+    """
+    from pathlib import Path
+
+    # Canonical Polygon (PoS) token addresses, lowercased for case-insensitive compare.
+    canonical = {
+        "WMATIC_ALPHA": "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270",
+        "WETH_ALPHA":   "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619",
+        "WBTC_ALPHA":   "0x1bfd67037b42cf73acf204706795bf64736c834e",
+        "LINK_ALPHA":   "0x53e0bca35ec356bd5dddfebbd1fc0fd03fabad39",
+    }
+
+    repo_root = Path(__file__).resolve().parents[2]
+    raw = json.loads((repo_root / "followed_equities.json").read_text(encoding="utf-8"))
+    by_symbol = {a["symbol"]: a["address"].lower() for a in raw.get("assets", [])}
+
+    for symbol, expected in canonical.items():
+        assert symbol in by_symbol, f"{symbol} missing from followed_equities.json"
+        assert by_symbol[symbol] == expected, (
+            f"{symbol} address {by_symbol[symbol]} != canonical {expected} "
+            "(single-byte typos here cause silent 100% quote-revert failures)"
+        )
 
 
 def test_load_followed_equities_empty_when_missing_file(tmp_path):
