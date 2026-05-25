@@ -59,6 +59,14 @@ _X_SIGNAL_MIN_EFFECTIVE_TRADE_USD_BASE = float(
     getattr(cfg, "X_SIGNAL_MIN_EFFECTIVE_TRADE_USD_BASE", 12.0)
 )
 
+# USDC fragmentation guard (May 2026): the swap layer can only spend from ONE ERC20 contract,
+# but the eligibility/sizing layer treats bridged USDC.e + native USDC as one combined budget.
+# Cap trade size at max(per-variant balance) * (1 - eps) so transferFrom doesn't STF, and skip
+# with `insufficient_per_variant_usdc` when even the cap is below the configured min trade size.
+def _x_signal_per_variant_usdc_eps_bps() -> float:
+    """Safety margin (bps) shaved off best per-variant USDC balance when capping trade size."""
+    return float(cfg.env_float("X_SIGNAL_PER_VARIANT_USDC_EPS_BPS", 50.0))
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CONTROL_JSON_PATH = _REPO_ROOT / "control.json"
 _SESSION_BASELINE_PATH = _REPO_ROOT / "portfolio_session_baseline.json"
@@ -504,6 +512,20 @@ class SignalEquityTrader:
         self.usdc_address = usdc_address
         self.last_usdc_balance_source = "not_queried"
         self._last_known_good_usdc_balance: Optional[float] = None
+        # Populated only on successful on-chain reads (cleared on failure / fallback paths) so the
+        # per-variant cap below is skipped when fresh data is unavailable.
+        self._last_known_per_variant_usdc_balances: dict[str, float] = {}
+
+    def _max_per_variant_usdc_balance_usd(self) -> Optional[float]:
+        """Best single-variant USDC balance (max across native + USDC.e), or None when unavailable.
+
+        The swap layer can only spend from one ERC20 contract; this is the real cap on a USDC-funded
+        BUY notional even when the combined stables budget looks larger.
+        """
+        balances = self._last_known_per_variant_usdc_balances
+        if not balances:
+            return None
+        return max(balances.values())
 
     @classmethod
     def builder(cls) -> SignalEquityTraderBuilder:
@@ -692,6 +714,7 @@ class SignalEquityTrader:
         )
         if not wallet or not usdc_tokens:
             self.last_usdc_balance_source = "fallback_missing_wallet_or_token"
+            self._last_known_per_variant_usdc_balances = {}
             logger.warning(
                 "on-chain USDC balance query skipped (missing wallet/token); using SNAPSHOT balance: $%.2f",
                 float(fallback_balance),
@@ -710,6 +733,7 @@ class SignalEquityTrader:
 
         if not rpc_endpoints:
             self.last_usdc_balance_source = "fallback_missing_rpc_endpoints"
+            self._last_known_per_variant_usdc_balances = {}
             logger.warning(
                 "on-chain USDC balance query skipped (no RPC endpoints configured); using SNAPSHOT balance: $%.2f",
                 float(fallback_balance),
@@ -739,11 +763,13 @@ class SignalEquityTrader:
                 for attempt in range(1, per_rpc_attempts + 1):
                     try:
                         web3_client = connect_web3(urls=[endpoint])
-                        onchain_balance = sum(
-                            self._read_erc20_usdc_balance_usd(web3_client, wallet, token_addr)
+                        per_variant_balances: dict[str, float] = {
+                            token_addr: self._read_erc20_usdc_balance_usd(web3_client, wallet, token_addr)
                             for token_addr in usdc_tokens
-                        )
+                        }
+                        onchain_balance = sum(per_variant_balances.values())
                         self._last_known_good_usdc_balance = onchain_balance
+                        self._last_known_per_variant_usdc_balances = per_variant_balances
                         self.last_usdc_balance_source = "onchain"
                         logger.info(
                             "USDC balance LIVE on-chain via %s (attempt %d/%d): $%.2f "
@@ -813,6 +839,7 @@ class SignalEquityTrader:
             return float(self._last_known_good_usdc_balance)
 
         self.last_usdc_balance_source = "fallback_after_all_rpcs_failed"
+        self._last_known_per_variant_usdc_balances = {}
         logger.warning(
             "All RPC endpoints failed; using SNAPSHOT fallback balance: $%.2f | last_error=%s",
             float(fallback_balance),
@@ -1145,6 +1172,45 @@ class SignalEquityTrader:
                         f"base=${float(trade_size):.2f} → adjusted=${adjusted:.2f}"
                     )
                     trade_size = adjusted
+                # USDC fragmentation guard: combined balance can fund the size, but the swap
+                # `transferFrom` runs on a single ERC20 contract. Cap to max(per-variant balance)
+                # minus a small eps; if even the cap is below min_trade_usdc, skip with a
+                # structured reason so the user can consolidate USDC instead of burning gas on STF.
+                max_per_variant = self._max_per_variant_usdc_balance_usd()
+                if max_per_variant is not None and float(trade_size) > float(max_per_variant):
+                    eps_bps = float(_x_signal_per_variant_usdc_eps_bps())
+                    capped = float(max_per_variant) * (1.0 - eps_bps / 10000.0)
+                    variants_str = ", ".join(
+                        f"${v:.2f}"
+                        for v in sorted(
+                            self._last_known_per_variant_usdc_balances.values(), reverse=True
+                        )
+                    )
+                    if capped < float(self.config.min_trade_usdc):
+                        print(
+                            f"[nanoclaw] X-SIGNAL skipped | insufficient per-variant USDC | "
+                            f"sym={sym} | computed=${float(trade_size):.2f} | "
+                            f"best_variant=${float(max_per_variant):.2f} | "
+                            f"capped=${capped:.2f} < min=${float(self.config.min_trade_usdc):.2f} | "
+                            f"variants=[{variants_str}] | "
+                            f"consolidate USDC into one variant or reduce trade size"
+                        )
+                        logger.debug(
+                            "build_plan block sym=%s reason=insufficient_per_variant_usdc "
+                            "trade_size=%s max_per_variant=%s capped=%s min=%s",
+                            sym,
+                            trade_size,
+                            max_per_variant,
+                            capped,
+                            self.config.min_trade_usdc,
+                        )
+                        return None, "insufficient_per_variant_usdc"
+                    print(
+                        f"[nanoclaw] X-SIGNAL trade size capped (USDC fragmentation) | sym={sym} | "
+                        f"original=${float(trade_size):.2f} | best_variant=${float(max_per_variant):.2f} | "
+                        f"capped=${capped:.2f} (eps={eps_bps:.0f}bps) | variants=[{variants_str}]"
+                    )
+                    trade_size = capped
                 if trade_size <= 0 or trade_size > usdc_balance:
                     print(f"[nanoclaw] BLOCK: {sym} | invalid_trade_size (computed=${trade_size:.2f}, available=${usdc_balance:.2f})")
                     logger.debug("build_plan block sym=%s reason=invalid_trade_size", sym)

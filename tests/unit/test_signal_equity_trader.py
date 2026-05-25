@@ -1549,6 +1549,231 @@ def test_x_signal_wbtc_min_notional_disabled_when_env_zero(monkeypatch):
     assert reason is None
 
 
+def _set_per_variant_balances(strategy, variants: dict[str, float]) -> None:
+    """Helper: simulate what `_query_onchain_usdc_balance` records on a successful read."""
+    strategy._last_known_per_variant_usdc_balances = dict(variants)
+
+
+def test_x_signal_caps_size_when_usdc_fragmented_above_per_variant(monkeypatch, capsys):
+    """USDC.e + native combined funds the size, but max single-variant balance is the real cap."""
+    s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
+    monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 1.0)
+    monkeypatch.setattr(strategy_module, "_x_signal_min_effective_trade_usd", lambda _s, **_kw: 0.0)
+
+    def _stub_onchain(_self, _fallback):
+        _set_per_variant_balances(_self, {USDC_E_TEST: 8.71, USDC_NATIVE_TEST: 9.95})
+        return 18.66
+
+    monkeypatch.setattr(SignalEquityTrader, "_query_onchain_usdc_balance", _stub_onchain)
+    monkeypatch.setattr(
+        SignalEquityTrader,
+        "_compute_trade_size",
+        lambda self, usdc_balance, signal_strength, usdt_balance=0.0, *, symbol="": 10.25,
+    )
+    monkeypatch.setattr(s, "_estimate_gas_cost_usd", lambda _gas_gwei: 0.01)
+
+    plan, reason = s.build_plan_with_block_reason(
+        symbol="LINK_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.81,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=18.66,
+        equity_balance=0.0,
+        usdt_balance=90.81,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+        upside_pct=13.0,
+    )
+
+    assert plan is not None, f"expected plan after cap; reason={reason!r}"
+    assert reason is None
+    # 9.95 * (1 - 50/10000) = 9.90025 — pinned to default eps (50 bps).
+    assert plan.trade_size == pytest.approx(9.95 * (1 - 50 / 10000.0))
+    assert plan.trade_size <= 9.95
+    out = capsys.readouterr().out
+    assert "trade size capped (USDC fragmentation)" in out
+
+
+def test_x_signal_skips_when_per_variant_cap_below_min_trade_usdc(monkeypatch, capsys):
+    """When even max-per-variant minus eps is below min_trade_usdc, REJECT with structured reason."""
+    s = _build_strategy_tuned(min_trade_usdc=5.0, max_trade_usdc=200.0)
+    monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 1.0)
+    monkeypatch.setattr(strategy_module, "_x_signal_min_effective_trade_usd", lambda _s, **_kw: 0.0)
+
+    def _stub_onchain(_self, _fallback):
+        _set_per_variant_balances(_self, {USDC_E_TEST: 4.0, USDC_NATIVE_TEST: 5.0})
+        return 9.0
+
+    monkeypatch.setattr(SignalEquityTrader, "_query_onchain_usdc_balance", _stub_onchain)
+    monkeypatch.setattr(
+        SignalEquityTrader,
+        "_compute_trade_size",
+        lambda self, usdc_balance, signal_strength, usdt_balance=0.0, *, symbol="": 10.25,
+    )
+    monkeypatch.setattr(s, "_estimate_gas_cost_usd", lambda _gas_gwei: 0.01)
+
+    plan, reason = s.build_plan_with_block_reason(
+        symbol="LINK_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.81,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=9.0,
+        equity_balance=0.0,
+        usdt_balance=90.81,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+        upside_pct=13.0,
+    )
+
+    assert plan is None
+    assert reason == "insufficient_per_variant_usdc"
+    out = capsys.readouterr().out
+    assert "insufficient per-variant USDC" in out
+    assert "consolidate USDC" in out
+
+
+def test_x_signal_skips_cap_when_single_variant_balance_covers_size(monkeypatch, capsys):
+    """No cap should fire when max-per-variant already covers the computed trade size."""
+    s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
+    monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 1.0)
+    monkeypatch.setattr(strategy_module, "_x_signal_min_effective_trade_usd", lambda _s, **_kw: 0.0)
+
+    def _stub_onchain(_self, _fallback):
+        _set_per_variant_balances(_self, {USDC_E_TEST: 1.0, USDC_NATIVE_TEST: 50.0})
+        return 51.0
+
+    monkeypatch.setattr(SignalEquityTrader, "_query_onchain_usdc_balance", _stub_onchain)
+    monkeypatch.setattr(
+        SignalEquityTrader,
+        "_compute_trade_size",
+        lambda self, usdc_balance, signal_strength, usdt_balance=0.0, *, symbol="": 10.25,
+    )
+    monkeypatch.setattr(s, "_estimate_gas_cost_usd", lambda _gas_gwei: 0.01)
+
+    plan, reason = s.build_plan_with_block_reason(
+        symbol="LINK_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.81,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=51.0,
+        equity_balance=0.0,
+        usdt_balance=90.81,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+        upside_pct=13.0,
+    )
+
+    assert plan is not None, f"expected unblocked plan; reason={reason!r}"
+    assert reason is None
+    assert plan.trade_size == pytest.approx(10.25)
+    out = capsys.readouterr().out
+    assert "trade size capped (USDC fragmentation)" not in out
+    assert "insufficient per-variant USDC" not in out
+
+
+def test_x_signal_skips_cap_when_per_variant_cache_unavailable(monkeypatch, capsys):
+    """RPC-fallback paths leave the cache empty; the cap must be skipped (fail-safe)."""
+    s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
+    monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 1.0)
+    monkeypatch.setattr(strategy_module, "_x_signal_min_effective_trade_usd", lambda _s, **_kw: 0.0)
+
+    def _stub_onchain(_self, _fallback):
+        _set_per_variant_balances(_self, {})  # simulate snapshot fallback (empty dict)
+        return 18.66
+
+    monkeypatch.setattr(SignalEquityTrader, "_query_onchain_usdc_balance", _stub_onchain)
+    monkeypatch.setattr(
+        SignalEquityTrader,
+        "_compute_trade_size",
+        lambda self, usdc_balance, signal_strength, usdt_balance=0.0, *, symbol="": 10.25,
+    )
+    monkeypatch.setattr(s, "_estimate_gas_cost_usd", lambda _gas_gwei: 0.01)
+
+    plan, reason = s.build_plan_with_block_reason(
+        symbol="LINK_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.81,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=18.66,
+        equity_balance=0.0,
+        usdt_balance=90.81,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+        upside_pct=13.0,
+    )
+
+    assert plan is not None, f"expected unblocked plan; reason={reason!r}"
+    assert reason is None
+    assert plan.trade_size == pytest.approx(10.25)
+    out = capsys.readouterr().out
+    assert "trade size capped (USDC fragmentation)" not in out
+
+
+def test_max_per_variant_usdc_balance_usd_returns_max():
+    s = _build_strategy_tuned()
+    assert s._max_per_variant_usdc_balance_usd() is None
+    s._last_known_per_variant_usdc_balances = {USDC_E_TEST: 8.71, USDC_NATIVE_TEST: 9.95}
+    assert s._max_per_variant_usdc_balance_usd() == pytest.approx(9.95)
+
+
+def test_query_onchain_usdc_balance_records_per_variant(monkeypatch):
+    """Successful on-chain read must populate the per-variant cache (used by fragmentation cap)."""
+    s = _build_strategy_tuned()
+    _pin_usdc_env(monkeypatch, bridged=USDC_E_TEST, native=USDC_NATIVE_TEST)
+    monkeypatch.setenv("RPC_ENDPOINTS", "https://rpc-one")
+    monkeypatch.setenv("X_SIGNAL_ONCHAIN_USDC_RETRY_ATTEMPTS", "1")
+    monkeypatch.setattr(s, "_rpc_endpoints_for_usdc_query", lambda: ["https://rpc-one"])
+
+    balances_raw = {
+        USDC_E_TEST.lower(): 8_710_000,
+        USDC_NATIVE_TEST.lower(): 9_950_000,
+    }
+
+    class _FakeContract:
+        def __init__(self, token_address: str) -> None:
+            self._token_address = str(token_address).lower()
+
+        @property
+        def functions(self):
+            return self
+
+        def balanceOf(self, _wallet):
+            return self
+
+        def call(self):
+            return balances_raw[self._token_address]
+
+    class _FakeEth:
+        def contract(self, address, abi):
+            _ = abi
+            return _FakeContract(address)
+
+    class _FakeWeb3Client:
+        eth = _FakeEth()
+
+    import nanoclaw.config as nc_cfg
+
+    monkeypatch.setattr(nc_cfg, "connect_web3", lambda urls: _FakeWeb3Client())
+
+    out = s._query_onchain_usdc_balance(0.0)
+
+    assert out == pytest.approx(18.66)
+    assert s.last_usdc_balance_source == "onchain"
+    assert s._last_known_per_variant_usdc_balances == {
+        USDC_E_TEST: pytest.approx(8.71),
+        USDC_NATIVE_TEST: pytest.approx(9.95),
+    }
+    assert s._max_per_variant_usdc_balance_usd() == pytest.approx(9.95)
+
+
 def test_low_effective_after_gas_still_blocks_when_effective_below_override(monkeypatch):
     s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
     monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 1.0)
