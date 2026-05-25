@@ -1717,6 +1717,100 @@ def test_x_signal_skips_cap_when_per_variant_cache_unavailable(monkeypatch, caps
     assert "trade size capped (USDC fragmentation)" not in out
 
 
+def test_x_signal_fragmentation_skip_uses_executor_min_trade_usd_floor(monkeypatch, capsys):
+    """Production repro: capped $9.90 falls below MIN_TRADE_USD=$10 with sub-HC signal.
+
+    Without honoring the executor's `MIN_TRADE_USD` at plan-time, the trade slipped
+    through the strategy guard and was rejected later by the swap-executor's generic
+    `min_trade_guard` log path — hiding fragmentation as the actionable root cause.
+    """
+    s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
+    monkeypatch.setattr(strategy_module, "_HARD_BYPASS_ENABLED", True)
+    monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 10.0)
+    monkeypatch.setattr(strategy_module, "_x_signal_min_effective_trade_usd", lambda _s, **_kw: 0.0)
+
+    def _stub_onchain(_self, _fallback):
+        _set_per_variant_balances(_self, {USDC_E_TEST: 8.71, USDC_NATIVE_TEST: 9.95})
+        return 18.66
+
+    monkeypatch.setattr(SignalEquityTrader, "_query_onchain_usdc_balance", _stub_onchain)
+    monkeypatch.setattr(
+        SignalEquityTrader,
+        "_compute_trade_size",
+        lambda self, usdc_balance, signal_strength, usdt_balance=0.0, *, symbol="": 10.25,
+    )
+    monkeypatch.setattr(s, "_estimate_gas_cost_usd", lambda _gas_gwei: 0.01)
+
+    plan, reason = s.build_plan_with_block_reason(
+        symbol="LINK_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.81,  # below high-conviction threshold (0.85) → no executor bypass
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=18.66,
+        equity_balance=0.0,
+        usdt_balance=98.14,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+        upside_pct=13.0,
+    )
+
+    assert plan is None
+    assert reason == "insufficient_per_variant_usdc"
+    out = capsys.readouterr().out
+    assert "insufficient per-variant USDC" in out
+    assert "consolidate USDC" in out
+    # Surface the executor-aware floor (10.00), not the strategy's lower min_trade_usdc (4.0).
+    assert "min=$10.00" in out
+
+
+def test_x_signal_fragmentation_cap_allows_high_conviction_bypass(monkeypatch, capsys):
+    """High-conviction X-SIGNAL (|signal| >= 0.85) with capped >= $7.5 should still trade.
+
+    Mirrors the swap-executor's `_x_signal_min_trade_guard_bypass` so the plan-time guard
+    never over-skips a trade the executor would have allowed.
+    """
+    s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
+    monkeypatch.setattr(strategy_module, "_HARD_BYPASS_ENABLED", True)
+    monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 10.0)
+    monkeypatch.setattr(strategy_module, "_x_signal_min_effective_trade_usd", lambda _s, **_kw: 0.0)
+
+    def _stub_onchain(_self, _fallback):
+        _set_per_variant_balances(_self, {USDC_E_TEST: 8.71, USDC_NATIVE_TEST: 9.95})
+        return 18.66
+
+    monkeypatch.setattr(SignalEquityTrader, "_query_onchain_usdc_balance", _stub_onchain)
+    monkeypatch.setattr(
+        SignalEquityTrader,
+        "_compute_trade_size",
+        lambda self, usdc_balance, signal_strength, usdt_balance=0.0, *, symbol="": 10.25,
+    )
+    monkeypatch.setattr(s, "_estimate_gas_cost_usd", lambda _gas_gwei: 0.01)
+
+    plan, reason = s.build_plan_with_block_reason(
+        symbol="LINK_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=18,
+        signal_strength=0.92,  # >= 0.85 high-conviction threshold → bypass eligible
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=18.66,
+        equity_balance=0.0,
+        usdt_balance=98.14,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+        upside_pct=13.0,
+    )
+
+    assert plan is not None, f"expected unblocked plan; reason={reason!r}"
+    assert reason is None
+    assert plan.trade_size == pytest.approx(9.95 * (1 - 50 / 10000.0))
+    out = capsys.readouterr().out
+    assert "trade size capped (USDC fragmentation)" in out
+    assert "insufficient per-variant USDC" not in out
+
+
 def test_max_per_variant_usdc_balance_usd_returns_max():
     s = _build_strategy_tuned()
     assert s._max_per_variant_usdc_balance_usd() is None

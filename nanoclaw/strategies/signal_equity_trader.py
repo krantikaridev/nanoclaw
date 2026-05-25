@@ -1174,8 +1174,10 @@ class SignalEquityTrader:
                     trade_size = adjusted
                 # USDC fragmentation guard: combined balance can fund the size, but the swap
                 # `transferFrom` runs on a single ERC20 contract. Cap to max(per-variant balance)
-                # minus a small eps; if even the cap is below min_trade_usdc, skip with a
-                # structured reason so the user can consolidate USDC instead of burning gas on STF.
+                # minus a small eps; if even the cap is below the swap-executor's effective
+                # minimum, skip with a structured reason so the user can consolidate USDC
+                # instead of letting the trade fall through to the executor's generic
+                # `min_trade_guard` log.
                 max_per_variant = self._max_per_variant_usdc_balance_usd()
                 if max_per_variant is not None and float(trade_size) > float(max_per_variant):
                     eps_bps = float(_x_signal_per_variant_usdc_eps_bps())
@@ -1186,12 +1188,26 @@ class SignalEquityTrader:
                             self._last_known_per_variant_usdc_balances.values(), reverse=True
                         )
                     )
-                    if capped < float(self.config.min_trade_usdc):
+                    # Pre-empt the swap-executor's `min_trade_guard` (env `MIN_TRADE_USD`) at
+                    # plan-time when fragmentation is the cause, so the operator sees the
+                    # actionable `insufficient_per_variant_usdc` reason. Mirrors the executor's
+                    # high-conviction bypass (`_x_signal_min_trade_guard_bypass`) so we never
+                    # over-skip a trade the executor would have allowed.
+                    executor_min = float(self.config.min_trade_usdc)
+                    if _HARD_BYPASS_ENABLED and float(_HARD_BYPASS_MIN_TRADE_USD) > 0:
+                        high_conv_bypass = (
+                            strength > 0
+                            and abs(float(strength)) >= float(_X_SIGNAL_HIGH_CONVICTION_STRENGTH)
+                            and float(capped) + 1e-9 >= float(_X_SIGNAL_MIN_SIZE_OVERRIDE)
+                        )
+                        if not high_conv_bypass:
+                            executor_min = max(executor_min, float(_HARD_BYPASS_MIN_TRADE_USD))
+                    if capped < executor_min:
                         print(
                             f"[nanoclaw] X-SIGNAL skipped | insufficient per-variant USDC | "
                             f"sym={sym} | computed=${float(trade_size):.2f} | "
                             f"best_variant=${float(max_per_variant):.2f} | "
-                            f"capped=${capped:.2f} < min=${float(self.config.min_trade_usdc):.2f} | "
+                            f"capped=${capped:.2f} < min=${executor_min:.2f} | "
                             f"variants=[{variants_str}] | "
                             f"consolidate USDC into one variant or reduce trade size"
                         )
@@ -1202,7 +1218,7 @@ class SignalEquityTrader:
                             trade_size,
                             max_per_variant,
                             capped,
-                            self.config.min_trade_usdc,
+                            executor_min,
                         )
                         return None, "insufficient_per_variant_usdc"
                     print(
