@@ -97,28 +97,38 @@ _AUTO_USDC_FAILURE_STATE = {
 }
 
 
-def _x_signal_buy_risk_level(*, usdt: float, wmatic: float) -> str:
+def _x_signal_buy_risk_level_from_buffers(*, stable_usd: float, wmatic: float) -> str:
     """
-    Minimal risk classifier used to protect session PnL by scaling X-Signal BUY sizing.
+    Buffer-only risk tier from combined stables + WMATIC (shared by assess + cycle gate).
 
-    Logic (mirrors nanoreconcile operator heuristic):
-    - HIGH: USDT < (PROTECTION_FLUCTUATION_USDT_THRESHOLD + 3)
-    - MEDIUM: USDT < (PROTECTION_FLUCTUATION_USDT_THRESHOLD + 9) AND WMATIC > PROTECTION_FLUCTUATION_MIN_WMATIC
+    - HIGH: stable_usd < (PROTECTION_FLUCTUATION_USDT_THRESHOLD + 3)
+    - MEDIUM: stable_usd < (PROTECTION_FLUCTUATION_USDT_THRESHOLD + 9) AND WMATIC > MIN
     - LOW: otherwise
     """
     th_usdt = float(getattr(cfg, "PROTECTION_FLUCTUATION_USDT_THRESHOLD", 0.0))
     th_wmatic = float(getattr(cfg, "PROTECTION_FLUCTUATION_MIN_WMATIC", 0.0))
-    # Keep this focused on USDT + WMATIC (current damage area) with operator-intuitive constants.
     high_usdt_buffer = 3.0
     medium_usdt_buffer = 9.0
-    usdt_f = float(usdt)
+    stable_f = float(stable_usd)
     wmatic_f = float(wmatic)
 
-    if usdt_f < (th_usdt + high_usdt_buffer):
+    if stable_f < (th_usdt + high_usdt_buffer):
         return "HIGH"
-    if usdt_f < (th_usdt + medium_usdt_buffer) and wmatic_f > th_wmatic:
+    if stable_f < (th_usdt + medium_usdt_buffer) and wmatic_f > th_wmatic:
         return "MEDIUM"
     return "LOW"
+
+
+def _x_signal_buy_risk_level(*, usdt: float, usdc: float, wmatic: float) -> str:
+    """
+    Minimal risk classifier used to protect session PnL by scaling X-Signal BUY sizing.
+
+    Buffer thresholds use combined stables (USDT + USDC), matching STABLE_USD spend capacity.
+    """
+    return _x_signal_buy_risk_level_from_buffers(
+        stable_usd=float(usdt) + float(usdc),
+        wmatic=wmatic,
+    )
 
 
 def _format_money(x: float) -> str:
@@ -264,6 +274,8 @@ def _assess_x_signal_buy_risk(
             divergence = None
             divergence_trigger = False
 
+    buffer_level = _x_signal_buy_risk_level_from_buffers(stable_usd=stable_usd_f, wmatic=wmatic_f)
+
     reasons: list[str] = []
     if stable_usd_f < (th_usdt + high_usdt_buffer):
         reasons.append("usdt_below_high_buffer")
@@ -272,7 +284,7 @@ def _assess_x_signal_buy_risk(
 
     if reasons:
         level = "HIGH"
-    elif stable_usd_f < (th_usdt + medium_usdt_buffer) and wmatic_f > th_wmatic:
+    elif buffer_level == "MEDIUM":
         level = "MEDIUM"
         reasons.append("usdt_below_medium_buffer_and_wmatic_high")
     else:

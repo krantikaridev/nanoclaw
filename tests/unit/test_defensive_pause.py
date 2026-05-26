@@ -67,13 +67,13 @@ def test_defensive_pause_blocks_x_signal_buy_and_copy_trades(monkeypatch):
     monkeypatch.setattr(swap_executor, "USDC_COPY_STRATEGY", _FakeCopyStrategy())
 
     state = {}
-    # Cycle 1: HIGH risk, streak=1 -> no defensive pause yet; should take X-signal BUY.
-    b1 = Balances(usdt=11.0, usdc=50.0, wmatic=0.0, pol=1.0)
+    # Cycle 1: HIGH risk (combined stables low), streak=1 -> no defensive pause yet; should take X-signal BUY.
+    b1 = Balances(usdt=9.0, usdc=2.0, wmatic=0.0, pol=1.0)
     d1 = swap_executor.determine_trade_decision(state, b1, current_price=1.0, dry_run=True)
     assert d1.direction == "USDC_TO_EQUITY"
 
     # Cycle 2: HIGH risk again, streak=2 -> defensive pause activates; blocks X-signal BUY and copy trades.
-    b2 = Balances(usdt=11.0, usdc=50.0, wmatic=0.0, pol=1.0)
+    b2 = Balances(usdt=9.0, usdc=2.0, wmatic=0.0, pol=1.0)
     d2 = swap_executor.determine_trade_decision(state, b2, current_price=1.0, dry_run=True)
     # Falls through to non-entry paths (main strategy / protection), not X-signal BUY or copy-trade entry.
     assert d2.direction != "USDC_TO_EQUITY"

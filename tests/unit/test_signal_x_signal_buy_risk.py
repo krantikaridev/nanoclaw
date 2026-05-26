@@ -59,6 +59,17 @@ def test_buy_risk_medium_uses_combined_stables_for_buffer(vm_threshold, monkeypa
     assert "usdt_below_medium_buffer_and_wmatic_high" in (ctx2.get("reasons") or [])
 
 
+def test_cycle_risk_level_low_when_usdt_low_but_combined_stables_ample(vm_threshold):
+    """_x_signal_buy_risk_level matches assess path for defensive_pause / cycle gate."""
+    level = signal_module._x_signal_buy_risk_level(usdt=9.27, usdc=30.90, wmatic=156.0)
+    assert level == "LOW"
+
+
+def test_cycle_risk_level_high_when_combined_stables_genuinely_low(vm_threshold):
+    level = signal_module._x_signal_buy_risk_level(usdt=9.0, usdc=2.0, wmatic=156.0)
+    assert level == "HIGH"
+
+
 def test_buy_risk_divergence_still_usdt_only(vm_threshold, monkeypatch):
     monkeypatch.setattr(
         signal_module.cfg,

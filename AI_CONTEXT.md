@@ -317,6 +317,13 @@ Directional milestones only—**capital scales when gates pass**, not on calenda
 - Unit tests for take-profit paths, swap path candidates, and X-Signal threshold helper (`tests/unit/`).
 - No non-core alerting layers in-scope; prioritize strategy code and deterministic logs.
 
+## Today's learnings (26 May 2026 — Cleanup #5: defensive_pause / cycle risk uses combined stables)
+
+- **Incident**: Post–Cleanup #4 deploy, `try_x_signal` logged `Risk=LOW | stable_usd=$40.17` and `X-SIGNAL PLAN SELECTED`, but the same cycles hit `TRADE SKIPPED: defensive_pause (risk=HIGH) — pausing X-signal BUY entries`.
+- **Root cause**: Cleanup #4 fixed `_assess_x_signal_buy_risk()` (plan-level BUY defense) to use combined stables, but `_x_signal_buy_risk_level()` (used by `_cycle_risk_level` → `_defensive_pause_state`) still compared **USDT-only** to buffer thresholds. With `usdt=$9.27` and `usdc=$30.90`, cycle gate saw HIGH while plan assess saw LOW.
+- **Fix (Cleanup #5)**: Extracted shared `_x_signal_buy_risk_level_from_buffers(stable_usd, wmatic)`; `_x_signal_buy_risk_level` and `_assess_x_signal_buy_risk` both use combined stables for HIGH/MEDIUM buffer tiers. `_cycle_risk_level` passes `balances.usdc`. Tests: `test_signal_x_signal_buy_risk.py` (cycle gate cases), `test_defensive_pause.py` (HIGH only when stables genuinely low).
+- **Post-deploy grep**: With `STABLE_USD≥$40`, cycles should **not** show `defensive_pause ... pausing X-signal BUY`; expect `cycle_selected` and/or real tx hash (or a concrete non-pause skip reason).
+
 ## Today's learnings (26 May 2026 — Cleanup #4: X-SIGNAL BUY defense / rotation unblock)
 
 - **Incident**: Post–Cleanup #3 deploy, LINK_ALPHA `signal=0.810` force-eligible every cycle but `X-SIGNAL BUY DEFENSE ACTIVE | buy_plans_paused=True | reasons=usdt_below_high_buffer` with `USDT=$9.27`, `USDC=$30.90`, `STABLE_USD≈$40.17`. `high_trigger = PROTECTION_FLUCTUATION_USDT_THRESHOLD (12) + 3 = $15`.

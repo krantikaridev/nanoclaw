@@ -324,12 +324,13 @@ def _cycle_risk_level(balances: Balances) -> str:
     """
     Single-cycle risk classification used for defensive entry gating.
 
-    Keep consistent with X-signal risk heuristics (USDT/WMATIC liquidity risk).
+    Keep consistent with X-signal risk heuristics (combined stables + WMATIC liquidity risk).
     """
     try:
         return str(
             signal_module._x_signal_buy_risk_level(
                 usdt=float(balances.usdt),
+                usdc=float(balances.usdc),
                 wmatic=float(balances.wmatic),
             )
         ).strip().upper()
