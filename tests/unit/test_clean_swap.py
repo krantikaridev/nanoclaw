@@ -2590,7 +2590,7 @@ def test_try_x_signal_high_conviction_bypasses_high_gas_and_forces_usdc_topup(mo
 
     usdc_topup_calls = []
 
-    def _ensure_usdc_for_x_signal(min_usdc, min_wmatic_value, force=False):
+    def _ensure_usdc_for_x_signal(min_usdc, min_wmatic_value, force=False, **_kw):
         _ = force
         usdc_topup_calls.append((float(min_usdc), float(min_wmatic_value)))
         return False
@@ -2755,7 +2755,7 @@ def test_try_x_signal_logs_high_conviction_auto_usdc_failure(monkeypatch, capsys
     monkeypatch.setattr(clean_swap, "_tuned_signal_equity_trader", lambda min_strength: _TunedTrader())
     monkeypatch.setattr(clean_swap, "can_trade_asset", lambda symbol, now=None, cooldown_seconds=0: True)
     monkeypatch.setattr(clean_swap, "get_token_balance", lambda *_args, **_kwargs: 0.0)
-    monkeypatch.setattr(clean_swap, "ensure_usdc_for_x_signal", lambda min_usdc, min_wmatic_value, force=False: False)
+    monkeypatch.setattr(clean_swap, "ensure_usdc_for_x_signal", lambda min_usdc, min_wmatic_value, force=False, **_kw: False)
     monkeypatch.setattr(
         clean_swap,
         "get_balances",
@@ -3031,7 +3031,7 @@ def test_try_x_signal_logs_standard_auto_usdc_failure(monkeypatch, capsys):
     monkeypatch.setattr(clean_swap, "_tuned_signal_equity_trader", lambda min_strength: _TunedTrader())
     monkeypatch.setattr(clean_swap, "can_trade_asset", lambda symbol, now=None, cooldown_seconds=0: True)
     monkeypatch.setattr(clean_swap, "get_token_balance", lambda *_args, **_kwargs: 0.0)
-    monkeypatch.setattr(clean_swap, "ensure_usdc_for_x_signal", lambda min_usdc, min_wmatic_value, force=False: False)
+    monkeypatch.setattr(clean_swap, "ensure_usdc_for_x_signal", lambda min_usdc, min_wmatic_value, force=False, **_kw: False)
     monkeypatch.setattr(
         clean_swap,
         "get_balances",
@@ -3488,6 +3488,111 @@ def test_ensure_usdc_for_x_signal_skipped_when_gas_not_ok(monkeypatch):
     )
     monkeypatch.setattr(clean_swap, "GAS_PROTECTOR", _GasProtectorBad())
     assert clean_swap.ensure_usdc_for_x_signal(min_usdc=50.0, force=True) is False
+
+
+class _GasProtectorGasHotPolOk:
+    """Mocks a hot-gas-but-pol-ok protector to verify high-conviction bypass."""
+
+    def __init__(self) -> None:
+        self.last_urgent: bool | None = None
+
+    def get_safe_status(self, **kwargs):
+        self.last_urgent = bool(kwargs.get("urgent", False))
+        return {
+            "ok": False,
+            "gas_ok": False,
+            "pol_ok": True,
+            "pol_balance": 1.0,
+            "gas_gwei": 614.0,
+            "max_gwei": 80.0,
+        }
+
+
+class _GasProtectorGasHotPolBad:
+    def get_safe_status(self, **kwargs):
+        _ = kwargs
+        return {
+            "ok": False,
+            "gas_ok": False,
+            "pol_ok": False,
+            "pol_balance": 0.0,
+            "gas_gwei": 614.0,
+            "max_gwei": 80.0,
+        }
+
+
+def test_ensure_usdc_for_x_signal_high_conviction_bypasses_gas_when_pol_ok(monkeypatch, capsys):
+    from modules import signal as signal_module
+
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_AUTO_USDC_TOPUP_ENABLED", True)
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_AUTO_USDC_MIN_SWAP_USD", 8.0)
+    protector = _GasProtectorGasHotPolOk()
+    monkeypatch.setattr(clean_swap, "GAS_PROTECTOR", protector)
+    monkeypatch.setenv("POLYGON_PRIVATE_KEY", "0x" + "a" * 64)
+    monkeypatch.setattr(clean_swap, "get_live_wmatic_price", lambda: 2.0)
+
+    balances_state = {"calls": 0}
+
+    def _get_balances():
+        if balances_state["calls"] == 0:
+            balances_state["calls"] += 1
+            return clean_swap.Balances(usdt=40.0, wmatic=0.0, pol=1.0, usdc=5.0)
+        balances_state["calls"] += 1
+        return clean_swap.Balances(usdt=10.0, wmatic=0.0, pol=1.0, usdc=30.0)
+
+    monkeypatch.setattr(clean_swap, "get_balances", _get_balances)
+
+    directions: list[str] = []
+
+    async def _fake_swap(*_args, **kwargs):
+        directions.append(str(kwargs.get("direction")))
+        return "0xhash"
+
+    monkeypatch.setattr(signal_module, "approve_and_swap", _fake_swap)
+
+    ok = clean_swap.ensure_usdc_for_x_signal(min_usdc=25.0, force=True, high_conviction=True)
+    out = capsys.readouterr().out
+
+    assert ok is True
+    assert directions == ["USDT_TO_USDC"]
+    assert "AUTO-USDC HIGH-CONVICTION GAS OVERRIDE" in out
+    assert protector.last_urgent is True
+
+
+def test_ensure_usdc_for_x_signal_high_conviction_still_requires_pol(monkeypatch, capsys):
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_AUTO_USDC_TOPUP_ENABLED", True)
+    monkeypatch.setattr(
+        clean_swap,
+        "get_balances",
+        lambda: clean_swap.Balances(usdt=40.0, wmatic=0.0, pol=0.0, usdc=5.0),
+    )
+    monkeypatch.setattr(clean_swap, "GAS_PROTECTOR", _GasProtectorGasHotPolBad())
+
+    ok = clean_swap.ensure_usdc_for_x_signal(min_usdc=25.0, force=True, high_conviction=True)
+    out = capsys.readouterr().out
+
+    assert ok is False
+    assert "AUTO-USDC skipped — gas/POL guard" in out
+    assert "high_conviction=True" in out
+
+
+def test_ensure_usdc_for_x_signal_default_high_conviction_does_not_bypass_gas(monkeypatch, capsys):
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_AUTO_USDC_TOPUP_ENABLED", True)
+    monkeypatch.setattr(
+        clean_swap,
+        "get_balances",
+        lambda: clean_swap.Balances(usdt=40.0, wmatic=0.0, pol=1.0, usdc=5.0),
+    )
+    protector = _GasProtectorGasHotPolOk()
+    monkeypatch.setattr(clean_swap, "GAS_PROTECTOR", protector)
+
+    ok = clean_swap.ensure_usdc_for_x_signal(min_usdc=25.0, force=True)
+    out = capsys.readouterr().out
+
+    assert ok is False
+    assert "AUTO-USDC skipped — gas/POL guard" in out
+    assert "high_conviction=False" in out
+    assert protector.last_urgent is False
 
 
 def test_ensure_usdc_for_x_signal_skipped_without_private_key(monkeypatch):

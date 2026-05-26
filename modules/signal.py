@@ -616,12 +616,27 @@ def rotation_priority_detector() -> bool:
     return False
 
 
-def ensure_usdc_for_x_signal(min_usdc: float = 8.0, min_wmatic_value: float = 15.0, force: bool = False) -> bool:
-    """If USDC is below ``min_usdc`` and (a strong X-Signal BUY is active or force=True), swap USDT→USDC first, then WMATIC→USDC."""
+def ensure_usdc_for_x_signal(
+    min_usdc: float = 8.0,
+    min_wmatic_value: float = 15.0,
+    force: bool = False,
+    high_conviction: bool = False,
+) -> bool:
+    """If USDC is below ``min_usdc`` and (a strong X-Signal BUY is active or force=True), swap USDT→USDC first, then WMATIC→USDC.
+
+    ``high_conviction`` mirrors the X-SIGNAL trade path: when True, the gas-price
+    ceiling is bypassed (POL-balance check still required) so the funding leg
+    cannot starve while the trade itself would have been allowed at any gwei.
+    Without this, gas spikes above ``MAX_GWEI`` block AUTO-USDC indefinitely
+    even though the corresponding X-SIGNAL trade is allowed via
+    ``allow_high_gas_override``, leaving USDT idle and the bot stuck in a
+    fragmented-USDC dust trap.
+    """
     fac = _cs_mod()
     balances = fac.get_balances()
     print(
         f"{runtime._nanolog()}AUTO-USDC consider | force={bool(force)} | "
+        f"high_conviction={bool(high_conviction)} | "
         f"usdc=${balances.usdc:.2f} usdt=${balances.usdt:.2f} wmatic={balances.wmatic:.6f} "
         f"min_usdc=${float(min_usdc):.2f} min_wmatic_value=${float(min_wmatic_value):.2f}"
     )
@@ -642,14 +657,25 @@ def ensure_usdc_for_x_signal(min_usdc: float = 8.0, min_wmatic_value: float = 15
         return False
 
     gst = fac.GAS_PROTECTOR.get_safe_status(
-        address=fac.WALLET, urgent=False, min_pol=fac.MIN_POL_FOR_GAS
+        address=fac.WALLET, urgent=bool(high_conviction), min_pol=fac.MIN_POL_FOR_GAS
     )
-    if not gst.get("ok", False):
+    gas_ok = bool(gst.get("gas_ok", False))
+    pol_ok = bool(gst.get("pol_ok", gst.get("ok", False)))
+    proceed = bool(gst.get("ok", False)) or (bool(high_conviction) and pol_ok)
+    if not proceed:
         print(
             f"{runtime._nanolog()}AUTO-USDC skipped — gas/POL guard "
-            f"(gas_ok={gst.get('gas_ok')}, pol={gst.get('pol_balance')}, min_pol={fac.MIN_POL_FOR_GAS})"
+            f"(gas_ok={gas_ok}, pol_ok={pol_ok}, high_conviction={bool(high_conviction)}, "
+            f"gas_gwei={gst.get('gas_gwei')}, max_gwei={gst.get('max_gwei')}, "
+            f"pol={gst.get('pol_balance')}, min_pol={fac.MIN_POL_FOR_GAS})"
         )
         return False
+    if bool(high_conviction) and not gas_ok:
+        print(
+            f"{runtime._nanolog()}🚀 AUTO-USDC HIGH-CONVICTION GAS OVERRIDE "
+            f"| gas={gst.get('gas_gwei')} gwei > {gst.get('max_gwei')} gwei "
+            f"| bypassing for high-conviction X-SIGNAL funding"
+        )
 
     key, _key_source = cfg.resolve_private_key(log_success=True)
     if not key:
@@ -1133,6 +1159,7 @@ def try_x_signal_equity_decision(
                     min_usdc=auto_topup_target,
                     min_wmatic_value=float(X_SIGNAL_WMATIC_MIN_VALUE),
                     force=True,
+                    high_conviction=bool(high_conviction),
                 )
                 balances = fcb.get_balances()
                 auto_topup_post_usdc = float(balances.usdc)
