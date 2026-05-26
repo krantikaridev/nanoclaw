@@ -14,14 +14,18 @@
 
 ## Current focus (top of stack)
 
-- **Cleanup #3 — IN PROGRESS** (side chat, operator will report when done). Handoff: [§ Cleanup #3 handoff prompt](#cleanup-3-handoff-prompt). Baseline symptom (2026-05-26 ~13:36 IST): wallet $121.33 vs bot $111.08, gap $10.25.
-- **WIP evidence (uncommitted, 2026-05-26):** `modules/runtime.py` — `Balances.pol_usd` + populate in `get_balances()` / `write_portfolio_history_snapshot`; `modules/swap_executor.py` — `WALLET TOTAL USD` log adds `POL_USD=`. Note: POL was already in `compute_authoritative_total_usd` formula (`AI_CONTEXT.md`); early diff is **visibility**, not inclusion. LINK MTM / stables drift / WBTC noise gate still expected in remaining side-chat work.
-- **Operator north star:** trustworthy **+ve net PnL** on stage → increase seed → maximize **capital rotation** (X-Signal path) → scale toward **~$100k** per release train. Do **not** size up until Cleanup #3 + P0 gates pass (see strategy note below).
+- ~~**Cleanup #3 — IN PROGRESS**~~ ✅ MERGED to `origin/V2` 2026-05-26: commits `9f85cbcb` (POL_USD visibility), `9abb0881` (LINK MTM fallback floor), `9adb388d` (stables drift regression tests), `76946ea3` (WBTC balance-read noise gate). Test gate 47 → 52 in the canonical 4-file set (+ 9 new tests in adjacent files, 61 total across the runtime test surface). See [Append log](#append-log-side-chat-reports-come-here) for the side-chat report.
+- **Next**: re-run scaling math (operator priority) once a few clean cycles confirm wallet-vs-bot within $1 in steady state. Then Cleanup #4 (pre-existing 9 test failures + in-flight swap reservation race).
+- **Operator north star:** trustworthy **+ve net PnL** on stage → increase seed → maximize **capital rotation** (X-Signal path) → scale toward **~$100k** per release train.
 
 ## Recent merged work (commits on `origin/V2`)
 
 | Commit | Title | Side chat | Status |
 |---|---|---|---|
+| `76946ea3` | Cleanup #3 (4/4): suppress `BALANCE READ FAILED` spam after first per-token log | Cleanup #3 side chat | merged 2026-05-26 |
+| `9adb388d` | Cleanup #3 (3/4): pin stables drift invariants at `get_balances()` surface | Cleanup #3 side chat | merged 2026-05-26 |
+| `9abb0881` | Cleanup #3 (2/4): treat `current_price_usd` as a true FALLBACK FLOOR for FE_USD | Cleanup #3 side chat | merged 2026-05-26 |
+| `9f85cbcb` | Cleanup #3 (1/4): surface POL_USD in WALLET TOTAL USD for operator parity | Cleanup #3 side chat | merged 2026-05-26 |
 | `30fb17b9` | Cleanup #2: harden `_force_max_approval` against startup-crash landmine | (other thread) | merged + deployed to VM 2026-05-26 |
 | `fb5eac6e` | Cleanup #1: route WALLET TOTAL USD through one helper | (other thread) | merged + deployed to VM 2026-05-26 |
 | `bbfa05d9` | Enhance FE_USD fallback + diagnostics for unquoted assets | this master | merged + deployed |
@@ -29,8 +33,10 @@
 
 ## Open questions / parked threads
 
-- **Seed-capital scaling** (~$120 → $1k → $25k → $100k). Operator priority (2026-05-26): +ve PnL first, then seed + rotation velocity. **Parked for sizing decisions** until Cleanup #3 lands and P0 validation runs on wallet-accurate books — master will re-open scaling math after side-chat merge.
-- **Pre-existing 9 test failures** (outdated profit-take logic, mock signature mismatches, live RPC bleed into mock-only tests). Deferred from Cleanup #1; assigned to Cleanup #4.
+- **Seed-capital scaling** (~$120 → $1k → $25k → $100k). Operator priority (2026-05-26): +ve PnL first, then seed + rotation velocity. **Parked for sizing decisions** until Cleanup #3 lands ✓ and P0 validation runs on wallet-accurate books — master can re-open scaling math now that POL_USD is visible, LINK MTM is fallback-floored, stables invariants pinned, and WBTC log noise is gated. Verify wallet-vs-bot match within $1 in steady state on a few clean cycles before scaling.
+- **Pre-existing 9 test failures** (outdated profit-take logic, mock signature mismatches, live RPC bleed into mock-only tests). Confirmed unchanged by Cleanup #3 (re-run against the pre-#3 tree). Deferred from Cleanup #1; still assigned to Cleanup #4.
+- **In-flight swap reservation race in stables accounting** (NEW from Cleanup #3 part 3). Steady-state arithmetic in `get_balances()` is correct (regression tests now pin USDC dedup + USDT fresh-read). The 2026-05-26 ±$8.56 stables drift coincided with `tx 1de9409c` settling mid-cycle — most plausibly a balance-read snapshot at a non-deterministic point relative to swap settlement. Candidate fix for Cleanup #4: optional debounced re-read after `approve_and_swap` returns a tx hash, before the next `WALLET TOTAL USD` emission. Out of scope for #3 per acceptance criterion A.
+- **`current_price_usd` operator hygiene** (NEW from Cleanup #3 part 2). Fallback is now a true floor; stale fallbacks above true spot will OVERSTATE TOTAL. Operator-facing reminder: refresh `followed_equities.json` fallback prices periodically (no automation yet; candidate for v2.9 if drift becomes visible).
 - **`WMATIC_ALPHA` / `WETH_ALPHA` / `WBTC_ALPHA` blocklist** is operator-managed in `.xsignal_blocked_symbols`. No code change planned unless trading restarts on them.
 
 ## Decisions log
@@ -184,3 +190,19 @@ Side chats append a block here when they finish. Format:
 - Tests: N → M passing
 - Notes: <anything master needs to know>
 -->
+
+### 2026-05-26 — Cleanup #3 — PnL accounting drift (POL visibility + LINK fallback floor + stables invariants + WBTC noise gate)
+- Commits (origin/V2):
+  - `9f85cbcb` Cleanup #3 (1/4): surface POL_USD in WALLET TOTAL USD for operator parity
+  - `9abb0881` Cleanup #3 (2/4): treat `current_price_usd` as a true FALLBACK FLOOR for FE_USD
+  - `9adb388d` Cleanup #3 (3/4): pin stables drift invariants at `get_balances()` surface
+  - `76946ea3` Cleanup #3 (4/4): suppress `BALANCE READ FAILED` spam after first per-token log
+- Tests: canonical 4-file gate 47 → 52 passing (+5). Extended runtime gate (adds `test_runtime_usdc_native.py` + `test_runtime_get_token_balance.py`) 47 → 61 (+14). Pre-existing 9 failures unchanged (verified by running the failing set against the pre-#3 tree); still deferred to Cleanup #4.
+- Notes:
+  - **POL was already in TOTAL arithmetically** — Cleanup #3 part 1 added operator visibility (`Balances.pol_usd` field + `POL_USD=$X.XX` in the log line). No formula change.
+  - **LINK MTM**: `current_price_usd` is now a true fallback FLOOR (`max(live, bal × fallback)`). New diagnostic `FE_USD FALLBACK FLOOR APPLIED` fires when fallback wins. Operators MUST refresh fallbacks periodically — added as a parked thread.
+  - **Stables drift**: no behavior change. Source is correct; most likely cause of the 2026-05-26 ±$8.56 was an in-flight swap reservation race (added as a parked thread for Cleanup #4). Regression tests now pin steady-state invariants.
+  - **WBTC noise gate**: per-(token, wallet) latch in `get_token_balance` logs once, then suppresses. Per-token AND per-wallet so fresh wallets still get diagnostics.
+  - **.env impact**: none. No new knobs.
+  - **AI_CONTEXT.md**: "Today's learnings (26 May 2026 — Cleanup #3)" entry added at top of the learnings section.
+  - **Operator next step**: re-deploy V2 to VM; verify wallet-vs-bot match within $1 in steady state on a few clean cycles before re-opening scaling math.

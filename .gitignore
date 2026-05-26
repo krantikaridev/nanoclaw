@@ -9,6 +9,9 @@
 
 *.backup*
 
+# Side-chat commit message scratch (never commit)
+.commit_msg.txt
+
 # Virtual environment
 .venv/
 venv/
