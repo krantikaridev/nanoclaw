@@ -27,6 +27,13 @@ MANUAL_PATTERN = re.compile(
     re.IGNORECASE,
 )
 WALLET_PATTERN = re.compile(r"WALLET BALANCE.*USDC=\$?([\d.]+)")
+# Cleanup #1 (May 2026): the authoritative source for the CURRENT TOTAL is now
+# ``modules.runtime.compute_authoritative_total_usd(get_balances())``, called
+# in-process via ``compute_authoritative_total_in_process()`` below. The two regex
+# patterns here are retained as a READ-ONLY FALLBACK ONLY — for parsing existing
+# historical ``real_cron.log`` rows when the in-process call is unavailable
+# (e.g. RPC down on the operator's VM, no live web3 client in test env).
+# Do NOT add this regex as a primary path for any new caller.
 AUTHORITATIVE_TOTAL_PATTERN_V2 = re.compile(
     r"WALLET TOTAL USD\s*\|\s*TOTAL=\$?([\d.]+)\s*\|\s*USDT=\$?([\d.]+)\s*\|\s*USDC=\$?([\d.]+)\s*\|\s*"
     r"STABLE_USD=\$?([\d.]+)\s*\|\s*WMATIC=([\d.]+)",
@@ -211,7 +218,56 @@ def _print_balance_block(bal: dict) -> None:
         )
 
 
+def compute_authoritative_total_in_process() -> dict | None:
+    """Live in-process WALLET TOTAL USD via ``runtime.compute_authoritative_total_usd``.
+
+    Cleanup #1 (May 2026): this is the canonical path for ``nanopnl`` /
+    ``nanostatus`` / ``nanodaily`` to read the CURRENT total. It calls the same
+    helper the bot uses to emit ``WALLET TOTAL USD`` in ``real_cron.log`` and to
+    write ``portfolio_history.csv::total_value``, so the four touchpoints
+    (compute → log → CSV → report) cannot drift.
+
+    Returns ``None`` when the in-process compute is unusable (no RPC, RPC error,
+    near-zero total) so the caller falls through to the regex-based historical
+    parser as a graceful safety net.
+    """
+    try:
+        from modules import runtime
+    except Exception:
+        return None
+    try:
+        balances = runtime.get_balances()
+        total = float(runtime.compute_authoritative_total_usd(balances))
+    except Exception:
+        return None
+    # Sanity: matches ``_is_usable_snapshot`` total floor; a near-zero total here
+    # means the RPC reads silently failed (``get_token_balance`` swallows errors)
+    # and we should defer to the historical-log fallback rather than report a
+    # bogus zero to the operator.
+    if not math.isfinite(total) or total <= 5.0:
+        return None
+    usdt = float(balances.usdt)
+    usdc = float(balances.usdc)
+    stable_usd = usdt + usdc
+    return {
+        "usdt": usdt,
+        "usdc": usdc,
+        "wmatic": float(balances.wmatic),
+        "total": total,
+        "source": "RUNTIME WALLET TRUTH (in-process compute_authoritative_total_usd)",
+        "stable_usd": stable_usd,
+        "rpc_read_suspect": bool(stable_usd < 5.0 and total > 45.0),
+    }
+
+
 def get_current_balance():
+    # Cleanup #1: prefer the in-process authoritative compute. Falls through to the
+    # regex-based historical parser when RPC is unavailable (e.g. test env, VM RPC
+    # outage), preserving prior behavior as a safety net.
+    in_process = compute_authoritative_total_in_process()
+    if in_process is not None:
+        return in_process
+
     snapshots = extract_snapshots(Path(LOG_FILE))
     if not snapshots:
         return None

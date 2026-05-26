@@ -185,6 +185,25 @@ class Balances:
     total_portfolio_usd: float = 0.0
 
 
+def compute_authoritative_total_usd(balances: "Balances") -> float:
+    """Single source of truth for WALLET TOTAL USD across log / CSV / pnl_report.
+
+    Authoritative formula:
+        USDT + USDC(.e + native combined) + WMATIC*price_wmatic_usd
+        + POL*POL_USD_PRICE + FE_USD
+
+    The formula is materialized into ``Balances.total_portfolio_usd`` by
+    ``get_balances()`` and ``write_portfolio_history_snapshot``; this helper is the
+    canonical READ accessor.  Every operator-facing TOTAL surface (the
+    ``WALLET TOTAL USD`` line in ``real_cron.log``, ``portfolio_history.csv``'s
+    ``total_value`` column, and ``scripts/pnl_report.py``) MUST go through this
+    helper rather than reading the field directly so the four touchpoints cannot
+    drift silently — exactly the symptom that hid the May 2026 LINK_ALPHA FE_USD
+    undercount for hours.
+    """
+    return float(balances.total_portfolio_usd)
+
+
 @dataclass(frozen=True)
 class TradeDecision:
     direction: Optional[str] = None
@@ -939,7 +958,19 @@ def write_portfolio_history_snapshot(current_price: float) -> None:
 
     # Deployed equity tokens (WETH/LINK/…) quoted via router — keeps CSV aligned with nanomon when stables are drained.
     fe_usd = _followed_equity_tokens_usdt_usd()
-    total_value = usdt + usdc + (wmatic * current_price) + (pol * pol_price_usd) + fe_usd
+    # Cleanup #1 (May 2026): build a Balances snapshot and read TOTAL through the
+    # canonical helper so the CSV ``total_value`` column never drifts from the
+    # ``WALLET TOTAL USD`` log line / pnl_report. Formula write site mirrors
+    # ``get_balances()``; if you change one, change both (and update tests).
+    balances_snapshot = Balances(
+        usdt=usdt,
+        wmatic=wmatic,
+        pol=pol,
+        usdc=usdc,
+        followed_equity_usd=fe_usd,
+        total_portfolio_usd=usdt + usdc + (wmatic * current_price) + (pol * pol_price_usd) + fe_usd,
+    )
+    total_value = compute_authoritative_total_usd(balances_snapshot)
     row = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "usdt": f"{usdt:.6f}",

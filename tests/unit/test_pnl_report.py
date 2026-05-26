@@ -10,6 +10,23 @@ from scripts import pnl_report
 from scripts.pnl_report import extract_snapshots
 
 
+@pytest.fixture(autouse=True)
+def _disable_in_process_authoritative_total(monkeypatch):
+    """Force regex-fallback path for legacy tests.
+
+    Cleanup #1 (May 2026): ``get_current_balance`` now prefers the in-process
+    ``compute_authoritative_total_in_process`` (live RPC via runtime). The tests
+    in this module pin the regex / log-snapshot semantics, so we disable the
+    in-process path here. New tests covering the authoritative in-process path
+    live in ``test_runtime_authoritative_total.py``.
+    """
+    monkeypatch.setattr(
+        pnl_report,
+        "compute_authoritative_total_in_process",
+        lambda: None,
+    )
+
+
 def _write_log(tmp_path: Path, body: str) -> Path:
     log_file = tmp_path / "real_cron.log"
     log_file.write_text(body, encoding="utf-8")
