@@ -1,5 +1,5 @@
 {
-  "_note": "Only Polygon-valid addresses are kept active. Tier 1 adds liquid Polygon assets with per-asset min_signal_strength floors. earnings_days controls earnings window filter (None = no restriction).",
+  "_note": "Only Polygon-valid addresses are kept active. Tier 1 adds liquid Polygon assets with per-asset min_signal_strength floors. earnings_days controls earnings window filter (None = no restriction). current_price_usd is a fallback floor used by FE_USD MTM accounting when on-chain quotes (V2 router + V3 QuoterV2 single + multi-hop) all return 0. Update periodically; the bot prefers live quotes when available. Stale fallback is better than $0 in TOTAL.",
   "enabled": true,
   "min_signal_strength": 0.6,
   "assets": [
@@ -18,7 +18,8 @@
       "min_signal_strength": 0.55,
       "signal_strength": 0.87,
       "upside_pct": 16,
-      "earnings_days": null
+      "earnings_days": null,
+      "current_price_usd": 2500.0
     },
     {
       "symbol": "WBTC_ALPHA",
@@ -27,7 +28,8 @@
       "min_signal_strength": 0.55,
       "signal_strength": 0.83,
       "upside_pct": 14,
-      "earnings_days": null
+      "earnings_days": null,
+      "current_price_usd": 95000.0
     },
     {
       "symbol": "LINK_ALPHA",
@@ -36,7 +38,8 @@
       "min_signal_strength": 0.55,
       "signal_strength": 0.81,
       "upside_pct": 13,
-      "earnings_days": null
+      "earnings_days": null,
+      "current_price_usd": 9.43
     }
   ]
 }

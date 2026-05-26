@@ -843,6 +843,22 @@ def _followed_equity_tokens_usdt_usd() -> float:
         if px is not None and float(px) > 0 and bal > 0:
             added_px = float(bal) * float(px)
             total += added_px
+        # Operator-visible diagnostic: when on-chain MTM quote returns 0 for a held position
+        # AND TOTAL accounting would silently undercount the equity bucket, surface it in
+        # `real_cron.log` so the operator notices stale telemetry. Without this, a single
+        # broken quote path (RPC flake, drained pool, or address mismatch) makes the bot
+        # appear to be bleeding ~$value while the wallet is actually fine — exactly the
+        # symptom that hit LINK_ALPHA in May 2026.
+        try:
+            print(
+                f"[nanoclaw] FE_USD UNQUOTED | sym={sym} | "
+                f"bal={float(bal):.6f} | live_quote_usdt=$0.00 | "
+                f"fallback_px_usd={float(px) if isinstance(px, (int, float)) else 0.0:.4f} | "
+                f"contributed_to_total=${added_px:.2f} | "
+                f"action: refresh `current_price_usd` in followed_equities.json or fix on-chain quote path"
+            )
+        except Exception:
+            pass
         # region agent log
         _agent_debug_ndjson(
             {

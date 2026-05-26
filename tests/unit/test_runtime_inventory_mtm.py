@@ -161,3 +161,110 @@ def test_quote_followed_token_usdt_mtm_uses_multihop_when_direct_fails(monkeypat
         slippage_bps=300,
     )
     assert out == pytest.approx(4.0)
+
+
+# region FE_USD fallback / visibility regression
+# These tests cover the May 2026 incident where LINK_ALPHA holdings were silently
+# excluded from TOTAL because all on-chain quote tiers returned 0 AND
+# `current_price_usd` was unset in `followed_equities.json`. The result was a
+# multi-dollar undercount in the operator-facing PnL with zero diagnostic signal.
+
+class _FakeAsset:
+    def __init__(self, symbol: str, addr: str, decimals: int, current_price_usd: float | None) -> None:
+        self.symbol = symbol
+        self.token_address = addr
+        self.decimals = decimals
+        self.current_price_usd = current_price_usd
+
+
+def test_followed_equity_uses_current_price_fallback_when_quote_zero(monkeypatch, capsys) -> None:
+    """When live quote returns 0 but `current_price_usd` is set, fe_usd must use bal*price."""
+    asset = _FakeAsset(
+        symbol="LINK_ALPHA",
+        addr="0x53E0bca35eC356Bd5DdDFebbD1Fc0FD03FaBad39",
+        decimals=18,
+        current_price_usd=9.43,
+    )
+    monkeypatch.setattr(
+        runtime.X_SIGNAL_EQUITY_TRADER,
+        "load_followed_equities",
+        lambda: [asset],
+    )
+    monkeypatch.setattr(runtime, "get_token_balance", lambda *_a, **_k: 8.676)
+    monkeypatch.setattr(
+        runtime,
+        "_quote_followed_token_usdt_mtm",
+        lambda *_a, **_k: 0.0,
+    )
+    fe_usd = runtime._followed_equity_tokens_usdt_usd()
+    assert fe_usd == pytest.approx(8.676 * 9.43, rel=1e-6)
+    captured = capsys.readouterr().out
+    assert "FE_USD UNQUOTED" in captured
+    assert "LINK_ALPHA" in captured
+    assert "fallback_px_usd=9.4300" in captured
+
+
+def test_followed_equity_zero_quote_zero_fallback_still_visible(monkeypatch, capsys) -> None:
+    """Even when no fallback price is set, the operator must see the unquoted line."""
+    asset = _FakeAsset(
+        symbol="WBTC_ALPHA",
+        addr="0x1BFD67037B42Cf73acf204706795bF64736C834e",
+        decimals=8,
+        current_price_usd=None,
+    )
+    monkeypatch.setattr(
+        runtime.X_SIGNAL_EQUITY_TRADER,
+        "load_followed_equities",
+        lambda: [asset],
+    )
+    monkeypatch.setattr(runtime, "get_token_balance", lambda *_a, **_k: 0.00012)
+    monkeypatch.setattr(
+        runtime,
+        "_quote_followed_token_usdt_mtm",
+        lambda *_a, **_k: 0.0,
+    )
+    fe_usd = runtime._followed_equity_tokens_usdt_usd()
+    assert fe_usd == pytest.approx(0.0)
+    captured = capsys.readouterr().out
+    assert "FE_USD UNQUOTED" in captured
+    assert "WBTC_ALPHA" in captured
+    assert "contributed_to_total=$0.00" in captured
+
+
+def test_followed_equity_live_quote_takes_precedence_over_fallback(monkeypatch, capsys) -> None:
+    """Live quote (>0) must always be used over `current_price_usd`, even if fallback is set."""
+    asset = _FakeAsset(
+        symbol="LINK_ALPHA",
+        addr="0x53E0bca35eC356Bd5DdDFebbD1Fc0FD03FaBad39",
+        decimals=18,
+        current_price_usd=100.0,  # absurd fallback to prove it's not used
+    )
+    monkeypatch.setattr(
+        runtime.X_SIGNAL_EQUITY_TRADER,
+        "load_followed_equities",
+        lambda: [asset],
+    )
+    monkeypatch.setattr(runtime, "get_token_balance", lambda *_a, **_k: 1.0)
+    monkeypatch.setattr(
+        runtime,
+        "_quote_followed_token_usdt_mtm",
+        lambda *_a, **_k: 9.43,
+    )
+    fe_usd = runtime._followed_equity_tokens_usdt_usd()
+    assert fe_usd == pytest.approx(9.43)
+    captured = capsys.readouterr().out
+    assert "FE_USD UNQUOTED" not in captured
+
+
+def test_followed_equities_json_has_fallback_prices_for_held_assets() -> None:
+    """Regression: ensure operator-facing fallback prices are populated post-incident."""
+    import json
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[2]
+    data = json.loads((repo_root / "followed_equities.json").read_text(encoding="utf-8"))
+    by_sym = {a["symbol"]: a for a in data["assets"]}
+    for sym in ("WETH_ALPHA", "WBTC_ALPHA", "LINK_ALPHA"):
+        assert "current_price_usd" in by_sym[sym], f"missing fallback price for {sym}"
+        assert float(by_sym[sym]["current_price_usd"]) > 0
+# endregion
