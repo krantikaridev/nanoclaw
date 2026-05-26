@@ -1,5 +1,5 @@
 {
-  "_note": "Only Polygon-valid addresses are kept active. Tier 1 adds liquid Polygon assets with per-asset min_signal_strength floors. earnings_days controls earnings window filter (None = no restriction). current_price_usd is a fallback floor used by FE_USD MTM accounting when on-chain quotes (V2 router + V3 QuoterV2 single + multi-hop) all return 0. Update periodically; the bot prefers live quotes when available. Stale fallback is better than $0 in TOTAL.",
+  "_note": "Only Polygon-valid addresses are kept active. Tier 1 adds liquid Polygon assets with per-asset min_signal_strength floors. earnings_days controls earnings window filter (None = no restriction). current_price_usd is a TRUE FALLBACK FLOOR for FE_USD MTM accounting: per-asset USD = max(live_quote_usdt, bal × current_price_usd). Cleanup #3 (May 2026) flipped this from zero-quote-only-fallback to true-floor after LINK_ALPHA MTM'd at $35.78 vs spot $53.52. Update periodically — a stale fallback above true spot will overstate TOTAL.",
   "enabled": true,
   "min_signal_strength": 0.6,
   "assets": [

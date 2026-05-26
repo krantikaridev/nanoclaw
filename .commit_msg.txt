@@ -1,0 +1,29 @@
+Cleanup #3 (1/4): surface POL_USD in WALLET TOTAL USD for operator parity
+
+POL was already arithmetically included in compute_authoritative_total_usd
+(usdt + usdc + wmatic*price + pol*POL_USD_PRICE + fe_usd, runtime.py:923),
+but the WALLET TOTAL USD log line only emitted POL quantity. When an operator
+reconciled bot TOTAL $111.08 against MetaMask $121.33 on 2026-05-26, the
+$0.85 POL slice was invisible -- it looked excluded, when in reality it was
+just unprinted.
+
+Changes (surgical, no arithmetic shift):
+- Add Balances.pol_usd (= pol * POL_USD_PRICE), set in get_balances() and
+  write_portfolio_history_snapshot() right where total_portfolio_usd is built.
+- Print "| POL_USD=$X.XX" between POL qty and FE_USD in the WALLET TOTAL USD
+  log line. Inserted after WMATIC, so AUTHORITATIVE_TOTAL_PATTERN_V2 still
+  parses historical-log fallback rows unchanged (regex stops at WMATIC).
+
+Tests (47 -> 50 passing in the green gate set):
+- test_pol_usd_field_equals_pol_times_pol_price: pol_usd == pol * POL_USD_PRICE
+  through get_balances() with monkeypatched components.
+- test_pol_usd_contributes_to_total_exactly_once: toggling POL from 0 to 10
+  shifts TOTAL by exactly 10 * POL_USD_PRICE (no double-count, no skip).
+- test_wallet_total_usd_log_line_includes_pol_usd_field: log line contains
+  "POL_USD=$0.92" AND still parses the V2 regex.
+- Existing round-trip test updated to assert the new emitter shape parses.
+
+.env impact: none. POL_USD_PRICE env knob unchanged (still 0.10 default).
+This is a visibility fix only; the value going into TOTAL is identical.
+
+Co-authored-by: Cursor <cursoragent@cursor.com>

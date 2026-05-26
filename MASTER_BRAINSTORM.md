@@ -14,7 +14,9 @@
 
 ## Current focus (top of stack)
 
-- **Cleanup #3** — PnL accounting drift + WBTC log noise. Side chat prompt below ([§ Cleanup #3 handoff prompt](#cleanup-3-handoff-prompt)). Bot state at 2026-05-26 13:32 IST: wallet $121.33 vs bot $111.08, gap $10.25.
+- **Cleanup #3 — IN PROGRESS** (side chat, operator will report when done). Handoff: [§ Cleanup #3 handoff prompt](#cleanup-3-handoff-prompt). Baseline symptom (2026-05-26 ~13:36 IST): wallet $121.33 vs bot $111.08, gap $10.25.
+- **WIP evidence (uncommitted, 2026-05-26):** `modules/runtime.py` — `Balances.pol_usd` + populate in `get_balances()` / `write_portfolio_history_snapshot`; `modules/swap_executor.py` — `WALLET TOTAL USD` log adds `POL_USD=`. Note: POL was already in `compute_authoritative_total_usd` formula (`AI_CONTEXT.md`); early diff is **visibility**, not inclusion. LINK MTM / stables drift / WBTC noise gate still expected in remaining side-chat work.
+- **Operator north star:** trustworthy **+ve net PnL** on stage → increase seed → maximize **capital rotation** (X-Signal path) → scale toward **~$100k** per release train. Do **not** size up until Cleanup #3 + P0 gates pass (see strategy note below).
 
 ## Recent merged work (commits on `origin/V2`)
 
@@ -27,7 +29,7 @@
 
 ## Open questions / parked threads
 
-- **Seed-capital scaling** (~$120 → $1k → $25k → $100k). Operator wants advice. Parked until Cleanup #3 lands — scaling on top of broken accounting is reckless. Re-open after PnL is wallet-accurate.
+- **Seed-capital scaling** (~$120 → $1k → $25k → $100k). Operator priority (2026-05-26): +ve PnL first, then seed + rotation velocity. **Parked for sizing decisions** until Cleanup #3 lands and P0 validation runs on wallet-accurate books — master will re-open scaling math after side-chat merge.
 - **Pre-existing 9 test failures** (outdated profit-take logic, mock signature mismatches, live RPC bleed into mock-only tests). Deferred from Cleanup #1; assigned to Cleanup #4.
 - **`WMATIC_ALPHA` / `WETH_ALPHA` / `WBTC_ALPHA` blocklist** is operator-managed in `.xsignal_blocked_symbols`. No code change planned unless trading restarts on them.
 

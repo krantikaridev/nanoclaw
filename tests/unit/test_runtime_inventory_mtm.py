@@ -231,13 +231,48 @@ def test_followed_equity_zero_quote_zero_fallback_still_visible(monkeypatch, cap
     assert "contributed_to_total=$0.00" in captured
 
 
-def test_followed_equity_live_quote_takes_precedence_over_fallback(monkeypatch, capsys) -> None:
-    """Live quote (>0) must always be used over `current_price_usd`, even if fallback is set."""
+def test_followed_equity_uses_max_of_live_and_fallback(monkeypatch, capsys) -> None:
+    """Cleanup #3 (May 2026): effective FE_USD per asset = max(live_quote, bal*fallback).
+
+    Pre-cleanup, live quote always won when > 0. That allowed a degraded on-chain
+    quote (drained pool, large-size price impact) to silently undercount TOTAL —
+    the May 2026 LINK_ALPHA incident where 5.676 LINK MTM'd at ~$35.78 while
+    spot * bal was ~$53.52. Now ``current_price_usd`` in followed_equities.json
+    is a true fallback FLOOR: the larger of (live, fallback × bal) wins.
+    """
     asset = _FakeAsset(
         symbol="LINK_ALPHA",
         addr="0x53E0bca35eC356Bd5DdDFebbD1Fc0FD03FaBad39",
         decimals=18,
-        current_price_usd=100.0,  # absurd fallback to prove it's not used
+        current_price_usd=9.43,
+    )
+    monkeypatch.setattr(
+        runtime.X_SIGNAL_EQUITY_TRADER,
+        "load_followed_equities",
+        lambda: [asset],
+    )
+    monkeypatch.setattr(runtime, "get_token_balance", lambda *_a, **_k: 5.676)
+    monkeypatch.setattr(
+        runtime,
+        "_quote_followed_token_usdt_mtm",
+        lambda *_a, **_k: 35.78,
+    )
+    fe_usd = runtime._followed_equity_tokens_usdt_usd()
+    # bal * fallback ≈ 53.52 > live 35.78 → fallback floor wins.
+    assert fe_usd == pytest.approx(5.676 * 9.43, rel=1e-6)
+    captured = capsys.readouterr().out
+    assert "FE_USD FALLBACK FLOOR APPLIED" in captured
+    assert "LINK_ALPHA" in captured
+    assert "live_quote_usdt=$35.78" in captured
+
+
+def test_followed_equity_live_quote_wins_when_above_fallback(monkeypatch, capsys) -> None:
+    """When live quote ≥ bal*fallback, live wins (no floor logging, no fallback bump)."""
+    asset = _FakeAsset(
+        symbol="LINK_ALPHA",
+        addr="0x53E0bca35eC356Bd5DdDFebbD1Fc0FD03FaBad39",
+        decimals=18,
+        current_price_usd=9.43,
     )
     monkeypatch.setattr(
         runtime.X_SIGNAL_EQUITY_TRADER,
@@ -245,15 +280,49 @@ def test_followed_equity_live_quote_takes_precedence_over_fallback(monkeypatch, 
         lambda: [asset],
     )
     monkeypatch.setattr(runtime, "get_token_balance", lambda *_a, **_k: 1.0)
+    # live $12.00 > fallback 1 × $9.43 = $9.43 → live wins.
     monkeypatch.setattr(
         runtime,
         "_quote_followed_token_usdt_mtm",
-        lambda *_a, **_k: 9.43,
+        lambda *_a, **_k: 12.0,
     )
     fe_usd = runtime._followed_equity_tokens_usdt_usd()
-    assert fe_usd == pytest.approx(9.43)
+    assert fe_usd == pytest.approx(12.0)
     captured = capsys.readouterr().out
     assert "FE_USD UNQUOTED" not in captured
+    assert "FALLBACK FLOOR APPLIED" not in captured
+
+
+def test_followed_equity_fe_usd_equals_bal_times_max_of_quote_per_unit_and_fallback(monkeypatch) -> None:
+    """Acceptance criterion C: FE_USD = bal × max(live_quote_per_unit, fallback_per_unit).
+
+    Pins the contract that the task spec calls out explicitly. The function returns
+    USDT-notional, which is ``bal × effective_unit_price``, where
+    ``effective_unit_price = max(live_quote_total / bal, fallback_usd)``.
+    """
+    bal = 4.0
+    fallback = 5.0
+    live_total = 12.0  # equivalent to $3.00 / unit, below the $5 fallback
+    expected = bal * max(live_total / bal, fallback)  # = max(12, 20) = 20.0
+
+    asset = _FakeAsset(
+        symbol="LINK_ALPHA",
+        addr="0x53E0bca35eC356Bd5DdDFebbD1Fc0FD03FaBad39",
+        decimals=18,
+        current_price_usd=fallback,
+    )
+    monkeypatch.setattr(
+        runtime.X_SIGNAL_EQUITY_TRADER,
+        "load_followed_equities",
+        lambda: [asset],
+    )
+    monkeypatch.setattr(runtime, "get_token_balance", lambda *_a, **_k: bal)
+    monkeypatch.setattr(
+        runtime,
+        "_quote_followed_token_usdt_mtm",
+        lambda *_a, **_k: live_total,
+    )
+    assert runtime._followed_equity_tokens_usdt_usd() == pytest.approx(expected)
 
 
 def test_followed_equities_json_has_fallback_prices_for_held_assets() -> None:

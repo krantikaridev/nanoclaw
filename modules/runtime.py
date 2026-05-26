@@ -849,52 +849,76 @@ def _followed_equity_tokens_usdt_usd() -> float:
             continue
         slip = int(cfg.INVENTORY_MTM_SLIPPAGE_BPS)
         usdt_val = _quote_followed_token_usdt_mtm(w3, token_in=addr, amount_in_raw=amt, slippage_bps=slip)
-        added_px = 0.0
-        if usdt_val > 0:
-            total += usdt_val
-            # region agent log
-            _agent_debug_ndjson(
-                {
-                    "hypothesisId": "H2",
-                    "location": "runtime._followed_equity_tokens_usdt_usd:asset",
-                    "message": "fe leg quoted",
-                    "data": {"symbol": sym, "bal": float(bal), "amt": int(amt), "usdt_val": float(usdt_val)},
-                }
-            )
-            # endregion
-            continue
         px = getattr(a, "current_price_usd", None)
-        if px is not None and float(px) > 0 and bal > 0:
-            added_px = float(bal) * float(px)
-            total += added_px
-        # Operator-visible diagnostic: when on-chain MTM quote returns 0 for a held position
-        # AND TOTAL accounting would silently undercount the equity bucket, surface it in
-        # `real_cron.log` so the operator notices stale telemetry. Without this, a single
-        # broken quote path (RPC flake, drained pool, or address mismatch) makes the bot
-        # appear to be bleeding ~$value while the wallet is actually fine — exactly the
-        # symptom that hit LINK_ALPHA in May 2026.
         try:
-            print(
-                f"[nanoclaw] FE_USD UNQUOTED | sym={sym} | "
-                f"bal={float(bal):.6f} | live_quote_usdt=$0.00 | "
-                f"fallback_px_usd={float(px) if isinstance(px, (int, float)) else 0.0:.4f} | "
-                f"contributed_to_total=${added_px:.2f} | "
-                f"action: refresh `current_price_usd` in followed_equities.json or fix on-chain quote path"
-            )
-        except Exception:
-            pass
+            fallback_px = float(px) if px is not None else 0.0
+        except (TypeError, ValueError):
+            fallback_px = 0.0
+        fallback_usd = float(bal) * fallback_px if (fallback_px > 0 and bal > 0) else 0.0
+        # Cleanup #3 (May 2026): use ``current_price_usd`` as a FALLBACK FLOOR, not just a
+        # zero-quote substitute. Pre-cleanup, the live quote always won when > 0, even if
+        # it priced 5.676 LINK at $35.78 (~$6.30/LINK against a $9.43 spot fallback) — a
+        # ~$18 silent undercount that operators only caught by reconciling against
+        # MetaMask. After cleanup, the effective price is ``max(live_quote, fallback)``:
+        #   * Healthy pool, fresh quote ≥ fallback → live wins (no change vs pre-cleanup).
+        #   * Drained pool / large-size impact / stale quote < fallback → fallback floor
+        #     wins, TOTAL stays anchored to a known good operator-curated spot price.
+        # Operators MUST refresh ``current_price_usd`` in followed_equities.json
+        # periodically — a stale fallback above true spot will overstate TOTAL.
+        effective_usd = max(float(usdt_val), fallback_usd)
+        total += effective_usd
+        if usdt_val <= 0 and fallback_usd <= 0:
+            # Zero live quote AND no fallback configured: position is invisible to TOTAL.
+            try:
+                print(
+                    f"[nanoclaw] FE_USD UNQUOTED | sym={sym} | "
+                    f"bal={float(bal):.6f} | live_quote_usdt=$0.00 | "
+                    f"fallback_px_usd={fallback_px:.4f} | "
+                    f"contributed_to_total=$0.00 | "
+                    f"action: refresh `current_price_usd` in followed_equities.json or fix on-chain quote path"
+                )
+            except Exception:
+                pass
+        elif usdt_val <= 0 and fallback_usd > 0:
+            # Existing diagnostic (Cleanup pre-#3): no live quote, fallback carries TOTAL.
+            try:
+                print(
+                    f"[nanoclaw] FE_USD UNQUOTED | sym={sym} | "
+                    f"bal={float(bal):.6f} | live_quote_usdt=$0.00 | "
+                    f"fallback_px_usd={fallback_px:.4f} | "
+                    f"contributed_to_total=${fallback_usd:.2f} | "
+                    f"action: refresh `current_price_usd` in followed_equities.json or fix on-chain quote path"
+                )
+            except Exception:
+                pass
+        elif fallback_usd > usdt_val:
+            # Cleanup #3 (May 2026): live quote came back lower than fallback × bal. This
+            # is the May 2026 LINK_ALPHA symptom — operator-visible diagnostic so the gap
+            # against MetaMask is logged at the moment it happens, not back-solved later.
+            try:
+                print(
+                    f"[nanoclaw] FE_USD FALLBACK FLOOR APPLIED | sym={sym} | "
+                    f"bal={float(bal):.6f} | live_quote_usdt=${float(usdt_val):.2f} | "
+                    f"fallback_px_usd={fallback_px:.4f} | "
+                    f"fallback_total_usd=${fallback_usd:.2f} | "
+                    f"contributed_to_total=${effective_usd:.2f} | "
+                    f"action: verify on-chain pool depth; refresh fallback when spot moves materially"
+                )
+            except Exception:
+                pass
         # region agent log
         _agent_debug_ndjson(
             {
                 "hypothesisId": "H2",
                 "location": "runtime._followed_equity_tokens_usdt_usd:asset",
-                "message": "quote zero for asset",
+                "message": "fe leg priced",
                 "data": {
                     "symbol": sym,
                     "bal": float(bal),
                     "amt": int(amt),
                     "usdt_val": float(usdt_val),
-                    "price_fallback_usd": float(added_px),
+                    "fallback_usd": float(fallback_usd),
+                    "effective_usd": float(effective_usd),
                 },
             }
         )
