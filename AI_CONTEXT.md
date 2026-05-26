@@ -317,6 +317,13 @@ Directional milestones only—**capital scales when gates pass**, not on calenda
 - Unit tests for take-profit paths, swap path candidates, and X-Signal threshold helper (`tests/unit/`).
 - No non-core alerting layers in-scope; prioritize strategy code and deterministic logs.
 
+## Today's learnings (26 May 2026 — Cleanup #4: X-SIGNAL BUY defense / rotation unblock)
+
+- **Incident**: Post–Cleanup #3 deploy, LINK_ALPHA `signal=0.810` force-eligible every cycle but `X-SIGNAL BUY DEFENSE ACTIVE | buy_plans_paused=True | reasons=usdt_below_high_buffer` with `USDT=$9.27`, `USDC=$30.90`, `STABLE_USD≈$40.17`. `high_trigger = PROTECTION_FLUCTUATION_USDT_THRESHOLD (12) + 3 = $15`.
+- **Root cause**: `_assess_x_signal_buy_risk()` compared **USDT-only** to the buffer thresholds, while X-SIGNAL equity BUYs spend **USDC** (`USDC_TO_EQUITY`). Low USDT with ample USDC falsely tripped HIGH and blocked rotation.
+- **Fix (Cleanup #4)**: Buffer checks (HIGH `usdt_below_high_buffer`, MEDIUM `usdt_below_medium_buffer_and_wmatic_high`) now use **combined stables** (`balances.usdt + balances.usdc`, same as `STABLE_USD`). `very_large_usdt_divergence` remains USDT snapshot vs on-chain USDT. Operator logs (`X-SIGNAL BUY RISK`, `BUY RISK CONTEXT`, `BUY DEFENSE`) print both `usdt=` and `stable_usd=` plus triggers. `_x_signal_buy_risk_level` / `_cycle_risk_level` unchanged (USDT paths). Tests: `tests/unit/test_signal_x_signal_buy_risk.py`.
+- **Post-deploy grep**: With `STABLE_USD≥$40`, cycles should **not** show `buy_plans_paused=True` solely for `usdt_below_high_buffer` when LINK is force-eligible.
+
 ## Today's learnings (26 May 2026 — Cleanup #3: PnL accounting drift)
 
 - **Incident**: Wallet TOTAL $121.33 (MetaMask, Polygon tab) vs bot TOTAL $111.08 (`nanopnl` → `RUNTIME WALLET TRUTH (in-process compute_authoritative_total_usd)`). Gap $10.25, suspiciously equal to the LINK_ALPHA buy that fired in the same cycle (tx `1de9409c`). Component delta: stables +$8.56 OVER, LINK -$17.96 SHORT, POL -$0.85 SHORT, WMATIC 0.

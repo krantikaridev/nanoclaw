@@ -234,14 +234,15 @@ def _filter_xsignal_blocked_equities(
 def _assess_x_signal_buy_risk(
     *,
     onchain_usdt: float,
+    onchain_usdc: float,
     onchain_wmatic: float,
     snapshot_usdt: Optional[float] = None,
 ) -> tuple[str, dict[str, object]]:
     """
-    Risk assessment used to protect Session PnL.
+    Risk assessment used to protect Session PnL for USDC→equity X-Signal BUYs.
 
-    In addition to the threshold rules, this supports an explicit HIGH-risk trigger on
-    "very large USDT divergence" between a caller-provided snapshot and fresh on-chain USDT.
+    Buffer thresholds use combined stables (USDT + USDC), matching STABLE_USD spend capacity.
+    USDT-only divergence checks are unchanged (snapshot vs fresh on-chain USDT).
     """
     th_usdt = float(getattr(cfg, "PROTECTION_FLUCTUATION_USDT_THRESHOLD", 0.0))
     th_wmatic = float(getattr(cfg, "PROTECTION_FLUCTUATION_MIN_WMATIC", 0.0))
@@ -250,6 +251,8 @@ def _assess_x_signal_buy_risk(
     high_usdt_divergence_usd = float(cfg.env_float("X_SIGNAL_BUY_RISK_HIGH_USDT_DIVERGENCE_USD", 20.0))
 
     usdt_f = float(onchain_usdt)
+    usdc_f = float(onchain_usdc)
+    stable_usd_f = usdt_f + usdc_f
     wmatic_f = float(onchain_wmatic)
     divergence = None
     divergence_trigger = False
@@ -262,14 +265,14 @@ def _assess_x_signal_buy_risk(
             divergence_trigger = False
 
     reasons: list[str] = []
-    if usdt_f < (th_usdt + high_usdt_buffer):
+    if stable_usd_f < (th_usdt + high_usdt_buffer):
         reasons.append("usdt_below_high_buffer")
     if divergence_trigger:
         reasons.append("very_large_usdt_divergence")
 
     if reasons:
         level = "HIGH"
-    elif usdt_f < (th_usdt + medium_usdt_buffer) and wmatic_f > th_wmatic:
+    elif stable_usd_f < (th_usdt + medium_usdt_buffer) and wmatic_f > th_wmatic:
         level = "MEDIUM"
         reasons.append("usdt_below_medium_buffer_and_wmatic_high")
     else:
@@ -278,6 +281,8 @@ def _assess_x_signal_buy_risk(
 
     ctx: dict[str, object] = {
         "onchain_usdt": usdt_f,
+        "onchain_usdc": usdc_f,
+        "onchain_stable_usd": stable_usd_f,
         "onchain_wmatic": wmatic_f,
         "usdt_th": th_usdt,
         "wmatic_th": th_wmatic,
@@ -954,6 +959,7 @@ def try_x_signal_equity_decision(
 
     risk_level, risk_ctx = _assess_x_signal_buy_risk(
         onchain_usdt=float(balances.usdt),
+        onchain_usdc=float(balances.usdc),
         onchain_wmatic=float(balances.wmatic),
         snapshot_usdt=(None if dry_run else snapshot_usdt),
     )
@@ -972,11 +978,15 @@ def try_x_signal_equity_decision(
     # This print runs for everything that was not skipped above
     print(
         f"{runtime._nanolog()}X-SIGNAL BUY RISK | Risk={risk_level} | "
-        f"USDT=${float(balances.usdt):.2f} | WMATIC={float(balances.wmatic):.4f} | "
+        f"USDT=${float(balances.usdt):.2f} | USDC=${float(balances.usdc):.2f} | "
+        f"STABLE_USD=${float(risk_ctx.get('onchain_stable_usd', 0.0)):.2f} | "
+        f"WMATIC={float(balances.wmatic):.4f} | "
         f"buy_size_multiplier={buy_mult:.2f}"
     )
     print(
         f"{runtime._nanolog()}X-SIGNAL BUY RISK CONTEXT | "
+        f"usdt={_format_money(float(risk_ctx.get('onchain_usdt', 0.0)))} | "
+        f"stable_usd={_format_money(float(risk_ctx.get('onchain_stable_usd', 0.0)))} | "
         f"usdt_th={_format_money(float(risk_ctx.get('usdt_th', 0.0)))} | "
         f"high_trigger={_format_money(float(risk_ctx.get('usdt_th', 0.0)) + float(risk_ctx.get('high_usdt_buffer', 0.0)))} | "
         f"medium_trigger={_format_money(float(risk_ctx.get('usdt_th', 0.0)) + float(risk_ctx.get('medium_usdt_buffer', 0.0)))} | "
@@ -996,7 +1006,8 @@ def try_x_signal_equity_decision(
         print(
             f"{runtime._nanolog()}X-SIGNAL BUY DEFENSE | action={'skip_buys'} | risk={risk_level} | "
             f"reasons={reasons or 'N/A'} | "
-            f"usdt={_format_money(float(risk_ctx.get('onchain_usdt', 0.0)))} "
+            f"usdt={_format_money(float(risk_ctx.get('onchain_usdt', 0.0)))} | "
+            f"stable_usd={_format_money(float(risk_ctx.get('onchain_stable_usd', 0.0)))} "
             f"(high<{_format_money(high_trigger)}, medium<{_format_money(medium_trigger)}) | "
             f"wmatic={float(risk_ctx.get('onchain_wmatic', 0.0)):.4f} (th>{float(risk_ctx.get('wmatic_th', 0.0)):.4f}) | "
             f"usdt_div={usdt_div_s} (high>={_format_money(div_hi)})"

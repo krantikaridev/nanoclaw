@@ -1864,9 +1864,9 @@ def test_try_x_signal_equity_decision_triggers_high_at_threshold_plus_3(monkeypa
     monkeypatch.setattr(signal_module.cfg, "PROTECTION_FLUCTUATION_USDT_THRESHOLD", 30.0, raising=False)
     monkeypatch.setattr(signal_module.cfg, "PROTECTION_FLUCTUATION_MIN_WMATIC", 0.0, raising=False)
 
-    # HIGH rule: trigger when USDT < (USDT_TH + 3) = 33.0
+    # HIGH rule: trigger when STABLE_USD < (USDT_TH + 3) = 33.0 (USDC not masking low USDT)
     decision = clean_swap.try_x_signal_equity_decision(
-        clean_swap.Balances(usdt=32.5, wmatic=10.0, pol=1.0, usdc=20.0),
+        clean_swap.Balances(usdt=32.5, wmatic=10.0, pol=1.0, usdc=0.0),
         dry_run=True,
     )
     out = capsys.readouterr().out
@@ -1923,9 +1923,9 @@ def test_try_x_signal_equity_decision_pauses_buys_when_risk_medium(monkeypatch, 
     monkeypatch.setattr(signal_module.cfg, "PROTECTION_FLUCTUATION_USDT_THRESHOLD", 30.0, raising=False)
     monkeypatch.setattr(signal_module.cfg, "PROTECTION_FLUCTUATION_MIN_WMATIC", 5.0, raising=False)
 
-    # MEDIUM rule: USDT < (USDT_TH + 9) = 39.0 AND WMATIC > WMATIC_TH
+    # MEDIUM rule: STABLE_USD < (USDT_TH + 9) = 39.0 AND WMATIC > WMATIC_TH
     decision = clean_swap.try_x_signal_equity_decision(
-        clean_swap.Balances(usdt=37.5, wmatic=10.0, pol=1.0, usdc=20.0),
+        clean_swap.Balances(usdt=37.5, wmatic=10.0, pol=1.0, usdc=0.0),
         dry_run=True,
     )
     out = capsys.readouterr().out
@@ -1984,9 +1984,9 @@ def test_try_x_signal_equity_decision_allows_weth_buy_when_risk_medium(monkeypat
     monkeypatch.setattr(signal_module.cfg, "PROTECTION_FLUCTUATION_USDT_THRESHOLD", 30.0, raising=False)
     monkeypatch.setattr(signal_module.cfg, "PROTECTION_FLUCTUATION_MIN_WMATIC", 5.0, raising=False)
 
-    # MEDIUM rule: USDT < (USDT_TH + 9) = 39.0 AND WMATIC > WMATIC_TH
+    # MEDIUM: STABLE_USD < 39 with spendable USDC (USDC alone must not clear medium band)
     decision = clean_swap.try_x_signal_equity_decision(
-        clean_swap.Balances(usdt=37.5, wmatic=10.0, pol=1.0, usdc=20.0),
+        clean_swap.Balances(usdt=15.0, wmatic=10.0, pol=1.0, usdc=20.0),
         dry_run=True,
     )
     out = capsys.readouterr().out
