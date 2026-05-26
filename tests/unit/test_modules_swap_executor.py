@@ -1317,6 +1317,19 @@ def test_x_signal_small_high_conviction_relaxed_slippage_for_usdc_to_equity(monk
     assert slip == (8000, 10000)
 
 
+def test_x_signal_small_high_conviction_default_slippage_is_3000_5000_bps():
+    """Regression: defaults tightened from 8000/10000 -> 3000/5000 (May 2026).
+
+    V3 pre-flight `check=ok` already validates the live quote, and 100% fill rate at the old
+    8000 bps showed realized slippage was nowhere near 80%. The tighter ceiling halves
+    worst-case loss-per-trade with a 5x safety margin over typical V3 fills.
+    """
+    import config as cfg_mod
+
+    assert int(cfg_mod.X_SIGNAL_SMALL_HIGH_CONVICTION_FALLBACK_PRIMARY_BPS) == 3000
+    assert int(cfg_mod.X_SIGNAL_SMALL_HIGH_CONVICTION_FALLBACK_RETRY_BPS) == 5000
+
+
 def test_x_signal_small_high_conviction_relaxed_slippage_rejects_large_notional():
     decision = TradeDecision(
         direction="USDC_TO_EQUITY",

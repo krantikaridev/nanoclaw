@@ -247,7 +247,12 @@ X_SIGNAL_EQUITY_STRONG_TP_PCT = env_float("X_SIGNAL_EQUITY_STRONG_TP_PCT", 12.0)
 # Optional per-symbol skip (balance-read workaround). Empty = trade all followed_equities assets.
 X_SIGNAL_TEMP_SKIP_SYMBOLS = env_symbol_frozenset("X_SIGNAL_TEMP_SKIP_SYMBOLS", "")
 # TEMPORARY (May 2026): WBTC_* BUY min notional while Polygon WBTC liquidity is poor; 0 disables.
-X_SIGNAL_WBTC_MIN_NOTIONAL_USD = env_float("X_SIGNAL_WBTC_MIN_NOTIONAL_USD", 25.0)
+# Lowered 25.0 -> 10.0 (May 2026): typical X-SIGNAL dynamic sizing on a sub-$30 USDC bankroll
+# is ~$10.25-$10.30, so a $25 floor blocked WBTC_ALPHA 100% of the time even at signal=0.83.
+# At ~$10 notional with the high-conviction slippage tier and the swap-executor's effective
+# min trade guard, fills are gated by realized-slippage ceiling rather than an arbitrary floor.
+# Operators on thinner liquidity windows can dial it back up via env without code changes.
+X_SIGNAL_WBTC_MIN_NOTIONAL_USD = env_float("X_SIGNAL_WBTC_MIN_NOTIONAL_USD", 10.0)
 X_SIGNAL_EQUITY_SELL_FRACTION = env_float("X_SIGNAL_EQUITY_SELL_FRACTION", 0.55)
 # REVERSIBLE travel tune (2026-05-09): X-SIGNAL-only dust/exec floor when combined stables ≥ ~$80 (see swap_executor + signal_equity_trader).
 X_SIGNAL_EQUITY_DUST_MIN_USD = env_float("X_SIGNAL_EQUITY_DUST_MIN_USD", 7.5)
@@ -279,13 +284,18 @@ HIGH_CONVICTION_FALLBACK_RETRY_BPS = env_int(
     env_int("HIGH_CONVICTION_FALLBACK_RETRY_SLIPPAGE_BPS", 5000),
 )
 # Small high-conviction X-SIGNAL (USDC_TO_EQUITY, |signal|>=0.85, notional<=$12) fallback router only.
+# Tightened 8000/10000 -> 3000/5000 bps (May 2026): the V3 pre-flight `check=ok` gate already
+# validates the live quote, and 100% fill rate at 8000 bps showed actual realized slippage was
+# nowhere near 80%. Cuts worst-case loss-per-trade by ~50% (~$8 -> ~$3 on a $10 trade) while
+# preserving a 5x safety margin over typical V3 fills (<1%). Operators can revert via env if
+# pool liquidity for a specific pair degrades.
 X_SIGNAL_SMALL_HIGH_CONVICTION_FALLBACK_PRIMARY_BPS = env_int(
     "X_SIGNAL_SMALL_HIGH_CONVICTION_FALLBACK_PRIMARY_BPS",
-    8000,
+    3000,
 )
 X_SIGNAL_SMALL_HIGH_CONVICTION_FALLBACK_RETRY_BPS = env_int(
     "X_SIGNAL_SMALL_HIGH_CONVICTION_FALLBACK_RETRY_BPS",
-    10000,
+    5000,
 )
 # ~$10 gated trades: use small-tier execution (8000/10000, 50 min_out) when |signal| >= this at/below max notional.
 X_SIGNAL_SMALL_GATED_MIN_STRENGTH = env_float("X_SIGNAL_SMALL_GATED_MIN_STRENGTH", 0.80)

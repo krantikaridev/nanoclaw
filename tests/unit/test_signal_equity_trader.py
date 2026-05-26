@@ -1520,6 +1520,45 @@ def test_x_signal_wbtc_min_notional_does_not_block_link_alpha(monkeypatch):
     assert reason is None
 
 
+def test_x_signal_wbtc_min_notional_default_is_ten_usd():
+    """Regression: default `X_SIGNAL_WBTC_MIN_NOTIONAL_USD` is $10 so typical $10.25 sizing clears.
+
+    Lowered May 2026 from $25 because at the small-bankroll dynamic-sizing band of ~$10.25 the
+    $25 floor blocked WBTC_ALPHA 100% even at signal=0.83. The realized-slippage ceiling on the
+    small-tier execution path is the actual fill safety net at this notional.
+    """
+    assert float(cfg.X_SIGNAL_WBTC_MIN_NOTIONAL_USD) == 10.0
+
+
+def test_x_signal_wbtc_min_notional_default_clears_typical_dynamic_sizing(monkeypatch):
+    """At the new $10 default, typical X-SIGNAL sizing of ~$10.25 is no longer blocked."""
+    monkeypatch.setattr(cfg, "X_SIGNAL_WBTC_MIN_NOTIONAL_USD", 10.0)
+    s = _build_strategy_tuned(min_trade_usdc=4.0, max_trade_usdc=200.0)
+    monkeypatch.setattr(strategy_module, "_HARD_BYPASS_MIN_TRADE_USD", 1.0)
+    monkeypatch.setattr(
+        SignalEquityTrader,
+        "_compute_trade_size",
+        lambda self, usdc_balance, signal_strength, usdt_balance=0.0, *, symbol="": 10.30,
+    )
+    monkeypatch.setattr(s, "_estimate_gas_cost_usd", lambda _gas_gwei: 0.71)
+
+    plan, reason = s.build_plan_with_block_reason(
+        symbol="WBTC_ALPHA",
+        token_address="0x" + "1" * 40,
+        token_decimals=8,
+        signal_strength=0.83,
+        earnings_proximity_days=None,
+        current_price_usd=1.0,
+        usdc_balance=40.0,
+        equity_balance=0.0,
+        wallet_address_for_gas="0x" + "3" * 40,
+        can_trade_asset=lambda *_a, **_k: True,
+        upside_pct=22.0,
+    )
+    assert plan is not None
+    assert reason is None
+
+
 def test_x_signal_wbtc_min_notional_disabled_when_env_zero(monkeypatch):
     """X_SIGNAL_WBTC_MIN_NOTIONAL_USD=0 disables the temporary WBTC gate."""
     monkeypatch.setattr(cfg, "X_SIGNAL_WBTC_MIN_NOTIONAL_USD", 0.0)
