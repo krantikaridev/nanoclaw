@@ -144,13 +144,20 @@ def ensure_startup_router_approval(
 
 
 def _force_max_approval(w3, private_key, router_address, token_address="0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"):
-    """Backward-compatible wrapper — prefer ``ensure_startup_router_approval``."""
+    """Backward-compatible wrapper — prefer ``ensure_startup_router_approval``.
+
+    Historical default passed ``force=True`` which bypassed the allowance pre-check
+    inside ``ensure_startup_router_approval``. On 2026-05-24 the live bot crash-looped
+    on startup when POL ≈0.025 < approve gas budget; allowance was already MAX, so
+    the safe path is to skip rather than force a fresh approve. The wrapper now
+    delegates without ``force`` so both the allowance and POL pre-checks apply,
+    matching the new call site in ``clean_swap.py`` (``ensure_startup_router_approval``).
+    """
     return ensure_startup_router_approval(
         w3,
         private_key,
         router_address,
         token_address=token_address,
-        force=True,
     )
 
 def _fallback_router_slippage_bps() -> int:

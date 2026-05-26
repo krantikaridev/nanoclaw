@@ -317,6 +317,12 @@ Directional milestones only—**capital scales when gates pass**, not on calenda
 - Unit tests for take-profit paths, swap path candidates, and X-Signal threshold helper (`tests/unit/`).
 - No non-core alerting layers in-scope; prioritize strategy code and deterministic logs.
 
+## Today's learnings (24 May 2026 — startup-crash landmine)
+
+- **Incident**: Live bot crash-looped on startup on 2026-05-24. Every restart hit `clean_swap.py:249 _force_max_approval(...)` → `swap_executor.py:72 w3.eth.send_raw_transaction(...)` → `Web3RPCError: insufficient funds for gas` (POL balance ~0.0254, approve tx cost ~0.0496 POL). Crontab's 2-min watchdog respawned the same crash so AUTO-POL never got a chance to top up.
+- **Root cause**: legacy `_force_max_approval` wrapper passed `force=True` to `ensure_startup_router_approval`, bypassing the allowance pre-check inside (`if not force and allowance >= min_allowance:`). With allowance already at MAX (the common case), the safe path is to skip — not to broadcast a fresh approve that can't fund itself.
+- **Fix (Cleanup #2, 2026-05-26)**: Dropped `force=True` from `_force_max_approval` so the wrapper inherits both the allowance pre-check (skip + return True when sufficient) and the POL pre-check (skip + return False when balance < `approve_gas_units × gas_price × 1.10`). Neither path raises. The interactive code path in `clean_swap.py` (now `ensure_startup_router_approval` at line 254, not the legacy `_force_max_approval` at 249) already had both guards in `bbfa05d9`; this commit closes the wrapper-shaped landmine for any stale caller. Regression tests in `tests/unit/test_force_max_approval_resilience.py` pin the three cases (allowance-max → True, POL-low → False, never raises).
+
 ## Today's learnings (1 May 2026)
 
 - POL guard false positive bug.
