@@ -312,6 +312,22 @@ def mark_asset_traded(symbol: str, now: Optional[float] = None, cooldown_seconds
         print(f"📌 Asset {symbol} cooldown started ({int(cooldown_seconds)}s)")
 
 
+# Cleanup #3 (May 2026): per-(token, wallet) latch of tokens whose ``balanceOf``
+# has already raised once. The blocklist in ``.xsignal_blocked_symbols`` gates
+# trading, but the FE_USD inventory scan still iterates every followed equity
+# every cycle for accurate accounting. When a contract is unreadable (e.g.
+# WBTC_ALPHA at 0x1BFD6703…6C834E returning BadFunctionCallOutput), the loop
+# emitted ``BALANCE READ FAILED`` every cycle indefinitely — a few hundred
+# lines/day of operator noise per broken contract. Now we log the failure
+# once per (token, wallet) pair per process lifetime, then suppress.
+_BALANCE_READ_FAIL_LOGGED: set[tuple[str, str]] = set()
+
+
+def _reset_balance_read_fail_logged() -> None:
+    """Test helper: clear the once-logged latch between cases."""
+    _BALANCE_READ_FAIL_LOGGED.clear()
+
+
 def get_token_balance(
     token_address: str,
     decimals: int = 6,
@@ -331,6 +347,10 @@ def get_token_balance(
         contract = client.eth.contract(address=token_a, abi=ERC20_ABI)
         return contract.functions.balanceOf(wallet_a).call() / (10**decimals)
     except Exception as exc:
+        key = (str(token_a).lower(), str(wallet_a).lower())
+        if key in _BALANCE_READ_FAIL_LOGGED:
+            return 0.0
+        _BALANCE_READ_FAIL_LOGGED.add(key)
         err_s = str(exc).strip().replace("\n", " ")
         if len(err_s) > 220:
             err_s = err_s[:217] + "..."
@@ -338,7 +358,8 @@ def get_token_balance(
         w_disp = f"{wallet_a[:10]}…{wallet_a[-6:]}" if len(str(wallet_a)) > 20 else str(wallet_a)
         print(
             f"{_nanolog()}BALANCE READ FAILED | token={t_disp} | wallet={w_disp} | "
-            f"{type(exc).__name__}: {err_s}"
+            f"{type(exc).__name__}: {err_s} | "
+            f"(further failures for this token+wallet suppressed for process lifetime)"
         )
         return 0.0
 
