@@ -272,7 +272,7 @@ def test_swap_executor_log_format_round_trips_through_v2_regex() -> None:
     drift between the helper-driven emitter and the fallback regex parser."""
     b = Balances(
         usdt=10.0, wmatic=5.0, pol=2.0, usdc=20.0,
-        followed_equity_usd=8.0, total_portfolio_usd=55.5,
+        followed_equity_usd=8.0, pol_usd=0.5, total_portfolio_usd=55.5,
     )
     total_usd = compute_authoritative_total_usd(b)
     stable = float(b.usdt) + float(b.usdc)
@@ -280,11 +280,93 @@ def test_swap_executor_log_format_round_trips_through_v2_regex() -> None:
         f"WALLET TOTAL USD | TOTAL=${total_usd:.2f} "
         f"| USDT=${b.usdt:.2f} | USDC=${b.usdc:.2f} | STABLE_USD=${stable:.2f} "
         f"| WMATIC={b.wmatic:.6f} "
-        f"| POL={b.pol:.6f} | FE_USD=${b.followed_equity_usd:.2f}"
+        f"| POL={b.pol:.6f} | POL_USD=${b.pol_usd:.2f} "
+        f"| FE_USD=${b.followed_equity_usd:.2f}"
     )
     m = pnl_report.AUTHORITATIVE_TOTAL_PATTERN_V2.search(log_line)
     assert m is not None, f"V2 regex must still parse helper-emitted log line: {log_line!r}"
     assert float(m.group(1)) == pytest.approx(total_usd)
+
+
+# endregion
+
+
+# region POL_USD operator visibility (Cleanup #3, May 2026)
+# Pre-cleanup: POL was already in ``total_portfolio_usd`` arithmetically, but only POL
+# quantity (not POL_USD) appeared in the ``WALLET TOTAL USD`` log line. Operators
+# reconciling against MetaMask had to back-solve POL's USD slice from the gap, which
+# made it look (in the 2026-05-26 incident) as if POL was excluded from TOTAL. Cleanup #3
+# makes the POL_USD slice a first-class field on ``Balances`` and prints it in the log.
+
+
+def test_pol_usd_field_equals_pol_times_pol_price(monkeypatch) -> None:
+    """``Balances.pol_usd`` must equal ``pol × POL_USD_PRICE`` from ``get_balances()``.
+
+    Pinning this prevents a future refactor from setting ``pol_usd`` from a stale
+    cache or a different price source than the one driving ``total_portfolio_usd``.
+    """
+    import clean_swap
+
+    monkeypatch.setattr(runtime, "POL_USD_PRICE", 0.10)
+    monkeypatch.setattr(runtime, "get_token_balance", lambda *_a, **_k: 0.0)
+    monkeypatch.setattr(runtime, "get_pol_balance", lambda *_a, **_k: 9.177)
+    monkeypatch.setattr(runtime, "_total_usdc_balance", lambda *_a, **_k: 0.0)
+    monkeypatch.setattr(runtime, "_followed_equity_tokens_usdt_usd", lambda: 0.0)
+    monkeypatch.setattr("protection.get_live_wmatic_price", lambda: 0.0)
+
+    b = runtime.get_balances()
+    assert b.pol == pytest.approx(9.177)
+    assert b.pol_usd == pytest.approx(9.177 * 0.10)
+    # Acceptance criterion B: POL is included in TOTAL exactly once (here, the only
+    # non-zero component is POL_USD).
+    assert compute_authoritative_total_usd(b) == pytest.approx(9.177 * 0.10)
+
+
+def test_pol_usd_contributes_to_total_exactly_once(monkeypatch) -> None:
+    """Toggling POL between 0 and a positive balance changes TOTAL by exactly POL × price.
+
+    If a future refactor double-counted POL (e.g. once via ``pol_usd`` and once via
+    ``pol × POL_USD_PRICE``), or zero-counted it, this assertion would fail.
+    """
+    monkeypatch.setattr(runtime, "POL_USD_PRICE", 0.10)
+    monkeypatch.setattr(runtime, "get_token_balance", lambda *_a, **_k: 0.0)
+    monkeypatch.setattr(runtime, "_total_usdc_balance", lambda *_a, **_k: 0.0)
+    monkeypatch.setattr(runtime, "_followed_equity_tokens_usdt_usd", lambda: 0.0)
+    monkeypatch.setattr("protection.get_live_wmatic_price", lambda: 0.0)
+
+    monkeypatch.setattr(runtime, "get_pol_balance", lambda *_a, **_k: 0.0)
+    total_zero = compute_authoritative_total_usd(runtime.get_balances())
+
+    monkeypatch.setattr(runtime, "get_pol_balance", lambda *_a, **_k: 10.0)
+    total_with_pol = compute_authoritative_total_usd(runtime.get_balances())
+
+    assert (total_with_pol - total_zero) == pytest.approx(10.0 * 0.10)
+
+
+def test_wallet_total_usd_log_line_includes_pol_usd_field() -> None:
+    """``WALLET TOTAL USD`` log line must surface POL_USD so operators reconciling
+    against MetaMask see POL's USD contribution without back-solving.
+
+    Regression for the 2026-05-26 incident: bot TOTAL $111.08 vs wallet $121.33,
+    where the $0.85 POL slice was invisible in the log and looked excluded.
+    """
+    b = Balances(
+        usdt=10.48, wmatic=156.571, pol=9.177, usdc=41.76,
+        followed_equity_usd=53.74, pol_usd=0.9177,
+        total_portfolio_usd=10.48 + 41.76 + 14.50 + 0.9177 + 53.74,
+    )
+    total_usd = compute_authoritative_total_usd(b)
+    stable = float(b.usdt) + float(b.usdc)
+    log_line = (
+        f"WALLET TOTAL USD | TOTAL=${total_usd:.2f} "
+        f"| USDT=${b.usdt:.2f} | USDC=${b.usdc:.2f} | STABLE_USD=${stable:.2f} "
+        f"| WMATIC={b.wmatic:.6f} "
+        f"| POL={b.pol:.6f} | POL_USD=${b.pol_usd:.2f} "
+        f"| FE_USD=${b.followed_equity_usd:.2f}"
+    )
+    assert "POL_USD=$0.92" in log_line
+    m = pnl_report.AUTHORITATIVE_TOTAL_PATTERN_V2.search(log_line)
+    assert m is not None, "POL_USD insertion must not break the V2 fallback regex"
 
 
 # endregion

@@ -181,6 +181,11 @@ class Balances:
     usdc: float = 0.0
     # Mark-to-USDT (router quote) for followed equity tokens (WETH/LINK/...) not in core balances; bug fix 2026-05-03
     followed_equity_usd: float = 0.0
+    # Operator visibility (Cleanup #3, May 2026): pol × POL_USD_PRICE, the exact USD slice POL
+    # contributes to ``total_portfolio_usd``. POL was already in TOTAL pre-cleanup, but the
+    # ``WALLET TOTAL USD`` log line only printed POL quantity, so operators reconciling
+    # against MetaMask had to back-solve POL_USD from the gap. Now it is a first-class field.
+    pol_usd: float = 0.0
     # usdt+usdc+WMATIC*px+POL*px+followed_equity_usd; for dashboard / nanomon when liquid stables are 0 but positions exist
     total_portfolio_usd: float = 0.0
 
@@ -920,13 +925,15 @@ def get_balances() -> Balances:
     except Exception:
         wmatic_px = 0.0
     pol_price_usd = float(POL_USD_PRICE)
-    total_pf = usdt + usdc + (wmatic * wmatic_px) + (pol * pol_price_usd) + fe_usd
+    pol_usd = pol * pol_price_usd
+    total_pf = usdt + usdc + (wmatic * wmatic_px) + pol_usd + fe_usd
     return Balances(
         usdt=usdt,
         wmatic=wmatic,
         pol=pol,
         usdc=usdc,
         followed_equity_usd=fe_usd,
+        pol_usd=pol_usd,
         total_portfolio_usd=total_pf,
     )
 
@@ -962,13 +969,15 @@ def write_portfolio_history_snapshot(current_price: float) -> None:
     # canonical helper so the CSV ``total_value`` column never drifts from the
     # ``WALLET TOTAL USD`` log line / pnl_report. Formula write site mirrors
     # ``get_balances()``; if you change one, change both (and update tests).
+    pol_usd = pol * pol_price_usd
     balances_snapshot = Balances(
         usdt=usdt,
         wmatic=wmatic,
         pol=pol,
         usdc=usdc,
         followed_equity_usd=fe_usd,
-        total_portfolio_usd=usdt + usdc + (wmatic * current_price) + (pol * pol_price_usd) + fe_usd,
+        pol_usd=pol_usd,
+        total_portfolio_usd=usdt + usdc + (wmatic * current_price) + pol_usd + fe_usd,
     )
     total_value = compute_authoritative_total_usd(balances_snapshot)
     row = {

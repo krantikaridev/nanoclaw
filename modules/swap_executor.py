@@ -3011,7 +3011,8 @@ async def main(*, dry_run: bool = False) -> None:
         f"{runtime._nanolog()}WALLET TOTAL USD | TOTAL=${_total_usd:.2f} "
         f"| USDT=${balances.usdt:.2f} | USDC=${balances.usdc:.2f} | STABLE_USD=${_stable:.2f} "
         f"| WMATIC={balances.wmatic:.6f} "
-        f"| POL={balances.pol:.6f} | FE_USD=${balances.followed_equity_usd:.2f}"
+        f"| POL={balances.pol:.6f} | POL_USD=${balances.pol_usd:.2f} "
+        f"| FE_USD=${balances.followed_equity_usd:.2f}"
     )
     print(
         f"Real USDT: {balances.usdt:.2f} | USDC: {balances.usdc:.2f} | "
