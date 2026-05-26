@@ -22,6 +22,8 @@ def test_nanobot_aliases_script_defines_core_functions():
     assert "nanodaily()" in content
     assert "nanobot()" in content
     assert "nanohealth()" in content
+    assert "nanovel()" in content
+    assert "nh()" in content
 
 
 def test_nanobot_aliases_script_supports_install_mode():

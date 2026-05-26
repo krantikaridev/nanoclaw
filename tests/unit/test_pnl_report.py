@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -465,3 +466,56 @@ def test_load_portfolio_total_series_sorted_and_dedupes_same_ts(tmp_path: Path, 
     assert len(series) == 2
     assert series[0][1] == pytest.approx(80.0)
     assert series[1][1] == pytest.approx(95.0)
+
+
+def test_count_velocity_fills_utc_day_window(tmp_path: Path) -> None:
+    day = datetime(2026, 5, 26, 12, 0, 0, tzinfo=timezone.utc)
+    day_start = day.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_end = day_start + timedelta(days=1)
+    inside = int(day_start.timestamp()) + 3600
+    outside = int(day_end.timestamp()) + 60
+    log_file = _write_log(
+        tmp_path,
+        "\n".join(
+            [
+                f"[nanoclaw] === CYCLE {inside} | BALANCES: USDT=$1 USDC=$1 WMATIC=$1 ===",
+                "✅ Swap executed successfully!",
+                f"[nanoclaw] === CYCLE {outside} | BALANCES: USDT=$1 USDC=$1 WMATIC=$1 ===",
+                "✅ Swap executed successfully!",
+            ]
+        ),
+    )
+    assert (
+        pnl_report.count_velocity_fills(log_file, since_utc=day_start, until_utc=day_end) == 1
+    )
+
+
+def test_count_velocity_fills_session_since(tmp_path: Path) -> None:
+    session_start = datetime(2026, 5, 26, 18, 21, 34, tzinfo=timezone.utc)
+    before = int(session_start.timestamp()) - 900
+    after = int(session_start.timestamp()) + 900
+    log_file = _write_log(
+        tmp_path,
+        "\n".join(
+            [
+                f"[nanoclaw] === CYCLE {before} | BALANCES: USDT=$1 USDC=$1 WMATIC=$1 ===",
+                "✅ Swap executed successfully!",
+                f"[nanoclaw] === CYCLE {after} | BALANCES: USDT=$1 USDC=$1 WMATIC=$1 ===",
+                "✅ Swap executed successfully!",
+            ]
+        ),
+    )
+    assert pnl_report.count_velocity_fills(log_file, since_utc=session_start) == 1
+
+
+def test_format_velocity_lines_includes_session(tmp_path: Path, monkeypatch) -> None:
+    log_file = _write_log(tmp_path, "")
+    monkeypatch.setattr(pnl_report, "LOG_FILE", str(log_file))
+    now = datetime(2026, 5, 26, 20, 0, 0, tzinfo=timezone.utc)
+    lines = pnl_report.format_velocity_lines(
+        log_path=log_file,
+        session_started_at="2026-05-26T18:21:34+00:00",
+        now_utc=now,
+    )
+    assert any("velocity_fills_per_day_utc=" in x for x in lines)
+    assert any("velocity_fills_session=" in x for x in lines)

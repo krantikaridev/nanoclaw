@@ -79,6 +79,16 @@ nanohealth() {
   python scripts/nanohealth.py "$@"
 }
 
+nh() {
+  nanohealth "$@"
+}
+
+nanovel() {
+  _nanoclaw_enter_root || return 1
+  _nanoclaw_activate_venv
+  python scripts/pnl_report.py --velocity-only "$@"
+}
+
 nanobot() {
   _nanoclaw_enter_root || return 1
   tail -f real_cron.log
@@ -197,6 +207,21 @@ if [[ -f ".venv/bin/activate" ]]; then
 fi
 python scripts/nanohealth.py "\$@"
 EOF
+  cat >"${bindir}/nh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+exec "${bindir}/nanohealth" "\$@"
+EOF
+  cat >"${bindir}/nanovel" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+cd "${NANOCLAW_ROOT}"
+if [[ -f ".venv/bin/activate" ]]; then
+  # shellcheck source=/dev/null
+  source ".venv/bin/activate"
+fi
+python scripts/pnl_report.py --velocity-only "\$@"
+EOF
   chmod +x \
     "${bindir}/nanoup" \
     "${bindir}/nanokill" \
@@ -206,21 +231,23 @@ EOF
     "${bindir}/nanobot" \
     "${bindir}/nanoattach" \
     "${bindir}/nanodaily" \
-    "${bindir}/nanohealth"
+    "${bindir}/nanohealth" \
+    "${bindir}/nh" \
+    "${bindir}/nanovel"
 
   if [[ -f "${HOME}/.bashrc" ]] && ! grep -F 'export PATH="$HOME/.local/bin:$PATH"' "${HOME}/.bashrc" >/dev/null 2>&1; then
     printf '\n# local user bin for nanoclaw command shims\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "${HOME}/.bashrc"
     echo "✅ added ~/.local/bin PATH bootstrap to ${HOME}/.bashrc"
   fi
   echo "✅ installed standalone nano* command shims in ${bindir}"
-  echo "Verify: command -v nanoup nanostatus nanopnl nanodaily nanohealth"
+  echo "Verify: command -v nanoup nanostatus nanopnl nanodaily nanohealth nanovel nh"
 }
 
 _nanoclaw_install_everything() {
   _nanoclaw_install_aliases
   _nanoclaw_install_cmd_shims
   echo "Run: source ~/.bashrc"
-  echo "Verify: type nanoup && type nanokill && type nanorestart && type nanostatus && type nanodaily && type nanohealth"
+  echo "Verify: type nanoup && type nanokill && type nanorestart && type nanostatus && type nanodaily && type nanohealth && type nanovel && type nh"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

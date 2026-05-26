@@ -327,12 +327,98 @@ def print_daily_summary(*, reset_session: bool = False, lookback: str | None = N
     print(f"Session PnL:   ${session_delta:+.2f} ({session_pct:+.2f}%)")
     print(f"Session start: {session_started_at}")
     print(pnl_24h_line)
-    print()
+    _print_velocity_block(session_started_at=session_started_at)
 
     win_spec = lookback if (lookback and str(lookback).strip()) else "24h"
     _print_lookback_table(total, parse_lookback_windows(win_spec))
     print()
     _print_portfolio_csv_analytics()
+    return 0
+
+
+_CYCLE_TS_RE = re.compile(r"=== CYCLE (\d+)")
+_SWAP_SUCCESS_MARKER = "Swap executed successfully!"
+
+
+def count_velocity_fills(
+    log_path: Path | str = LOG_FILE,
+    *,
+    since_utc: datetime | None = None,
+    until_utc: datetime | None = None,
+) -> int:
+    """
+    On-chain swap count from ``real_cron.log``.
+
+    Each ``Swap executed successfully!`` line is attributed to the preceding
+    ``=== CYCLE <unix_ts>`` line (log lines have no calendar date prefix).
+    """
+    path = Path(log_path)
+    if not path.is_file():
+        return 0
+    since_ts = since_utc.timestamp() if since_utc is not None else None
+    until_ts = until_utc.timestamp() if until_utc is not None else None
+    last_ts = 0
+    n = 0
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        m = _CYCLE_TS_RE.search(line)
+        if m:
+            last_ts = int(m.group(1))
+            continue
+        if _SWAP_SUCCESS_MARKER not in line:
+            continue
+        if last_ts <= 0:
+            continue
+        if since_ts is not None and last_ts < since_ts:
+            continue
+        if until_ts is not None and last_ts >= until_ts:
+            continue
+        n += 1
+    return n
+
+
+def _utc_day_window(now_utc: datetime | None = None) -> tuple[datetime, datetime]:
+    now = now_utc or datetime.now(timezone.utc)
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    return start, start + timedelta(days=1)
+
+
+def _session_started_at_label() -> str | None:
+    data = _read_session_baseline(Path(SESSION_BASELINE_FILE))
+    if isinstance(data, dict):
+        raw = str(data.get("session_started_at") or "").strip()
+        return raw or None
+    return None
+
+
+def format_velocity_lines(
+    *,
+    log_path: Path | str = LOG_FILE,
+    session_started_at: str | None = None,
+    now_utc: datetime | None = None,
+) -> list[str]:
+    """Human-readable velocity: UTC calendar day + optional session (tag/deploy) window."""
+    now = now_utc or datetime.now(timezone.utc)
+    day_start, day_end = _utc_day_window(now)
+    utc_n = count_velocity_fills(log_path, since_utc=day_start, until_utc=day_end)
+    lines = [f"velocity_fills_per_day_utc={float(utc_n):.1f} (UTC {day_start.date()})"]
+    sess_label = session_started_at if session_started_at is not None else _session_started_at_label()
+    sess_dt = _parse_iso_ts(sess_label) if sess_label else None
+    if sess_dt is not None:
+        sess_n = count_velocity_fills(log_path, since_utc=sess_dt)
+        lines.append(f"velocity_fills_session={float(sess_n):.1f} (since {sess_label})")
+    return lines
+
+
+def _print_velocity_block(*, session_started_at: str | None = None) -> None:
+    print("📈 ROTATION")
+    for line in format_velocity_lines(session_started_at=session_started_at):
+        print(line)
+    print()
+
+
+def print_velocity_only() -> int:
+    for line in format_velocity_lines():
+        print(line)
     return 0
 
 
@@ -671,6 +757,7 @@ def print_report(*, reset_session: bool = False) -> int:
     print(f"Session PnL:   ${session_delta:+.2f} ({session_pct:+.2f}%)")
     print(f"Session start: {session_started_at}")
     print(pnl_24h_line)
+    _print_velocity_block(session_started_at=session_started_at)
     print("Reset session baseline: nanopnl --reset-session")
     print()
 
@@ -688,6 +775,11 @@ def print_report(*, reset_session: bool = False) -> int:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Nanoclaw PnL report")
     parser.add_argument("--reset-session", action="store_true", help="Reset session baseline to current total")
+    parser.add_argument(
+        "--velocity-only",
+        action="store_true",
+        help="Print UTC-day and session fill counts only (nanovel)",
+    )
     parser.add_argument(
         "--daily-summary",
         action="store_true",
@@ -708,6 +800,8 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = _build_parser().parse_args()
+    if bool(args.velocity_only):
+        return print_velocity_only()
     lookback_arg = str(getattr(args, "lookback", "") or "").strip()
     if bool(args.daily_summary):
         lb = lookback_arg if lookback_arg else None

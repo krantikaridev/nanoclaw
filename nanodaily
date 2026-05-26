@@ -2,19 +2,24 @@
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT" || exit 1
 
+PYTHON="python"
+if [[ -x "${ROOT}/.venv/bin/python" ]]; then
+  PYTHON="${ROOT}/.venv/bin/python"
+fi
+
 echo "═══════════════════════════════════════════════"
 echo "           NANODAILY HEALTH — $(date '+%Y-%m-%d %H:%M')"
 echo "═══════════════════════════════════════════════"
 echo "💰 BALANCE:"
 # Multi-window lookback from portfolio_history.csv (sparse rows → n/a until history exists).
-REPORT_OUTPUT="$(PYTHONIOENCODING=utf-8 python scripts/pnl_report.py --daily-summary --lookback "1h,4h,12h,24h,48h,168h,336h,720h" 2>&1)"
+REPORT_OUTPUT="$(PYTHONIOENCODING=utf-8 "${PYTHON}" scripts/pnl_report.py --daily-summary --lookback "1h,4h,12h,24h,48h,168h,336h,720h" 2>&1)"
 SUMMARY_EXIT=$?
 if [ "$SUMMARY_EXIT" -eq 0 ] && [ -n "${REPORT_OUTPUT//[[:space:]]/}" ]; then
   printf '%s\n' "$REPORT_OUTPUT"
 else
   # Fallback when --daily-summary fails or emits no usable output.
   echo "⚠️ daily-summary fallback (exit=$SUMMARY_EXIT)"
-  REPORT_OUTPUT="$(PYTHONIOENCODING=utf-8 python scripts/pnl_report.py 2>&1 || true)"
+  REPORT_OUTPUT="$(PYTHONIOENCODING=utf-8 "${PYTHON}" scripts/pnl_report.py 2>&1 || true)"
   printf '%s\n' "$REPORT_OUTPUT" | grep -E "(CURRENT BALANCE|source:|Stables USDC|USDC|WMATIC|USDT|TOTAL|suspect|Since baseline|Session PnL|24h PnL)"
 fi
 echo ""

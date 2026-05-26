@@ -63,6 +63,7 @@ bot_state.json
 trade_exits.json
 wallet_performance.json
 portfolio_session_baseline.json
+portfolio_baseline.json
 # Operator / external-layer control plane (paused, copy caps).
 control.json
 .runtime/
