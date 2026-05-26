@@ -47,7 +47,9 @@
 | 2026-05-26 | `WBTC_ALPHA` in blocklist; balance-read noise gate deferred to Cleanup #3 | Trading impact zero; log impact medium |
 | 2026-05-26 | `compute_authoritative_total_usd` is the **only** sanctioned source of `WALLET TOTAL USD` | Cleanup #1 (`fb5eac6e`). Side chats must not re-introduce regex parsing. |
 | 2026-05-26 | `_force_max_approval` wrapper no longer passes `force=True` | Cleanup #2 (`30fb17b9`). Closes May 24 crash-loop landmine. |
-| 2026-05-26 | `current_price_usd` in `followed_equities.json` is a **fallback floor**, not authoritative | Live on-chain MTM preferred; fallback only when quote returns 0 |
+| 2026-05-26 | `current_price_usd` in `followed_equities.json` is a **fallback floor**, not authoritative | Cleanup #3 (`9abb0881`): effective FE_USD = `max(live_quote_usdt, bal × fallback)`; live wins when ≥ fallback; `FE_USD FALLBACK FLOOR APPLIED` when fallback wins |
+| 2026-05-26 | `Balances.pol_usd` + `POL_USD=` on `WALLET TOTAL USD` line | Cleanup #3 (`9f85cbcb`): POL was already in TOTAL; visibility only for MetaMask reconcile |
+| 2026-05-26 | `BALANCE READ FAILED` log-once per `(token, wallet)` in `get_token_balance` | Cleanup #3 (`76946ea3`); blocklist does not gate inventory reads |
 
 ---
 
