@@ -1354,6 +1354,40 @@ def _low_stables_dust_rebuild_rate_ok(state: dict | None) -> bool:
 def _record_low_stables_dust_rebuild_allowed(state: dict) -> None:
     d = _low_stables_dust_rebuild_state(state)
     d["last_allowed_cycle"] = int(d.get("cycle_count", 0) or 0)
+    d["pending_execution"] = True
+
+
+def _main_strategy_low_stables_dust_rebuild_execution_bypass(
+    state: dict | None,
+    decision: TradeDecision,
+    *,
+    decision_notional_usd: float | None,
+    min_trade_usd: float,
+) -> bool:
+    """Execution-time MIN_TRADE_USD bypass for a planning-approved low-stables dust rebuild."""
+    if state is None or decision_notional_usd is None or min_trade_usd <= 0:
+        return False
+    d = _low_stables_dust_rebuild_state(state)
+    if not bool(d.get("pending_execution")):
+        return False
+    direction = str(decision.direction or "").strip().upper()
+    if direction not in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:
+        return False
+    rebuild_floor = float(
+        getattr(cfg, "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_NOTIONAL_FLOOR_USD", 5.0)
+    )
+    if float(decision_notional_usd) + 1e-9 < rebuild_floor:
+        return False
+    if float(decision_notional_usd) + 1e-9 >= float(min_trade_usd):
+        return False
+    return True
+
+
+def _clear_low_stables_dust_rebuild_pending(state: dict | None) -> None:
+    if state is None:
+        return
+    d = _low_stables_dust_rebuild_state(state)
+    d.pop("pending_execution", None)
 
 
 def _main_strategy_low_stables_dust_rebuild_override_active(
@@ -3272,11 +3306,23 @@ async def main(*, dry_run: bool = False) -> None:
                 state=state,
             ):
                 print(_PROFIT_TAKE_P2_RELIEF_LOG)
+            elif _main_strategy_low_stables_dust_rebuild_execution_bypass(
+                state,
+                decision,
+                decision_notional_usd=decision_notional_usd,
+                min_trade_usd=min_trade_usd,
+            ):
+                print(
+                    f"{runtime._nanolog()}{_MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_LOG} | "
+                    f"min_trade_guard bypassed (${decision_notional_usd:.2f} < MIN_TRADE_USD ${min_trade_usd:.2f})"
+                )
+                _clear_low_stables_dust_rebuild_pending(state)
             else:
                 reason = (
                     f"min_trade_guard ({decision.direction}: ${decision_notional_usd:.2f} "
                     f"< MIN_TRADE_USD ${min_trade_usd:.2f})"
                 )
+                _clear_low_stables_dust_rebuild_pending(state)
                 cs._log_trade_skipped(reason)
                 print(
                     f"{runtime._nanolog()}TRADE SKIPPED | below minimum size | "

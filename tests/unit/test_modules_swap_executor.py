@@ -56,6 +56,9 @@ from modules.swap_executor import (
     _x_signal_gated_trade_enhanced_execution_eligible,
     _x_signal_gated_trade_relaxed_slippage,
     _x_signal_min_trade_guard_bypass,
+    _main_strategy_low_stables_dust_rebuild_execution_bypass,
+    _clear_low_stables_dust_rebuild_pending,
+    _record_low_stables_dust_rebuild_allowed,
     _x_signal_small_high_conviction_relaxed_slippage,
     estimate_expected_net_edge_pct,
     select_main_strategy_trade,
@@ -112,6 +115,35 @@ def test_x_signal_min_trade_guard_bypass_rejects_low_strength():
         signal_strength=0.80,
     )
     assert not _x_signal_min_trade_guard_bypass(d, decision_notional_usd=7.99, min_trade_usd=10.0)
+
+
+def test_low_stables_dust_rebuild_execution_bypass_requires_pending_flag():
+    state: dict = {}
+    d = TradeDecision(
+        direction="WMATIC_TO_USDC",
+        amount_in=int(3 * 1_000_000_000_000_000_000),
+        trade_size=6.33,
+    )
+    assert not _main_strategy_low_stables_dust_rebuild_execution_bypass(
+        state, d, decision_notional_usd=6.33, min_trade_usd=10.0
+    )
+    _record_low_stables_dust_rebuild_allowed(state)
+    assert _main_strategy_low_stables_dust_rebuild_execution_bypass(
+        state, d, decision_notional_usd=6.33, min_trade_usd=10.0
+    )
+    _clear_low_stables_dust_rebuild_pending(state)
+    assert not _main_strategy_low_stables_dust_rebuild_execution_bypass(
+        state, d, decision_notional_usd=6.33, min_trade_usd=10.0
+    )
+
+
+def test_low_stables_dust_rebuild_execution_bypass_rejects_at_or_above_min_trade():
+    state: dict = {}
+    _record_low_stables_dust_rebuild_allowed(state)
+    d = TradeDecision(direction="WMATIC_TO_USDC", amount_in=1, trade_size=10.0)
+    assert not _main_strategy_low_stables_dust_rebuild_execution_bypass(
+        state, d, decision_notional_usd=10.0, min_trade_usd=10.0
+    )
 
 
 def test_x_signal_min_trade_guard_bypass_rejects_non_equity_direction():

@@ -1608,6 +1608,79 @@ def test_main_skips_small_wmatic_exit_when_below_min_trade_usd(monkeypatch, caps
     assert "TRADE SKIPPED | below minimum size" in out
 
 
+def test_main_low_stables_dust_rebuild_min_trade_guard_bypassed(monkeypatch, capsys):
+    """Planning-approved low-stables dust rebuild clears MIN_TRADE_USD at execution."""
+    monkeypatch.setenv("POLYGON_PRIVATE_KEY", "0x" + "a" * 64)
+    state = {"low_stables_dust_rebuild": {"pending_execution": True}}
+    monkeypatch.setattr(clean_swap, "load_state", lambda: state)
+    monkeypatch.setattr(
+        clean_swap,
+        "get_balances",
+        lambda: clean_swap.Balances(usdt=5.0, wmatic=80.0, pol=1.0, usdc=4.0),
+    )
+    monkeypatch.setattr(clean_swap, "has_active_lock", lambda: False)
+    monkeypatch.setattr(clean_swap, "create_lock", lambda: None)
+    monkeypatch.setattr(clean_swap, "release_lock", lambda: None)
+    wmatic_price = 0.09
+    monkeypatch.setattr(clean_swap, "get_live_wmatic_price", lambda: wmatic_price)
+    monkeypatch.setattr(clean_swap, "write_portfolio_history_snapshot", lambda _price: None)
+    monkeypatch.setattr(clean_swap, "is_global_cooldown_active", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(clean_swap, "save_state", lambda _state: None)
+    monkeypatch.setattr(clean_swap, "get_pol_balance", lambda: 1.0)
+    monkeypatch.setattr(
+        clean_swap,
+        "get_gas_status",
+        lambda **_kw: {
+            "ok": True,
+            "gas_gwei": 20.0,
+            "max_gwei": 80.0,
+            "pol_balance": 1.0,
+            "min_pol_balance": 0.005,
+        },
+    )
+    monkeypatch.setattr(clean_swap, "MIN_TRADE_USD", 10.0)
+
+    logs: list[str] = []
+    monkeypatch.setattr(clean_swap, "_log_trade_skipped", lambda reason: logs.append(reason))
+    notional = 6.33
+    monkeypatch.setattr(
+        swap_exec,
+        "determine_trade_decision",
+        lambda *_args, **_kwargs: clean_swap.TradeDecision(
+            direction="WMATIC_TO_USDC",
+            amount_in=int((notional / wmatic_price) * 1_000_000_000_000_000_000),
+            trade_size=notional,
+            message="dust rebuild",
+        ),
+    )
+    monkeypatch.setattr(
+        swap_exec,
+        "cs_evaluate_take_profit",
+        lambda *_args, **_kwargs: (False, None),
+    )
+    monkeypatch.setattr(swap_exec, "_profit_take_balance_relief_bypass_allowed", lambda *_a, **_k: False)
+    monkeypatch.setattr(swap_exec, "_main_strategy_mild_loss_rotation_min_notional_bypass_allowed", lambda *_a, **_k: False)
+
+    swap_called = {"ok": False}
+
+    async def _approve_and_swap(*_args, **_kwargs):
+        swap_called["ok"] = True
+        return "0xhash"
+
+    monkeypatch.setattr(swap_exec, "approve_and_swap", _approve_and_swap)
+    monkeypatch.setattr(clean_swap, "mark_asset_traded", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(clean_swap, "mark_wallet_traded", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(swap_exec.wallet_performance, "record_copy_exit", lambda **_kwargs: [])
+
+    asyncio.run(clean_swap.main(dry_run=False))
+
+    out = capsys.readouterr().out
+    assert swap_called["ok"]
+    assert not any("min_trade_guard" in x for x in logs)
+    assert "min_trade_guard bypassed" in out
+    assert state["low_stables_dust_rebuild"].get("pending_execution") is None
+
+
 def test_main_profit_take_min_trade_guard_bypassed_when_balance_relief_applies(monkeypatch, capsys):
     """TEMPORARY: sub-MIN_TRADE_USD WMATIC→USDT profit exit may clear min_trade_guard when relief passes."""
     monkeypatch.setenv("POLYGON_PRIVATE_KEY", "0x" + "a" * 64)
