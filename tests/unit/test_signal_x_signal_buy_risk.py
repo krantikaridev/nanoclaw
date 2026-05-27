@@ -86,3 +86,58 @@ def test_buy_risk_divergence_still_usdt_only(vm_threshold, monkeypatch):
     assert level == "HIGH"
     assert "very_large_usdt_divergence" in (ctx.get("reasons") or [])
     assert "usdt_below_high_buffer" not in (ctx.get("reasons") or [])
+
+
+def test_reduced_high_risk_xsignal_eligible(monkeypatch):
+    monkeypatch.setattr(signal_module, "allow_reduced_high_risk_xsignal", lambda: True)
+    assert signal_module.reduced_high_risk_xsignal_eligible(
+        total_portfolio_usd=140.0,
+        signal_strength=0.85,
+    )
+    assert not signal_module.reduced_high_risk_xsignal_eligible(
+        total_portfolio_usd=120.0,
+        signal_strength=0.85,
+    )
+    assert not signal_module.reduced_high_risk_xsignal_eligible(
+        total_portfolio_usd=140.0,
+        signal_strength=0.75,
+    )
+
+
+def test_apply_reduced_high_risk_xsignal_override(monkeypatch):
+    monkeypatch.setattr(signal_module, "allow_reduced_high_risk_xsignal", lambda: True)
+    mult, skip, applied = signal_module._apply_reduced_high_risk_xsignal_override(
+        risk_level="HIGH",
+        skip_buys=True,
+        buy_mult=0.0,
+        total_portfolio_usd=140.0,
+        max_buy_signal_strength=0.82,
+    )
+    assert applied
+    assert mult == pytest.approx(0.40)
+    assert skip is False
+
+    mult2, skip2, applied2 = signal_module._apply_reduced_high_risk_xsignal_override(
+        risk_level="HIGH",
+        skip_buys=True,
+        buy_mult=0.0,
+        total_portfolio_usd=140.0,
+        max_buy_signal_strength=0.70,
+    )
+    assert not applied2
+    assert mult2 == 0.0
+    assert skip2 is True
+
+
+def test_apply_reduced_high_risk_disabled_by_env(monkeypatch):
+    monkeypatch.setattr(signal_module, "allow_reduced_high_risk_xsignal", lambda: False)
+    mult, skip, applied = signal_module._apply_reduced_high_risk_xsignal_override(
+        risk_level="HIGH",
+        skip_buys=True,
+        buy_mult=0.0,
+        total_portfolio_usd=200.0,
+        max_buy_signal_strength=0.95,
+    )
+    assert not applied
+    assert mult == 0.0
+    assert skip is True

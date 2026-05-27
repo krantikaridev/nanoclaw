@@ -2,6 +2,7 @@ import asyncio
 from datetime import datetime
 import json
 
+import config as cfg
 import clean_swap
 from modules import swap_executor as swap_exec
 
@@ -1247,6 +1248,127 @@ def test_determine_trade_decision_main_strategy_dust_defer_uses_eight_dollar_flo
     )
 
     assert out_deferred.should_execute is False
+    assert any("main_strategy_dust_deferred" in reason for reason in skipped)
+
+
+def test_main_strategy_low_stables_dust_rebuild_allows_sub_floor_sell(monkeypatch, capsys):
+    """Low-stables exception: $6 WMATIC→USDT passes when stables critical and portfolio healthy."""
+    monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))
+    monkeypatch.setattr(clean_swap, "evaluate_take_profit", lambda *_a, **_k: (False, None))
+    monkeypatch.setattr(clean_swap, "MIN_TRADE_USD", 15.0)
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", False)
+    monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
+    monkeypatch.setattr(swap_exec, "_low_stables_dust_rebuild_enabled", lambda: True)
+
+    main_dust = clean_swap.TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(6.0 * 1_000_000_000_000_000_000),
+        message="tiny main sell",
+    )
+    monkeypatch.setattr(swap_exec, "select_main_strategy_trade", lambda *_a, **_k: main_dust)
+    monkeypatch.setattr(
+        swap_exec,
+        "_wmatic_stable_p2_relief_override_active",
+        lambda *_a, **_k: False,
+    )
+
+    skipped: list[str] = []
+    monkeypatch.setattr(clean_swap, "_log_trade_skipped", lambda reason: skipped.append(reason))
+
+    out = clean_swap.determine_trade_decision(
+        state={},
+        balances=clean_swap.Balances(
+            usdt=7.0,
+            usdc=2.0,
+            wmatic=120.0,
+            pol=1.0,
+            total_portfolio_usd=140.0,
+        ),
+        current_price=1.0,
+    )
+
+    captured = capsys.readouterr().out
+    assert out is main_dust
+    assert not any("main_strategy_dust_deferred" in reason for reason in skipped)
+    assert swap_exec._MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_LOG in captured
+
+
+def test_main_strategy_low_stables_dust_rebuild_still_defers_when_stables_ample(monkeypatch):
+    monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))
+    monkeypatch.setattr(clean_swap, "evaluate_take_profit", lambda *_a, **_k: (False, None))
+    monkeypatch.setattr(clean_swap, "MIN_TRADE_USD", 15.0)
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", False)
+    monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
+    monkeypatch.setattr(swap_exec, "_low_stables_dust_rebuild_enabled", lambda: True)
+
+    main_dust = clean_swap.TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(6.0 * 1_000_000_000_000_000_000),
+        message="tiny main sell",
+    )
+    monkeypatch.setattr(swap_exec, "select_main_strategy_trade", lambda *_a, **_k: main_dust)
+    monkeypatch.setattr(
+        swap_exec,
+        "_wmatic_stable_p2_relief_override_active",
+        lambda *_a, **_k: False,
+    )
+
+    skipped: list[str] = []
+    monkeypatch.setattr(clean_swap, "_log_trade_skipped", lambda reason: skipped.append(reason))
+
+    out = clean_swap.determine_trade_decision(
+        state={},
+        balances=clean_swap.Balances(
+            usdt=30.0,
+            usdc=20.0,
+            wmatic=120.0,
+            pol=1.0,
+            total_portfolio_usd=160.0,
+        ),
+        current_price=1.0,
+    )
+
+    assert out.should_execute is False
+    assert any("main_strategy_dust_deferred" in reason for reason in skipped)
+
+
+def test_main_strategy_low_stables_dust_rebuild_rate_limited(monkeypatch):
+    monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))
+    monkeypatch.setattr(clean_swap, "evaluate_take_profit", lambda *_a, **_k: (False, None))
+    monkeypatch.setattr(clean_swap, "MIN_TRADE_USD", 15.0)
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", False)
+    monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
+    monkeypatch.setattr(swap_exec, "_low_stables_dust_rebuild_enabled", lambda: True)
+    monkeypatch.setattr(cfg, "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_CYCLE_COOLDOWN", 3, raising=False)
+
+    main_dust = clean_swap.TradeDecision(
+        direction="WMATIC_TO_USDT",
+        amount_in=int(6.0 * 1_000_000_000_000_000_000),
+        message="tiny main sell",
+    )
+    monkeypatch.setattr(swap_exec, "select_main_strategy_trade", lambda *_a, **_k: main_dust)
+    monkeypatch.setattr(
+        swap_exec,
+        "_wmatic_stable_p2_relief_override_active",
+        lambda *_a, **_k: False,
+    )
+
+    skipped: list[str] = []
+    monkeypatch.setattr(clean_swap, "_log_trade_skipped", lambda reason: skipped.append(reason))
+
+    balances = clean_swap.Balances(
+        usdt=7.0,
+        usdc=2.0,
+        wmatic=120.0,
+        pol=1.0,
+        total_portfolio_usd=140.0,
+    )
+    state: dict = {}
+    out1 = clean_swap.determine_trade_decision(state, balances, current_price=1.0)
+    assert out1 is main_dust
+
+    out2 = clean_swap.determine_trade_decision(state, balances, current_price=1.0)
+    assert out2.should_execute is False
     assert any("main_strategy_dust_deferred" in reason for reason in skipped)
 
 

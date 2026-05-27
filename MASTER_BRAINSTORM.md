@@ -15,9 +15,10 @@
 
 ## Current focus (top of stack)
 
-- **Cleanup #5 — LIVE on VM `d1b82635` (2026-05-26):** defensive_pause / cycle risk uses **STABLE_USD**. Post-deploy: watch for no new `pausing X-signal BUY` when `stable_usd≥$40`.
-- **PnL accounting fix (operator):** `portfolio_baseline.json` write **failed** (noisy `python3 -c` polluted `TOTAL` → invalid JSON → CSV first row ~$82 still drives **+47%**). Re-write baseline with **quiet** command below; then **tag-only session** resets on future deploys.
-- **Parked (v3):** top-up / deposit must not count as profit in `portfolio_history` steps.
+- **Turnover metrics — MERGED `22f96757` on `origin/V2`:** `turnover_multiple_session/day_utc` in ROTATION block + `nanovel`. **VM deploy:** `git pull` + `nanoup` (no `--reset-session` on top-up).
+- **Operator — USDC top-up in progress (~$16 USDT Binance funding):** withdraw/bridge **USDC on Polygon** to `0x05eF…` so on-chain **STABLE ≥ ~$15** (target **~$20** landed after fees). **Do not** reset session/baseline after top-up (v3 flow tags later).
+- **Cleanup #5 — LIVE `d1b82635` / VM may be `580217bf`:** defensive_pause correct when stables low; fills resume when stables ample.
+- **Parked (v3):** top-up must not count as profit in `portfolio_history` / session %.
 - **`nanodaily` exit=127:** bare `python` not on PATH — **`source .venv/bin/activate`** before `nanodaily`, or use **`nh`** / **`nanopnl`** (worked in operator session).
 - **Parked:** Instance B; 9 legacy test failures; in-flight stables race.
 - **Operator north star:** +ve net PnL on stage → seed scale → rotation velocity → ~$100k (release train).
@@ -113,8 +114,8 @@ nanopnl | grep -E 'Session PnL|Session start|TOTAL'
 
 ```bash
 source .venv/bin/activate
-nanopnl | grep -E 'TOTAL|Session PnL|Since baseline|velocity_fills'
-nanovel    # rotation only (UTC day + session since --reset-session)
+nanopnl | grep -E 'TOTAL|Session PnL|Since baseline|velocity_fills|turnover_'
+nanovel    # rotation only: fills + turnover multiples
 nh         # RPC gate
 nanodaily  # includes ROTATION block in --daily-summary
 grep "X-SIGNAL BUY RISK" real_cron.log | tail -1
@@ -128,6 +129,8 @@ grep '=== CYCLE' real_cron.log | tail -1
 
 | Commit     | Title                                                                           | Side chat            | Status                                              |
 | ---------- | ------------------------------------------------------------------------------- | -------------------- | --------------------------------------------------- |
+| `22f96757` | PnL turnover: `turnover_multiple_*` + `sum_turnover_usd` in ROTATION / nanovel  | turnover side chat   | merged 2026-05-27; VM pull pending                  |
+| `580217bf` | Velocity in pnl_report + nanodaily venv python + `portfolio_baseline.json` gitignore | turnover prep        | merged 2026-05-26; on VM                            |
 | `76946ea3` | Cleanup #3 (4/4): suppress `BALANCE READ FAILED` spam after first per-token log | Cleanup #3 side chat | merged 2026-05-26                                   |
 | `9adb388d` | Cleanup #3 (3/4): pin stables drift invariants at `get_balances()` surface      | Cleanup #3 side chat | merged 2026-05-26                                   |
 | `9abb0881` | Cleanup #3 (2/4): treat `current_price_usd` as a true FALLBACK FLOOR for FE_USD | Cleanup #3 side chat | merged 2026-05-26                                   |
@@ -230,4 +233,10 @@ START BY: reading MASTER_BRAINSTORM.md in full, then ask the operator what's nex
 - Commits: `d1b826357a48ec2f3622eb5456fedef7926a10ce` — shared `_x_signal_buy_risk_level_from_buffers`; `_cycle_risk_level` passes `usdc`; `test_defensive_pause` uses usdt=9, usdc=2 for HIGH
 - Tests: canonical gate **57 → 59** (+2 in `test_signal_x_signal_buy_risk.py`); **59/59** green
 - Notes: Split-brain after #4 — `Risk=LOW` + `PLAN SELECTED` but `defensive_pause (risk=HIGH) — pausing X-signal BUY` on VM @ `844b2e21`. Operator VM @ 17:40 UTC still **`844b2e21`** → **`nanoup` required**. `.env.example` unchanged. **Velocity today (UTC):** ~**10** fills via `Swap executed successfully!` + CYCLE ts (not date-grep). **Session PnL:** ~**-0.15%** since 09:54 reset.
+
+### 2026-05-27 — PnL turnover metrics (rotation reporting)
+
+- Commits: `22f96757` — `sum_turnover_usd`, `format_turnover_lines`, ROTATION block + `--velocity-only` / `nanovel`
+- Tests: `test_pnl_report.py` **30/30** (+5 turnover tests)
+- Notes: **turnover_multiple** = notional ÷ current seed TOTAL; ignores plan-only `TRADE_ATTRIBUTION | Asset=`. Operator top-up ~$16 USDT in flight — **no session/baseline reset** after transfer.
 

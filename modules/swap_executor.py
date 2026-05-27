@@ -381,6 +381,14 @@ def _defensive_pause_state(state: dict, *, risk_level: str) -> tuple[bool, int]:
     return False, 0
 
 
+def _clear_defensive_pause_window(state: dict) -> None:
+    """End an active defensive pause (e.g. reduced HIGH-risk X-SIGNAL allowed this cycle)."""
+    d = state.setdefault("defensive_pause", {})
+    if int(d.get("remaining_cycles", 0) or 0) > 0:
+        d["remaining_cycles"] = 0
+        print(f"{runtime._nanolog()}Defensive pause window cleared (reduced HIGH-risk X-SIGNAL)")
+
+
 def _facade():
     """Tests monkeypatch attrs on ``clean_swap`` — always read knobs from that module."""
     return importlib.import_module("clean_swap")
@@ -799,6 +807,11 @@ _MAIN_STRATEGY_MODERATE_FORCE_WM_MIN_USD = float(cfg.MAIN_STRATEGY_MODERATE_FORC
 _MAIN_STRATEGY_MODERATE_FORCE_CYCLES_MIN = int(cfg.MAIN_STRATEGY_MODERATE_FORCE_CYCLES_MIN)
 _MAIN_STRATEGY_MODERATE_FORCE_NOTIONAL_FLOOR_USD = float(cfg.MAIN_STRATEGY_MODERATE_ROTATION_MIN_NOTIONAL_USD)
 _MAIN_STRATEGY_DUST_DEFER_NOTIONAL_USD = float(cfg.MAIN_STRATEGY_DUST_DEFER_NOTIONAL_USD)
+# Low-stables dust rebuild: sub-$8 WMATIC→stable when combined stables are critically low (reversible).
+_MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_LOG = (
+    "Main Strategy dust conversion to USDC for stable buffer rebuild"
+)
+_MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_STATE_KEY = "low_stables_dust_rebuild"
 _MAIN_STRATEGY_LONG_IDLE_CYCLES_LOW = int(cfg.MAIN_STRATEGY_LONG_IDLE_CYCLES_LOW)
 _MAIN_STRATEGY_LONG_IDLE_CYCLES_MODERATE = int(cfg.MAIN_STRATEGY_LONG_IDLE_CYCLES_MODERATE)
 _MAIN_STRATEGY_LONG_IDLE_CYCLES_HEALTHY = int(cfg.MAIN_STRATEGY_LONG_IDLE_CYCLES_HEALTHY)
@@ -1286,6 +1299,93 @@ def _profit_take_balance_relief_signal_strength(
         valid_exit_reason=valid_exit_reason,
     )
     return _round_relief_signal_strength(strength)
+
+
+def _low_stables_dust_rebuild_enabled() -> bool:
+    return bool(getattr(cfg, "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_ENABLED", True))
+
+
+def _low_stables_dust_rebuild_state(state: dict | None) -> dict:
+    if state is None:
+        return {}
+    return state.setdefault(_MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_STATE_KEY, {})
+
+
+def _low_stables_dust_rebuild_bump_cycle(state: dict) -> int:
+    d = _low_stables_dust_rebuild_state(state)
+    n = int(d.get("cycle_count", 0) or 0) + 1
+    d["cycle_count"] = n
+    return n
+
+
+def _low_stables_dust_rebuild_rate_ok(state: dict | None) -> bool:
+    """At most one rebuild attempt every N planning cycles (see env cooldown)."""
+    if state is None:
+        return True
+    cooldown = max(1, int(getattr(cfg, "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_CYCLE_COOLDOWN", 3)))
+    d = _low_stables_dust_rebuild_state(state)
+    last = int(d.get("last_allowed_cycle", 0) or 0)
+    current = int(d.get("cycle_count", 0) or 0)
+    if last <= 0:
+        return True
+    return (current - last) >= cooldown
+
+
+def _record_low_stables_dust_rebuild_allowed(state: dict) -> None:
+    d = _low_stables_dust_rebuild_state(state)
+    d["last_allowed_cycle"] = int(d.get("cycle_count", 0) or 0)
+
+
+def _main_strategy_low_stables_dust_rebuild_override_active(
+    decision: TradeDecision,
+    *,
+    balances: Balances,
+    current_price_usd: float,
+    state: dict | None = None,
+) -> bool:
+    """
+    Exception path when MAIN_STRATEGY would dust-defer a small WMATIC→stable exit but stables are critical.
+
+    Only applies below the normal ``MAIN_STRATEGY_DUST_DEFER_NOTIONAL_USD`` floor (default $8), down to
+    ``MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_NOTIONAL_FLOOR_USD`` (default $5). Normal dust thresholds unchanged.
+    """
+    if not _low_stables_dust_rebuild_enabled():
+        return False
+    direction = str(decision.direction or "").strip().upper()
+    if direction not in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:
+        return False
+
+    stable_usd = float(balances.usdt) + float(balances.usdc)
+    max_stable = float(getattr(cfg, "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_MAX_STABLE_USD", 15.0))
+    if stable_usd + 1e-9 >= max_stable:
+        return False
+
+    min_portfolio = float(
+        getattr(cfg, "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_MIN_PORTFOLIO_USD", 130.0)
+    )
+    if float(balances.total_portfolio_usd) <= min_portfolio:
+        return False
+
+    wm_equiv_usd = float(balances.wmatic) * float(current_price_usd)
+    # Healthy stack: not in the depleted low-WMATIC band (operator still holds rotation capital in WMATIC).
+    if _profit_take_wmatic_stack_low(wm_equiv_usd):
+        return False
+
+    notional_usd = _decision_notional_usd(decision, current_price_usd=current_price_usd)
+    rebuild_floor = float(
+        getattr(cfg, "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_NOTIONAL_FLOOR_USD", 5.0)
+    )
+    dust_floor = float(_MAIN_STRATEGY_DUST_DEFER_NOTIONAL_USD)
+    if notional_usd is None:
+        return False
+    if notional_usd + 1e-9 < rebuild_floor:
+        return False
+    if notional_usd + 1e-9 >= dust_floor:
+        return False
+
+    if not _low_stables_dust_rebuild_rate_ok(state):
+        return False
+    return True
 
 
 def _profit_take_rotation_state(state: dict | None) -> dict:
@@ -2515,6 +2615,7 @@ def determine_trade_decision(
 
     # TEMPORARY (May 2026 sprint): track cycles since last WMATIC→stable profit exit for force-relief.
     _profit_take_bump_cycle_counter(state)
+    _low_stables_dust_rebuild_bump_cycle(state)
 
     risk_level = _cycle_risk_level(balances)
     pause_active, pause_remaining = _defensive_pause_state(state, risk_level=risk_level)
@@ -2581,10 +2682,24 @@ def determine_trade_decision(
             and xd_local.should_execute
             and str(xd_local.direction or "").strip().upper() in {"USDC_TO_EQUITY"}
         ):
-            cs._log_trade_skipped(
-                f"defensive_pause (risk=HIGH, remaining_cycles={pause_remaining}) — pausing X-signal BUY entries"
-            )
-            xd_local = None
+            strength = float(xd_local.signal_strength or 0.0)
+            if (
+                risk_level == "HIGH"
+                and signal_module.reduced_high_risk_xsignal_eligible(
+                    total_portfolio_usd=float(balances.total_portfolio_usd),
+                    signal_strength=strength,
+                )
+            ):
+                _clear_defensive_pause_window(state)
+                print(
+                    f"{runtime._nanolog()}defensive_pause skipped for reduced HIGH-risk X-SIGNAL "
+                    f"(signal={strength:.2f}, total_portfolio_usd=${float(balances.total_portfolio_usd):.2f})"
+                )
+            else:
+                cs._log_trade_skipped(
+                    f"defensive_pause (risk=HIGH, remaining_cycles={pause_remaining}) — pausing X-signal BUY entries"
+                )
+                xd_local = None
         xd_dir_local = str(xd_local.direction or "").strip().upper() if xd_local else ""
         if (
             entries_paused
@@ -2924,6 +3039,23 @@ def determine_trade_decision(
         ):
             if main_dust_min_usd >= eff_main_min_usd:
                 print(_PROFIT_TAKE_P2_RELIEF_LOG)
+            return main_decision
+        if _main_strategy_low_stables_dust_rebuild_override_active(
+            main_decision,
+            balances=balances,
+            current_price_usd=current_price,
+            state=state,
+        ):
+            notional_rb = _decision_notional_usd(main_decision, current_price_usd=current_price)
+            notional_s = f"{notional_rb:.2f}" if notional_rb is not None else "?"
+            stable_usd = float(balances.usdt) + float(balances.usdc)
+            print(
+                f"{_MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_LOG} | "
+                f"direction={main_dir} | notional=${notional_s} | stables=${stable_usd:.2f} | "
+                f"wmatic_usd=${float(balances.wmatic) * float(current_price):.2f} | "
+                f"bypassing dust defer (floor=${float(_MAIN_STRATEGY_DUST_DEFER_NOTIONAL_USD):.2f})"
+            )
+            _record_low_stables_dust_rebuild_allowed(state)
             return main_decision
         if main_dust_min_usd >= eff_main_min_usd:
             main_dust_min_usd = float(_MAIN_STRATEGY_DUST_DEFER_NOTIONAL_USD)

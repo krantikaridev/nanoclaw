@@ -131,6 +131,64 @@ def _x_signal_buy_risk_level(*, usdt: float, usdc: float, wmatic: float) -> str:
     )
 
 
+# Reduced HIGH-risk X-SIGNAL: small entries on strong signals when stables are low but portfolio is healthy.
+_REDUCED_HIGH_RISK_XSIGNAL_MULT = 0.40
+_REDUCED_HIGH_RISK_MIN_SIGNAL = 0.80
+_REDUCED_HIGH_RISK_MIN_PORTFOLIO_USD = 130.0
+
+
+def allow_reduced_high_risk_xsignal() -> bool:
+    """Feature gate (default on). Set ALLOW_REDUCED_HIGH_RISK_XSIGNAL=false to restore full HIGH-risk block."""
+    return bool(cfg.env_bool("ALLOW_REDUCED_HIGH_RISK_XSIGNAL", True))
+
+
+def reduced_high_risk_xsignal_eligible(
+    *,
+    total_portfolio_usd: float,
+    signal_strength: float,
+) -> bool:
+    """Strong signal + healthy total portfolio while buffer tier is still HIGH."""
+    if not allow_reduced_high_risk_xsignal():
+        return False
+    if float(total_portfolio_usd) <= _REDUCED_HIGH_RISK_MIN_PORTFOLIO_USD:
+        return False
+    if abs(float(signal_strength)) + 1e-9 < _REDUCED_HIGH_RISK_MIN_SIGNAL:
+        return False
+    return True
+
+
+def _max_eligible_buy_signal_strength(eligible: Sequence[FollowedEquity]) -> float:
+    strengths = [
+        abs(float(a.signal_strength))
+        for a in eligible
+        if float(a.signal_strength) > 0
+    ]
+    return max(strengths, default=0.0)
+
+
+def _apply_reduced_high_risk_xsignal_override(
+    *,
+    risk_level: str,
+    skip_buys: bool,
+    buy_mult: float,
+    total_portfolio_usd: float,
+    max_buy_signal_strength: float,
+) -> tuple[float, bool, bool]:
+    """
+    When HIGH buffer risk but portfolio is healthy, allow limited BUY sizing instead of full skip.
+
+    Returns (buy_mult, skip_buys, applied).
+    """
+    if str(risk_level).strip().upper() != "HIGH" or not skip_buys:
+        return buy_mult, skip_buys, False
+    if not reduced_high_risk_xsignal_eligible(
+        total_portfolio_usd=total_portfolio_usd,
+        signal_strength=max_buy_signal_strength,
+    ):
+        return buy_mult, skip_buys, False
+    return _REDUCED_HIGH_RISK_XSIGNAL_MULT, False, True
+
+
 def _format_money(x: float) -> str:
     try:
         return f"${float(x):.2f}"
@@ -1109,6 +1167,25 @@ def try_x_signal_equity_decision(
             f"(Signal-Driven Rotation)"
         )
     eligible_count = len(eligible)
+    buy_mult, skip_buys, reduced_high_applied = _apply_reduced_high_risk_xsignal_override(
+        risk_level=risk_level,
+        skip_buys=skip_buys,
+        buy_mult=buy_mult,
+        total_portfolio_usd=float(balances.total_portfolio_usd),
+        max_buy_signal_strength=_max_eligible_buy_signal_strength(eligible),
+    )
+    if reduced_high_applied:
+        print(
+            f"{runtime._nanolog()}HIGH risk reduced sizing applied "
+            f"({_REDUCED_HIGH_RISK_XSIGNAL_MULT:.2f}x) for strong signal"
+        )
+        print(
+            f"{runtime._nanolog()}X-SIGNAL BUY RISK | Risk={risk_level} | "
+            f"USDT=${float(balances.usdt):.2f} | USDC=${float(balances.usdc):.2f} | "
+            f"STABLE_USD=${float(risk_ctx.get('onchain_stable_usd', 0.0)):.2f} | "
+            f"WMATIC={float(balances.wmatic):.4f} | "
+            f"buy_size_multiplier={buy_mult:.2f} | total_portfolio_usd=${float(balances.total_portfolio_usd):.2f}"
+        )
     high_conviction = bool(cfg_enabled) and any(
         float(a.signal_strength) >= high_conviction_threshold for a in eligible if float(a.signal_strength) > 0
     )
