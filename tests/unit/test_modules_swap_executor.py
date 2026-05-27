@@ -59,6 +59,10 @@ from modules.swap_executor import (
     _main_strategy_low_stables_dust_rebuild_execution_bypass,
     _clear_low_stables_dust_rebuild_pending,
     _record_low_stables_dust_rebuild_allowed,
+    _record_low_stables_dust_rebuild_pending,
+    _record_low_stables_dust_rebuild_executed,
+    _apply_low_stables_rebuild_rotation_precedence,
+    _low_stables_dust_rebuild_rate_ok,
     _x_signal_small_high_conviction_relaxed_slippage,
     estimate_expected_net_edge_pct,
     select_main_strategy_trade,
@@ -115,6 +119,31 @@ def test_x_signal_min_trade_guard_bypass_rejects_low_strength():
         signal_strength=0.80,
     )
     assert not _x_signal_min_trade_guard_bypass(d, decision_notional_usd=7.99, min_trade_usd=10.0)
+
+
+def test_low_stables_dust_rebuild_rate_ok_while_pending_despite_cooldown():
+    state = {
+        "low_stables_dust_rebuild": {
+            "pending_execution": True,
+            "last_allowed_cycle": 100,
+            "cycle_count": 101,
+        }
+    }
+    assert _low_stables_dust_rebuild_rate_ok(state)
+
+
+def test_low_stables_dust_rebuild_pending_does_not_consume_cooldown_until_executed():
+    state: dict = {"low_stables_dust_rebuild": {"cycle_count": 5}}
+    _record_low_stables_dust_rebuild_pending(state)
+    assert state["low_stables_dust_rebuild"].get("last_allowed_cycle") is None
+    _record_low_stables_dust_rebuild_executed(state)
+    assert state["low_stables_dust_rebuild"]["last_allowed_cycle"] == 5
+    assert "pending_execution" not in state["low_stables_dust_rebuild"]
+
+
+def test_low_stables_rebuild_rotation_precedence_defers_x_signal_when_stables_critical():
+    b = Balances(usdt=0.0, usdc=9.13, wmatic=156.0, pol=1.0, total_portfolio_usd=140.0)
+    assert _apply_low_stables_rebuild_rotation_precedence(True, balances=b, state={}) is False
 
 
 def test_low_stables_dust_rebuild_execution_bypass_requires_pending_flag():

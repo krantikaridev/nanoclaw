@@ -1339,11 +1339,13 @@ def _low_stables_dust_rebuild_bump_cycle(state: dict) -> int:
 
 
 def _low_stables_dust_rebuild_rate_ok(state: dict | None) -> bool:
-    """At most one rebuild attempt every N planning cycles (see env cooldown)."""
+    """At most one new rebuild plan every N cycles; pending plans may retry until executed."""
     if state is None:
         return True
-    cooldown = max(1, int(getattr(cfg, "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_CYCLE_COOLDOWN", 3)))
     d = _low_stables_dust_rebuild_state(state)
+    if bool(d.get("pending_execution")):
+        return True
+    cooldown = max(1, int(getattr(cfg, "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_CYCLE_COOLDOWN", 3)))
     last = int(d.get("last_allowed_cycle", 0) or 0)
     current = int(d.get("cycle_count", 0) or 0)
     if last <= 0:
@@ -1351,10 +1353,51 @@ def _low_stables_dust_rebuild_rate_ok(state: dict | None) -> bool:
     return (current - last) >= cooldown
 
 
-def _record_low_stables_dust_rebuild_allowed(state: dict) -> None:
+def _record_low_stables_dust_rebuild_pending(state: dict) -> None:
+    """Planning approved a dust rebuild; execution may retry until swap succeeds."""
+    d = _low_stables_dust_rebuild_state(state)
+    d["pending_execution"] = True
+
+
+def _record_low_stables_dust_rebuild_executed(state: dict) -> None:
+    """Consume cooldown only after a successful WMATIC→stable rebuild swap."""
     d = _low_stables_dust_rebuild_state(state)
     d["last_allowed_cycle"] = int(d.get("cycle_count", 0) or 0)
-    d["pending_execution"] = True
+    d.pop("pending_execution", None)
+
+
+def _record_low_stables_dust_rebuild_allowed(state: dict) -> None:
+    """Backward-compatible alias for planning-time pending flag."""
+    _record_low_stables_dust_rebuild_pending(state)
+
+
+def _apply_low_stables_rebuild_rotation_precedence(
+    rotation_first: bool,
+    *,
+    balances: Balances,
+    state: dict | None,
+) -> bool:
+    """Stable-first: defer rotation-priority X-SIGNAL BUY when stables rebuild is urgent."""
+    if not rotation_first:
+        return False
+    if not _low_stables_dust_rebuild_enabled():
+        return rotation_first
+    stable_usd = float(balances.usdt) + float(balances.usdc)
+    max_stable = float(getattr(cfg, "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_MAX_STABLE_USD", 15.0))
+    min_portfolio = float(
+        getattr(cfg, "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_MIN_PORTFOLIO_USD", 130.0)
+    )
+    if stable_usd + 1e-9 >= max_stable:
+        return rotation_first
+    if float(balances.total_portfolio_usd) <= min_portfolio:
+        return rotation_first
+    if not _low_stables_dust_rebuild_rate_ok(state):
+        return rotation_first
+    print(
+        f"{runtime._nanolog()}Signal-Driven Rotation: X-Signal BUY deferred — "
+        "low-stables stable rebuild has cycle priority"
+    )
+    return False
 
 
 def _main_strategy_low_stables_dust_rebuild_execution_bypass(
@@ -1418,11 +1461,6 @@ def _main_strategy_low_stables_dust_rebuild_override_active(
         getattr(cfg, "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_MIN_PORTFOLIO_USD", 130.0)
     )
     if float(balances.total_portfolio_usd) <= min_portfolio:
-        return False
-
-    wm_equiv_usd = float(balances.wmatic) * float(current_price_usd)
-    # Healthy stack: not in the depleted low-WMATIC band (operator still holds rotation capital in WMATIC).
-    if _profit_take_wmatic_stack_low(wm_equiv_usd):
         return False
 
     notional_usd = _decision_notional_usd(decision, current_price_usd=current_price_usd)
@@ -2685,6 +2723,11 @@ def determine_trade_decision(
         f"| copy_targets={len(target_wallets_prelude)}"
     )
     x_signal_rotation_first = _signal_driven_rotation_x_signal_first()
+    x_signal_rotation_first = _apply_low_stables_rebuild_rotation_precedence(
+        x_signal_rotation_first,
+        balances=balances,
+        state=state,
+    )
     print(
         "🔍 DECISION PATH | precedence: PROTECTION → "
         + (
@@ -3082,18 +3125,6 @@ def determine_trade_decision(
             state=state,
         ):
             main_dust_min_usd = float(_MAIN_STRATEGY_MILD_LOSS_IDLE_NOTIONAL_FLOOR_USD)
-        # TEMPORARY SPRINT FIX - May 2026: P2 bypass-first — overrides MAIN_STRATEGY dust defer / $10 floor.
-        if _wmatic_stable_p2_relief_override_active(
-            main_decision,
-            balances=balances,
-            current_price_usd=current_price,
-            min_trade_usd=eff_main_min_usd,
-            profit_signal=profit_signal,
-            state=state,
-        ):
-            if main_dust_min_usd >= eff_main_min_usd:
-                print(_PROFIT_TAKE_P2_RELIEF_LOG)
-            return main_decision
         if _main_strategy_low_stables_dust_rebuild_override_active(
             main_decision,
             balances=balances,
@@ -3109,7 +3140,19 @@ def determine_trade_decision(
                 f"wmatic_usd=${float(balances.wmatic) * float(current_price):.2f} | "
                 f"bypassing dust defer (floor=${float(_MAIN_STRATEGY_DUST_DEFER_NOTIONAL_USD):.2f})"
             )
-            _record_low_stables_dust_rebuild_allowed(state)
+            _record_low_stables_dust_rebuild_pending(state)
+            return main_decision
+        # TEMPORARY SPRINT FIX - May 2026: P2 bypass-first — overrides MAIN_STRATEGY dust defer / $10 floor.
+        if _wmatic_stable_p2_relief_override_active(
+            main_decision,
+            balances=balances,
+            current_price_usd=current_price,
+            min_trade_usd=eff_main_min_usd,
+            profit_signal=profit_signal,
+            state=state,
+        ):
+            if main_dust_min_usd >= eff_main_min_usd:
+                print(_PROFIT_TAKE_P2_RELIEF_LOG)
             return main_decision
         if main_dust_min_usd >= eff_main_min_usd:
             main_dust_min_usd = float(_MAIN_STRATEGY_DUST_DEFER_NOTIONAL_USD)
@@ -3461,6 +3504,8 @@ async def main(*, dry_run: bool = False) -> None:
             if str(decision.direction or "").strip().upper() in {"WMATIC_TO_USDT", "WMATIC_TO_USDC"}:
                 decision_log.record_profit_take_execution(state, success=True, reason="swap_ok")
                 _profit_take_record_exit(state)
+                if bool(_low_stables_dust_rebuild_state(state).get("pending_execution")):
+                    _record_low_stables_dust_rebuild_executed(state)
             if decision.cooldown_asset:
                 sym_ca, secs_a = decision.cooldown_asset
                 cs.mark_asset_traded(sym_ca, cooldown_seconds=int(secs_a))

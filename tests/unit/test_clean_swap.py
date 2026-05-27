@@ -1368,8 +1368,65 @@ def test_main_strategy_low_stables_dust_rebuild_rate_limited(monkeypatch):
     assert out1 is main_dust
 
     out2 = clean_swap.determine_trade_decision(state, balances, current_price=1.0)
-    assert out2.should_execute is False
+    assert out2 is main_dust
+    assert state["low_stables_dust_rebuild"].get("pending_execution") is True
+
+    swap_exec._record_low_stables_dust_rebuild_executed(state)
+    skipped.clear()
+    out3 = clean_swap.determine_trade_decision(state, balances, current_price=1.0)
+    assert out3.should_execute is False
     assert any("main_strategy_dust_deferred" in reason for reason in skipped)
+
+
+def test_main_strategy_low_stables_dust_rebuild_instance_a_balances(monkeypatch, capsys):
+    """Stage wallet: ~$9 stables, ~$14 WMATIC stack, ~$6 reserve-protection sell."""
+    monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))
+    monkeypatch.setattr(clean_swap, "evaluate_take_profit", lambda *_a, **_k: (False, None))
+    monkeypatch.setattr(clean_swap, "MIN_TRADE_USD", 10.0)
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
+    monkeypatch.setattr(swap_exec, "_low_stables_dust_rebuild_enabled", lambda: True)
+    monkeypatch.setattr(
+        swap_exec,
+        "_signal_driven_rotation_x_signal_first",
+        lambda: True,
+    )
+    monkeypatch.setattr(clean_swap, "try_x_signal_equity_decision", lambda *_a, **_k: None)
+
+    wmatic_price = 14.08 / 156.57
+    main_dust = clean_swap.TradeDecision(
+        direction="WMATIC_TO_USDC",
+        amount_in=int((6.33 / wmatic_price) * 1_000_000_000_000_000_000),
+        trade_size=6.33,
+        message="reserve protection",
+    )
+    monkeypatch.setattr(swap_exec, "select_main_strategy_trade", lambda *_a, **_k: main_dust)
+    monkeypatch.setattr(
+        swap_exec,
+        "_wmatic_stable_p2_relief_override_active",
+        lambda *_a, **_k: False,
+    )
+
+    skipped: list[str] = []
+    monkeypatch.setattr(clean_swap, "_log_trade_skipped", lambda reason: skipped.append(reason))
+
+    out = clean_swap.determine_trade_decision(
+        state={},
+        balances=clean_swap.Balances(
+            usdt=0.0,
+            usdc=9.13,
+            wmatic=156.57,
+            pol=1.0,
+            total_portfolio_usd=140.53,
+        ),
+        current_price=wmatic_price,
+    )
+
+    captured = capsys.readouterr().out
+    assert out is main_dust
+    assert not any("main_strategy_dust_deferred" in reason for reason in skipped)
+    assert "low-stables stable rebuild has cycle priority" in captured
+    assert swap_exec._MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_LOG in captured
 
 
 def test_determine_trade_decision_main_strategy_balance_relief_before_dust_defer(monkeypatch, capsys):
