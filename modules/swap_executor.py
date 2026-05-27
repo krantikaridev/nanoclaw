@@ -1339,18 +1339,29 @@ def _low_stables_dust_rebuild_bump_cycle(state: dict) -> int:
 
 
 def _low_stables_dust_rebuild_rate_ok(state: dict | None) -> bool:
-    """At most one new rebuild plan every N cycles; pending plans may retry until executed."""
+    """Cooldown between *new* rebuild plans after a successful swap; pending may always retry."""
     if state is None:
         return True
     d = _low_stables_dust_rebuild_state(state)
     if bool(d.get("pending_execution")):
         return True
     cooldown = max(1, int(getattr(cfg, "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_CYCLE_COOLDOWN", 3)))
-    last = int(d.get("last_allowed_cycle", 0) or 0)
+    last = int(d.get("last_executed_cycle", 0) or 0)
     current = int(d.get("cycle_count", 0) or 0)
     if last <= 0:
         return True
     return (current - last) >= cooldown
+
+
+def _low_stables_dust_rebuild_reconcile_state(state: dict) -> None:
+    """Drop legacy planning-only cooldown markers (pre-9c8d38e1) that blocked execution retries."""
+    d = _low_stables_dust_rebuild_state(state)
+    if bool(d.get("pending_execution")):
+        return
+    last_allowed = int(d.get("last_allowed_cycle", 0) or 0)
+    last_executed = int(d.get("last_executed_cycle", 0) or 0)
+    if last_allowed > 0 and last_executed < last_allowed:
+        d.pop("last_allowed_cycle", None)
 
 
 def _record_low_stables_dust_rebuild_pending(state: dict) -> None:
@@ -1362,7 +1373,9 @@ def _record_low_stables_dust_rebuild_pending(state: dict) -> None:
 def _record_low_stables_dust_rebuild_executed(state: dict) -> None:
     """Consume cooldown only after a successful WMATIC→stable rebuild swap."""
     d = _low_stables_dust_rebuild_state(state)
-    d["last_allowed_cycle"] = int(d.get("cycle_count", 0) or 0)
+    cycle = int(d.get("cycle_count", 0) or 0)
+    d["last_executed_cycle"] = cycle
+    d["last_allowed_cycle"] = cycle
     d.pop("pending_execution", None)
 
 
@@ -1390,8 +1403,6 @@ def _apply_low_stables_rebuild_rotation_precedence(
     if stable_usd + 1e-9 >= max_stable:
         return rotation_first
     if float(balances.total_portfolio_usd) <= min_portfolio:
-        return rotation_first
-    if not _low_stables_dust_rebuild_rate_ok(state):
         return rotation_first
     print(
         f"{runtime._nanolog()}Signal-Driven Rotation: X-Signal BUY deferred — "
@@ -1433,19 +1444,13 @@ def _clear_low_stables_dust_rebuild_pending(state: dict | None) -> None:
     d.pop("pending_execution", None)
 
 
-def _main_strategy_low_stables_dust_rebuild_override_active(
+def _main_strategy_low_stables_dust_rebuild_eligible(
     decision: TradeDecision,
     *,
     balances: Balances,
     current_price_usd: float,
-    state: dict | None = None,
 ) -> bool:
-    """
-    Exception path when MAIN_STRATEGY would dust-defer a small WMATIC→stable exit but stables are critical.
-
-    Only applies below the normal ``MAIN_STRATEGY_DUST_DEFER_NOTIONAL_USD`` floor (default $8), down to
-    ``MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_NOTIONAL_FLOOR_USD`` (default $5). Normal dust thresholds unchanged.
-    """
+    """Core gates for low-stables dust rebuild (stables, portfolio, notional band, direction)."""
     if not _low_stables_dust_rebuild_enabled():
         return False
     direction = str(decision.direction or "").strip().upper()
@@ -1474,7 +1479,28 @@ def _main_strategy_low_stables_dust_rebuild_override_active(
         return False
     if notional_usd + 1e-9 >= dust_floor:
         return False
+    return True
 
+
+def _main_strategy_low_stables_dust_rebuild_override_active(
+    decision: TradeDecision,
+    *,
+    balances: Balances,
+    current_price_usd: float,
+    state: dict | None = None,
+) -> bool:
+    """
+    Exception path when MAIN_STRATEGY would dust-defer a small WMATIC→stable exit but stables are critical.
+
+    Only applies below the normal ``MAIN_STRATEGY_DUST_DEFER_NOTIONAL_USD`` floor (default $8), down to
+    ``MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_NOTIONAL_FLOOR_USD`` (default $5). Normal dust thresholds unchanged.
+    """
+    if not _main_strategy_low_stables_dust_rebuild_eligible(
+        decision,
+        balances=balances,
+        current_price_usd=current_price_usd,
+    ):
+        return False
     if not _low_stables_dust_rebuild_rate_ok(state):
         return False
     return True
@@ -2275,7 +2301,16 @@ def _wmatic_stable_p2_relief_override_active(
         balances=balances,
         state=state,
     )
-    if _signal_driven_rotation_x_signal_first() and not mild_loss_recovery_p2:
+    low_stables_rebuild = _main_strategy_low_stables_dust_rebuild_eligible(
+        decision,
+        balances=balances,
+        current_price_usd=current_price_usd,
+    )
+    if (
+        _signal_driven_rotation_x_signal_first()
+        and not mild_loss_recovery_p2
+        and not low_stables_rebuild
+    ):
         print(
             f"{runtime._nanolog()}Signal-Driven Rotation: P2 WMATIC→stable deferred — "
             "strong X-Signal BUY has cycle priority"
@@ -2708,6 +2743,7 @@ def determine_trade_decision(
     # TEMPORARY (May 2026 sprint): track cycles since last WMATIC→stable profit exit for force-relief.
     _profit_take_bump_cycle_counter(state)
     _low_stables_dust_rebuild_bump_cycle(state)
+    _low_stables_dust_rebuild_reconcile_state(state)
 
     risk_level = _cycle_risk_level(balances)
     pause_active, pause_remaining = _defensive_pause_state(state, risk_level=risk_level)
@@ -3359,13 +3395,11 @@ async def main(*, dry_run: bool = False) -> None:
                     f"{runtime._nanolog()}{_MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_LOG} | "
                     f"min_trade_guard bypassed (${decision_notional_usd:.2f} < MIN_TRADE_USD ${min_trade_usd:.2f})"
                 )
-                _clear_low_stables_dust_rebuild_pending(state)
             else:
                 reason = (
                     f"min_trade_guard ({decision.direction}: ${decision_notional_usd:.2f} "
                     f"< MIN_TRADE_USD ${min_trade_usd:.2f})"
                 )
-                _clear_low_stables_dust_rebuild_pending(state)
                 cs._log_trade_skipped(reason)
                 print(
                     f"{runtime._nanolog()}TRADE SKIPPED | below minimum size | "

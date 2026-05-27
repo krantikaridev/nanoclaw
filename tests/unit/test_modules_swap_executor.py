@@ -63,6 +63,7 @@ from modules.swap_executor import (
     _record_low_stables_dust_rebuild_executed,
     _apply_low_stables_rebuild_rotation_precedence,
     _low_stables_dust_rebuild_rate_ok,
+    _low_stables_dust_rebuild_reconcile_state,
     _x_signal_small_high_conviction_relaxed_slippage,
     estimate_expected_net_edge_pct,
     select_main_strategy_trade,
@@ -125,10 +126,23 @@ def test_low_stables_dust_rebuild_rate_ok_while_pending_despite_cooldown():
     state = {
         "low_stables_dust_rebuild": {
             "pending_execution": True,
-            "last_allowed_cycle": 100,
+            "last_executed_cycle": 100,
             "cycle_count": 101,
         }
     }
+    assert _low_stables_dust_rebuild_rate_ok(state)
+
+
+def test_low_stables_dust_rebuild_reconcile_clears_legacy_planning_cooldown():
+    state = {
+        "low_stables_dust_rebuild": {
+            "last_allowed_cycle": 50,
+            "last_executed_cycle": 0,
+            "cycle_count": 52,
+        }
+    }
+    _low_stables_dust_rebuild_reconcile_state(state)
+    assert "last_allowed_cycle" not in state["low_stables_dust_rebuild"]
     assert _low_stables_dust_rebuild_rate_ok(state)
 
 

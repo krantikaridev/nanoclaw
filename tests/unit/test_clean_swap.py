@@ -1736,6 +1736,7 @@ def test_main_low_stables_dust_rebuild_min_trade_guard_bypassed(monkeypatch, cap
     assert not any("min_trade_guard" in x for x in logs)
     assert "min_trade_guard bypassed" in out
     assert state["low_stables_dust_rebuild"].get("pending_execution") is None
+    assert state["low_stables_dust_rebuild"].get("last_executed_cycle") is not None
 
 
 def test_main_profit_take_min_trade_guard_bypassed_when_balance_relief_applies(monkeypatch, capsys):
