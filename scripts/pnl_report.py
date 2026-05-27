@@ -327,7 +327,7 @@ def print_daily_summary(*, reset_session: bool = False, lookback: str | None = N
     print(f"Session PnL:   ${session_delta:+.2f} ({session_pct:+.2f}%)")
     print(f"Session start: {session_started_at}")
     print(pnl_24h_line)
-    _print_velocity_block(session_started_at=session_started_at)
+    _print_velocity_block(session_started_at=session_started_at, seed_usd=total)
 
     win_spec = lookback if (lookback and str(lookback).strip()) else "24h"
     _print_lookback_table(total, parse_lookback_windows(win_spec))
@@ -338,6 +338,9 @@ def print_daily_summary(*, reset_session: bool = False, lookback: str | None = N
 
 _CYCLE_TS_RE = re.compile(r"=== CYCLE (\d+)")
 _SWAP_SUCCESS_MARKER = "Swap executed successfully!"
+_TRADE_ATTRIBUTION_ONCHAIN_RE = re.compile(
+    r"\[nanoclaw\]\s+TRADE_ATTRIBUTION\s+tx=(0x[0-9a-fA-F]+).*?\bsz≈([\d.eE+\-]+)"
+)
 
 
 def count_velocity_fills(
@@ -376,6 +379,57 @@ def count_velocity_fills(
     return n
 
 
+def sum_turnover_usd(
+    log_path: Path | str = LOG_FILE,
+    *,
+    since_utc: datetime | None = None,
+    until_utc: datetime | None = None,
+) -> tuple[float, int]:
+    """
+    On-chain swap notional from ``real_cron.log`` TRADE_ATTRIBUTION lines with ``tx=0x…``.
+
+    Each line is attributed to the preceding ``=== CYCLE <unix_ts>`` (same as velocity).
+    Plan-only lines (``TRADE_ATTRIBUTION | Asset=…``, no ``tx=``) are ignored.
+    Dedupes by tx hex per window (one notional per tx if the log repeats).
+    """
+    path = Path(log_path)
+    if not path.is_file():
+        return 0.0, 0
+    since_ts = since_utc.timestamp() if since_utc is not None else None
+    until_ts = until_utc.timestamp() if until_utc is not None else None
+    last_ts = 0
+    seen_tx: set[str] = set()
+    notional_sum = 0.0
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        m = _CYCLE_TS_RE.search(line)
+        if m:
+            last_ts = int(m.group(1))
+            continue
+        if "TRADE_ATTRIBUTION" not in line or "tx=0x" not in line:
+            continue
+        attr = _TRADE_ATTRIBUTION_ONCHAIN_RE.search(line)
+        if not attr:
+            continue
+        if last_ts <= 0:
+            continue
+        if since_ts is not None and last_ts < since_ts:
+            continue
+        if until_ts is not None and last_ts >= until_ts:
+            continue
+        tx_hex = attr.group(1).lower()
+        if tx_hex in seen_tx:
+            continue
+        seen_tx.add(tx_hex)
+        try:
+            sz = float(attr.group(2))
+        except ValueError:
+            continue
+        if not math.isfinite(sz) or sz < 0:
+            continue
+        notional_sum += sz
+    return notional_sum, len(seen_tx)
+
+
 def _utc_day_window(now_utc: datetime | None = None) -> tuple[datetime, datetime]:
     now = now_utc or datetime.now(timezone.utc)
     start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -409,15 +463,51 @@ def format_velocity_lines(
     return lines
 
 
-def _print_velocity_block(*, session_started_at: str | None = None) -> None:
+def format_turnover_lines(
+    *,
+    log_path: Path | str = LOG_FILE,
+    session_started_at: str | None = None,
+    seed_usd: float,
+    now_utc: datetime | None = None,
+) -> list[str]:
+    """Human-readable turnover: UTC calendar day + optional session window vs current seed TOTAL."""
+    now = now_utc or datetime.now(timezone.utc)
+    day_start, day_end = _utc_day_window(now)
+    day_notional, _ = sum_turnover_usd(log_path, since_utc=day_start, until_utc=day_end)
+    seed = float(seed_usd)
+    day_mult = day_notional / seed if seed > 0 else 0.0
+    lines = [
+        f"turnover_notional_usd_day_utc={day_notional:.2f} | "
+        f"turnover_multiple_day_utc={day_mult:.2f}x (seed=${seed:.2f})"
+    ]
+    sess_label = session_started_at if session_started_at is not None else _session_started_at_label()
+    sess_dt = _parse_iso_ts(sess_label) if sess_label else None
+    if sess_dt is not None:
+        sess_notional, _ = sum_turnover_usd(log_path, since_utc=sess_dt)
+        sess_mult = sess_notional / seed if seed > 0 else 0.0
+        lines.append(
+            f"turnover_notional_usd_session={sess_notional:.2f} | "
+            f"turnover_multiple_session={sess_mult:.2f}x (seed=${seed:.2f})"
+        )
+    return lines
+
+
+def _print_velocity_block(*, session_started_at: str | None = None, seed_usd: float | None = None) -> None:
     print("📈 ROTATION")
     for line in format_velocity_lines(session_started_at=session_started_at):
         print(line)
+    if seed_usd is not None:
+        for line in format_turnover_lines(session_started_at=session_started_at, seed_usd=float(seed_usd)):
+            print(line)
     print()
 
 
 def print_velocity_only() -> int:
+    bal = get_current_balance()
+    seed = float(bal["total"]) if bal else 0.0
     for line in format_velocity_lines():
+        print(line)
+    for line in format_turnover_lines(seed_usd=seed):
         print(line)
     return 0
 
@@ -757,7 +847,7 @@ def print_report(*, reset_session: bool = False) -> int:
     print(f"Session PnL:   ${session_delta:+.2f} ({session_pct:+.2f}%)")
     print(f"Session start: {session_started_at}")
     print(pnl_24h_line)
-    _print_velocity_block(session_started_at=session_started_at)
+    _print_velocity_block(session_started_at=session_started_at, seed_usd=total)
     print("Reset session baseline: nanopnl --reset-session")
     print()
 
@@ -778,7 +868,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--velocity-only",
         action="store_true",
-        help="Print UTC-day and session fill counts only (nanovel)",
+        help="Print UTC-day and session fill counts + turnover (nanovel)",
     )
     parser.add_argument(
         "--daily-summary",

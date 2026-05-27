@@ -519,3 +519,113 @@ def test_format_velocity_lines_includes_session(tmp_path: Path, monkeypatch) -> 
     )
     assert any("velocity_fills_per_day_utc=" in x for x in lines)
     assert any("velocity_fills_session=" in x for x in lines)
+
+
+def _attribution_line(tx: str, sz: float) -> str:
+    return (
+        f"[nanoclaw] TRADE_ATTRIBUTION tx={tx} dir=USDC→WMATIC "
+        f"sz≈{sz:.2f} msg=Swap executed successfully!"
+    )
+
+
+def test_sum_turnover_usd_utc_day_window(tmp_path: Path) -> None:
+    day = datetime(2026, 5, 26, 12, 0, 0, tzinfo=timezone.utc)
+    day_start = day.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_end = day_start + timedelta(days=1)
+    inside = int(day_start.timestamp()) + 3600
+    outside = int(day_end.timestamp()) + 60
+    log_file = _write_log(
+        tmp_path,
+        "\n".join(
+            [
+                f"[nanoclaw] === CYCLE {inside} | BALANCES: USDT=$1 USDC=$1 WMATIC=$1 ===",
+                _attribution_line("0xabc111", 30.0),
+                f"[nanoclaw] === CYCLE {outside} | BALANCES: USDT=$1 USDC=$1 WMATIC=$1 ===",
+                _attribution_line("0xabc222", 50.0),
+            ]
+        ),
+    )
+    notional, tx_count = pnl_report.sum_turnover_usd(
+        log_file, since_utc=day_start, until_utc=day_end
+    )
+    assert notional == pytest.approx(30.0)
+    assert tx_count == 1
+
+
+def test_sum_turnover_usd_session_since(tmp_path: Path) -> None:
+    session_start = datetime(2026, 5, 26, 18, 21, 34, tzinfo=timezone.utc)
+    before = int(session_start.timestamp()) - 900
+    after = int(session_start.timestamp()) + 900
+    log_file = _write_log(
+        tmp_path,
+        "\n".join(
+            [
+                f"[nanoclaw] === CYCLE {before} | BALANCES: USDT=$1 USDC=$1 WMATIC=$1 ===",
+                _attribution_line("0xabc111", 20.0),
+                f"[nanoclaw] === CYCLE {after} | BALANCES: USDT=$1 USDC=$1 WMATIC=$1 ===",
+                _attribution_line("0xabc222", 40.0),
+            ]
+        ),
+    )
+    notional, tx_count = pnl_report.sum_turnover_usd(log_file, since_utc=session_start)
+    assert notional == pytest.approx(40.0)
+    assert tx_count == 1
+
+
+def test_sum_turnover_usd_dedupes_same_tx(tmp_path: Path) -> None:
+    ts = int(datetime(2026, 5, 27, 10, 0, 0, tzinfo=timezone.utc).timestamp())
+    log_file = _write_log(
+        tmp_path,
+        "\n".join(
+            [
+                f"[nanoclaw] === CYCLE {ts} | BALANCES: USDT=$1 USDC=$1 WMATIC=$1 ===",
+                _attribution_line("0xabc333", 25.0),
+                _attribution_line("0xabc333", 25.0),
+            ]
+        ),
+    )
+    notional, tx_count = pnl_report.sum_turnover_usd(log_file)
+    assert notional == pytest.approx(25.0)
+    assert tx_count == 1
+
+
+def test_sum_turnover_usd_ignores_plan_only_attribution(tmp_path: Path) -> None:
+    ts = int(datetime(2026, 5, 27, 10, 0, 0, tzinfo=timezone.utc).timestamp())
+    log_file = _write_log(
+        tmp_path,
+        "\n".join(
+            [
+                f"[nanoclaw] === CYCLE {ts} | BALANCES: USDT=$1 USDC=$1 WMATIC=$1 ===",
+                "TRADE_ATTRIBUTION | Asset=LINK | Size=$15.00 | Signal=0.81 | Plan only",
+                _attribution_line("0xabc444", 15.0),
+            ]
+        ),
+    )
+    notional, tx_count = pnl_report.sum_turnover_usd(log_file)
+    assert notional == pytest.approx(15.0)
+    assert tx_count == 1
+
+
+def test_format_turnover_lines_includes_session(tmp_path: Path) -> None:
+    day = datetime(2026, 5, 26, 20, 0, 0, tzinfo=timezone.utc)
+    day_start = day.replace(hour=0, minute=0, second=0, microsecond=0)
+    inside = int(day_start.timestamp()) + 3600
+    log_file = _write_log(
+        tmp_path,
+        "\n".join(
+            [
+                f"[nanoclaw] === CYCLE {inside} | BALANCES: USDT=$1 USDC=$1 WMATIC=$1 ===",
+                _attribution_line("0xabc555", 60.0),
+            ]
+        ),
+    )
+    lines = pnl_report.format_turnover_lines(
+        log_path=log_file,
+        session_started_at="2026-05-26T18:21:34+00:00",
+        seed_usd=120.0,
+        now_utc=day,
+    )
+    assert any("turnover_notional_usd_day_utc=60.00" in x for x in lines)
+    assert any("turnover_multiple_day_utc=0.50x" in x for x in lines)
+    assert any("turnover_notional_usd_session=" in x for x in lines)
+    assert any("turnover_multiple_session=" in x for x in lines)

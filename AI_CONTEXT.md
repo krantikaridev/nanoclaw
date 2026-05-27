@@ -317,6 +317,12 @@ Directional milestones only—**capital scales when gates pass**, not on calenda
 - Unit tests for take-profit paths, swap path candidates, and X-Signal threshold helper (`tests/unit/`).
 - No non-core alerting layers in-scope; prioritize strategy code and deterministic logs.
 
+## Today's learnings (27 May 2026 — PnL turnover / rotation metrics)
+
+- **Operator ask**: Distinguish **velocity** (on-chain swap count from `Swap executed successfully!`) from **turnover** (USD notional swapped ÷ current seed TOTAL). A `turnover_multiple` of 1.0 means ~$120 swapped on a ~$120 book; 10.0 means ~$1200 notional — not 10 fills.
+- **Implementation**: `scripts/pnl_report.py` adds `sum_turnover_usd()` parsing on-chain `[nanoclaw] TRADE_ATTRIBUTION tx=0x… sz≈…` lines (CYCLE unix_ts attribution, tx dedupe); `format_turnover_lines()` beside existing velocity in the ROTATION block and `--velocity-only` / `nanovel`. Plan-only `TRADE_ATTRIBUTION | Asset=…` lines (no `tx=`) are ignored. Seed for multiple = live TOTAL from `get_current_balance()`, not lifetime CSV.
+- **`.env.example`**: unchanged (no new env knobs).
+
 ## Today's learnings (26 May 2026 — Cleanup #5: defensive_pause / cycle risk uses combined stables)
 
 - **Incident**: Post–Cleanup #4 deploy, `try_x_signal` logged `Risk=LOW | stable_usd=$40.17` and `X-SIGNAL PLAN SELECTED`, but the same cycles hit `TRADE SKIPPED: defensive_pause (risk=HIGH) — pausing X-signal BUY entries`.

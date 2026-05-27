@@ -22,8 +22,8 @@ For operators and agents, **`AI_CONTEXT.md`** on branch **`V2`** is the authorit
 | `nanoup` | Safe update + restart (recommended), including `.env` apply from `.env.example` with secret/runtime-key preserve; **never resets `control.json`** (operator pause state); ends with **`nanohealth`** (Polygon RPC + chain `137`); repo script: **`scripts/nanoup.sh`** |
 | `nanohealth` | **`python scripts/nanohealth.py`**: RPC gate via **`connect_web3()`**; exit `1` if unhealthy |
 | `nanostatus` | PnL/status report from `real_cron.log` via `scripts/pnl_report.py` (forwards CLI flags, e.g. `--reset-session`) |
-| `nanopnl` | PnL view with current balance, baseline/session %, 24h delta, and **rotation** (UTC-day + session fill counts) |
-| `nanovel` | Rotation only: `velocity_fills_per_day_utc` + `velocity_fills_session` (same logic as `nanopnl`) |
+| `nanopnl` | PnL view with current balance, baseline/session %, 24h delta, and **rotation** (UTC-day + session fill counts and turnover: `turnover_multiple` = swap notional USD ÷ current seed TOTAL) |
+| `nanovel` | Rotation only: velocity fills + turnover multiples (same logic as `nanopnl` ROTATION block) |
 | `nh` | Alias of `nanohealth` |
 | `nanobot` | Live log stream (`tail -f real_cron.log`) |
 | `nanorestart` | **`nanoup`** then **`nanohealth`** then **`pnl_report`** (forwards flags where applicable) |
