@@ -1166,6 +1166,17 @@ class SignalEquityTrader:
                     return None, "invalid_trade_size_multiplier"
                 if mult != 1.0:
                     adjusted = float(trade_size) * mult
+                    if (
+                        str(buy_risk_level or "").strip().upper() == "HIGH"
+                        and 0.0 < mult < 1.0
+                    ):
+                        floor = float(cfg.env_float("REDUCED_HIGH_RISK_MIN_TRADE_USD", 8.0))
+                        if floor > 0.0 and adjusted + 1e-9 < floor:
+                            print(
+                                f"[nanoclaw] REDUCED HIGH-RISK min trade floor | "
+                                f"scaled=${adjusted:.2f} → floor=${floor:.2f}"
+                            )
+                            adjusted = floor
                     risk_note = f" | Risk={buy_risk_level}" if buy_risk_level else ""
                     print(
                         f"[nanoclaw] RISK SIZING{risk_note} | multiplier={mult:.2f} | "

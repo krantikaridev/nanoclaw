@@ -1848,3 +1848,17 @@ def test_log_min_net_edge_policy_once_emits_single_banner(capsys):
     assert "threshold=" in out
     assert "fee_buffer=" in out
     assert "planning_gas=" in out
+
+
+def test_main_strategy_reserve_prefers_usdc_when_stables_critical(monkeypatch):
+    monkeypatch.setattr(cfg, "PROTECTION_FLUCTUATION_USDT_THRESHOLD", 12.0, raising=False)
+    monkeypatch.setattr(cfg, "MAIN_STRATEGY_RESERVE_PREFER_USDC", True, raising=False)
+    b = Balances(usdt=0.46, usdc=9.30, wmatic=156.0, pol=1.0, total_portfolio_usd=141.0)
+    assert swap_exec_mod._main_strategy_stable_reserve_direction(b) == "WMATIC_TO_USDC"
+
+
+def test_main_strategy_reserve_usdt_when_stables_ample(monkeypatch):
+    monkeypatch.setattr(cfg, "PROTECTION_FLUCTUATION_USDT_THRESHOLD", 12.0, raising=False)
+    monkeypatch.setattr(cfg, "MAIN_STRATEGY_RESERVE_PREFER_USDC", True, raising=False)
+    b = Balances(usdt=5.0, usdc=25.0, wmatic=156.0, pol=1.0, total_portfolio_usd=141.0)
+    assert swap_exec_mod._main_strategy_stable_reserve_direction(b) == "WMATIC_TO_USDT"

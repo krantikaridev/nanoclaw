@@ -317,6 +317,17 @@ Directional milestones only—**capital scales when gates pass**, not on calenda
 - Unit tests for take-profit paths, swap path candidates, and X-Signal threshold helper (`tests/unit/`).
 - No non-core alerting layers in-scope; prioritize strategy code and deterministic logs.
 
+## Today's learnings (27 May 2026 — Stage liveness: reduced HIGH-risk + low-stables dust rebuild)
+
+- **Incident (Instance A @ `22f96757`)**: After two ~$10 LINK BUYs, `STABLE_USD≈$9.76` → perpetual `Risk=HIGH`, `buy_size_multiplier=0.00`, `defensive_pause`, and `main_strategy_dust_deferred` on ~$6.48 `WMATIC_TO_USDT` (USDT reserve path). Bot looked stuck: no new BUYs, no LINK sells, no stable recycle.
+- **Ship package (`0ee1302a` + follow-ups)**:
+  1. **`ALLOW_REDUCED_HIGH_RISK_XSIGNAL`**: On HIGH buffer risk, if `TOTAL>$130` and eligible BUY signal `≥0.80`, allow **`buy_size_multiplier=0.40`** and clear `defensive_pause` for that cycle (not a full block).
+  2. **`MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_*`**: When stables `<$15`, portfolio `>$130`, and MAIN wants a **$5–$8** WMATIC→stable exit, bypass dust defer (rate-limited every 3 cycles).
+  3. **`MAIN_STRATEGY_RESERVE_PREFER_USDC`**: USDT reserve protection sells **WMATIC→USDC** when combined stables are below the X-SIGNAL high buffer (~$15), so rebuild feeds the bucket BUYs use.
+  4. **`REDUCED_HIGH_RISK_MIN_TRADE_USD=8`**: Floors scaled HIGH-risk BUY size so 0.40× does not fall below `MIN_TRADE_USD`.
+- **Post-deploy grep (healthy unblock)**: `HIGH risk reduced sizing applied`, `Main Strategy dust conversion to USDC`, `STABLE RESERVE PROTECTION (USDC)`, `defensive_pause skipped for reduced HIGH-risk`, and eventually `Risk=LOW` or a small `USDC_TO_EQUITY` fill — not endless `dust_deferred` + `DEFENSE ACTIVE` with `0.00` multiplier.
+- **Disable rollback**: `ALLOW_REDUCED_HIGH_RISK_XSIGNAL=false` and/or `MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_ENABLED=false` restores prior full HIGH block / dust defer behavior.
+
 ## Today's learnings (27 May 2026 — PnL turnover / rotation metrics)
 
 - **Operator ask**: Distinguish **velocity** (on-chain swap count from `Swap executed successfully!`) from **turnover** (USD notional swapped ÷ current seed TOTAL). A `turnover_multiple` of 1.0 means ~$120 swapped on a ~$120 book; 10.0 means ~$1200 notional — not 10 fills.

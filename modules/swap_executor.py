@@ -507,6 +507,24 @@ async def evaluate_usdc_copy_trade(
         cooldown_wallet=cw,
     )
 
+def _main_strategy_stable_reserve_direction(balances: Balances) -> str:
+    """
+    WMATIC→stable for reserve / buffer rebuild.
+
+    Prefer USDC when combined stables are below the X-SIGNAL high buffer (USDT+USDC spend gate),
+    so rebuild feeds the bucket X-SIGNAL BUYs actually use.
+    """
+    if not bool(getattr(cfg, "MAIN_STRATEGY_RESERVE_PREFER_USDC", True)):
+        return "WMATIC_TO_USDT"
+    stable_usd = float(balances.usdt) + float(balances.usdc)
+    high_trigger = float(getattr(cfg, "PROTECTION_FLUCTUATION_USDT_THRESHOLD", 12.0)) + 3.0
+    if stable_usd + 1e-9 < high_trigger:
+        return "WMATIC_TO_USDC"
+    if float(balances.usdc) + 1e-9 < float(balances.usdt):
+        return "WMATIC_TO_USDC"
+    return "WMATIC_TO_USDT"
+
+
 def select_main_strategy_trade(
     balances: Balances,
     current_price: float,
@@ -548,21 +566,23 @@ def select_main_strategy_trade(
 
     if balances.usdt < MAIN_STRATEGY_MIN_USDT_RESERVE:
         notional = wmatic_value_usd * MAIN_STRATEGY_RESERVE_SELL_FRACTION
+        reserve_dir = _main_strategy_stable_reserve_direction(balances)
+        stable_out = "USDC" if reserve_dir == "WMATIC_TO_USDC" else "USDT"
         decision_log.log_main_strategy_decision(
             action="TAKE",
             reason="usdt_reserve_protection",
-            direction="WMATIC_TO_USDT",
+            direction=reserve_dir,
             notional_usd=notional,
             wmatic_balance=float(balances.wmatic),
             wmatic_usd=wmatic_value_usd,
             state=state,
         )
         return TradeDecision(
-            direction="WMATIC_TO_USDT",
+            direction=reserve_dir,
             amount_in=int(balances.wmatic * MAIN_STRATEGY_RESERVE_SELL_FRACTION * 1e18),
             message=(
-                f"🔄 USDT RESERVE PROTECTION: ${balances.usdt:.2f} < $"
-                f"{MAIN_STRATEGY_MIN_USDT_RESERVE:.0f}"
+                f"🔄 STABLE RESERVE PROTECTION ({stable_out}): USDT=${balances.usdt:.2f} "
+                f"USDC=${balances.usdc:.2f} | USDT target ${MAIN_STRATEGY_MIN_USDT_RESERVE:.0f}"
             ),
         )
 
