@@ -1502,6 +1502,48 @@ class SignalEquityTrader:
             print(f"[nanoclaw-av] BALANCE READ FAILED (skipped asset) | {sym} | {e}")
             return None, "balance_read_failed"
 
+    def build_loss_cut_plan_with_block_reason(
+        self,
+        *,
+        symbol: str,
+        token_address: str,
+        token_decimals: int,
+        equity_balance: float,
+        sell_fraction: float,
+        current_price_usd: float | None = None,
+        entry_price_usd: float | None = None,
+        loss_pct: float | None = None,
+    ) -> tuple[Optional[EquityTradePlan], Optional[str]]:
+        """HIGH-risk loss-cut: partial EQUITY→USDC exit (ignores bullish external signal)."""
+        sym = str(symbol).strip()
+        if equity_balance <= 0:
+            return None, "zero_equity_balance"
+        frac = min(1.0, max(0.05, float(sell_fraction)))
+        amount_in_units = int(float(equity_balance) * frac * (10 ** int(token_decimals)))
+        if amount_in_units <= 0:
+            return None, "sell_amount_below_min_units"
+        price_note = f" @ ${float(current_price_usd):.2f}" if isinstance(current_price_usd, (int, float)) else ""
+        entry_note = (
+            f" | entry=${float(entry_price_usd):.2f} loss={float(loss_pct):.1f}%"
+            if isinstance(entry_price_usd, (int, float)) and isinstance(loss_pct, (int, float))
+            else ""
+        )
+        plan = EquityTradePlan(
+            direction="EQUITY_TO_USDC",
+            symbol=sym,
+            token_in=token_address,
+            token_out=self.usdc_address,
+            amount_in=amount_in_units,
+            trade_size=0.0,
+            signal_strength=-abs(float(getattr(cfg, "HIGH_RISK_LOSS_CUT_LOSS_PCT", 3.0)) / 100.0),
+            message=(
+                f"🟪 X-SIGNAL HIGH-RISK LOSS-CUT: {sym}{price_note}{entry_note} | "
+                f"Selling {frac * 100:.0f}% ({sym}→USDC)"
+            ),
+        )
+        print(f"[nanoclaw] PLAN_BUILD_SUCCESS | {sym} | LOSS_CUT_SELL | {frac*100:.0f}%")
+        return plan, None
+
     def build_plan(
         self,
         *,

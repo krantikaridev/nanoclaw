@@ -7,7 +7,7 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Callable, Optional, Sequence
 
 import config as cfg
 from config import (
@@ -163,6 +163,49 @@ def _max_eligible_buy_signal_strength(eligible: Sequence[FollowedEquity]) -> flo
         for a in eligible
         if float(a.signal_strength) > 0
     ]
+    return max(strengths, default=0.0)
+
+
+def _max_eligible_buy_signal_strength_for_reduced_high(
+    eligible: Sequence[FollowedEquity],
+    *,
+    state: dict | None,
+    get_equity_balance: Callable[[str, int], float],
+) -> float:
+    """Exclude underwater loss-cut symbols from reduced-HIGH BUY eligibility."""
+    from modules import x_signal_position as xsp
+
+    strengths: list[float] = []
+    for a in eligible:
+        if float(a.signal_strength) <= 0:
+            continue
+        sym = str(a.symbol).strip()
+        try:
+            eq_bal = float(get_equity_balance(a.token_address, int(a.decimals)))
+        except Exception:
+            eq_bal = 0.0
+        live = xsp.resolve_live_spot_usd(
+            fallback_price_usd=(
+                float(a.current_price_usd)
+                if isinstance(a.current_price_usd, (int, float))
+                else None
+            ),
+            equity_balance=eq_bal,
+            token_address=str(a.token_address),
+            token_decimals=int(a.decimals),
+        )
+        if xsp.is_underwater_symbol(
+            state,
+            sym,
+            fallback_price_usd=(
+                float(a.current_price_usd)
+                if isinstance(a.current_price_usd, (int, float))
+                else None
+            ),
+            live_spot_usd=live,
+        ):
+            continue
+        strengths.append(abs(float(a.signal_strength)))
     return max(strengths, default=0.0)
 
 
@@ -1073,6 +1116,97 @@ def _tuned_signal_equity_trader(min_signal_strength: float) -> SignalEquityTrade
     return SignalEquityTrader(config=tuned_cfg, gas_protector=gp, usdc_address=usdc_a)
 
 
+def _try_build_high_risk_loss_cut_decision(
+    *,
+    assets: Sequence[FollowedEquity],
+    balances: Balances,
+    risk_level: str,
+    state: dict | None,
+    trader: SignalEquityTrader,
+    secs_cooldown: int,
+    get_token_balance: Callable[[str, int], float],
+    can_trade_asset: Callable[..., bool],
+) -> TradeDecision | None:
+    """HIGH-risk partial exit for underwater configured symbols (e.g. LINK_ALPHA)."""
+    from modules import x_signal_position as xsp
+
+    if not xsp.loss_cut_cycle_eligible(
+        risk_level=risk_level,
+        total_portfolio_usd=float(balances.total_portfolio_usd),
+    ):
+        return None
+
+    assets_by_sym = {str(a.symbol).strip().upper(): a for a in assets}
+    for sym in sorted(xsp.loss_cut_symbols()):
+        asset = assets_by_sym.get(sym)
+        if asset is None:
+            continue
+        if not can_trade_asset(sym, None, int(secs_cooldown)):
+            print(
+                f"{runtime._nanolog()}HIGH risk loss-cut deferred for {sym} "
+                f"(per-asset cooldown)"
+            )
+            continue
+        try:
+            equity_balance = float(
+                get_token_balance(str(asset.token_address), int(asset.decimals))
+            )
+        except Exception as exc:
+            print(f"[nanoclaw-av] BALANCE READ FAILED (loss-cut) | {sym} | {exc}")
+            continue
+        if equity_balance <= 0:
+            continue
+        fallback_px = (
+            float(asset.current_price_usd)
+            if isinstance(asset.current_price_usd, (int, float))
+            else None
+        )
+        live_spot = xsp.resolve_live_spot_usd(
+            fallback_price_usd=fallback_px,
+            equity_balance=equity_balance,
+            token_address=str(asset.token_address),
+            token_decimals=int(asset.decimals),
+        )
+        underwater, entry_px, spot_px, loss_pct = xsp.underwater_context(
+            state,
+            sym,
+            fallback_price_usd=fallback_px,
+            live_spot_usd=live_spot,
+        )
+        if not underwater:
+            continue
+        print(
+            f"{runtime._nanolog()}HIGH risk loss-cut allowed for {sym} "
+            f"(unrealized loss detected) | entry=${entry_px:.2f} | spot=${spot_px:.2f} | "
+            f"loss_pct={loss_pct:.2f}%"
+        )
+        plan, block = trader.build_loss_cut_plan_with_block_reason(
+            symbol=sym,
+            token_address=str(asset.token_address),
+            token_decimals=int(asset.decimals),
+            equity_balance=equity_balance,
+            sell_fraction=xsp.loss_cut_sell_fraction(),
+            current_price_usd=spot_px,
+            entry_price_usd=entry_px,
+            loss_pct=loss_pct,
+        )
+        if not plan:
+            print(
+                f"{runtime._nanolog()}HIGH risk loss-cut plan blocked for {sym} | reason={block or 'unknown'}"
+            )
+            continue
+        return TradeDecision(
+            direction=plan.direction,
+            amount_in=int(plan.amount_in),
+            trade_size=float(plan.trade_size or 0.0),
+            message=plan.message,
+            token_in=plan.token_in,
+            token_out=plan.token_out,
+            cooldown_asset=(sym, int(secs_cooldown)),
+            signal_strength=float(plan.signal_strength or 0.0),
+        )
+    return None
+
 
 def try_x_signal_equity_decision(
     balances: Balances,
@@ -1190,7 +1324,11 @@ def try_x_signal_equity_decision(
         skip_buys=skip_buys,
         buy_mult=buy_mult,
         total_portfolio_usd=float(balances.total_portfolio_usd),
-        max_buy_signal_strength=_max_eligible_buy_signal_strength(eligible),
+        max_buy_signal_strength=_max_eligible_buy_signal_strength_for_reduced_high(
+            eligible,
+            state=state,
+            get_equity_balance=fcb.get_token_balance,
+        ),
     )
     _print_x_signal_buy_risk_status(
         risk_level=risk_level,
@@ -1435,6 +1573,19 @@ def try_x_signal_equity_decision(
             if hint:
                 chain_notes.append(hint)
 
+        loss_cut_decision = _try_build_high_risk_loss_cut_decision(
+            assets=assets,
+            balances=balances,
+            risk_level=risk_level,
+            state=state,
+            trader=tuned_trader,
+            secs_cooldown=secs_order,
+            get_token_balance=fcb.get_token_balance,
+            can_trade_asset=fcb.can_trade_asset,
+        )
+        if loss_cut_decision is not None:
+            return loss_cut_decision
+
         print(f"{runtime._nanolog()}=== BUILDING TRADE PLANS ===")
         plans = []
         for a in eligible_ordered:
@@ -1449,6 +1600,32 @@ def try_x_signal_equity_decision(
                         f"reason={reasons or 'N/A'}"
                     )
                     continue
+                if is_buy:
+                    from modules import x_signal_position as xsp
+
+                    if xsp.loss_cut_block_buys():
+                        _fb = (
+                            float(a.current_price_usd)
+                            if isinstance(a.current_price_usd, (int, float))
+                            else None
+                        )
+                        _live = xsp.resolve_live_spot_usd(
+                            fallback_price_usd=_fb,
+                            equity_balance=float(equity_balance),
+                            token_address=str(a.token_address),
+                            token_decimals=int(a.decimals),
+                        )
+                        if xsp.is_underwater_symbol(
+                            state,
+                            sym,
+                            fallback_price_usd=_fb,
+                            live_spot_usd=_live,
+                        ):
+                            print(
+                                f"{runtime._nanolog()}HIGH risk loss-cut BUY blocked for {sym} "
+                                f"(underwater)"
+                            )
+                            continue
                 if is_buy and medium_usdt_wmatic_guard and sym in ("WMATIC", "WMATIC_ALPHA"):
                     print(
                         f"{runtime._nanolog()}X-SIGNAL BUY SKIPPED | symbol={sym} | risk={risk_level} | "
@@ -1478,6 +1655,20 @@ def try_x_signal_equity_decision(
                 dynamic_trade_size_usdc = float(plan.trade_size)
                 if str(plan.direction) == "USDC_TO_EQUITY":
                     dynamic_trade_size_usdc = min(dynamic_trade_size_usdc, float(balances.usdc))
+                    if state is not None:
+                        _px = (
+                            float(a.current_price_usd)
+                            if isinstance(a.current_price_usd, (int, float)) and float(a.current_price_usd) > 0
+                            else 0.0
+                        )
+                        if _px <= 0 and float(equity_balance) > 0:
+                            _px = float(dynamic_trade_size_usdc) / float(equity_balance)
+                        state.setdefault("x_signal_pending_entries", {})[
+                            str(sym).strip().upper()
+                        ] = {
+                            "entry_price_usd": float(_px),
+                            "notional_usd": float(dynamic_trade_size_usdc),
+                        }
                     logger.info(
                         f"X-SIGNAL EQUITY BUY: {sym} | Strength {abs(float(a.signal_strength)):.2f} | "
                         f"Size: ${dynamic_trade_size_usdc:.2f}"

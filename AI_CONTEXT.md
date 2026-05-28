@@ -328,6 +328,19 @@ Directional milestones only—**capital scales when gates pass**, not on calenda
 - **Post-deploy grep (healthy unblock)**: `HIGH risk reduced sizing applied`, `Main Strategy dust conversion to USDC`, `STABLE RESERVE PROTECTION (USDC)`, `defensive_pause skipped for reduced HIGH-risk`, and eventually `Risk=LOW` or a small `USDC_TO_EQUITY` fill — not endless `dust_deferred` + `DEFENSE ACTIVE` with `0.00` multiplier.
 - **Disable rollback**: `ALLOW_REDUCED_HIGH_RISK_XSIGNAL=false` and/or `MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_ENABLED=false` restores prior full HIGH block / dust defer behavior.
 
+## Today's learnings (28 May 2026 — HIGH-risk LINK loss-cut, Option C)
+
+- **Incident (Instance A)**: Large `LINK_ALPHA` stack (~12.36 LINK, ~$110 MTM) with bullish external `signal_strength≈0.81` → bot planned **BUY only**; `defensive_pause` blocked new entries but **did not trim** underwater equity. Session drift ~-0.7% largely **mark-to-market**, not churn.
+- **Policy (Option C)**: **Loss-cut SELLs** + **block LINK BUYs while underwater**; **do not** raise reduced-HIGH BUY mult (stays **0.40x**).
+- **Implementation** (`modules/x_signal_position.py`, `modules/signal.py`, `nanoclaw/strategies/signal_equity_trader.py`):
+  - `ALLOW_HIGH_RISK_LOSS_CUT_XSIGNAL` (default true), `HIGH_RISK_LOSS_CUT_SYMBOLS=LINK_ALPHA`, `HIGH_RISK_LOSS_CUT_LOSS_PCT=3`, `HIGH_RISK_LOSS_CUT_SELL_FRACTION=0.55`, `HIGH_RISK_LOSS_CUT_BLOCK_BUYS=true`.
+  - Entry tracking on successful `USDC_TO_EQUITY` (`x_signal_equity_entries` + planning `x_signal_pending_entries`).
+  - When `Risk=HIGH`, `TOTAL>$130`, spot `< entry×(1−LOSS_PCT)`: plan `EQUITY_TO_USDC` loss-cut before rotation BUY loop; log `HIGH risk loss-cut allowed for LINK_ALPHA`.
+  - Underwater symbols excluded from reduced-HIGH eligibility; BUY loop logs `HIGH risk loss-cut BUY blocked`.
+  - `defensive_pause` still blocks BUYs; **loss-cut SELL** passes (`defensive_pause: loss-cut SELL allowed`).
+- **Operator grep**: `grep -E 'loss-cut|loss_cut|underwater|PLAN_BUILD_SUCCESS.*LOSS_CUT|HIGH risk loss-cut BUY blocked' real_cron.log | tail -30`
+- **Rollback**: `ALLOW_HIGH_RISK_LOSS_CUT_XSIGNAL=false`
+
 ## Today's learnings (27 May 2026 — PnL turnover / rotation metrics)
 
 - **Operator ask**: Distinguish **velocity** (on-chain swap count from `Swap executed successfully!`) from **turnover** (USD notional swapped ÷ current seed TOTAL). A `turnover_multiple` of 1.0 means ~$120 swapped on a ~$120 book; 10.0 means ~$1200 notional — not 10 fills.

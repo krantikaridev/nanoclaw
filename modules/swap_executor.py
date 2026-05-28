@@ -2813,26 +2813,34 @@ def determine_trade_decision(
             pause_active
             and xd_local
             and xd_local.should_execute
-            and str(xd_local.direction or "").strip().upper() in {"USDC_TO_EQUITY"}
         ):
-            strength = float(xd_local.signal_strength or 0.0)
-            if (
-                risk_level == "HIGH"
-                and signal_module.reduced_high_risk_xsignal_eligible(
-                    total_portfolio_usd=float(balances.total_portfolio_usd),
-                    signal_strength=strength,
-                )
-            ):
-                _clear_defensive_pause_window(state)
-                print(
-                    f"{runtime._nanolog()}defensive_pause skipped for reduced HIGH-risk X-SIGNAL "
-                    f"(signal={strength:.2f}, total_portfolio_usd=${float(balances.total_portfolio_usd):.2f})"
-                )
-            else:
-                cs._log_trade_skipped(
-                    f"defensive_pause (risk=HIGH, remaining_cycles={pause_remaining}) — pausing X-signal BUY entries"
-                )
-                xd_local = None
+            xd_dir_pause = str(xd_local.direction or "").strip().upper()
+            if xd_dir_pause == "EQUITY_TO_USDC":
+                msg_lc = str(xd_local.message or "").lower()
+                if "loss-cut" in msg_lc:
+                    print(
+                        f"{runtime._nanolog()}defensive_pause: loss-cut SELL allowed "
+                        f"({_x_signal_symbol_from_decision(xd_local)} underwater)"
+                    )
+            elif xd_dir_pause in {"USDC_TO_EQUITY"}:
+                strength = float(xd_local.signal_strength or 0.0)
+                if (
+                    risk_level == "HIGH"
+                    and signal_module.reduced_high_risk_xsignal_eligible(
+                        total_portfolio_usd=float(balances.total_portfolio_usd),
+                        signal_strength=strength,
+                    )
+                ):
+                    _clear_defensive_pause_window(state)
+                    print(
+                        f"{runtime._nanolog()}defensive_pause skipped for reduced HIGH-risk X-SIGNAL "
+                        f"(signal={strength:.2f}, total_portfolio_usd=${float(balances.total_portfolio_usd):.2f})"
+                    )
+                else:
+                    cs._log_trade_skipped(
+                        f"defensive_pause (risk=HIGH, remaining_cycles={pause_remaining}) — pausing X-signal BUY entries"
+                    )
+                    xd_local = None
         xd_dir_local = str(xd_local.direction or "").strip().upper() if xd_local else ""
         if (
             entries_paused
@@ -3515,6 +3523,30 @@ async def main(*, dry_run: bool = False) -> None:
             if is_x_signal_buy:
                 _clear_x_signal_stf_pause(state, decision)
                 print(f"{_X_SIGNAL_STF_LOG} | EXEC SUCCESS | sym={x_sym} | tx={tx_hash}")
+                from modules import x_signal_position as xsp
+
+                pending_root = state.setdefault("x_signal_pending_entries", {})
+                pending = pending_root.pop(x_sym, None) if x_sym else None
+                entry_px = float((pending or {}).get("entry_price_usd", 0.0) or 0.0)
+                if entry_px <= 0:
+                    entry_px = float(decision.trade_size or 0.0) / max(
+                        float(decision.trade_size or 1.0), 1.0
+                    )
+                xsp.record_equity_entry(
+                    state,
+                    x_sym,
+                    entry_price_usd=entry_px,
+                    notional_usd=float(decision.trade_size or 0.0),
+                    tx_hash=str(tx_hash),
+                )
+            elif (
+                str(decision.direction or "").strip().upper() == "EQUITY_TO_USDC"
+                and "loss-cut" in str(decision.message or "").lower()
+            ):
+                print(
+                    f"{runtime._nanolog()}HIGH risk loss-cut executed | "
+                    f"sym={_x_signal_symbol_from_decision(decision)} | tx={tx_hash}"
+                )
             attribution.notify_swap_success(decision=decision, tx_hash=tx_hash)
             if decision.direction == "USDC_TO_WMATIC" and decision.cooldown_wallet and decision.cooldown_wallet[0]:
                 wallet_performance.record_copy_entry(
