@@ -1130,13 +1130,54 @@ def _try_build_high_risk_loss_cut_decision(
     """HIGH-risk partial exit for underwater configured symbols (e.g. LINK_ALPHA)."""
     from modules import x_signal_position as xsp
 
+    assets_by_sym = {str(a.symbol).strip().upper(): a for a in assets}
+    underwater_candidates: list[str] = []
+    for sym in sorted(xsp.loss_cut_symbols()):
+        asset = assets_by_sym.get(sym)
+        if asset is None:
+            continue
+        try:
+            equity_balance = float(
+                get_token_balance(str(asset.token_address), int(asset.decimals))
+            )
+        except Exception:
+            continue
+        if equity_balance <= 0:
+            continue
+        fallback_px = (
+            float(asset.current_price_usd)
+            if isinstance(asset.current_price_usd, (int, float))
+            else None
+        )
+        live_spot = xsp.resolve_live_spot_usd(
+            fallback_price_usd=fallback_px,
+            equity_balance=equity_balance,
+            token_address=str(asset.token_address),
+            token_decimals=int(asset.decimals),
+        )
+        if xsp.is_underwater_symbol(
+            state,
+            sym,
+            fallback_price_usd=fallback_px,
+            live_spot_usd=live_spot,
+        ):
+            underwater_candidates.append(sym)
+
     if not xsp.loss_cut_cycle_eligible(
         risk_level=risk_level,
         total_portfolio_usd=float(balances.total_portfolio_usd),
+        has_underwater_position=bool(underwater_candidates),
     ):
+        from modules import runtime as _rt
+
+        print(
+            f"{_rt._nanolog()}loss-cut inactive | risk={risk_level} | "
+            f"underwater={','.join(underwater_candidates) or 'none'} | "
+            f"portfolio=${float(balances.total_portfolio_usd):.2f} | "
+            f"reason={'portfolio_below_min' if not xsp.loss_cut_portfolio_eligible(total_portfolio_usd=float(balances.total_portfolio_usd)) else 'risk_not_HIGH_and_no_underwater_any_risk'}"
+        )
         return None
 
-    assets_by_sym = {str(a.symbol).strip().upper(): a for a in assets}
     for sym in sorted(xsp.loss_cut_symbols()):
         asset = assets_by_sym.get(sym)
         if asset is None:
@@ -1167,7 +1208,7 @@ def _try_build_high_risk_loss_cut_decision(
             token_address=str(asset.token_address),
             token_decimals=int(asset.decimals),
         )
-        underwater, entry_px, spot_px, loss_pct = xsp.underwater_context(
+        underwater, entry_px, spot_px, loss_pct, entry_synthetic = xsp.underwater_context(
             state,
             sym,
             fallback_price_usd=fallback_px,
@@ -1175,10 +1216,11 @@ def _try_build_high_risk_loss_cut_decision(
         )
         if not underwater:
             continue
+        synth_note = " (bootstrap entry)" if entry_synthetic else ""
         print(
             f"{runtime._nanolog()}HIGH risk loss-cut allowed for {sym} "
-            f"(unrealized loss detected) | entry=${entry_px:.2f} | spot=${spot_px:.2f} | "
-            f"loss_pct={loss_pct:.2f}%"
+            f"(unrealized loss detected){synth_note} | entry=${entry_px:.2f} | spot=${spot_px:.2f} | "
+            f"loss_pct={loss_pct:.2f}% | risk={risk_level}"
         )
         plan, block = trader.build_loss_cut_plan_with_block_reason(
             symbol=sym,

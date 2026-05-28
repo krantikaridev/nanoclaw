@@ -46,6 +46,7 @@ def record_equity_entry(
         "notional_usd": float(notional_usd),
         "entry_ts": float(time.time()),
         "tx_hash": str(tx_hash),
+        "synthetic": False,
     }
 
 
@@ -56,28 +57,6 @@ def get_equity_entry(state: dict | None, symbol: str) -> dict[str, Any] | None:
     return raw if isinstance(raw, dict) else None
 
 
-def resolve_entry_price_usd(
-    state: dict | None,
-    symbol: str,
-    *,
-    fallback_price_usd: float | None = None,
-) -> float | None:
-    """
-    Entry price for underwater math.
-
-    Uses persisted fill price when present; otherwise bootstraps from
-    ``followed_equities.json`` ``current_price_usd`` for existing holdings.
-    """
-    entry = get_equity_entry(state, symbol)
-    if entry is not None:
-        px = float(entry.get("entry_price_usd", 0.0) or 0.0)
-        if px > 0:
-            return px
-    if fallback_price_usd is not None and float(fallback_price_usd) > 0:
-        return float(fallback_price_usd)
-    return None
-
-
 def resolve_live_spot_usd(
     *,
     fallback_price_usd: float | None,
@@ -85,10 +64,8 @@ def resolve_live_spot_usd(
     token_address: str,
     token_decimals: int,
 ) -> float | None:
-    """Best-effort spot USD per token unit (fallback floor from followed_equities when quote unavailable)."""
-    if fallback_price_usd is not None and float(fallback_price_usd) > 0:
-        return float(fallback_price_usd)
-    if equity_balance <= 0:
+    """Live spot per token: on-chain quote first, then ``current_price_usd`` fallback."""
+    if equity_balance <= 0 and (fallback_price_usd is None or float(fallback_price_usd) <= 0):
         return None
     try:
         from modules import runtime as rt
@@ -105,7 +82,37 @@ def resolve_live_spot_usd(
             return float(quote_usd)
     except Exception:
         pass
+    if fallback_price_usd is not None and float(fallback_price_usd) > 0:
+        return float(fallback_price_usd)
     return None
+
+
+def resolve_entry_price_usd(
+    state: dict | None,
+    symbol: str,
+    *,
+    fallback_price_usd: float | None = None,
+    live_spot_usd: float | None = None,
+) -> tuple[float | None, bool]:
+    """
+    Entry price for underwater math.
+
+    Returns (price, synthetic_bootstrap). Persisted fills win; otherwise estimate
+    cost above FE floor when the position predates entry tracking.
+    """
+    sym = str(symbol).strip().upper()
+    entry = get_equity_entry(state, sym)
+    if entry is not None:
+        px = float(entry.get("entry_price_usd", 0.0) or 0.0)
+        if px > 0:
+            return px, bool(entry.get("synthetic"))
+    if fallback_price_usd is None or float(fallback_price_usd) <= 0:
+        return None, False
+    premium = float(getattr(cfg, "HIGH_RISK_LOSS_CUT_BOOTSTRAP_ENTRY_PREMIUM_PCT", 12.0))
+    base = float(fallback_price_usd)
+    if live_spot_usd is not None and float(live_spot_usd) > 0:
+        base = max(base, float(live_spot_usd))
+    return base * (1.0 + premium / 100.0), True
 
 
 def underwater_context(
@@ -114,39 +121,57 @@ def underwater_context(
     *,
     fallback_price_usd: float | None,
     live_spot_usd: float | None,
-) -> tuple[bool, float | None, float | None, float | None]:
+) -> tuple[bool, float | None, float | None, float | None, bool]:
     """
-    Returns (is_underwater, entry_px, spot_px, loss_pct).
+    Returns (is_underwater, entry_px, spot_px, loss_pct, entry_synthetic).
 
     Underwater when ``spot < entry * (1 - LOSS_PCT/100)``.
     """
     if not allow_high_risk_loss_cut_xsignal():
-        return False, None, None, None
+        return False, None, None, None, False
     sym = str(symbol).strip().upper()
     if sym not in loss_cut_symbols():
-        return False, None, None, None
-    entry_px = resolve_entry_price_usd(state, sym, fallback_price_usd=fallback_price_usd)
-    if entry_px is None or entry_px <= 0:
-        return False, None, None, None
+        return False, None, None, None, False
     spot_px = live_spot_usd
     if spot_px is None or spot_px <= 0:
-        return False, entry_px, None, None
+        return False, None, None, None, False
+    entry_px, entry_synthetic = resolve_entry_price_usd(
+        state,
+        sym,
+        fallback_price_usd=fallback_price_usd,
+        live_spot_usd=spot_px,
+    )
+    if entry_px is None or entry_px <= 0:
+        return False, None, spot_px, None, False
     loss_pct = (float(entry_px) - float(spot_px)) / float(entry_px) * 100.0
     threshold = float(getattr(cfg, "HIGH_RISK_LOSS_CUT_LOSS_PCT", 3.0))
-    return float(loss_pct) + 1e-9 >= threshold, entry_px, spot_px, loss_pct
+    return float(loss_pct) + 1e-9 >= threshold, entry_px, spot_px, loss_pct, entry_synthetic
+
+
+def loss_cut_portfolio_eligible(*, total_portfolio_usd: float) -> bool:
+    if not allow_high_risk_loss_cut_xsignal():
+        return False
+    min_pf = float(getattr(cfg, "HIGH_RISK_LOSS_CUT_MIN_PORTFOLIO_USD", 130.0))
+    return float(total_portfolio_usd) > min_pf
 
 
 def loss_cut_cycle_eligible(
     *,
     risk_level: str,
     total_portfolio_usd: float,
+    has_underwater_position: bool = False,
 ) -> bool:
-    if not allow_high_risk_loss_cut_xsignal():
+    if not loss_cut_portfolio_eligible(total_portfolio_usd=total_portfolio_usd):
         return False
-    if str(risk_level).strip().upper() != "HIGH":
-        return False
-    min_pf = float(getattr(cfg, "HIGH_RISK_LOSS_CUT_MIN_PORTFOLIO_USD", 130.0))
-    return float(total_portfolio_usd) > min_pf
+    risk = str(risk_level).strip().upper()
+    if risk == "HIGH":
+        return True
+    if (
+        bool(getattr(cfg, "HIGH_RISK_LOSS_CUT_WHEN_UNDERWATER_ANY_RISK", True))
+        and has_underwater_position
+    ):
+        return True
+    return False
 
 
 def is_underwater_symbol(
@@ -156,7 +181,7 @@ def is_underwater_symbol(
     fallback_price_usd: float | None,
     live_spot_usd: float | None,
 ) -> bool:
-    underwater, _, _, _ = underwater_context(
+    underwater, _, _, _, _ = underwater_context(
         state,
         symbol,
         fallback_price_usd=fallback_price_usd,

@@ -20,7 +20,7 @@ def test_underwater_detected_when_spot_below_entry_threshold():
             "LINK_ALPHA": {"entry_price_usd": 10.0, "notional_usd": 20.0},
         }
     }
-    underwater, entry, spot, loss = xsp.underwater_context(
+    underwater, entry, spot, loss, _syn = xsp.underwater_context(
         state,
         "LINK_ALPHA",
         fallback_price_usd=9.43,
@@ -38,13 +38,55 @@ def test_underwater_false_when_spot_near_entry():
             "LINK_ALPHA": {"entry_price_usd": 10.0, "notional_usd": 20.0},
         }
     }
-    underwater, _, _, _ = xsp.underwater_context(
+    underwater, _, _, _, _ = xsp.underwater_context(
         state,
         "LINK_ALPHA",
         fallback_price_usd=10.0,
         live_spot_usd=9.8,
     )
     assert not underwater
+
+
+def test_bootstrap_entry_above_fallback_enables_underwater_without_persisted_entry():
+    state: dict = {}
+    underwater, entry, spot, loss, synthetic = xsp.underwater_context(
+        state,
+        "LINK_ALPHA",
+        fallback_price_usd=9.43,
+        live_spot_usd=8.5,
+    )
+    assert synthetic
+    assert entry == pytest.approx(9.43 * 1.12)
+    assert underwater
+    assert loss == pytest.approx((entry - 8.5) / entry * 100.0)
+
+
+def test_live_spot_prefers_quote_over_fallback(monkeypatch):
+    monkeypatch.setattr(
+        "modules.runtime._quote_followed_token_usdt_mtm",
+        lambda *_a, **_k: 8.25,
+    )
+    spot = xsp.resolve_live_spot_usd(
+        fallback_price_usd=9.43,
+        equity_balance=12.0,
+        token_address="0x" + "a" * 40,
+        token_decimals=18,
+    )
+    assert spot == pytest.approx(8.25)
+
+
+def test_loss_cut_eligible_on_low_risk_when_underwater(monkeypatch):
+    monkeypatch.setattr(cfg, "HIGH_RISK_LOSS_CUT_WHEN_UNDERWATER_ANY_RISK", True, raising=False)
+    assert xsp.loss_cut_cycle_eligible(
+        risk_level="LOW",
+        total_portfolio_usd=140.0,
+        has_underwater_position=True,
+    )
+    assert not xsp.loss_cut_cycle_eligible(
+        risk_level="LOW",
+        total_portfolio_usd=140.0,
+        has_underwater_position=False,
+    )
 
 
 def test_record_and_resolve_entry():
@@ -56,7 +98,9 @@ def test_record_and_resolve_entry():
         notional_usd=10.0,
         tx_hash="0xabc",
     )
-    assert xsp.resolve_entry_price_usd(state, "LINK_ALPHA") == pytest.approx(12.5)
+    px, synthetic = xsp.resolve_entry_price_usd(state, "LINK_ALPHA")
+    assert px == pytest.approx(12.5)
+    assert not synthetic
 
 
 def test_max_buy_strength_excludes_underwater_symbol(monkeypatch):
