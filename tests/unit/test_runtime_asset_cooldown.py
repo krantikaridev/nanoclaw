@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import os
 import time
 
 import pytest
 
+import config as cfg
 import modules.runtime as rt
 
 
@@ -31,3 +33,14 @@ def test_asset_cooldown_remaining_zero_when_ready():
     rt.ASSET_LAST_TRADE["WETH_ALPHA"] = time.time() - 10_000
     assert rt.can_trade_asset("WETH_ALPHA", cooldown_seconds=1200)
     assert rt.asset_cooldown_remaining_seconds("WETH_ALPHA", cooldown_seconds=1200) == 0.0
+
+
+def test_cycle_lock_ttl_uses_config_default(monkeypatch, tmp_path):
+    monkeypatch.setattr(cfg, "NANOCLOW_CYCLE_LOCK_SECONDS", 300, raising=False)
+    lock = tmp_path / "nanoclaw.lock"
+    lock.write_text("", encoding="utf-8")
+    now = time.time()
+    os.utime(lock, (now - 100, now - 100))
+    assert rt.has_active_lock(lock_file=str(lock), now=now)
+    os.utime(lock, (now - 400, now - 400))
+    assert not rt.has_active_lock(lock_file=str(lock), now=now)

@@ -1102,16 +1102,31 @@ def save_state(state: dict, path: str = STATE_FILE) -> None:
         json.dump(state, file_handle, indent=2)
 
 
-def has_active_lock(lock_file: str = LOCK_FILE, now: Optional[float] = None, lock_seconds: int = 15) -> bool:
+def _cycle_lock_seconds() -> int:
+    return max(15, int(getattr(cfg, "NANOCLOW_CYCLE_LOCK_SECONDS", 300)))
+
+
+def has_active_lock(
+    lock_file: str = LOCK_FILE,
+    now: Optional[float] = None,
+    lock_seconds: int | None = None,
+) -> bool:
     if not os.path.exists(lock_file):
         return False
     current_time = time.time() if now is None else now
-    return (current_time - os.path.getmtime(lock_file)) < lock_seconds
+    ttl = _cycle_lock_seconds() if lock_seconds is None else int(lock_seconds)
+    return (current_time - os.path.getmtime(lock_file)) < ttl
 
 
 def create_lock(lock_file: str = LOCK_FILE) -> None:
     with open(lock_file, "w", encoding="utf-8"):
         pass
+
+
+def touch_lock(lock_file: str = LOCK_FILE) -> None:
+    """Refresh lock mtime during long approve/swap so overlapping cron cannot start."""
+    if os.path.exists(lock_file):
+        os.utime(lock_file, None)
 
 
 def release_lock(lock_file: str = LOCK_FILE) -> None:

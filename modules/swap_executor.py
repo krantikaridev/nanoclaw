@@ -2415,6 +2415,25 @@ def _x_signal_symbol_from_decision(decision: TradeDecision) -> str:
     return "UNKNOWN"
 
 
+def _is_loss_cut_executable_decision(decision: TradeDecision | None) -> bool:
+    if decision is None or not decision.should_execute:
+        return False
+    if str(decision.direction or "").strip().upper() != "EQUITY_TO_USDC":
+        return False
+    return "loss-cut" in str(decision.message or "").lower()
+
+
+def _reserve_loss_cut_cooldown_before_swap(decision: TradeDecision) -> None:
+    """Persist per-asset cooldown as soon as loss-cut is selected (before long approve/swap)."""
+    asset = getattr(decision, "cooldown_asset", None)
+    if not isinstance(asset, tuple) or len(asset) < 2:
+        return
+    sym_ca, secs_a = str(asset[0] or "").strip(), int(asset[1])
+    if sym_ca and secs_a > 0:
+        cs = _facade()
+        cs.mark_asset_traded(sym_ca, cooldown_seconds=secs_a)
+
+
 def _x_signal_stf_pause_entry(state: dict | None, symbol: str) -> dict:
     if state is None:
         raise ValueError("state is required for X-SIGNAL STF backoff tracking")
@@ -3395,6 +3414,8 @@ async def main(*, dry_run: bool = False) -> None:
                 cycle_control=snap,
             )
         )
+        if _is_loss_cut_executable_decision(decision):
+            _reserve_loss_cut_cooldown_before_swap(decision)
         cs.save_state(state)
 
         if decision.message:
@@ -3571,6 +3592,7 @@ async def main(*, dry_run: bool = False) -> None:
                 f"min_out_extra={mo_extra} bps | quote=v3_stable_prefer+quoter_v2+v2_fallback"
             )
 
+        runtime.touch_lock()
         swap_outcome: dict = {}
         tx_hash = await approve_and_swap(
             w3,
