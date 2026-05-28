@@ -235,6 +235,7 @@ _effective_floor_for_equity = signal._effective_floor_for_equity
 ensure_usdc_for_x_signal = signal.ensure_usdc_for_x_signal
 evaluate_x_signal_equity_trade = signal.evaluate_x_signal_equity_trade
 try_x_signal_equity_decision = signal.try_x_signal_equity_decision
+try_high_risk_loss_cut_equity_decision = signal.try_high_risk_loss_cut_equity_decision
 
 if __name__ == "__main__":
     if not logging.root.handlers:

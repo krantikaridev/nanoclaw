@@ -2765,7 +2765,7 @@ def determine_trade_decision(
         state=state,
     )
     print(
-        "🔍 DECISION PATH | precedence: PROTECTION → "
+        "🔍 DECISION PATH | precedence: PROTECTION → HIGH_RISK_LOSS_CUT → "
         + (
             "X_SIGNAL_EQUITY (rotation-priority BUY — Signal-Driven Rotation) → PROFIT_TAKE → "
             if x_signal_rotation_first
@@ -2804,6 +2804,71 @@ def determine_trade_decision(
         wmatic_balance=float(balances.wmatic),
     )
     planning_gas_gwei = _planning_gas_gwei_for_net_edge()
+
+    loss_cut_decision = signal_module.try_high_risk_loss_cut_equity_decision(
+        balances,
+        dry_run=dry_run,
+        state=state,
+    )
+    if loss_cut_decision is not None and loss_cut_decision.should_execute:
+        lc_dir = str(loss_cut_decision.direction or "").strip().upper()
+        if pause_active and lc_dir == "EQUITY_TO_USDC":
+            if "loss-cut" in str(loss_cut_decision.message or "").lower():
+                print(
+                    f"{runtime._nanolog()}defensive_pause: loss-cut SELL allowed "
+                    f"({_x_signal_symbol_from_decision(loss_cut_decision)} underwater)"
+                )
+            else:
+                cs._log_trade_skipped(
+                    f"defensive_pause (risk=HIGH, remaining_cycles={pause_remaining}) — pausing equity SELL"
+                )
+                loss_cut_decision = None
+        if loss_cut_decision is not None and entries_paused and lc_dir in _CONTROL_PAUSE_BLOCK_ENTRIES:
+            cs._log_trade_skipped("control.json paused=True — skipping loss-cut entry trade")
+            loss_cut_decision = None
+        if loss_cut_decision is not None:
+            loss_cut_decision = _x_signal_apply_stf_pause_filter(loss_cut_decision, state=state)
+        if loss_cut_decision is not None:
+            loss_cut_decision = _x_signal_apply_blocked_symbol_filter(
+                loss_cut_decision,
+                log_skip=cs._log_trade_skipped,
+            )
+        if loss_cut_decision is not None and loss_cut_decision.should_execute:
+            print("🔍 DECISION PATH: HIGH_RISK_LOSS_CUT (underwater X-SIGNAL equity trim)")
+            x_dust_min_lc = _x_signal_equity_effective_dust_min(balances)
+            lc_notional = _decision_notional_usd(loss_cut_decision, current_price_usd=current_price)
+            blocked_lc, edge_lc = _decision_blocked_by_min_net_edge(
+                loss_cut_decision,
+                trade_usd=lc_notional,
+                gas_gwei=planning_gas_gwei,
+                log_skip=cs._log_trade_skipped,
+                stage="loss_cut_decision",
+            )
+            if blocked_lc:
+                decision_log.log_x_signal_decision(
+                    _x_signal_symbol_from_decision(loss_cut_decision),
+                    "REJECT",
+                    "below_min_net_edge",
+                    signal=loss_cut_decision.signal_strength,
+                    expected_edge_pct=edge_lc,
+                    notional_usd=lc_notional,
+                    wmatic_balance=float(balances.wmatic),
+                    extra=f"floor={_min_net_edge_floor_pct():.2f}%",
+                    state=state,
+                )
+            elif not _defer_if_dust(
+                loss_cut_decision,
+                branch_name="HIGH_RISK_LOSS_CUT",
+                current_price_usd=current_price,
+                min_trade_usd=x_dust_min_lc,
+            ):
+                decision_log.record_x_signal_cycle_outcome(
+                    state,
+                    taken=True,
+                    reason="loss_cut_executable",
+                    wmatic_balance=float(balances.wmatic),
+                )
+                return loss_cut_decision
 
     def _resolve_x_signal_equity_decision() -> Optional[TradeDecision]:
         if not cs.ENABLE_X_SIGNAL_EQUITY:

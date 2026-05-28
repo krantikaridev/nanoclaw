@@ -75,6 +75,47 @@ def test_live_spot_prefers_quote_over_fallback(monkeypatch):
     assert spot == pytest.approx(8.25)
 
 
+def test_loss_cut_spot_caps_inflated_quote(monkeypatch):
+    monkeypatch.setattr(cfg, "HIGH_RISK_LOSS_CUT_SPOT_SANITY_MULT", 1.35, raising=False)
+    monkeypatch.setattr(
+        "modules.runtime._quote_followed_token_usdt_mtm",
+        lambda *_a, **_k: 63.16,
+    )
+    spot = xsp.resolve_live_spot_usd(
+        fallback_price_usd=9.43,
+        equity_balance=12.0,
+        token_address="0x" + "a" * 40,
+        token_decimals=18,
+        mode="loss_cut",
+    )
+    assert spot == pytest.approx(9.43)
+
+
+def test_bootstrap_underwater_after_inflated_quote_capped(monkeypatch):
+    monkeypatch.setattr(cfg, "HIGH_RISK_LOSS_CUT_SPOT_SANITY_MULT", 1.35, raising=False)
+    monkeypatch.setattr(
+        "modules.runtime._quote_followed_token_usdt_mtm",
+        lambda *_a, **_k: 63.16,
+    )
+    state: dict = {}
+    underwater, entry, spot, loss, synthetic = xsp.underwater_context(
+        state,
+        "LINK_ALPHA",
+        fallback_price_usd=9.43,
+        live_spot_usd=xsp.resolve_live_spot_usd(
+            fallback_price_usd=9.43,
+            equity_balance=12.0,
+            token_address="0x" + "a" * 40,
+            token_decimals=18,
+            mode="loss_cut",
+        ),
+    )
+    assert synthetic
+    assert underwater
+    assert spot == pytest.approx(9.43)
+    assert entry == pytest.approx(9.43 * 1.12)
+
+
 def test_loss_cut_eligible_on_low_risk_when_underwater(monkeypatch):
     monkeypatch.setattr(cfg, "HIGH_RISK_LOSS_CUT_WHEN_UNDERWATER_ANY_RISK", True, raising=False)
     assert xsp.loss_cut_cycle_eligible(

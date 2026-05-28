@@ -63,27 +63,48 @@ def resolve_live_spot_usd(
     equity_balance: float,
     token_address: str,
     token_decimals: int,
+    mode: str = "default",
 ) -> float | None:
-    """Live spot per token: on-chain quote first, then ``current_price_usd`` fallback."""
+    """Live spot per token: on-chain quote first, then ``current_price_usd`` fallback.
+
+    ``mode='loss_cut'`` caps quotes far above FE fallback (drained-pool / size-impact
+    misquotes) so underwater trims are not suppressed by an inflated live spot.
+    """
     if equity_balance <= 0 and (fallback_price_usd is None or float(fallback_price_usd) <= 0):
         return None
+    fallback = (
+        float(fallback_price_usd)
+        if fallback_price_usd is not None and float(fallback_price_usd) > 0
+        else None
+    )
+    quote_usd: float | None = None
     try:
         from modules import runtime as rt
 
         slip = int(getattr(cfg, "INVENTORY_MTM_SLIPPAGE_BPS", 300))
         one_unit = int(10 ** int(token_decimals))
-        quote_usd = rt._quote_followed_token_usdt_mtm(
+        raw_quote = rt._quote_followed_token_usdt_mtm(
             rt.w3,
             token_in=str(token_address).strip(),
             amount_in_raw=one_unit,
             slippage_bps=slip,
         )
-        if quote_usd > 0:
-            return float(quote_usd)
+        if raw_quote > 0:
+            quote_usd = float(raw_quote)
     except Exception:
         pass
-    if fallback_price_usd is not None and float(fallback_price_usd) > 0:
-        return float(fallback_price_usd)
+    if quote_usd is not None and quote_usd > 0:
+        if (
+            str(mode).strip().lower() == "loss_cut"
+            and fallback is not None
+            and quote_usd > fallback * float(
+                getattr(cfg, "HIGH_RISK_LOSS_CUT_SPOT_SANITY_MULT", 1.35)
+            )
+        ):
+            return fallback
+        return quote_usd
+    if fallback is not None:
+        return fallback
     return None
 
 

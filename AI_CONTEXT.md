@@ -340,7 +340,7 @@ Directional milestones only—**capital scales when gates pass**, not on calenda
   - `defensive_pause` still blocks BUYs; **loss-cut SELL** passes (`defensive_pause: loss-cut SELL allowed`).
 - **Operator grep**: `grep -E 'loss-cut|loss_cut|underwater|PLAN_BUILD_SUCCESS.*LOSS_CUT|HIGH risk loss-cut BUY blocked' real_cron.log | tail -30`
 - **Rollback**: `ALLOW_HIGH_RISK_LOSS_CUT_XSIGNAL=false`
-- **Post-deploy fix**: Live spot must come from **on-chain quote** (not FE fallback = entry). Bootstrap entry uses `HIGH_RISK_LOSS_CUT_BOOTSTRAP_ENTRY_PREMIUM_PCT` (default 12%) when no persisted fill. `HIGH_RISK_LOSS_CUT_WHEN_UNDERWATER_ANY_RISK=true` allows trim when stables recovered above HIGH buffer but LINK still underwater. Grep: `loss-cut inactive`, `bootstrap entry`.
+- **Post-deploy fix**: Live spot from on-chain quote; bootstrap entry uses `HIGH_RISK_LOSS_CUT_BOOTSTRAP_ENTRY_PREMIUM_PCT` (default 12%). `HIGH_RISK_LOSS_CUT_WHEN_UNDERWATER_ANY_RISK=true` trims when LINK underwater even if `Risk=LOW`. `HIGH_RISK_LOSS_CUT_SPOT_SANITY_MULT` (default 1.35) caps inflated pool quotes vs FE fallback. Loss-cut runs in **`determine_trade_decision`** after protection (no `ENABLE_X_SIGNAL_EQUITY` gate). Grep: `loss-cut evaluate`, `loss-cut inactive`, `loss-cut allowed`, `bootstrap entry`.
 
 ## Today's learnings (27 May 2026 — PnL turnover / rotation metrics)
 

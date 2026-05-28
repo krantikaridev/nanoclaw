@@ -1130,6 +1130,9 @@ def _try_build_high_risk_loss_cut_decision(
     """HIGH-risk partial exit for underwater configured symbols (e.g. LINK_ALPHA)."""
     from modules import x_signal_position as xsp
 
+    if not xsp.allow_high_risk_loss_cut_xsignal():
+        return None
+
     assets_by_sym = {str(a.symbol).strip().upper(): a for a in assets}
     underwater_candidates: list[str] = []
     for sym in sorted(xsp.loss_cut_symbols()):
@@ -1154,6 +1157,7 @@ def _try_build_high_risk_loss_cut_decision(
             equity_balance=equity_balance,
             token_address=str(asset.token_address),
             token_decimals=int(asset.decimals),
+            mode="loss_cut",
         )
         if xsp.is_underwater_symbol(
             state,
@@ -1162,6 +1166,45 @@ def _try_build_high_risk_loss_cut_decision(
             live_spot_usd=live_spot,
         ):
             underwater_candidates.append(sym)
+
+    for sym in sorted(xsp.loss_cut_symbols()):
+        asset = assets_by_sym.get(sym)
+        if asset is None:
+            continue
+        try:
+            equity_balance = float(
+                get_token_balance(str(asset.token_address), int(asset.decimals))
+            )
+        except Exception:
+            continue
+        if equity_balance <= 0:
+            continue
+        fallback_px = (
+            float(asset.current_price_usd)
+            if isinstance(asset.current_price_usd, (int, float))
+            else None
+        )
+        live_spot = xsp.resolve_live_spot_usd(
+            fallback_price_usd=fallback_px,
+            equity_balance=equity_balance,
+            token_address=str(asset.token_address),
+            token_decimals=int(asset.decimals),
+            mode="loss_cut",
+        )
+        underwater, entry_px, spot_px, loss_pct, entry_synthetic = xsp.underwater_context(
+            state,
+            sym,
+            fallback_price_usd=fallback_px,
+            live_spot_usd=live_spot,
+        )
+        entry_s = f"${entry_px:.2f}" if entry_px else "n/a"
+        spot_s = f"${spot_px:.2f}" if spot_px is not None else "n/a"
+        loss_s = f"{loss_pct:.2f}%" if loss_pct is not None else "n/a"
+        synth = " bootstrap_entry" if entry_synthetic else ""
+        print(
+            f"{runtime._nanolog()}loss-cut evaluate | {sym} | underwater={underwater} | "
+            f"entry={entry_s} | spot={spot_s} | loss_pct={loss_s}{synth}"
+        )
 
     if not xsp.loss_cut_cycle_eligible(
         risk_level=risk_level,
@@ -1207,6 +1250,7 @@ def _try_build_high_risk_loss_cut_decision(
             equity_balance=equity_balance,
             token_address=str(asset.token_address),
             token_decimals=int(asset.decimals),
+            mode="loss_cut",
         )
         underwater, entry_px, spot_px, loss_pct, entry_synthetic = xsp.underwater_context(
             state,
@@ -1248,6 +1292,49 @@ def _try_build_high_risk_loss_cut_decision(
             signal_strength=float(plan.signal_strength or 0.0),
         )
     return None
+
+
+def try_high_risk_loss_cut_equity_decision(
+    balances: Balances,
+    *,
+    dry_run: bool = False,
+    state: dict | None = None,
+) -> Optional[TradeDecision]:
+    """Underwater trim for configured symbols; runs without ``ENABLE_X_SIGNAL_EQUITY``."""
+    from modules import x_signal_position as xsp
+
+    if not xsp.allow_high_risk_loss_cut_xsignal():
+        return None
+    fcb = _cs_mod()
+    assets_seq = _filter_xsignal_blocked_equities(
+        fcb.X_SIGNAL_EQUITY_TRADER.load_followed_equities(),
+        log_skips=False,
+    )
+    if not assets_seq:
+        return None
+    snapshot_usdt = float(balances.usdt)
+    if not dry_run:
+        balances = fcb.get_balances()
+    risk_level, _risk_ctx = _assess_x_signal_buy_risk(
+        onchain_usdt=float(balances.usdt),
+        onchain_usdc=float(balances.usdc),
+        onchain_wmatic=float(balances.wmatic),
+        snapshot_usdt=(None if dry_run else snapshot_usdt),
+    )
+    fe_cfg = fcb._load_followed_equities_json_dict()
+    min_strength = fcb._effective_equity_signal_min(fe_cfg)
+    tuned_trader = fcb._tuned_signal_equity_trader(min_strength)
+    secs_order = int(tuned_trader.config.per_asset_cooldown_seconds)
+    return _try_build_high_risk_loss_cut_decision(
+        assets=assets_seq,
+        balances=balances,
+        risk_level=risk_level,
+        state=state,
+        trader=tuned_trader,
+        secs_cooldown=secs_order,
+        get_token_balance=fcb.get_token_balance,
+        can_trade_asset=fcb.can_trade_asset,
+    )
 
 
 def try_x_signal_equity_decision(
@@ -1614,19 +1701,6 @@ def try_x_signal_equity_decision(
             hint = _polygon_chain_hint(str(a.symbol), str(a.token_address))
             if hint:
                 chain_notes.append(hint)
-
-        loss_cut_decision = _try_build_high_risk_loss_cut_decision(
-            assets=assets,
-            balances=balances,
-            risk_level=risk_level,
-            state=state,
-            trader=tuned_trader,
-            secs_cooldown=secs_order,
-            get_token_balance=fcb.get_token_balance,
-            can_trade_asset=fcb.can_trade_asset,
-        )
-        if loss_cut_decision is not None:
-            return loss_cut_decision
 
         print(f"{runtime._nanolog()}=== BUILDING TRADE PLANS ===")
         plans = []

@@ -152,8 +152,8 @@ def test_defensive_pause_allows_loss_cut_sell(monkeypatch):
     monkeypatch.setattr(swap_executor, "cs_check_exit_conditions", lambda: (False, None))
     monkeypatch.setattr(swap_executor, "cs_evaluate_take_profit", lambda *_a, **_k: (False, None))
     monkeypatch.setattr(
-        swap_executor,
-        "cs_try_x_signal_equity_decision",
+        swap_executor.signal_module,
+        "try_high_risk_loss_cut_equity_decision",
         lambda *_a, **_k: TradeDecision(
             direction="EQUITY_TO_USDC",
             amount_in=1_000_000_000_000_000_000,
@@ -161,6 +161,7 @@ def test_defensive_pause_allows_loss_cut_sell(monkeypatch):
             cooldown_asset=("LINK_ALPHA", 60),
         ),
     )
+    monkeypatch.setattr(swap_executor, "cs_try_x_signal_equity_decision", lambda *_a, **_k: None)
     monkeypatch.setattr(swap_executor, "_facade", lambda: cs)
     monkeypatch.setattr(swap_executor, "is_copy_trading_enabled", lambda: False)
     monkeypatch.setattr(swap_executor, "_signal_driven_rotation_x_signal_first", lambda: True)
