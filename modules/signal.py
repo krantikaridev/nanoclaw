@@ -1226,9 +1226,12 @@ def _try_build_high_risk_loss_cut_decision(
         if asset is None:
             continue
         if not can_trade_asset(sym, None, int(secs_cooldown)):
+            remain_s = runtime.asset_cooldown_remaining_seconds(
+                sym, cooldown_seconds=int(secs_cooldown)
+            )
             print(
                 f"{runtime._nanolog()}HIGH risk loss-cut deferred for {sym} "
-                f"(per-asset cooldown)"
+                f"(per-asset cooldown, ~{remain_s:.0f}s remaining)"
             )
             continue
         try:

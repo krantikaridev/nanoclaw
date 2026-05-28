@@ -171,6 +171,7 @@ def _effective_floor_for_equity(asset: FollowedEquity, min_strength: float) -> f
 
 WALLET_LAST_TRADE: Dict[str, float] = {}
 ASSET_LAST_TRADE: Dict[str, float] = {}
+_ASSET_LAST_TRADE_STATE_KEY = "asset_last_trade_unix"
 
 
 @dataclass(frozen=True)
@@ -300,16 +301,48 @@ def mark_wallet_traded(
     print(f"📌 Wallet {wallet_address[:8]}... cooldown started ({cooldown_seconds}s)")
 
 
-def can_trade_asset(symbol: str, now: Optional[float] = None, cooldown_seconds: int = 0) -> bool:
+def asset_cooldown_remaining_seconds(
+    symbol: str,
+    now: Optional[float] = None,
+    cooldown_seconds: int = 0,
+) -> float:
+    """Seconds until per-asset cooldown elapses (0 when ready)."""
     current_time = time.time() if now is None else now
-    last = ASSET_LAST_TRADE.get(symbol, 0)
-    return (current_time - last) > int(cooldown_seconds)
+    last = float(ASSET_LAST_TRADE.get(symbol, 0) or 0)
+    remain = float(cooldown_seconds) - (current_time - last)
+    return max(0.0, remain)
+
+
+def can_trade_asset(symbol: str, now: Optional[float] = None, cooldown_seconds: int = 0) -> bool:
+    return asset_cooldown_remaining_seconds(symbol, now=now, cooldown_seconds=cooldown_seconds) <= 0.0
 
 
 def mark_asset_traded(symbol: str, now: Optional[float] = None, cooldown_seconds: int = 0) -> None:
     ASSET_LAST_TRADE[symbol] = time.time() if now is None else now
     if cooldown_seconds:
         print(f"📌 Asset {symbol} cooldown started ({int(cooldown_seconds)}s)")
+
+
+def _hydrate_asset_last_trade_from_state(state: dict) -> None:
+    """Restore per-asset cooldown timestamps from ``bot_state.json`` (cron is one process per cycle)."""
+    raw = state.get(_ASSET_LAST_TRADE_STATE_KEY)
+    if not isinstance(raw, dict):
+        return
+    for sym, ts in raw.items():
+        key = str(sym).strip()
+        if not key:
+            continue
+        try:
+            ASSET_LAST_TRADE[key] = float(ts)
+        except (TypeError, ValueError):
+            continue
+
+
+def _persist_asset_last_trade_to_state(state: dict) -> None:
+    if ASSET_LAST_TRADE:
+        state[_ASSET_LAST_TRADE_STATE_KEY] = {
+            str(k): float(v) for k, v in ASSET_LAST_TRADE.items()
+        }
 
 
 # Cleanup #3 (May 2026): per-(token, wallet) latch of tokens whose ``balanceOf``
@@ -1054,12 +1087,17 @@ def write_portfolio_history_snapshot(current_price: float) -> None:
 def load_state(path: str = STATE_FILE) -> dict:
     try:
         with open(path, "r", encoding="utf-8") as file_handle:
-            return json.load(file_handle)
+            state = json.load(file_handle)
     except Exception:
-        return {"last_run": 0}
+        state = {"last_run": 0}
+    if not isinstance(state, dict):
+        state = {"last_run": 0}
+    _hydrate_asset_last_trade_from_state(state)
+    return state
 
 
 def save_state(state: dict, path: str = STATE_FILE) -> None:
+    _persist_asset_last_trade_to_state(state)
     with open(path, "w", encoding="utf-8") as file_handle:
         json.dump(state, file_handle, indent=2)
 
