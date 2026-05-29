@@ -15,9 +15,12 @@
 
 ## Current focus (top of stack)
 
-- **Turnover metrics — MERGED `22f96757` on `origin/V2`:** `turnover_multiple_session/day_utc` in ROTATION block + `nanovel`. **VM deploy:** `git pull` + `nanoup` (no `--reset-session` on top-up).
-- **Operator — USDC top-up in progress (~$16 USDT Binance funding):** withdraw/bridge **USDC on Polygon** to `0x05eF…` so on-chain **STABLE ≥ ~$15** (target **~$20** landed after fees). **Do not** reset session/baseline after top-up (v3 flow tags later).
-- **Cleanup #5 — LIVE `d1b82635` / VM may be `580217bf`:** defensive_pause correct when stables low; fills resume when stables ample.
+- **2026-05-29 stop-bleed + rotation — documented in `ROADMAP.md` § [Session log 2026-05-29](ROADMAP.md#session-log-2026-05-29-stage-instance-a--stop-bleed--rotation--llm).** VM @ **`15723c3f`**+; **`ALLOW_HIGH_RISK_LOSS_CUT_XSIGNAL=false`**; blocklist **`LINK_ALPHA, WMATIC_ALPHA, WBTC_ALPHA`**; rotation target **`WETH_ALPHA`** only.
+- **Immediate:** `nanokill` → single `nanoup` → confirm **`EXEC SUCCESS | sym=WETH_ALPHA`** (no `AttributeError`, no `EXEC ATTEMPT | WBTC`).
+- **Session PnL:** ~**+0.18%** (reset 2026-05-29T11:11:38Z); **`velocity_fills_session=0`** until first WETH fill.
+- **Parked (LLM):** Grok advisory-only (Phase B) → APPROVE/DENY gate (Phase C); PhotonBull / X sentiment = intelligence layer only, not Polygon ticker copy.
+- **Turnover metrics — MERGED `22f96757`:** `turnover_multiple_*` in ROTATION / `nanovel`.
+- **Cleanup #5 — LIVE `d1b82635`:** defensive_pause uses combined stables.
 - **Parked (v3):** top-up must not count as profit in `portfolio_history` / session %.
 - **`nanodaily` exit=127:** bare `python` not on PATH — **`source .venv/bin/activate`** before `nanodaily`, or use **`nh`** / **`nanopnl`** (worked in operator session).
 - **Parked:** Instance B; 9 legacy test failures; in-flight stables race.
@@ -141,6 +144,11 @@ grep '=== CYCLE' real_cron.log | tail -1
 | `fb5eac6e` | Cleanup #1: route WALLET TOTAL USD through one helper                           | (other thread)       | merged + deployed to VM 2026-05-26                  |
 | `bbfa05d9` | Enhance FE_USD fallback + diagnostics for unquoted assets                       | this master          | merged + deployed                                   |
 | `ca6ca24c` | Lower WBTC min notional + tighten slippage                                      | this master          | merged + deployed                                   |
+| `ea910953` | POL `_pol_target_for_trade` + `POL_EXECUTION_GAS_*` pre-trade top-up            | stop-bleed side chat | merged 2026-05-29; VM deployed                      |
+| `15723c3f` | Fix `_pol_target_for_trade` via `runtime` + `clean_swap` re-export              | stop-bleed side chat | merged 2026-05-29; VM deployed                      |
+| `069c9976` | Loss-cut dust min + blocklist when only LINK followed                           | Option C             | merged (prior in session)                           |
+| `17f3f421` | 300s cycle lock + loss-cut pre-mark cooldown                                    | Option C             | merged (prior in session)                           |
+| `261e56f9` | Persist `asset_last_trade_unix` in `bot_state.json`                             | Option C             | merged (prior in session)                           |
 
 
 ## Open questions / parked threads
@@ -149,7 +157,9 @@ grep '=== CYCLE' real_cron.log | tail -1
 - **Pre-existing 9 test failures** (profit-take mocks, RPC bleed). Parked for a future cleanup (not #5).
 - **In-flight swap reservation race** (stables snapshot vs swap settle). Parked; steady-state invariants pinned in #3 tests.
 - `**current_price_usd` operator hygiene** (NEW from Cleanup #3 part 2). Fallback is now a true floor; stale fallbacks above true spot will OVERSTATE TOTAL. Operator-facing reminder: refresh `followed_equities.json` fallback prices periodically (no automation yet; candidate for v2.9 if drift becomes visible).
-- `**WMATIC_ALPHA` / `WETH_ALPHA` / `WBTC_ALPHA` blocklist** is operator-managed in `.xsignal_blocked_symbols`. No code change planned unless trading restarts on them.
+- **Instance A blocklist (2026-05-29):** `LINK_ALPHA`, `WMATIC_ALPHA`, `WBTC_ALPHA` blocked; **only `WETH_ALPHA`** open for USDC→equity rotation. See `ROADMAP.md` session log.
+- **Quote-fail fallback:** try next X-SIGNAL plan candidate when primary symbol has no quotable path (WBTC proved this). Side chat TBD.
+- **Overlapping `clean_swap` processes** when quote ramp > cron interval — operator uses `nanokill` + single `nanoup`; code hardening TBD.
 
 ## Decisions log
 
@@ -166,6 +176,11 @@ grep '=== CYCLE' real_cron.log | tail -1
 | 2026-05-26 | X-SIGNAL BUY buffer checks use **USDT+USDC** (`onchain_stable_usd`), not USDT alone        | Cleanup #4 (`844b2e21`); USDT divergence stays USDT-only                                                                                                          |
 | 2026-05-26 | Cycle risk / `_defensive_pause_state` uses **STABLE_USD** via `_x_signal_buy_risk_level_from_buffers` | Cleanup #5 (`d1b82635`); `_cycle_risk_level` passes `balances.usdc`                                                                                              |
 | 2026-05-26 | **PnL:** portfolio baseline **once per wallet epoch**; **session** reset per **tag/deploy** only | No guessed $300 seed; top-ups ≠ profit (v3); VM operator files OK, code → side chat                                                                                  |
+| 2026-05-29 | **Stop bleed:** `ALLOW_HIGH_RISK_LOSS_CUT_XSIGNAL=false` on stage; loss-cut not relied on for LINK dust | Gas spiral from 0.19 POL vs ~0.22 tx; blocklist stops WBTC quote waste |
+| 2026-05-29 | **POL pre-trade target** = `max(MIN_POL floor, POL_EXECUTION_GAS_UNITS × gwei × mult)` | `ea910953`; fixes false “POL sufficient” at 0.19 POL |
+| 2026-05-29 | **`nanoup` preserves** operator loss-cut / recovery flags | `ENV_APPLY_PRESERVE_KEYS` in `env_sync.py` |
+| 2026-05-29 | **PhotonBull / X sentiment** → external intelligence only; **no** US ticker → Polygon swap | LLM phases B–E in `ROADMAP.md` session log §6 |
+| 2026-05-29 | **Rotation leg:** WETH only until `EXEC SUCCESS`; WBTC blocked (no Polygon liquidity) | WMATIC blocked (already hold 70 qty) |
 
 
 ---
@@ -203,7 +218,15 @@ START BY: reading MASTER_BRAINSTORM.md in full, then ask the operator what's nex
 
 ## Append log (side-chat reports come here)
 
+### 2026-05-29 — Stop bleed, POL execution target, rotation unblock (Instance A)
 
+- **Commits:** `261e56f9`, `17f3f421`, `069c9976`, `ea910953`, `15723c3f` (+ earlier loss-cut `7b231434` / `a3f3c9f8` in same arc).
+- **Operator VM:** `0x05eF…` · ~$124 USDC · LINK 0 on-chain · POL ~16 · session ~+0.18% · velocity 0 until WETH fill.
+- **Incidents closed:** loss-cut gas spiral; `nanoup` resetting `ALLOW_HIGH_RISK`; `AttributeError` `_pol_target_for_trade`; WBTC unquotable path.
+- **Safe config:** `ALLOW_HIGH_RISK_LOSS_CUT_XSIGNAL=false`; `.xsignal_blocked_symbols` = LINK, WMATIC, WBTC; cron `*/2` + `COOLDOWN_MINUTES=1`.
+- **Brainstorm captured:** PhotonBull ≠ Polygon; LLM hybrid layers (advisory → gate → control.json → multi-venue) in **`ROADMAP.md` session log**.
+- **Tests:** `test_runtime_pol_topup`, `test_env_sync` preserve keys, `test_high_risk_loss_cut`, startup gas bootstrap (local).
+- **Next:** single-process WETH `EXEC SUCCESS`; then Phase 1 velocity ≥ 0.5/day UTC.
 
 ### 2026-05-26 — Cleanup #3 — PnL accounting drift (POL visibility + LINK fallback floor + stables invariants + WBTC noise gate)
 

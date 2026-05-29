@@ -317,6 +317,17 @@ Directional milestones only—**capital scales when gates pass**, not on calenda
 - Unit tests for take-profit paths, swap path candidates, and X-Signal threshold helper (`tests/unit/`).
 - No non-core alerting layers in-scope; prioritize strategy code and deterministic logs.
 
+## Today's learnings (29 May 2026 — Stop bleed, POL execution target, WETH rotation, LLM brainstorm)
+
+- **Full session log:** `ROADMAP.md` § **Session log: 2026-05-29** (operator playbook, commits, PhotonBull/LLM phases). `MASTER_BRAINSTORM.md` append log 2026-05-29.
+- **Bleed closed on Instance A:** `ALLOW_HIGH_RISK_LOSS_CUT_XSIGNAL=false`; blocklist `LINK_ALPHA`, `WMATIC_ALPHA`, `WBTC_ALPHA`; deploy `ea910953` + `15723c3f` (`_pol_target_for_trade`, `POL_EXECUTION_GAS_UNITS`).
+- **POL:** Pre-trade AUTO-POL compares POL to **`_pol_target_for_trade()`** (not static `MIN_POL_FOR_GAS` alone). Fixes `POL sufficient` at ~0.19 POL while swap needed ~0.22.
+- **Crash → zero velocity:** `AttributeError: clean_swap._pol_target_for_trade` — use **`runtime._pol_target_for_trade`** in `modules/signal.py`; re-export on `clean_swap.py`.
+- **WBTC:** USDC→`0x1BFD6703…` not quotable on Polygon — keep blocked; rotate via **WETH_ALPHA** only.
+- **Overlapping cron:** `COOLDOWN_MINUTES=1` + `*/2` cron + long quote ramp → two processes; operator: `nanokill`, `rm /tmp/nanoclaw.lock`, single `nanoup`.
+- **nanoup preserve:** `ALLOW_HIGH_RISK_LOSS_CUT_XSIGNAL`, `ALLOW_REDUCED_HIGH_RISK_XSIGNAL`, recovery mode flags in `ENV_APPLY_PRESERVE_KEYS`.
+- **LLM / PhotonBull:** US equity + X sentiment ≠ Polygon execution; phases: advisory Grok → APPROVE/DENY gate → `control.json` agent → multi-venue (`ROADMAP.md` §6).
+
 ## Today's learnings (27 May 2026 — Stage liveness: reduced HIGH-risk + low-stables dust rebuild)
 
 - **Incident (Instance A @ `22f96757`)**: After two ~$10 LINK BUYs, `STABLE_USD≈$9.76` → perpetual `Risk=HIGH`, `buy_size_multiplier=0.00`, `defensive_pause`, and `main_strategy_dust_deferred` on ~$6.48 `WMATIC_TO_USDT` (USDT reserve path). Bot looked stuck: no new BUYs, no LINK sells, no stable recycle.
