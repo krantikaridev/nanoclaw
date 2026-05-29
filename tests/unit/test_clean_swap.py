@@ -4063,6 +4063,23 @@ def test_filter_xsignal_blocked_equities_ignores_block_when_all_assets_blocked(t
     assert "ignoring blocks this cycle" in capsys.readouterr().out
 
 
+def test_filter_xsignal_blocked_equities_honors_block_when_all_blocked_for_loss_cut(tmp_path, monkeypatch):
+    from modules import signal as signal_module
+    from nanoclaw.strategies.signal_equity_trader import FollowedEquity
+
+    (tmp_path / ".xsignal_blocked_symbols").write_text("LINK_ALPHA\n")
+    monkeypatch.setattr(signal_module, "_xsignal_block_list_search_roots", lambda: [tmp_path])
+    signal_module._XSIGNAL_BLOCKED_CACHE = None
+
+    assets = [FollowedEquity("LINK_ALPHA", "0x" + "2" * 40, 18)]
+    out = signal_module._filter_xsignal_blocked_equities(
+        assets,
+        log_skips=False,
+        allow_ignore_all_blocked=False,
+    )
+    assert out == []
+
+
 def test_try_x_signal_equity_skips_blocked_symbol_before_build_plan(tmp_path, monkeypatch, capsys):
     from modules import signal as signal_module
 

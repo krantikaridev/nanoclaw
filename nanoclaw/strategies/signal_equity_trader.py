@@ -1519,6 +1519,17 @@ class SignalEquityTrader:
         if equity_balance <= 0:
             return None, "zero_equity_balance"
         frac = min(1.0, max(0.05, float(sell_fraction)))
+        spot = float(current_price_usd) if isinstance(current_price_usd, (int, float)) else 0.0
+        min_equity_usd = float(
+            getattr(cfg, "HIGH_RISK_LOSS_CUT_MIN_EQUITY_USD", getattr(cfg, "MIN_TRADE_USD", 10.0))
+        )
+        if spot > 0 and min_equity_usd > 0:
+            position_usd = float(equity_balance) * spot
+            sell_usd = position_usd * frac
+            if position_usd + 1e-9 < min_equity_usd:
+                return None, "below_min_equity_notional"
+            if sell_usd + 1e-9 < min_equity_usd:
+                return None, "below_min_sell_notional"
         amount_in_units = int(float(equity_balance) * frac * (10 ** int(token_decimals)))
         if amount_in_units <= 0:
             return None, "sell_amount_below_min_units"

@@ -224,6 +224,34 @@ def test_loss_cut_builds_sell_decision(monkeypatch):
     assert "loss-cut" in str(decision.message).lower()
 
 
+def test_loss_cut_blocks_dust_position_notional(monkeypatch):
+    monkeypatch.setattr(cfg, "HIGH_RISK_LOSS_CUT_MIN_EQUITY_USD", 10.0, raising=False)
+    link = FollowedEquity(
+        symbol="LINK_ALPHA",
+        token_address="0x" + "a" * 40,
+        decimals=18,
+        signal_strength=0.81,
+        current_price_usd=9.0,
+    )
+    trader = SignalEquityTrader(
+        config=SignalEquityTraderConfig(enabled=True),
+        gas_protector=None,
+        usdc_address="0x" + "d" * 40,
+    )
+    plan, block = trader.build_loss_cut_plan_with_block_reason(
+        symbol="LINK_ALPHA",
+        token_address=link.token_address,
+        token_decimals=18,
+        equity_balance=0.5,
+        sell_fraction=0.55,
+        current_price_usd=9.0,
+        entry_price_usd=10.0,
+        loss_pct=10.0,
+    )
+    assert plan is None
+    assert block in {"below_min_equity_notional", "below_min_sell_notional"}
+
+
 def test_loss_cut_disabled_by_env(monkeypatch):
     monkeypatch.setattr(xsp, "allow_high_risk_loss_cut_xsignal", lambda: False)
     link = FollowedEquity(

@@ -399,6 +399,7 @@ def _filter_xsignal_blocked_equities(
     assets: Sequence[FollowedEquity],
     *,
     log_skips: bool = True,
+    allow_ignore_all_blocked: bool = True,
 ) -> list[FollowedEquity]:
     """Drop block-listed symbols before eligibility/planning (early cycle gate)."""
     blocked, source = load_xsignal_blocked_symbols()
@@ -412,7 +413,7 @@ def _filter_xsignal_blocked_equities(
                 log_xsignal_blocked_skip(sym, source=source)
             continue
         out.append(asset)
-    if not out and assets:
+    if not out and assets and allow_ignore_all_blocked:
         print(
             "[X-SIGNAL] WARNING: block list would remove all followed assets; "
             "ignoring blocks this cycle (trim .xsignal_blocked_symbols)"
@@ -1159,6 +1160,17 @@ def _try_build_high_risk_loss_cut_decision(
             token_decimals=int(asset.decimals),
             mode="loss_cut",
         )
+        spot_for_min = live_spot if live_spot and live_spot > 0 else fallback_px
+        min_equity_usd = float(
+            getattr(cfg, "HIGH_RISK_LOSS_CUT_MIN_EQUITY_USD", getattr(cfg, "MIN_TRADE_USD", 10.0))
+        )
+        if (
+            isinstance(spot_for_min, (int, float))
+            and float(spot_for_min) > 0
+            and min_equity_usd > 0
+            and float(equity_balance) * float(spot_for_min) + 1e-9 < min_equity_usd
+        ):
+            continue
         if xsp.is_underwater_symbol(
             state,
             sym,
@@ -1178,6 +1190,9 @@ def _try_build_high_risk_loss_cut_decision(
         except Exception:
             continue
         if equity_balance <= 0:
+            print(
+                f"{runtime._nanolog()}loss-cut evaluate | {sym} | skipped=zero_balance"
+            )
             continue
         fallback_px = (
             float(asset.current_price_usd)
@@ -1191,6 +1206,22 @@ def _try_build_high_risk_loss_cut_decision(
             token_decimals=int(asset.decimals),
             mode="loss_cut",
         )
+        spot_for_min = live_spot if live_spot and live_spot > 0 else fallback_px
+        min_equity_usd = float(
+            getattr(cfg, "HIGH_RISK_LOSS_CUT_MIN_EQUITY_USD", getattr(cfg, "MIN_TRADE_USD", 10.0))
+        )
+        if (
+            isinstance(spot_for_min, (int, float))
+            and float(spot_for_min) > 0
+            and min_equity_usd > 0
+            and float(equity_balance) * float(spot_for_min) + 1e-9 < min_equity_usd
+        ):
+            print(
+                f"{runtime._nanolog()}loss-cut evaluate | {sym} | skipped=dust "
+                f"(position_usd=${float(equity_balance) * float(spot_for_min):.2f} "
+                f"< min=${min_equity_usd:.2f})"
+            )
+            continue
         underwater, entry_px, spot_px, loss_pct, entry_synthetic = xsp.underwater_context(
             state,
             sym,
@@ -1255,6 +1286,22 @@ def _try_build_high_risk_loss_cut_decision(
             token_decimals=int(asset.decimals),
             mode="loss_cut",
         )
+        spot_for_min = live_spot if live_spot and live_spot > 0 else fallback_px
+        min_equity_usd = float(
+            getattr(cfg, "HIGH_RISK_LOSS_CUT_MIN_EQUITY_USD", getattr(cfg, "MIN_TRADE_USD", 10.0))
+        )
+        if (
+            isinstance(spot_for_min, (int, float))
+            and float(spot_for_min) > 0
+            and min_equity_usd > 0
+            and float(equity_balance) * float(spot_for_min) + 1e-9 < min_equity_usd
+        ):
+            print(
+                f"{runtime._nanolog()}HIGH risk loss-cut plan blocked for {sym} | "
+                f"reason=below_min_equity_notional "
+                f"(position_usd=${float(equity_balance) * float(spot_for_min):.4f} < ${min_equity_usd:.2f})"
+            )
+            continue
         underwater, entry_px, spot_px, loss_pct, entry_synthetic = xsp.underwater_context(
             state,
             sym,
@@ -1312,8 +1359,13 @@ def try_high_risk_loss_cut_equity_decision(
     assets_seq = _filter_xsignal_blocked_equities(
         fcb.X_SIGNAL_EQUITY_TRADER.load_followed_equities(),
         log_skips=False,
+        allow_ignore_all_blocked=False,
     )
     if not assets_seq:
+        print(
+            f"{runtime._nanolog()}loss-cut inactive | reason=all_followed_assets_blocked "
+            f"(check .xsignal_blocked_symbols)"
+        )
         return None
     snapshot_usdt = float(balances.usdt)
     if not dry_run:

@@ -445,6 +445,11 @@ HIGH_RISK_LOSS_CUT_WHEN_UNDERWATER_ANY_RISK = env_bool(
 )
 # Cap loss-cut live spot when on-chain quote exceeds fallback × this factor (drained-pool misquote).
 HIGH_RISK_LOSS_CUT_SPOT_SANITY_MULT = env_float("HIGH_RISK_LOSS_CUT_SPOT_SANITY_MULT", 1.35)
+# Skip loss-cut when position or partial-sell notional is below this (avoids STF/gas on dust).
+HIGH_RISK_LOSS_CUT_MIN_EQUITY_USD = env_float(
+    "HIGH_RISK_LOSS_CUT_MIN_EQUITY_USD",
+    env_float("MIN_TRADE_USD", 10.0),
+)
 MAIN_STRATEGY_LONG_IDLE_CYCLES_LOW = env_int("MAIN_STRATEGY_LONG_IDLE_CYCLES_LOW", 3)
 MAIN_STRATEGY_LONG_IDLE_CYCLES_MODERATE = env_int("MAIN_STRATEGY_LONG_IDLE_CYCLES_MODERATE", 6)
 MAIN_STRATEGY_LONG_IDLE_CYCLES_HEALTHY = env_int("MAIN_STRATEGY_LONG_IDLE_CYCLES_HEALTHY", 8)
