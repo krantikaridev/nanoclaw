@@ -1689,41 +1689,48 @@ def try_x_signal_equity_decision(
 
         if not dry_run and has_strong_buy:
             balances = fcb.get_balances()
-            if float(balances.pol) < float(fcb.MIN_POL_FOR_GAS):
-                pol_floor = float(fcb.MIN_POL_FOR_GAS)
+            pol_target = float(
+                fcb._pol_target_for_trade(
+                    float(fcb.MIN_POL_FOR_GAS),
+                    urgent=True,
+                    gas_units=int(getattr(fcb, "POL_EXECUTION_GAS_UNITS", 600_000)),
+                )
+            )
+            if float(balances.pol) < pol_target:
                 pol_block_reason: str | None = None
                 if fcb.AUTO_TOPUP_POL:
                     topup_ok = fcb.maybe_auto_topup_pol(
-                        min_pol=pol_floor,
+                        min_pol=float(fcb.MIN_POL_FOR_GAS),
                         context="x_signal_prep",
                         force=True,
+                        min_gas_units=int(getattr(fcb, "POL_EXECUTION_GAS_UNITS", 600_000)),
                     )
                     balances = fcb.get_balances()
-                    if topup_ok and float(balances.pol) >= pol_floor:
+                    if topup_ok and float(balances.pol) >= pol_target:
                         pass
                     elif topup_ok:
                         pol_block_reason = (
                             f"POL low for BUY path after top-up "
-                            f"(pol={float(balances.pol):.4f}, min={pol_floor:.4f})"
+                            f"(pol={float(balances.pol):.4f}, min={pol_target:.4f})"
                         )
                         print(
                             f"{runtime._nanolog()}AUTO-POL reported success but POL still low "
-                            f"(pol≈{float(balances.pol):.4f} < {pol_floor:.4f}) — BUY paths skipped"
+                            f"(pol≈{float(balances.pol):.4f} < {pol_target:.4f}) — BUY paths skipped"
                         )
                     else:
                         pol_block_reason = (
-                            f"POL low for BUY path (pol={float(balances.pol):.4f}, min={pol_floor:.4f})"
+                            f"POL low for BUY path (pol={float(balances.pol):.4f}, min={pol_target:.4f})"
                         )
                         print(
                             f"{runtime._nanolog()}AUTO-POL failed during X-SIGNAL prep "
-                            f"(pol<{pol_floor:.4f}) — BUY paths skipped"
+                            f"(pol<{pol_target:.4f}) — BUY paths skipped"
                         )
                 else:
                     pol_block_reason = (
-                        f"POL low for BUY path (pol={float(balances.pol):.4f}, min={pol_floor:.4f})"
+                        f"POL low for BUY path (pol={float(balances.pol):.4f}, min={pol_target:.4f})"
                     )
                     print(
-                        f"{runtime._nanolog()}POL low (pol≈{float(balances.pol):.4f} < {pol_floor:.4f}) "
+                        f"{runtime._nanolog()}POL low (pol≈{float(balances.pol):.4f} < {pol_target:.4f}) "
                         f"and AUTO_TOPUP_POL=false — BUY paths skipped"
                     )
                 if pol_block_reason:

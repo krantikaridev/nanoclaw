@@ -3382,6 +3382,7 @@ async def main(*, dry_run: bool = False) -> None:
             cs.maybe_auto_topup_pol,
             float(cs.MIN_POL_FOR_GAS),
             context="cycle_start",
+            min_gas_units=int(getattr(cs, "POL_EXECUTION_GAS_UNITS", 600_000)),
         )
 
     if cs.has_active_lock():
@@ -3517,32 +3518,69 @@ async def main(*, dry_run: bool = False) -> None:
             return
 
         pol_now = float(cs.get_pol_balance())
-        pol_floor = float(cs.effective_pol_floor(urgent=True))
-        if pol_now < pol_floor:
+        pol_target = float(
+            runtime._pol_target_for_trade(
+                float(cs.MIN_POL_FOR_GAS),
+                urgent=True,
+                gas_units=int(getattr(cs, "POL_EXECUTION_GAS_UNITS", 600_000)),
+            )
+        )
+        if pol_now < pol_target:
             if cs.AUTO_TOPUP_POL:
                 topup_ok = await asyncio.to_thread(
                     cs.maybe_auto_topup_pol,
-                    pol_floor,
+                    float(cs.MIN_POL_FOR_GAS),
                     context="pre_trade",
                     force=True,
+                    min_gas_units=int(getattr(cs, "POL_EXECUTION_GAS_UNITS", 600_000)),
                 )
                 pol_now = float(cs.get_pol_balance())
-                if not topup_ok or pol_now < pol_floor:
-                    cs._log_trade_skipped(f"POL low (auto top-up failed; need {pol_floor:.4f})")
+                if not topup_ok or pol_now < pol_target:
+                    cs._log_trade_skipped(f"POL low (auto top-up failed; need {pol_target:.4f})")
                     print(
                         f"{runtime._nanolog()}AUTO-POL failed — trade blocked "
-                        f"(pol≈{pol_now:.4f} < floor≈{pol_floor:.4f})"
+                        f"(pol≈{pol_now:.4f} < target≈{pol_target:.4f})"
                     )
                     return
             else:
-                cs._log_trade_skipped(f"POL low (have {pol_now:.4f}, need {pol_floor:.4f})")
+                cs._log_trade_skipped(f"POL low (have {pol_now:.4f}, need {pol_target:.4f})")
                 print(
-                    f"{runtime._nanolog()}POL low (pol≈{pol_now:.4f} < {pol_floor:.4f}) "
+                    f"{runtime._nanolog()}POL low (pol≈{pol_now:.4f} < {pol_target:.4f}) "
                     "and AUTO_TOPUP_POL=false — trade blocked"
                 )
                 return
 
-        gas_status = cs.get_gas_status(urgent=True, min_pol=pol_floor)
+        if _is_loss_cut_executable_decision(decision):
+            from modules import x_signal_position as xsp
+
+            if not xsp.allow_high_risk_loss_cut_xsignal():
+                cs._log_trade_skipped(
+                    "loss-cut disabled at execution (ALLOW_HIGH_RISK_LOSS_CUT_XSIGNAL=false)"
+                )
+                print(
+                    f"{runtime._nanolog()}loss-cut blocked at execution — "
+                    "ALLOW_HIGH_RISK_LOSS_CUT_XSIGNAL=false"
+                )
+                return
+            min_loss_cut_usd = float(
+                getattr(cfg, "HIGH_RISK_LOSS_CUT_MIN_EQUITY_USD", getattr(cfg, "MIN_TRADE_USD", 10.0))
+                or 0.0
+            )
+            if (
+                min_loss_cut_usd > 0
+                and decision_notional_usd is not None
+                and float(decision_notional_usd) + 1e-9 < min_loss_cut_usd
+            ):
+                cs._log_trade_skipped(
+                    f"loss-cut dust at execution (${float(decision_notional_usd):.2f} < ${min_loss_cut_usd:.2f})"
+                )
+                print(
+                    f"{runtime._nanolog()}loss-cut skipped — dust "
+                    f"(notional=${float(decision_notional_usd):.2f})"
+                )
+                return
+
+        gas_status = cs.get_gas_status(urgent=True, min_pol=pol_target)
         if not gas_status["ok"]:
             gas_gwei = float(gas_status.get("gas_gwei") or 0.0)
             if gas_gwei <= 400.0:

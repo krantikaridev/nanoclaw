@@ -38,12 +38,16 @@ def test_maybe_auto_topup_pol_triggers_when_pol_above_static_but_below_dynamic(
 ):
     monkeypatch.setattr(rt, "AUTO_TOPUP_POL", True)
     monkeypatch.setattr(rt, "get_pol_balance", lambda: 0.025)
-    monkeypatch.setattr(rt, "ensure_pol_for_trade", lambda min_pol=0.005: True)
+    monkeypatch.setattr(
+        rt,
+        "ensure_pol_for_trade",
+        lambda min_pol=None, min_gas_units=None: True,
+    )
 
     assert rt.maybe_auto_topup_pol(context="cycle_start") is True
     out = capsys.readouterr().out
     assert "AUTO-POL consider" in out
-    assert "floor=0.07" in out
+    assert "target=" in out
 
 
 def test_stage_snapshot_pol_0_025_needs_topup_before_swap(_stage_gas_knobs):

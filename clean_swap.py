@@ -249,7 +249,11 @@ if __name__ == "__main__":
     print(f"{LOG_PREFIX} Private key resolved from {startup_key_source}")
     if runtime.AUTO_TOPUP_POL:
         print("🔄 Startup POL bootstrap (AUTO-POL before approvals)...")
-        runtime.maybe_auto_topup_pol(context="startup", force=True)
+        runtime.maybe_auto_topup_pol(
+            context="startup",
+            force=True,
+            min_gas_units=int(getattr(runtime, "POL_EXECUTION_GAS_UNITS", 600_000)),
+        )
     if cfg.FORCE_STARTUP_MAX_APPROVE:
         print("🚀 Ensuring router token approval at startup...")
         approved = ensure_startup_router_approval(w3, startup_key, UNISWAP_V3_SWAP_ROUTER)

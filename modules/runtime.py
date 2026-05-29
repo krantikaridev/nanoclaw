@@ -57,6 +57,8 @@ POL_TOPUP_AMOUNT = cfg.POL_TOPUP_AMOUNT
 POL_AUTO_TOPUP_COOLDOWN_SECONDS = cfg.POL_AUTO_TOPUP_COOLDOWN_SECONDS
 POL_MIN_BALANCE_FOR_TOPUP_TX = cfg.POL_MIN_BALANCE_FOR_TOPUP_TX
 POL_SWAP_GAS_UNITS = cfg.POL_SWAP_GAS_UNITS
+POL_EXECUTION_GAS_UNITS = cfg.POL_EXECUTION_GAS_UNITS
+POL_EXECUTION_GAS_MULTIPLIER = cfg.POL_EXECUTION_GAS_MULTIPLIER
 POL_APPROVE_GAS_UNITS = cfg.POL_APPROVE_GAS_UNITS
 POL_UNWRAP_GAS_UNITS = cfg.POL_UNWRAP_GAS_UNITS
 POL_GAS_RESERVE_MULTIPLIER = cfg.POL_GAS_RESERVE_MULTIPLIER
@@ -458,6 +460,34 @@ def _pol_operating_floor(explicit_min: float | None = None, *, urgent: bool = Tr
     return max(static, effective_pol_floor(urgent=urgent))
 
 
+def _pol_execution_reserve(
+    *,
+    gas_units: int | None = None,
+    gas_gwei: float | None = None,
+) -> float:
+    """POL for approve+swap at live gas (can exceed POL_SWAP_GAS_UNITS floor alone)."""
+    units = int(gas_units if gas_units is not None else POL_EXECUTION_GAS_UNITS)
+    mult = max(1.0, float(POL_EXECUTION_GAS_MULTIPLIER))
+    return estimate_pol_gas_cost_pol(
+        gas_units=units,
+        gas_gwei=gas_gwei,
+        multiplier=mult,
+    )
+
+
+def _pol_target_for_trade(
+    explicit_min: float | None = None,
+    *,
+    urgent: bool = True,
+    gas_units: int | None = None,
+) -> float:
+    """Target POL before broadcasting approve+swap."""
+    floor = _pol_operating_floor(explicit_min, urgent=urgent)
+    if not urgent:
+        return floor
+    return max(floor, _pol_execution_reserve(gas_units=gas_units))
+
+
 def pol_can_broadcast_tx(*, gas_units: int, pol_balance: float | None = None) -> bool:
     pol = float(pol_balance if pol_balance is not None else get_pol_balance())
     need = estimate_pol_gas_cost_pol(gas_units=int(gas_units), multiplier=1.05)
@@ -476,22 +506,23 @@ def maybe_auto_topup_pol(
     *,
     context: str = "cycle",
     force: bool = False,
+    min_gas_units: int | None = None,
 ) -> bool:
-    """Proactive POL maintenance: top up when below operating floor (static + dynamic gas reserve)."""
-    floor = _pol_operating_floor(min_pol, urgent=True)
+    """Proactive POL maintenance: top up when below trade target (floor + execution gas estimate)."""
+    target = _pol_target_for_trade(min_pol, urgent=True, gas_units=min_gas_units)
     current_pol = float(get_pol_balance())
 
     if not AUTO_TOPUP_POL:
         print(
             f"{_nanolog()}AUTO-POL skipped — disabled (AUTO_TOPUP_POL=false, context={context}) "
-            f"| pol≈{current_pol:.4f} | floor={floor:.4f}"
+            f"| pol≈{current_pol:.4f} | target={target:.4f}"
         )
-        return current_pol >= floor
+        return current_pol >= target
 
-    if current_pol >= floor:
+    if current_pol >= target:
         print(
             f"{_nanolog()}AUTO-POL skipped — POL sufficient (context={context}) "
-            f"| pol≈{current_pol:.4f} | floor={floor:.4f}"
+            f"| pol≈{current_pol:.4f} | target={target:.4f}"
         )
         return True
 
@@ -501,15 +532,15 @@ def maybe_auto_topup_pol(
         remain_s = max(0.0, backoff_until - now_ts)
         print(
             f"{_nanolog()}AUTO-POL skipped — failure cooldown (context={context}) "
-            f"| pol≈{current_pol:.4f} | floor={floor:.4f} | retry_in≈{remain_s:.0f}s"
+            f"| pol≈{current_pol:.4f} | target={target:.4f} | retry_in≈{remain_s:.0f}s"
         )
         return False
 
     print(
         f"{_nanolog()}AUTO-POL consider (context={context}) "
-        f"| pol≈{current_pol:.4f} | floor={floor:.4f}"
+        f"| pol≈{current_pol:.4f} | target={target:.4f}"
     )
-    ok = ensure_pol_for_trade(min_pol=floor)
+    ok = ensure_pol_for_trade(min_pol=min_pol, min_gas_units=min_gas_units)
     if ok:
         _AUTO_POL_FAILURE_STATE["next_retry_ts"] = 0.0
         _AUTO_POL_FAILURE_STATE["consecutive_failures"] = 0.0
@@ -527,13 +558,17 @@ def maybe_auto_topup_pol(
     return False
 
 
-def ensure_pol_for_trade(min_pol: float = 0.025) -> bool:
+def ensure_pol_for_trade(
+    min_pol: float | None = None,
+    *,
+    min_gas_units: int | None = None,
+) -> bool:
     current_pol = float(get_pol_balance())
-    floor = _pol_operating_floor(float(min_pol), urgent=True)
-    if current_pol >= floor:
+    target = _pol_target_for_trade(min_pol, urgent=True, gas_units=min_gas_units)
+    if current_pol >= target:
         print(
             f"{_nanolog()}AUTO-POL skipped — POL sufficient "
-            f"| pol≈{current_pol:.4f} | floor={floor:.4f}"
+            f"| pol≈{current_pol:.4f} | target={target:.4f}"
         )
         return True
 
@@ -551,12 +586,12 @@ def ensure_pol_for_trade(min_pol: float = 0.025) -> bool:
         print(f"{_nanolog()}AUTO-POL skipped — no private key")
         return False
 
-    needed_pol = max(0.0, floor - current_pol)
-    # Target enough unwrap to clear the dynamic operating floor, not just POL_TOPUP_AMOUNT.
-    desired_topup_pol = max(float(POL_TOPUP_AMOUNT), needed_pol + 0.002)
+    needed_pol = max(0.0, target - current_pol)
+    # Target enough unwrap to clear execution reserve, not just POL_TOPUP_AMOUNT.
+    desired_topup_pol = max(float(POL_TOPUP_AMOUNT), needed_pol + 0.005)
     print(
         f"🔄 AUTO-POL | Topping up ~{desired_topup_pol:.4f} POL "
-        f"(current≈{current_pol:.4f}, floor={floor:.4f})"
+        f"(current≈{current_pol:.4f}, target={target:.4f})"
     )
     balances = get_balances()
     usdt_swap_amount = min(8.0, float(balances.usdt) * 0.95)
@@ -632,15 +667,15 @@ def ensure_pol_for_trade(min_pol: float = 0.025) -> bool:
             print(f"{_nanolog()}AUTO-POL failed — WMATIC unwrap reverted")
             return False
         final_pol = float(get_pol_balance())
-        if final_pol >= floor:
+        if final_pol >= target:
             print(
                 f"✅ AUTO-POL | Top-up successful "
-                f"(pol≈{final_pol:.4f}, floor={floor:.4f}, unwrap≈{unwrap_pol:.4f})"
+                f"(pol≈{final_pol:.4f}, target={target:.4f}, unwrap≈{unwrap_pol:.4f})"
             )
             return True
         print(
             f"{_nanolog()}AUTO-POL failed — POL still low "
-            f"(pol≈{final_pol:.4f}, need≥{floor:.4f})"
+            f"(pol≈{final_pol:.4f}, need≥{target:.4f})"
         )
         return False
     except Exception as e:

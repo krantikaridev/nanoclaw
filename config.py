@@ -129,9 +129,12 @@ POL_AUTO_TOPUP_COOLDOWN_SECONDS = env_int("POL_AUTO_TOPUP_COOLDOWN_SECONDS", 300
 POL_MIN_BALANCE_FOR_TOPUP_TX = env_float("POL_MIN_BALANCE_FOR_TOPUP_TX", 0.006)
 # Dynamic POL reserve: estimate swap gas at urgent gwei × multiplier (fixes stale low MIN_POL_FOR_GAS on VM).
 POL_SWAP_GAS_UNITS = env_int("POL_SWAP_GAS_UNITS", 450_000)
+# Approve + swap + receipt buffer for pre-trade POL top-up (must exceed POL_SWAP_GAS_UNITS reserve).
+POL_EXECUTION_GAS_UNITS = env_int("POL_EXECUTION_GAS_UNITS", 600_000)
 POL_APPROVE_GAS_UNITS = env_int("POL_APPROVE_GAS_UNITS", 85_000)
 POL_UNWRAP_GAS_UNITS = env_int("POL_UNWRAP_GAS_UNITS", 140_000)
 POL_GAS_RESERVE_MULTIPLIER = env_float("POL_GAS_RESERVE_MULTIPLIER", 1.30)
+POL_EXECUTION_GAS_MULTIPLIER = env_float("POL_EXECUTION_GAS_MULTIPLIER", 1.15)
 POL_GAS_RESERVE_BUFFER_POL = env_float("POL_GAS_RESERVE_BUFFER_POL", 0.005)
 # Startup: skip force-max approve when allowance already sufficient; never crash on low POL.
 FORCE_STARTUP_MAX_APPROVE = env_bool("FORCE_STARTUP_MAX_APPROVE", True)

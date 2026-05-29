@@ -26,6 +26,11 @@ _EXCLUDED_KEYS_SET = frozenset(ENV_SYNC_EXCLUDED_KEYS)
 ENV_APPLY_PRESERVE_KEYS = (
     *ENV_SYNC_EXCLUDED_KEYS,
     "TELEGRAM_CHAT_ID",
+    # Operator toggles on VM (template defaults must not override stage decisions on nanoup).
+    "ALLOW_HIGH_RISK_LOSS_CUT_XSIGNAL",
+    "ALLOW_REDUCED_HIGH_RISK_XSIGNAL",
+    "MAIN_STRATEGY_PNL_RECOVERY_MODE",
+    "PNL_RECOVERY_MODE",
     # Never clobber custody / trading identity when applying the template (template may hold a placeholder).
     "WALLET",
     # Preserve stage-specific RPC runtime selection when applying template.

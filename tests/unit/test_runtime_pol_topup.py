@@ -31,11 +31,47 @@ def test_maybe_auto_topup_pol_skips_when_disabled(monkeypatch, capsys):
 def test_maybe_auto_topup_pol_skips_when_sufficient(monkeypatch, capsys):
     monkeypatch.setattr(rt, "AUTO_TOPUP_POL", True)
     monkeypatch.setattr(rt, "MIN_POL_FOR_GAS", 0.15)
+    monkeypatch.setattr(rt, "POL_EXECUTION_GAS_UNITS", 600_000)
+    monkeypatch.setattr(rt, "POL_EXECUTION_GAS_MULTIPLIER", 1.15)
+    monkeypatch.setattr(rt, "URGENT_GWEI", 120.0)
+    monkeypatch.setattr(rt.GAS_PROTECTOR, "get_gas_price_gwei", lambda: 120.0)
     monkeypatch.setattr(rt, "get_pol_balance", lambda: 0.20)
 
     assert rt.maybe_auto_topup_pol(context="test") is True
     out = capsys.readouterr().out
     assert "AUTO-POL skipped — POL sufficient" in out
+    assert "target=" in out
+
+
+def test_pol_target_exceeds_static_floor_when_gas_congested(monkeypatch):
+    """Repro: pol≈0.187 above MIN_POL=0.15 but below real approve+swap cost at ~350 gwei."""
+    monkeypatch.setattr(rt, "MIN_POL_FOR_GAS", 0.15)
+    monkeypatch.setattr(rt, "POL_EXECUTION_GAS_UNITS", 600_000)
+    monkeypatch.setattr(rt, "POL_EXECUTION_GAS_MULTIPLIER", 1.15)
+    monkeypatch.setattr(rt, "URGENT_GWEI", 350.0)
+    monkeypatch.setattr(rt.GAS_PROTECTOR, "get_gas_price_gwei", lambda: 350.0)
+
+    target = rt._pol_target_for_trade(None, urgent=True)
+    assert target > 0.15
+    assert target > 0.187
+    assert rt._pol_operating_floor(None, urgent=True) < target
+
+
+def test_maybe_auto_topup_considers_topup_when_pol_above_static_below_execution(
+    monkeypatch, capsys,
+):
+    monkeypatch.setattr(rt, "AUTO_TOPUP_POL", True)
+    monkeypatch.setattr(rt, "MIN_POL_FOR_GAS", 0.15)
+    monkeypatch.setattr(rt, "POL_EXECUTION_GAS_UNITS", 600_000)
+    monkeypatch.setattr(rt, "POL_EXECUTION_GAS_MULTIPLIER", 1.15)
+    monkeypatch.setattr(rt, "URGENT_GWEI", 350.0)
+    monkeypatch.setattr(rt.GAS_PROTECTOR, "get_gas_price_gwei", lambda: 350.0)
+    monkeypatch.setattr(rt, "get_pol_balance", lambda: 0.187)
+    monkeypatch.setattr(rt, "ensure_pol_for_trade", lambda min_pol=None, min_gas_units=None: True)
+
+    assert rt.maybe_auto_topup_pol(context="pre_trade", force=True) is True
+    out = capsys.readouterr().out
+    assert "AUTO-POL consider" in out
 
 
 def test_maybe_auto_topup_pol_respects_failure_cooldown(monkeypatch, capsys):
@@ -54,7 +90,11 @@ def test_maybe_auto_topup_pol_force_bypasses_cooldown(monkeypatch):
     monkeypatch.setattr(rt, "MIN_POL_FOR_GAS", 0.15)
     monkeypatch.setattr(rt, "get_pol_balance", lambda: 0.01)
     rt._AUTO_POL_FAILURE_STATE["next_retry_ts"] = time.time() + 600.0
-    monkeypatch.setattr(rt, "ensure_pol_for_trade", lambda min_pol=0.15: True)
+    monkeypatch.setattr(
+        rt,
+        "ensure_pol_for_trade",
+        lambda min_pol=None, min_gas_units=None: True,
+    )
 
     assert rt.maybe_auto_topup_pol(context="pre_trade", force=True) is True
 
