@@ -15,10 +15,9 @@
 
 ## Current focus (top of stack)
 
-- **2026-05-29 stop-bleed + rotation — documented in `ROADMAP.md` § [Session log 2026-05-29](ROADMAP.md#session-log-2026-05-29-stage-instance-a--stop-bleed--rotation--llm).** VM @ **`15723c3f`**+; **`ALLOW_HIGH_RISK_LOSS_CUT_XSIGNAL=false`**; blocklist **`LINK_ALPHA, WMATIC_ALPHA, WBTC_ALPHA`**; rotation target **`WETH_ALPHA`** only.
-- **Immediate:** `nanokill` → single `nanoup` → confirm **`EXEC SUCCESS | sym=WETH_ALPHA`** (no `AttributeError`, no `EXEC ATTEMPT | WBTC`).
-- **Session PnL:** ~**+0.18%** (reset 2026-05-29T11:11:38Z); **`velocity_fills_session=0`** until first WETH fill.
-- **Parked (LLM):** Grok advisory-only (Phase B) → APPROVE/DENY gate (Phase C); PhotonBull / X sentiment = intelligence layer only, not Polygon ticker copy.
+- **Resume:** Instance A ops only — blocklist + loss-cut off; watch **WETH** `EXEC SUCCESS`; no session reset unless desired. Code next: **`ROADMAP.md` Backlog P1** — auto `current_price_usd` / last-good spot cache.
+- **2026-05-29 stop-bleed + rotation —** `ROADMAP.md` § [Session log 2026-05-29](ROADMAP.md#session-log-2026-05-29-stage-instance-a--stop-bleed--rotation--llm). VM **`15723c3f`**+; one WETH fill (`b7c0cce2…`); TOTAL ~**$132** after WETH floor fix.
+- **Parked (LLM):** Grok advisory (Phase B) → gate (Phase C); PhotonBull ≠ Polygon execution.
 - **Turnover metrics — MERGED `22f96757`:** `turnover_multiple_*` in ROTATION / `nanovel`.
 - **Cleanup #5 — LIVE `d1b82635`:** defensive_pause uses combined stables.
 - **Parked (v3):** top-up must not count as profit in `portfolio_history` / session %.
@@ -156,7 +155,7 @@ grep '=== CYCLE' real_cron.log | tail -1
 - **Seed-capital scaling** (~$120 → $1k → $25k → $100k). Parked until P0 window + stable post-#5 fills; books improved (#3–#5). Verify wallet-vs-bot ≤$1 in steady state before scaling.
 - **Pre-existing 9 test failures** (profit-take mocks, RPC bleed). Parked for a future cleanup (not #5).
 - **In-flight swap reservation race** (stables snapshot vs swap settle). Parked; steady-state invariants pinned in #3 tests.
-- `**current_price_usd` operator hygiene** (NEW from Cleanup #3 part 2). Fallback is now a true floor; stale fallbacks above true spot will OVERSTATE TOTAL. Operator-facing reminder: refresh `followed_equities.json` fallback prices periodically (no automation yet; candidate for v2.9 if drift becomes visible).
+- **`current_price_usd` auto fallback (BACKLOG P1 — `ROADMAP.md` § Backlog):** persist last good quoter spot per symbol; until shipped, manual floor in `followed_equities.json` (WETH **2000** on Instance A, 2026-05-29). Stale fallback **above** spot still overstates TOTAL.
 - **Instance A blocklist (2026-05-29):** `LINK_ALPHA`, `WMATIC_ALPHA`, `WBTC_ALPHA` blocked; **only `WETH_ALPHA`** open for USDC→equity rotation. See `ROADMAP.md` session log.
 - **Quote-fail fallback:** try next X-SIGNAL plan candidate when primary symbol has no quotable path (WBTC proved this). Side chat TBD.
 - **Overlapping `clean_swap` processes** when quote ramp > cron interval — operator uses `nanokill` + single `nanoup`; code hardening TBD.

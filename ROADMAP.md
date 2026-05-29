@@ -68,6 +68,7 @@ Full incident + operator playbook + LLM brainstorm: **[Session log 2026-05-29](#
 - Identify legacy and unused code
 - Find brittle coupling points
 - Propose cleanup priority and modular improvements
+- **Auto FE_USD fallback floor** (see [Backlog P1](#backlog-prioritized--resume-from-here)) — persist last good on-chain spot per followed symbol; reduce manual `current_price_usd` hygiene
 
 **Cursor Prompt**:
 > Perform a high-level audit of the current codebase. List the biggest sources of technical debt and recommend a cleanup priority.
@@ -227,6 +228,22 @@ python3 -c "from modules import runtime as r; print('pol', r.get_pol_balance(), 
 - [ ] **LLM Phase B:** wire `grok_agent_decision` post-cycle digest to Telegram (no swap override).
 - [ ] **X sentiment ingest:** normalized `SignalEvent` → update `followed_equities.json` strengths (no URL-in-prompt trading).
 - [ ] Confirm **`MANUAL CORRECT BALANCE`** vs `nanopnl` TOTAL if USDC moved (~$124 vs ~$66 log line) — reconcile on Polygonscan.
+
+---
+
+## Backlog (prioritized — resume from here)
+
+| Priority | Item | Goal | Sketch (for side chat) |
+|----------|------|------|----------------------|
+| **P1** | **Auto `current_price_usd` fallback floor** | Stop manual `followed_equities.json` edits (e.g. WETH 2500→2000); honest **TOTAL** / session PnL without overstating inventory | On each successful `_quote_followed_token_usdt_mtm` for symbol `S`, persist `last_good_spot_usd[S]` (e.g. in `bot_state.json` or `.runtime/fe_usd_spot_cache.json`). Effective FE leg stays `max(live_quote, bal × floor)` where `floor_px = min(json_floor, last_good_spot)` or auto-set json floor from `last_good_spot` when live &gt; 0. Cap upward drift (e.g. do not raise floor more than X% per day without live confirm). Log when auto-floor updates vs when JSON floor wins. Tests: stale high JSON + good live → live wins; live=0 → last_good; first run → JSON seed only. **Does not** change `signal_strength` (still operator/external). |
+| P2 | X-SIGNAL next-plan on quote fail | Rotation when one symbol unquotable (WBTC) | See §7 |
+| P2 | Cron / lock serialization | No overlapping `clean_swap` during long quote ramp | See §7 |
+| P3 | LLM advisory Phase B | Grok digest, no swap override | §6 table |
+| P3 | X sentiment → structured signals | Not raw tweet → swap | §6 |
+
+**Operator note (2026-05-29):** Until P1 ships, keep `current_price_usd` in `followed_equities.json` **at or below** spot (`≤ live_quote_usdt / balance`). WETH on Instance A set to **2000** — working.
+
+**Resume tomorrow (Instance A):** no config churn; grep `EXEC SUCCESS | WETH`; optional `nanopnl` (do not reset session unless reporting from $132 TOTAL).
 
 ### 8. Related docs
 
