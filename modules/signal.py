@@ -1690,10 +1690,10 @@ def try_x_signal_equity_decision(
         if not dry_run and has_strong_buy:
             balances = fcb.get_balances()
             pol_target = float(
-                fcb._pol_target_for_trade(
+                runtime._pol_target_for_trade(
                     float(fcb.MIN_POL_FOR_GAS),
                     urgent=True,
-                    gas_units=int(getattr(fcb, "POL_EXECUTION_GAS_UNITS", 600_000)),
+                    gas_units=int(getattr(runtime, "POL_EXECUTION_GAS_UNITS", 600_000)),
                 )
             )
             if float(balances.pol) < pol_target:
@@ -1703,7 +1703,7 @@ def try_x_signal_equity_decision(
                         min_pol=float(fcb.MIN_POL_FOR_GAS),
                         context="x_signal_prep",
                         force=True,
-                        min_gas_units=int(getattr(fcb, "POL_EXECUTION_GAS_UNITS", 600_000)),
+                        min_gas_units=int(getattr(runtime, "POL_EXECUTION_GAS_UNITS", 600_000)),
                     )
                     balances = fcb.get_balances()
                     if topup_ok and float(balances.pol) >= pol_target:
