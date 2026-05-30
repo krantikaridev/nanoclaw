@@ -281,4 +281,4 @@ START: Run operator snapshot (§5). Confirm clean_swap alive. Do not reset sessi
 2. **`nanoup` resets `X_SIGNAL_HONOR_FULL_BLOCKLIST`** — not on preserve list yet.
 3. **`followed_equities.json` local edits** — stash before nanoup; WETH floor 2000 manually.
 4. **24h PnL +26%** — CSV sparse anchor; ignore for decisions.
-5. **`pgrep clean_swap` empty** — verify bot loop; cron may differ from nohup.
+5. **`pgrep clean_swap` empty** — **usually normal**: one cycle per run; cron `*/2` respawns. Check **log timestamps** instead.
