@@ -169,6 +169,7 @@ nanopush() {
 }
 
 _nanoclaw_install_aliases() {
+  python "${NANOCLAW_ROOT}/scripts/normalize_shell_lf.py" 2>/dev/null || true
   local bashrc source_line
   bashrc="${HOME}/.bashrc"
   source_line="source \"${NANOCLAW_ROOT}/scripts/nanobot_aliases.sh\""

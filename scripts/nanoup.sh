@@ -107,6 +107,7 @@ if [[ "${DID_STASH}" -eq 1 ]]; then
 fi
 
 # Git on Windows dev machines often omits +x on *.sh; legacy wrappers exec scripts directly.
+python scripts/normalize_shell_lf.py 2>/dev/null || true
 chmod +x scripts/*.sh 2>/dev/null || true
 
 _preserve_runtime_state_after_git
