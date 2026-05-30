@@ -12,7 +12,7 @@ Operator ran final verification after `nanoup` @ `78ea6948`. **Safe to leave** w
 | Check | Expected | Observed (VM logs) | Pass? |
 |-------|----------|-------------------|-------|
 | `control.json` | `paused=true`, `operator_pause_lock=true` | `OK paused+lock` | **YES** |
-| Bot process | `pgrep -af clean_swap.py` shows PID | Fresh cycle @ `09:24:57` `[78ea6948]` (infer running) | **YES** |
+| Bot process | `pgrep clean_swap` often **empty** — **normal** (one cycle per run, cron `*/2` respawns) | Fresh log @ `09:36`+ with pause skip | **YES** |
 | Pause gate | `[CONTROL] paused=True → skipping new entry trades` | Present after restart | **YES** |
 | X-SIGNAL blocked | `skipping X-signal entry trade` | Present | **YES** |
 | No new fills | No `EXEC SUCCESS` after pause cycle | `tail -8` ends in `No actionable trade`; grep `EXEC SUCCESS` = **historical** WETH fills only | **YES** |
@@ -68,7 +68,7 @@ nohup bash scripts/nano_watch.sh >> ~/nano_watch.nohup.log 2>&1 &
 | Loss-cut | `ALLOW_HIGH_RISK_LOSS_CUT_XSIGNAL=false` | ✓ |
 | New entries while away | **blocked by pause** | ✓ |
 | Blocklist honor | `false` after `nanoup` — ignored when all blocked | ⚠ footgun **when unpaused** |
-| `clean_swap` | running (cycle @ 09:24:57 UTC) | ✓ |
+| **`clean_swap` in pgrep** | Often empty between cron ticks (one-shot process) | Cycle logs fresh | ✓ |
 
 ### iPhone / Terminus paranoid monitor (while on leave)
 

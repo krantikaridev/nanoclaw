@@ -14,13 +14,49 @@ echo "=== nanodiag | $(date -u +%Y-%m-%dT%H:%M:%SZ) UTC | $(TZ=Asia/Kolkata date
 git log -1 --oneline 2>/dev/null || echo "git: n/a"
 
 echo ""
-echo "--- process ---"
+echo "--- process (cron one-shot: empty pgrep between cycles is NORMAL) ---"
 if pgrep -af clean_swap.py; then
-  echo "OK clean_swap running"
+  echo "INFO clean_swap mid-cycle"
 else
-  echo "FAIL no clean_swap — run: NANOUP_AUTOSTASH=1 nanoup"
+  echo "INFO no clean_swap in pgrep (expected between */2 cron ticks)"
+fi
+if crontab -l 2>/dev/null | grep -E 'clean_swap|nanoclaw' | head -3; then
+  echo "OK cron watchdog present"
+else
+  echo "WARN no clean_swap cron — cycles only run after manual nanoup"
 fi
 pgrep -af nano_watch.sh 2>/dev/null || echo "INFO nano_watch not running (optional)"
+
+echo ""
+echo "--- log freshness (last ~15 min) ---"
+python3 - <<'PY'
+import re
+import time
+from pathlib import Path
+p = Path("real_cron.log")
+if not p.is_file():
+    print("FAIL no real_cron.log")
+    raise SystemExit(0)
+text = p.read_text(encoding="utf-8", errors="replace")[-120000:]
+# ISO-ish timestamps in log lines
+hits = re.findall(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", text)
+if hits:
+    from datetime import datetime, timezone
+    last = hits[-1]
+    try:
+        ts = datetime.strptime(last, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+        age = time.time() - ts.timestamp()
+        print(f"last_log_ts={last}Z age_sec={age:.0f}")
+        if age < 900:
+            print("OK recent cycle activity")
+        else:
+            print("WARN log stale >15m — check cron or run nanoup")
+    except ValueError:
+        print(f"last_log_ts={last} (parse skipped)")
+else:
+    tail = text.strip().splitlines()[-1] if text.strip() else ""
+    print(f"no timestamp in tail; last_line={tail[:120]!r}")
+PY
 
 echo ""
 echo "--- control.json (leave gate) ---"
@@ -61,5 +97,5 @@ echo "--- last cycle tail ---"
 tail -4 real_cron.log 2>/dev/null || echo "no real_cron.log"
 
 echo ""
-echo "PASS = paused+lock + clean_swap + pause skip lines + no new EXEC SUCCESS in tail"
-echo "Grok/iPhone: paste this block if something looks FAIL"
+echo "PASS = paused+lock + recent log activity + pause skip lines + cron present"
+echo "NOTE: pgrep clean_swap often empty — bot is one cycle per cron tick, then exits"
