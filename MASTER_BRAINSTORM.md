@@ -15,9 +15,11 @@
 
 ## Current focus (top of stack)
 
-- **2026-05-30 P0 BLOCKER — FE overweight / stables runway:** MetaMask ≈ bot **$131.76** · **WETH ~$117 (89%)** · **stables ~$13.27** · **WMATIC=0**. `STABLE RESERVE PROTECTION` plans `WMATIC→USDC` but **WMATIC=0 → quiet/no-op**. X-SIGNAL still **PLAN SELECTED WETH BUY** @ signal 0.87 (reduced HIGH-risk bypass). **Code fix:** Cleanup **#6** — low-stables **FE equity trim** (`WETH→USDC` partial) when `stable_usd < high_trigger` and FE leg dominates; block further `USDC→EQUITY` until runway restored. **Ops unblock (now):** manual ~$25–40 **WETH→USDC** *or* temp `WETH_ALPHA` in blocklist + `ALLOW_REDUCED_HIGH_RISK_XSIGNAL=false` until stables ≥ ~$35.
-- **Operator mandate (2026-05-30):** **ASAP session PnL > 0** — no 3-day wait; **max 12h** monitoring window when operator unavailable; otherwise continuous push. **Horizon:** short-term rotation / capital velocity first (hours–days), not long holds. **Aspiration:** expand to commodities, equities, crypto, futures, options over time — **Polygon DEX short-term rotation proves edge first**; multi-venue only after trustworthy PnL + external risk layer (`ROADMAP.md` Phases 1–4).
-- **Parallel side chats (ASAP):** **#6 FE stable runway** (P0) · **P1 auto FE_USD floor** · **P3 baseline fix** (ops) · **P4 nanodaily metrics** · **12h watch cron** (ops).
+- **CODE FREEZE (2026-05-30 → ~7 Jun IST leave):** **`bf849af7`** deployed on VM. **No side chats** until operator returns. Handoff: **`docs/OPERATOR_CODE_FREEZE_2026-05-30.md`** (commands, health, multi-venue roadmap, new-thread prompt).
+- **VM state @ freeze:** TOTAL **~$130.89** · stables **$17.91** · session **−1.04%** · **3 fills** UTC day · `Risk=LOW` · dust defer **$9.33 < $10** blocking new BUYs · **`HONOR_FULL_BLOCKLIST=false`** (nanoup wiped `true` — footgun). **`pgrep clean_swap`** was empty in snapshot — verify before long leave.
+- **Merged @ freeze:** Cleanup **#6** FE runway · **P1** spot cache · nanodaily skips · blocklist honor · **nano_watch**.
+- **Operator mandate (2026-05-30):** Multi-venue **leverage-first** (not Polygon-only long term); **~25% energy** through **30 Jun**; **binary go/no-go** trading vs SaaS/content; months on stage — **expectancy still unproven**.
+- **Post-freeze P0 side chats:** preserve `X_SIGNAL_HONOR_FULL_BLOCKLIST` on nanoup · default `NANOUP_AUTOSTASH=1` · **FE-heavy BUY guard** (stables < $40 + fe_share > 55%) · alias **`ns`** snapshot.
 - **2026-05-29 stop-bleed + rotation —** `ROADMAP.md` § [Session log 2026-05-29](ROADMAP.md#session-log-2026-05-29-stage-instance-a--stop-bleed--rotation--llm). VM **`15723c3f`**+; session **11 fills** · session PnL **~-0.63%** (PnL gate failing).
 - **Parked (LLM):** Grok advisory (Phase B) → gate (Phase C); PhotonBull ≠ Polygon execution.
 - **Turnover metrics — MERGED `22f96757`:** `turnover_multiple_*` in ROTATION / `nanovel`.
@@ -247,6 +249,13 @@ OUT OF SCOPE: blocklist edits, manual operator swaps, multi-venue.
 ---
 
 ## Append log (side-chat reports come here)
+
+### 2026-05-30 — Code freeze checkpoint (Instance A @ bf849af7)
+
+- **Deploy:** `bf849af7` on VM; P1 `FE_USD AUTO_FLOOR_UPDATE` live; Cleanup #6 shipped (runway not seen yet — stables $17.91 > $15).
+- **Session:** −1.04%; 3× WETH BUY drained stables $50→$18 post-deploy; dust defer now blocks $9.33 BUYs.
+- **Blocklist:** all 4 symbols listed; `HONOR_FULL_BLOCKLIST=false` after nanoup → ignore-all-blocks warning once; execution blocks WMATIC individually.
+- **Leave:** acceptable hours if `clean_swap` alive + optional `nano_watch`; doc **`docs/OPERATOR_CODE_FREEZE_2026-05-30.md`**.
 
 ### 2026-05-30 — P0 triage: FE overweight / stables deadlock (Instance A)
 
