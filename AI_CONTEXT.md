@@ -325,6 +325,8 @@ Directional milestones only—**capital scales when gates pass**, not on calenda
 - **Operator**: Pick 1–2 Polygonscan-verified trader EOAs, `max_copy_ratio` 0.05–0.08, weekly manual review; or `COPY_TRADING_ENABLED=false` until audit exit 0.
 - **Acceptance**: `nanocopyaudit` exit **0**; `copy_targets=N` matches tradeable EOAs only.
 
+- **Leave (Instance A @ 78ea6948):** With `control.json paused=true` + `operator_pause_lock=true`, post-restart logs must show `[CONTROL] paused=True` and `skipping X-signal entry trade`. `PLAN SELECTED` / `4/4 eligible` / blocklist warnings are **plan-only** — not leave blockers. `grep EXEC SUCCESS` shows **history**; use `tail real_cron.log` for recent cycles. Full checklist: `docs/OPERATOR_CODE_FREEZE_2026-05-30.md` §0.
+
 ## Today's learnings (30 May 2026 — Cleanup #6: FE stable runway trim)
 
 - **Incident (Instance A post-WMATIC rotation)**: ~$131 TOTAL, stables ~$13, WETH FE_USD ~$117 (~89%), WMATIC=0. MAIN `STABLE RESERVE` plans WMATIC→USDC with `amount_in=0`; reduced-HIGH X-SIGNAL keeps `USDC→WETH` BUY — stables drain further when already FE-overweight.

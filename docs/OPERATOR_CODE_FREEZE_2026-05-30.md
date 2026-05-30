@@ -1,26 +1,74 @@
 # Operator code freeze — 2026-05-30 (IST leave → ~7 Jun)
 
-> **Status:** Code freeze on `origin/V2` @ **`bf849af7`**. No side chats until operator returns.  
-> **Open new Cursor thread** with: this file + `MASTER_BRAINSTORM.md` + `AI_CONTEXT.md` § Today's learnings 30 May.
+> **Status:** Code freeze on `origin/V2`. VM leave sign-off **2026-05-30 ~09:25 UTC** @ **`78ea6948`** (paused).  
+> **Open new Cursor thread** with: this file + `MASTER_BRAINSTORM.md` + `AI_CONTEXT.md` + `docs/GROK_HEAVY_STRATEGY_REVIEW_2026-05-30.md` + `docs/COPY_TRADING_AUDIT.md`.
 
 ---
 
-## 1. Bot health snapshot (2026-05-30 ~14:35 IST)
+## 0. Leave sign-off (2026-05-30 ~09:25 UTC) — **CLEARED TO LEAVE**
+
+Operator ran final verification after `nanoup` @ `78ea6948`. **Safe to leave** while `control.json` stays paused+locked.
+
+| Check | Expected | Observed (VM logs) | Pass? |
+|-------|----------|-------------------|-------|
+| `control.json` | `paused=true`, `operator_pause_lock=true` | `OK paused+lock` | **YES** |
+| Bot process | `pgrep -af clean_swap.py` shows PID | Fresh cycle @ `09:24:57` `[78ea6948]` (infer running) | **YES** |
+| Pause gate | `[CONTROL] paused=True → skipping new entry trades` | Present after restart | **YES** |
+| X-SIGNAL blocked | `skipping X-signal entry trade` | Present | **YES** |
+| No new fills | No `EXEC SUCCESS` after pause cycle | `tail -8` ends in `No actionable trade`; grep `EXEC SUCCESS` = **historical** WETH fills only | **YES** |
+| RPC | `nanohealth: ok chain_id=137` | OK | **YES** |
+| Session baseline | Do **not** reset | Still ~−1.04% anchor | **YES** |
+
+**Normal while paused (do not panic):**
+
+- `4/4 eligible`, `PLAN SELECTED`, blocklist `ignoring blocks` — **planning only**; execution blocked by pause.
+- `x_signal_taken` counter may still increment on plan/skip paths — not proof of on-chain fill.
+- `STABLE RESERVE` / protection **no actionable trade** — OK.
+
+**Known non-blockers while paused (fix when back):**
+
+| Issue | Risk while paused | Fix post-freeze |
+|-------|---------------------|-----------------|
+| `X_SIGNAL_HONOR_FULL_BLOCKLIST` wiped by `nanoup` | Low — pause blocks BUY | Preserve key in `env_sync.py` |
+| All 4 symbols blocked → blocks ignored | Low — pause blocks BUY | Honor flag + trim blocklist |
+| VM @ `78ea6948` (not latest `bcd730c7` copy audit) | Low | `git pull` + `nanocopyaudit` when back |
+| `followed_wallets.json` legacy token list on VM | Low if copy never fires | `docs/COPY_TRADING_AUDIT.md` |
+
+**Do not unpause** until back and FE-heavy BUY guard + blocklist preserve are shipped (Grok plan).
+
+### Final 30s re-check (optional before closing laptop)
+
+```bash
+cd ~/.nanobot/workspace/nanoclaw && source .venv/bin/activate
+python3 -c "import json; c=json.load(open('control.json')); assert c.get('paused') and c.get('operator_pause_lock'); print('OK leave gate')"
+pgrep -af clean_swap.py || echo 'FAIL: no bot'
+grep -E '\[CONTROL\] paused=True|skipping X-signal entry' real_cron.log | tail -2
+tail -3 real_cron.log | grep -q 'EXEC SUCCESS' && echo 'WARN: recent fill' || echo 'OK no recent fill in tail'
+```
+
+Optional background monitor:
+
+```bash
+nohup bash scripts/nano_watch.sh >> ~/nano_watch.nohup.log 2>&1 &
+```
+
+---
+
+## 1. Bot health snapshot (2026-05-30 ~09:25 UTC — leave state)
 
 | Signal | Value | OK? |
 |--------|-------|-----|
-| Commit | `bf849af7` | ✓ |
+| Commit (VM) | **`78ea6948`** (post-`nanoup`; dev ahead with copy audit) | ✓ |
+| **`control.json`** | **`paused=true`**, **`operator_pause_lock=true`** | ✓ leave gate |
+| Pause in logs | `[CONTROL] paused=True`, `skipping X-signal entry trade` | ✓ |
 | RPC / `nh` | chain 137 green | ✓ |
 | TOTAL / MetaMask | ~$130.89 / ~$131 | ✓ (≤$1) |
-| Session PnL | **−1.04%** (~−$1.38) | ⚠ not green |
+| Session PnL | **−1.04%** (~−$1.38) | ⚠ not green — **do not reset** |
 | Stables | $17.91 (~14%) | ⚠ low; FE ~85% |
 | Loss-cut | `ALLOW_HIGH_RISK_LOSS_CUT_XSIGNAL=false` | ✓ |
-| Catastrophic bleed | stopped (no gas spiral) | ✓ |
-| Recent churn | 3× WETH BUY post-deploy (stables $50→$18) | ⚠ |
-| **`X_SIGNAL_HONOR_FULL_BLOCKLIST`** | **`false`** (nanoup reset from template) | ✗ footgun |
-| Blocklist | all 4 symbols listed | ⚠ ignored when all blocked + honor=false |
-| Current cycle behavior | `$9.33` BUY **dust_deferred** (< $10 min) | ✓ accidental brake |
-| `clean_swap` in `pgrep` | **not seen** in snapshot (only `control.py`) | ⚠ verify |
+| New entries while away | **blocked by pause** | ✓ |
+| Blocklist honor | `false` after `nanoup` — ignored when all blocked | ⚠ footgun **when unpaused** |
+| `clean_swap` | running (cycle @ 09:24:57 UTC) | ✓ |
 
 ### Leave as-is? (updated after operator pause)
 
@@ -159,10 +207,11 @@ exec > >(tee "$OUT") 2>&1
 echo "SNAPSHOT UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ) IST=$(TZ=Asia/Kolkata date +%H:%M)"
 git log -1 --oneline
 pgrep -af 'clean_swap|control.py' || echo "WARNING: no clean_swap"
-grep -E '^(TEST_MODE|ALLOW_HIGH_RISK|X_SIGNAL_HONOR|FE_STABLE_RUNWAY)=' .env
+grep -E '^(TEST_MODE|ALLOW_HIGH_RISK|X_SIGNAL_HONOR|FE_STABLE_RUNWAY|COPY_TRADING)=' .env
+python3 -c "import json; c=json.load(open('control.json')); print('paused=', c.get('paused'), 'lock=', c.get('operator_pause_lock'))"
 cat .xsignal_blocked_symbols 2>/dev/null
 nanopnl | grep -E 'TOTAL|Stables|Session PnL|velocity'
-grep -E 'FE STABLE RUNWAY|EXEC SUCCESS|PLAN SELECTED|Risk=|TRADE SKIPPED|dust_deferred' real_cron.log | tail -20
+grep -E '\[CONTROL\] paused=True|skipping X-signal entry|FE STABLE RUNWAY|EXEC SUCCESS|PLAN SELECTED|Risk=|TRADE SKIPPED' real_cron.log | tail -20
 echo "LOG=$OUT"
 ```
 
@@ -191,7 +240,7 @@ READ FIRST:
 4. MASTER_BRAINSTORM.md — append log 2026-05-30
 5. AI_CONTEXT.md — FE runway, P1 spot cache, blocklist honor, copy audit
 
-VM: Instance A @ bf849af7 · wallet 0x05eF… · ~$131 TOTAL · session ~−1% · leave until ~7 Jun IST.
+VM: Instance A @ 78ea6948 (leave) · paused+lock · wallet 0x05eF… · ~$131 TOTAL · session ~−1% · leave until ~7 Jun IST.
 
 OPERATOR GOALS:
 - Multi-venue (leverage-first), not Polygon-only long term
