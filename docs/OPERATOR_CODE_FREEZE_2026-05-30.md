@@ -22,20 +22,34 @@
 | Current cycle behavior | `$9.33` BUY **dust_deferred** (< $10 min) | ✓ accidental brake |
 | `clean_swap` in `pgrep` | **not seen** in snapshot (only `control.py`) | ⚠ verify |
 
-### Leave as-is?
+### Leave as-is? (updated after operator pause)
 
-**Acceptable for a short break (hours)** if you confirm the trading loop is alive:
+**Operator set `control.json`:** `paused=true`, `operator_pause_lock=true`, reason = freeze entries until back.
+
+**`PLAN SELECTED` in logs is normal while paused** — X-SIGNAL still *plans* in `signal.py`; **execution** is blocked in `swap_executor.py` when `entries_paused`. Do **not** grep `PLAN SELECTED` alone to verify pause.
+
+**Verify pause before leaving (run on VM):**
 
 ```bash
-pgrep -af clean_swap.py || { echo "NO BOT — restarting"; nanoup; sleep 30; pgrep -af clean_swap.py; }
+python3 -c "import json; print(json.load(open('control.json')))"
+grep -E '\[CONTROL\] paused=True|skipping new entry|skipping X-signal entry' real_cron.log | tail -5
+grep 'EXEC SUCCESS' real_cron.log | tail -3   # timestamps should be BEFORE pause if safe
+pgrep -af clean_swap.py
 ```
 
-**Not ideal for days** without:
+Expect: `paused: true`, log line `[CONTROL] paused=True → skipping new entry trades`, and **no new `EXEC SUCCESS`** after pause time. Protection exits (trim/profit-take) may still run.
 
-1. `X_SIGNAL_HONOR_FULL_BLOCKLIST=true` in `.env` **and** add to `ENV_APPLY_PRESERVE_KEYS` (post-freeze task), **or** blocklist only 3 symbols (leave one open).
-2. Optional: `nano_watch` running → `nohup bash scripts/nano_watch.sh >> ~/nano_watch.nohup.log 2>&1 &`
+**Acceptable for leave (days)** with pause + `clean_swap` alive + optional `nano_watch`:
 
-**Will session PnL flip green while away?** Unlikely unless WETH mark-up ~1%. Dust defer + blocklist skips reduce further harm.
+```bash
+nohup bash scripts/nano_watch.sh >> ~/nano_watch.nohup.log 2>&1 &
+```
+
+**Post-freeze (when back):** fix `X_SIGNAL_HONOR_FULL_BLOCKLIST` preserve on nanoup + FE-heavy BUY guard (see Grok review).
+
+**Will session PnL flip green while away?** Possible if WETH marks up ~1%; no new BUY churn while paused. Session baseline **unchanged** (−1.04% anchor).
+
+**Grok Heavy review:** full text in **`docs/GROK_HEAVY_STRATEGY_REVIEW_2026-05-30.md`**.
 
 ---
 
@@ -158,9 +172,10 @@ echo "LOG=$OUT"
 
 1. **`ENV_APPLY_PRESERVE_KEYS`:** add `X_SIGNAL_HONOR_FULL_BLOCKLIST`, `FE_STABLE_RUNWAY_*` toggles.
 2. **`nanoup.sh`:** default `NANOUP_AUTOSTASH=1` (document in README).
-3. **FE-heavy BUY guard:** block `USDC→EQUITY` when `fe_share > 0.55` and `stables < 40` (even if stables > 15).
-4. **Aliases:** install `ns`, `nw`, `nu` in `scripts/nanobot_aliases.sh`.
-5. **Polymarket adapter** scoping (ROADMAP Phase 4) — only after Polygon P0 trend positive.
+3. **FE-heavy BUY guard:** block `USDC→EQUITY` when `fe_share > 0.55` and `stables < 40` (even if stables > 15). *(Grok #2 priority.)*
+4. **Copy trading audit** *(operator TODO — review tonight):* `followed_wallets.json` currently lists token contracts, not trader wallets. Either replace with 1–2 verified on-chain leaders or `COPY_TRADING_ENABLED=false` until validated. See **`docs/GROK_HEAVY_STRATEGY_REVIEW_2026-05-30.md` §D/F.**
+5. **Aliases:** install `ns`, `nw`, `nu` in `scripts/nanobot_aliases.sh`.
+6. **Polymarket adapter** scoping (ROADMAP Phase 4) — only after Polygon P0 trend positive.
 
 ---
 
@@ -171,8 +186,9 @@ ROLE: Master operator for nanoclaw — triage only, no code until operator ends 
 
 READ FIRST:
 1. docs/OPERATOR_CODE_FREEZE_2026-05-30.md (this freeze state)
-2. MASTER_BRAINSTORM.md — append log 2026-05-30
-3. AI_CONTEXT.md — FE runway, P1 spot cache, blocklist honor
+2. docs/GROK_HEAVY_STRATEGY_REVIEW_2026-05-30.md (adversarial plan + side-chat diffs)
+3. MASTER_BRAINSTORM.md — append log 2026-05-30
+4. AI_CONTEXT.md — FE runway, P1 spot cache, blocklist honor
 
 VM: Instance A @ bf849af7 · wallet 0x05eF… · ~$131 TOTAL · session ~−1% · leave until ~7 Jun IST.
 
