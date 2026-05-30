@@ -70,7 +70,30 @@ nohup bash scripts/nano_watch.sh >> ~/nano_watch.nohup.log 2>&1 &
 | Blocklist honor | `false` after `nanoup` — ignored when all blocked | ⚠ footgun **when unpaused** |
 | `clean_swap` | running (cycle @ 09:24:57 UTC) | ✓ |
 
-### Leave as-is? (updated after operator pause)
+### iPhone / Terminus paranoid monitor (while on leave)
+
+Run **`nanodiag`** once daily or when anxious — one screen, pass/fail:
+
+```bash
+cd ~/.nanobot/workspace/nanoclaw && source .venv/bin/activate && nanodiag
+```
+
+Quick checks:
+
+| Command | What it tells you |
+|---------|-------------------|
+| **`nanodiag`** | All-in-one: process, pause, RPC, PnL, skip lines, last fill |
+| **`nh`** | RPC alive |
+| **`nanopnl`** | TOTAL, stables, session % (MTM still moves on WETH) |
+| **`pgrep -af clean_swap`** | Bot process (empty = dead → `NANOUP_AUTOSTASH=1 nanoup`) |
+
+**PASS while on leave:** `paused=True` + `operator_pause_lock=True` + `skipping X-signal entry` in recent logs + **no new** `EXEC SUCCESS` in `tail real_cron.log`.
+
+**Paste to Grok on iPhone** if any `FAIL` line — attach `nanodiag` output.
+
+**Not blocked by pause (by design):** protection / profit-take **exits** (EQUITY→USDC). Your book is FE-heavy with no trim signal firing — logs show `No actionable trade`. **Blocked:** all **entries** (USDC→EQUITY, WMATIC buys, copy buys).
+
+---
 
 **Operator set `control.json`:** `paused=true`, `operator_pause_lock=true`, reason = freeze entries until back.
 

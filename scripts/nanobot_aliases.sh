@@ -95,6 +95,10 @@ nanocopyaudit() {
   python scripts/copy_trading_audit.py "$@"
 }
 
+nanodiag() {
+  bash "${NANOCLAW_ROOT}/scripts/nanodiag.sh" "$@"
+}
+
 nanobot() {
   _nanoclaw_enter_root || return 1
   tail -f real_cron.log

@@ -24,6 +24,7 @@ def test_nanobot_aliases_script_defines_core_functions():
     assert "nanohealth()" in content
     assert "nanovel()" in content
     assert "nanocopyaudit()" in content
+    assert "nanodiag()" in content
     assert "nh()" in content
 
 
