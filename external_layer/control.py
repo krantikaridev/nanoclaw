@@ -227,7 +227,14 @@ def _risk_to_control_payload(risk: dict[str, bool | str | float]) -> dict[str, o
         payload["stable_usd"] = s
     if w is not None:
         payload["wmatic_balance"] = w
-    return _apply_operator_pause_lock(_apply_manual_unpause_over_wmatic(payload, risk))
+    payload = _apply_manual_unpause_over_wmatic(payload, risk)
+    try:
+        from .auto_pause import apply_auto_pause_control, auto_pause_enabled
+    except ImportError:
+        from auto_pause import apply_auto_pause_control, auto_pause_enabled  # type: ignore[no-redef]
+    if auto_pause_enabled():
+        return apply_auto_pause_control(payload)
+    return _apply_operator_pause_lock(payload)
 
 
 def _load_full_control_dict() -> dict[str, object]:

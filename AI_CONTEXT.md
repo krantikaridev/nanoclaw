@@ -583,7 +583,9 @@ Earnings Volatility Capture Engine v1, while preserving strict hard risk limits 
 | `nanopush` | Run secret scan + env sync/check, stage `.env.example`, then `git push` |
 | `nanodiag` | One-screen leave monitor: process, pause gate, RPC, PnL tail, **`unpause_readiness`** hard gates |
 | `nanodeploy` | **Single VM command**: `nanoup` + `nanohealth` + `unpause_readiness` + `nanodiag` + `nano_48h_green` |
-| `nano48h` / `nanogreen` | Alias for `bash scripts/nano_48h_green.sh` |
+| `nanogreen` | Portfolio green gate — **`--hours 8|12|24|48`**, **`--session-min-pct -1`** (default floor −1%, not 0%) |
+| `nano8h` / `nano12h` / `nano24h` / `nano48h` | Shorthand for `nanogreen --hours N` |
+| `EXTERNAL_AUTO_PAUSE_ENABLED=true` | **Automated** pause/unpause via `external_layer` → `control.json` (no manual edits) |
 | `python scripts/unpause_readiness.py` | Hard gates only (loss-cut off, FE runway, blocklist honor, copy audit) — exit **0** when safe to *consider* unpause |
 | `bash scripts/nano_48h_green.sh` | **48h-green snapshot**: PASS/FAIL on session PnL ≥ 0 and no `EXEC SUCCESS` after `[CONTROL] paused=True`; prints FE share estimate + last 3 `FE STABLE RUNWAY` lines from `real_cron.log`. Exit **0** only when both gates pass. |
 

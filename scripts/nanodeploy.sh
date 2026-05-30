@@ -61,7 +61,7 @@ bash "${ROOT}/scripts/nanodiag.sh" || true
 echo ""
 echo "--- nano_48h_green (session + pause discipline) ---"
 GREEN_RC=0
-bash "${ROOT}/scripts/nano_48h_green.sh" || GREEN_RC=$?
+bash "${ROOT}/scripts/nano_green.sh" || GREEN_RC=$?
 
 echo ""
 echo "=== nanodeploy summary ==="

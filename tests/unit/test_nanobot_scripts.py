@@ -27,6 +27,8 @@ def test_nanobot_aliases_script_defines_core_functions():
     assert "nanocopyaudit()" in content
     assert "nanodiag()" in content
     assert "nano48h()" in content
+    assert "nano12h()" in content
+    assert "nanogreen()" in content
     assert "nanodeploy()" in content
     assert "Verify: command -v nanoup nanodeploy nanodiag nano48h" in content
     assert "nh()" in content
@@ -732,10 +734,22 @@ def _sandbox_root_for_nano_48h_green(
     scripts = root / "scripts"
     scripts.mkdir(parents=True)
 
-    green_src = REPO_ROOT / "scripts" / "nano_48h_green.sh"
-    green_dst = scripts / "nano_48h_green.sh"
+    green_src = REPO_ROOT / "scripts" / "nano_green.sh"
+    green_dst = scripts / "nano_green.sh"
     green_dst.write_text(green_src.read_text(encoding="utf-8"), encoding="utf-8")
     green_dst.chmod(green_dst.stat().st_mode | stat.S_IXUSR)
+    py_src = REPO_ROOT / "scripts" / "nano_green.py"
+    (scripts / "nano_green.py").write_text(py_src.read_text(encoding="utf-8"), encoding="utf-8")
+    (scripts / "unpause_readiness.py").write_text(
+        (REPO_ROOT / "scripts" / "unpause_readiness.py").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    legacy = scripts / "nano_48h_green.sh"
+    legacy.write_text(
+        (REPO_ROOT / "scripts" / "nano_48h_green.sh").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    legacy.chmod(legacy.stat().st_mode | stat.S_IXUSR)
 
     (scripts / "pnl_report.py").write_text(
         "\n".join(
@@ -761,6 +775,36 @@ def _sandbox_root_for_nano_48h_green(
     control = {"paused": paused, "reason": "test pause"}
     (root / "control.json").write_text(json.dumps(control) + "\n", encoding="utf-8")
 
+    (root / ".env").write_text(
+        "\n".join(
+            [
+                "ALLOW_HIGH_RISK_LOSS_CUT_XSIGNAL=false",
+                "FE_STABLE_RUNWAY_ENABLED=true",
+                "COPY_TRADING_ENABLED=false",
+                "X_SIGNAL_HONOR_FULL_BLOCKLIST=true",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (root / "followed_equities.json").write_text(
+        json.dumps(
+            {
+                "enabled": True,
+                "assets": [
+                    {
+                        "symbol": "WETH_ALPHA",
+                        "address": "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+                        "decimals": 18,
+                    }
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (root / ".xsignal_blocked_symbols").write_text("LINK_ALPHA\n", encoding="utf-8")
+
     default_lines = [
         "[nanoclaw] FE STABLE RUNWAY TRIM | sym=WETH | sell_fraction=0.1 | stable_usd=13.00 | fe_share=0.89",
         "[nanoclaw] FE STABLE RUNWAY | defer USDC→EQUITY BUY | stable_usd=13.00 | fe_share=0.89",
@@ -782,7 +826,7 @@ def _run_nano_48h_green(root: Path) -> subprocess.CompletedProcess[str]:
         "PATH": f"{root / 'bin'}{os.pathsep}{os.environ.get('PATH', '')}",
     }
     return subprocess.run(
-        ["bash", str(root / "scripts" / "nano_48h_green.sh")],
+        ["bash", str(root / "scripts" / "nano_green.sh"), "--hours", "48"],
         cwd=root,
         env=env,
         text=True,
@@ -797,7 +841,7 @@ def test_nanodeploy_script_exists():
     assert script_path.is_file()
     content = script_path.read_text(encoding="utf-8")
     assert "unpause_readiness" in content
-    assert "nano_48h_green" in content
+    assert "nano_green" in content
     assert "nanodiag" in content
 
 
@@ -806,13 +850,11 @@ def test_unpause_readiness_module_exists():
 
 
 def test_nano_48h_green_script_exists():
-    script_path = REPO_ROOT / "scripts" / "nano_48h_green.sh"
+    script_path = REPO_ROOT / "scripts" / "nano_green.py"
     assert script_path.is_file()
     content = script_path.read_text(encoding="utf-8")
-    assert "session_pnl:" in content
-    assert "pause_exec:" in content
-    assert "fe_share:" in content
-    assert "FE STABLE RUNWAY" in content
+    assert "evaluate_green_gate" in content
+    assert "session_min_pct" in content
     assert "OVERALL:" in content
 
 
@@ -821,23 +863,27 @@ def test_nano_48h_green_passes_when_gates_met(tmp_path: Path):
     root = _sandbox_root_for_nano_48h_green(tmp_path)
     result = _run_nano_48h_green(root)
     assert result.returncode == 0, result.stderr + result.stdout
-    assert "session_pnl: PASS" in result.stdout
-    assert "pause_exec:  PASS" in result.stdout
-    assert "fe_share=" in result.stdout
-    assert "FE STABLE RUNWAY" in result.stdout
+    assert "nanogreen |" in result.stdout
+    assert "session:" in result.stdout
     assert "OVERALL: PASS" in result.stdout
 
 
-def test_nano_48h_green_fails_when_session_negative(tmp_path: Path):
+def test_nano_48h_green_legacy_wrapper_exists():
+    script_path = REPO_ROOT / "scripts" / "nano_48h_green.sh"
+    assert script_path.is_file()
+    assert "nano_green.sh" in script_path.read_text(encoding="utf-8")
+
+
+def test_nano_48h_green_fails_when_session_below_floor(tmp_path: Path):
     _require_bash()
     root = _sandbox_root_for_nano_48h_green(
         tmp_path,
-        session_total=101.0,
-        current_total=100.0,
+        session_total=132.0,
+        current_total=130.0,
     )
     result = _run_nano_48h_green(root)
     assert result.returncode == 1, result.stdout
-    assert "session_pnl: FAIL" in result.stdout
+    assert "session:" in result.stdout and "FAIL" in result.stdout
     assert "OVERALL: FAIL" in result.stdout
 
 
@@ -850,5 +896,5 @@ def test_nano_48h_green_fails_exec_success_after_pause(tmp_path: Path):
     root = _sandbox_root_for_nano_48h_green(tmp_path, cron_lines=lines)
     result = _run_nano_48h_green(root)
     assert result.returncode == 1, result.stdout
-    assert "pause_exec:  FAIL" in result.stdout
+    assert "pause_exec:" in result.stdout and "FAIL" in result.stdout
     assert "OVERALL: FAIL" in result.stdout

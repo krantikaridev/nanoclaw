@@ -100,11 +100,23 @@ nanodiag() {
 }
 
 nano48h() {
-  bash "${NANOCLAW_ROOT}/scripts/nano_48h_green.sh" "$@"
+  bash "${NANOCLAW_ROOT}/scripts/nano_green.sh" --hours 48 "$@"
 }
 
 nanogreen() {
-  nano48h "$@"
+  bash "${NANOCLAW_ROOT}/scripts/nano_green.sh" "$@"
+}
+
+nano8h() {
+  nanogreen --hours 8
+}
+
+nano12h() {
+  nanogreen --hours 12
+}
+
+nano24h() {
+  nanogreen --hours 24
 }
 
 nanodeploy() {

@@ -32,6 +32,10 @@ ENV_APPLY_PRESERVE_KEYS = (
     "X_SIGNAL_HONOR_FULL_BLOCKLIST",
     "MAIN_STRATEGY_PNL_RECOVERY_MODE",
     "PNL_RECOVERY_MODE",
+    "EXTERNAL_AUTO_PAUSE_ENABLED",
+    "EXTERNAL_AUTO_GREEN_HOURS",
+    "EXTERNAL_AUTO_SESSION_MIN_PCT",
+    "EXTERNAL_AUTO_WINDOW_MIN_PCT",
     # Never clobber custody / trading identity when applying the template (template may hold a placeholder).
     "WALLET",
     # Preserve stage-specific RPC runtime selection when applying template.
