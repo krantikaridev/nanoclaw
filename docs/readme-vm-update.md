@@ -206,24 +206,25 @@ Plain-language: send **USDC on Polygon** to the bot **`WALLET=`** address. Step-
 
 ## One-time VM alias bootstrap
 
-If `nanoup`/`nanorestart` are missing (`command not found`), add aliases once:
+If `nanoup`/`nanorestart` are missing (`command not found`), install shims once:
 
 ```bash
 scripts/nanobot_aliases.sh --install
-source ~/.bashrc
+export PATH="$HOME/.local/bin:$PATH"   # or open a new login shell
 ```
 
-`--install` also places standalone `nano*` command shims in `~/.local/bin` so commands keep working in new shells without re-sourcing.
+`--install` places standalone `nano*` command shims in `~/.local/bin`, adds PATH to `~/.bashrc`, and **removes** any legacy `source .../nanobot_aliases.sh` line (CRLF in that file breaks login shells).
 
-Verify aliases are loaded:
+Optional — interactive shell **functions** (not required for `nanogreen` / `nanoup` shims):
 
 ```bash
-type nanoup
-type nanokill
-type nanorestart
-type nanostatus
-type nanodaily
-type nanohealth
+source scripts/nanobot_aliases.sh
+```
+
+Verify shims are on PATH:
+
+```bash
+command -v nanoup nanogreen nano12h
 ```
 
 `nanostatus`, `nanopnl`, and `nanorestart` forward CLI flags to `scripts/pnl_report.py` (example: `--reset-session`). Run **`nanohealth`** before trusting PnL when RPC has been flaky.

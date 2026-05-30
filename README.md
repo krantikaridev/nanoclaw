@@ -60,9 +60,9 @@ NANOUP_AUTOSTASH=1 nanorestart
 ```
 
 If aliases are missing on VM (`nanoup: command not found`), use direct script fallback once:
-`NANOUP_AUTOSTASH=1 bash scripts/nanoup.sh`, then install aliases via
-`scripts/nanobot_aliases.sh --install && source ~/.bashrc` (details in `docs/readme-vm-update.md`).
-`--install` also installs standalone command shims into `~/.local/bin` (`nanohealth`, `nanostatus`, `nanopnl`, etc.) so commands work in fresh shells without manual re-source.
+`NANOUP_AUTOSTASH=1 bash scripts/nanoup.sh`, then install shims via
+`scripts/nanobot_aliases.sh --install` (details in `docs/readme-vm-update.md`).
+`--install` places standalone command shims in `~/.local/bin` (`nanohealth`, `nanostatus`, `nanogreen`, etc.) and adds PATH to `~/.bashrc` — it does **not** source `nanobot_aliases.sh` on login (avoids CRLF parse failures on VM).
 
 ### Stop / restart
 

@@ -46,6 +46,10 @@ else
 fi
 
 echo ""
+echo "--- shell shims (~/.local/bin; drops legacy bashrc source) ---"
+bash "${ROOT}/scripts/nanobot_aliases.sh" --install || echo "WARN nanobot_aliases --install failed"
+
+echo ""
 echo "--- nanohealth ---"
 "${PYTHON}" scripts/nanohealth.py || echo "WARN nanohealth failed"
 

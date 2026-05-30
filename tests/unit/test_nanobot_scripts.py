@@ -39,11 +39,14 @@ def test_nanobot_aliases_script_supports_install_mode():
     content = script_path.read_text(encoding="utf-8")
 
     assert "--install" in content
-    assert "source ~/.bashrc" in content
+    assert "_nanoclaw_bootstrap_bashrc" in content
+    assert "nanobot_aliases.sh|d" in content
     assert "standalone nano* command shims" in content
     # Guard against accidental legacy alias block duplication.
     assert content.startswith("#!/usr/bin/env bash\n")
     assert 'alias nanoup=' not in content
+    # Install must not append a bashrc source line (CRLF breakage on VM).
+    assert 'printf \'\\n# nanoclaw aliases\\n%s\\n\' "${source_line}"' not in content
 
 
 def test_nanokill_and_nanorestart_scripts_exist():
@@ -301,7 +304,8 @@ def test_install_mode_creates_standalone_command_shims(tmp_path: Path):
     root = _sandbox_root(tmp_path)
     fake_home = tmp_path / "home"
     fake_home.mkdir(parents=True, exist_ok=True)
-    (fake_home / ".bashrc").write_text("", encoding="utf-8")
+    legacy_source = 'source "/old/path/scripts/nanobot_aliases.sh"\n'
+    (fake_home / ".bashrc").write_text(legacy_source, encoding="utf-8")
     env = {**os.environ, "HOME": str(fake_home), "NANOCLAW_ROOT": str(root)}
 
     install = subprocess.run(
@@ -314,10 +318,16 @@ def test_install_mode_creates_standalone_command_shims(tmp_path: Path):
     )
     assert install.returncode == 0, install.stderr
 
+    bashrc_text = (fake_home / ".bashrc").read_text(encoding="utf-8")
+    assert "nanobot_aliases.sh" not in bashrc_text
+    assert 'export PATH="$HOME/.local/bin:$PATH"' in bashrc_text
+    assert "removed legacy nanobot_aliases.sh source" in install.stdout
+
     bindir = fake_home / ".local" / "bin"
     assert (bindir / "nanostatus").is_file()
     assert (bindir / "nanopnl").is_file()
     assert (bindir / "nanodaily").is_file()
+    assert (bindir / "nanogreen").is_file()
 
     run_status = subprocess.run(
         ["bash", "-lc", 'export PATH="$HOME/.local/bin:$PATH"; nanostatus'],

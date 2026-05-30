@@ -182,17 +182,29 @@ nanopush() {
   git push "$@"
 }
 
+_nanoclaw_bootstrap_bashrc() {
+  local bashrc path_line
+  bashrc="${HOME}/.bashrc"
+  path_line='export PATH="$HOME/.local/bin:$PATH"'
+  if [[ ! -f "${bashrc}" ]]; then
+    return 0
+  fi
+  # Legacy installs sourced this file on every login; CRLF in the script breaks bash.
+  if grep -F "nanobot_aliases.sh" "${bashrc}" >/dev/null 2>&1; then
+    sed -i '\|nanobot_aliases.sh|d' "${bashrc}"
+    echo "✅ removed legacy nanobot_aliases.sh source from ${bashrc} (use ~/.local/bin shims)"
+  fi
+  if ! grep -F "${path_line}" "${bashrc}" >/dev/null 2>&1; then
+    printf '\n# nanoclaw command shims (~/.local/bin)\n%s\n' "${path_line}" >> "${bashrc}"
+    echo "✅ added ~/.local/bin PATH bootstrap to ${bashrc}"
+  else
+    echo "✅ ~/.local/bin PATH bootstrap already in ${bashrc}"
+  fi
+}
+
 _nanoclaw_install_aliases() {
   python "${NANOCLAW_ROOT}/scripts/normalize_shell_lf.py" 2>/dev/null || true
-  local bashrc source_line
-  bashrc="${HOME}/.bashrc"
-  source_line="source \"${NANOCLAW_ROOT}/scripts/nanobot_aliases.sh\""
-  if [[ -f "${bashrc}" ]] && grep -F "${source_line}" "${bashrc}" >/dev/null 2>&1; then
-    echo "✅ aliases already installed in ${bashrc}"
-  else
-    printf '\n# nanoclaw aliases\n%s\n' "${source_line}" >> "${bashrc}"
-    echo "✅ added alias bootstrap to ${bashrc}"
-  fi
+  _nanoclaw_bootstrap_bashrc
 }
 
 _nanoclaw_install_cmd_shims() {
@@ -337,19 +349,16 @@ EOF
     "${bindir}/nano24h" \
     "${bindir}/nanodeploy"
 
-  if [[ -f "${HOME}/.bashrc" ]] && ! grep -F 'export PATH="$HOME/.local/bin:$PATH"' "${HOME}/.bashrc" >/dev/null 2>&1; then
-    printf '\n# local user bin for nanoclaw command shims\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "${HOME}/.bashrc"
-    echo "✅ added ~/.local/bin PATH bootstrap to ${HOME}/.bashrc"
-  fi
   echo "✅ installed standalone nano* command shims in ${bindir}"
-  echo "Verify: command -v nanoup nanodeploy nanodiag nano48h nanocopyaudit nanohealth nh"
+  echo "Verify: command -v nanoup nanodeploy nanodiag nano48h nanogreen nanocopyaudit nanohealth nh"
 }
 
 _nanoclaw_install_everything() {
-  _nanoclaw_install_aliases
   _nanoclaw_install_cmd_shims
-  echo "Run: source ~/.bashrc"
-  echo "Verify: type nanodeploy && type nanodiag && type nanoup && type nanohealth && type nh"
+  _nanoclaw_install_aliases
+  echo "Run: export PATH=\"\$HOME/.local/bin:\$PATH\"  # or open a new login shell"
+  echo "Optional (interactive functions): source \"${NANOCLAW_ROOT}/scripts/nanobot_aliases.sh\""
+  echo "Verify: command -v nanodeploy nanodiag nanoup nanogreen nanohealth nh"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

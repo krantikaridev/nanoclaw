@@ -73,7 +73,7 @@ When a Grok (or Cursor) thread hits the message limit—or you deliberately star
 - [ ] **CSV sanity** — if anything looked like test-mode spikes, run **`scripts/clean_dummy_data.sh`** after backup approval; reconcile with Polygonscan.
 - [ ] **`nanohealth`**, then **`nanostatus` / `nanopnl`** — RPC gate first; then spot-check totals vs on-chain intuition after deploy.
 - [ ] **Optional artifact bundle** — `./scripts/package_runtime_artifacts.sh` before sharing externally.
-- [ ] **Parked ops** — `bash scripts/nanobot_aliases.sh --install` + `source ~/.bashrc` on VM once so **`nanohealth`** is on `PATH` (until then: `python scripts/nanohealth.py`).
+- [ ] **Parked ops** — `bash scripts/nanobot_aliases.sh --install` on VM once so **`nanohealth`** / **`nanogreen`** shims land in `~/.local/bin` (until then: `python scripts/nanohealth.py`, `python scripts/nano_green.py`).
 - [ ] **Reminder**: no two write-enabled bots on one wallet key.
 
 ## **v2.8.0 PnL benchmark — same-day closure (operator)**
