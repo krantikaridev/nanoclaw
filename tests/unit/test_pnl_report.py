@@ -629,3 +629,76 @@ def test_format_turnover_lines_includes_session(tmp_path: Path) -> None:
     assert any("turnover_multiple_day_utc=0.50x" in x for x in lines)
     assert any("turnover_notional_usd_session=" in x for x in lines)
     assert any("turnover_multiple_session=" in x for x in lines)
+
+
+def test_parse_trade_skip_reason_colon_and_pipe() -> None:
+    assert pnl_report.parse_trade_skip_reason(
+        "[nanoclaw] TRADE SKIPPED: cooldown (global, ~130s left)"
+    ) == "cooldown"
+    assert pnl_report.parse_trade_skip_reason(
+        "[nanoclaw] TRADE SKIPPED: defensive_pause (risk=HIGH) — pausing X-signal BUY entries"
+    ) == "defensive_pause"
+    assert pnl_report.parse_trade_skip_reason(
+        "[nanoclaw] TRADE SKIPPED | below minimum size | direction=BUY | size=$1.00"
+    ) == "below minimum size"
+    assert pnl_report.parse_trade_skip_reason("no skip here") is None
+
+
+def test_count_trade_skips_lifetime_and_24h_window(tmp_path: Path) -> None:
+    now = datetime(2026, 5, 30, 12, 0, 0, tzinfo=timezone.utc)
+    since = now - timedelta(hours=24)
+    inside = int((now - timedelta(hours=2)).timestamp())
+    outside = int((now - timedelta(hours=30)).timestamp())
+    log_file = _write_log(
+        tmp_path,
+        "\n".join(
+            [
+                f"[nanoclaw] === CYCLE {outside} | BALANCES: USDT=$1 USDC=$1 WMATIC=$1 ===",
+                "[nanoclaw] TRADE SKIPPED: cooldown (global, ~130s left)",
+                f"[nanoclaw] === CYCLE {inside} | BALANCES: USDT=$1 USDC=$1 WMATIC=$1 ===",
+                "[nanoclaw] TRADE SKIPPED: defensive_pause (risk=HIGH)",
+                "[nanoclaw] TRADE SKIPPED | below minimum size | direction=BUY",
+            ]
+        ),
+    )
+    assert pnl_report.count_trade_skips(log_file) == 3
+    assert pnl_report.count_trade_skips(log_file, since_utc=since, until_utc=now) == 2
+
+
+def test_trade_skip_reason_counts_top_reasons(tmp_path: Path) -> None:
+    now = datetime(2026, 5, 30, 12, 0, 0, tzinfo=timezone.utc)
+    since = now - timedelta(hours=24)
+    ts = int((now - timedelta(hours=1)).timestamp())
+    log_file = _write_log(
+        tmp_path,
+        "\n".join(
+            [
+                f"[nanoclaw] === CYCLE {ts} | BALANCES: USDT=$1 USDC=$1 WMATIC=$1 ===",
+                "[nanoclaw] TRADE SKIPPED: cooldown (global, ~130s left)",
+                "[nanoclaw] TRADE SKIPPED: cooldown (global, ~90s left)",
+                "[nanoclaw] TRADE SKIPPED: dust_deferred (below min)",
+            ]
+        ),
+    )
+    counts = pnl_report.trade_skip_reason_counts(log_file, since_utc=since, until_utc=now)
+    assert counts == {"cooldown": 2, "dust_deferred": 1}
+
+
+def test_format_trade_skip_stats_includes_top_reasons(tmp_path: Path) -> None:
+    now = datetime(2026, 5, 30, 12, 0, 0, tzinfo=timezone.utc)
+    ts = int((now - timedelta(hours=1)).timestamp())
+    log_file = _write_log(
+        tmp_path,
+        "\n".join(
+            [
+                f"[nanoclaw] === CYCLE {ts} | BALANCES: USDT=$1 USDC=$1 WMATIC=$1 ===",
+                "[nanoclaw] TRADE SKIPPED: cooldown (global, ~130s left)",
+                "[nanoclaw] TRADE SKIPPED: cooldown (global, ~90s left)",
+                "[nanoclaw] TRADE SKIPPED: dust_deferred (below min)",
+            ]
+        ),
+    )
+    lines = pnl_report.format_trade_skip_stats(log_file, now_utc=now, top_n=2)
+    assert lines[0] == "Trade skips (lifetime): 3"
+    assert lines[1] == "Trade skips (24h UTC): 3"
+    assert lines[2] == "Top skip reasons (24h): cooldown (2), dust_deferred (1)"

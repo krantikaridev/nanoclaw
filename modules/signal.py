@@ -413,7 +413,15 @@ def _filter_xsignal_blocked_equities(
                 log_xsignal_blocked_skip(sym, source=source)
             continue
         out.append(asset)
-    if not out and assets and allow_ignore_all_blocked:
+    if not out and assets:
+        if not allow_ignore_all_blocked:
+            return out
+        if bool(getattr(cfg, "X_SIGNAL_HONOR_FULL_BLOCKLIST", False)):
+            print(
+                "[X-SIGNAL] All followed assets blocked — no equity plans "
+                "(operator block honored)."
+            )
+            return []
         print(
             "[X-SIGNAL] WARNING: block list would remove all followed assets; "
             "ignoring blocks this cycle (trim .xsignal_blocked_symbols)"
@@ -1344,6 +1352,133 @@ def _try_build_high_risk_loss_cut_decision(
     return None
 
 
+def _fe_stable_runway_compute_sell_fraction(
+    *,
+    stable_usd: float,
+    target_stable_usd: float,
+    position_usd: float,
+) -> float | None:
+    if position_usd <= 0.0:
+        return None
+    shortfall = max(0.0, float(target_stable_usd) - float(stable_usd))
+    min_trade = float(getattr(cfg, "MIN_TRADE_USD", 10.0))
+    sell_usd = max(shortfall, min_trade)
+    frac = min(1.0, sell_usd / float(position_usd))
+    return min(1.0, max(0.05, frac))
+
+
+def try_fe_stable_runway_trim_equity_decision(
+    balances: Balances,
+    *,
+    dry_run: bool = False,
+    state: dict | None = None,
+    wmatic_usd: float | None = None,
+) -> Optional[TradeDecision]:
+    """Partial EQUITY→USDC trim when FE-heavy and stables critically low with no WMATIC rebuild."""
+    from modules import swap_executor as swap_exec
+    from modules import x_signal_position as xsp
+
+    fe_ctx = swap_exec._fe_stable_runway_context(balances, wmatic_usd=wmatic_usd)
+    if fe_ctx is None:
+        return None
+
+    fcb = _cs_mod()
+    assets_seq = _filter_xsignal_blocked_equities(
+        fcb.X_SIGNAL_EQUITY_TRADER.load_followed_equities(),
+        log_skips=False,
+    )
+    if not assets_seq:
+        return None
+
+    fe_cfg = fcb._load_followed_equities_json_dict()
+    min_strength = fcb._effective_equity_signal_min(fe_cfg)
+    tuned_trader = fcb._tuned_signal_equity_trader(min_strength)
+    secs_order = int(tuned_trader.config.per_asset_cooldown_seconds)
+
+    holdings: list[tuple[float, int, FollowedEquity, float, float]] = []
+    for idx, asset in enumerate(assets_seq):
+        sym = str(asset.symbol).strip()
+        try:
+            equity_balance = float(
+                fcb.get_token_balance(str(asset.token_address), int(asset.decimals))
+            )
+        except Exception:
+            continue
+        if equity_balance <= 0:
+            continue
+        fallback_px = (
+            float(asset.current_price_usd)
+            if isinstance(asset.current_price_usd, (int, float))
+            else None
+        )
+        live_spot = xsp.resolve_live_spot_usd(
+            fallback_price_usd=fallback_px,
+            equity_balance=equity_balance,
+            token_address=str(asset.token_address),
+            token_decimals=int(asset.decimals),
+            mode="fe_stable_runway",
+        )
+        spot_px = live_spot if live_spot and live_spot > 0 else fallback_px
+        if not isinstance(spot_px, (int, float)) or float(spot_px) <= 0:
+            continue
+        position_usd = float(equity_balance) * float(spot_px)
+        holdings.append((position_usd, idx, asset, equity_balance, float(spot_px)))
+
+    if not holdings:
+        return None
+
+    holdings.sort(key=lambda row: (-row[0], row[1]))
+    position_usd, _idx, asset, equity_balance, spot_px = holdings[0]
+    sym = str(asset.symbol).strip()
+    sell_fraction = _fe_stable_runway_compute_sell_fraction(
+        stable_usd=float(fe_ctx["stable_usd"]),
+        target_stable_usd=float(fe_ctx["target_stable_usd"]),
+        position_usd=position_usd,
+    )
+    if sell_fraction is None:
+        return None
+
+    if not fcb.can_trade_asset(sym, None, secs_order):
+        remain_s = runtime.asset_cooldown_remaining_seconds(sym, cooldown_seconds=secs_order)
+        print(
+            f"{runtime._nanolog()}FE stable runway trim deferred for {sym} "
+            f"(per-asset cooldown, ~{remain_s:.0f}s remaining)"
+        )
+        return None
+
+    plan, block = tuned_trader.build_fe_stable_runway_plan_with_block_reason(
+        symbol=sym,
+        token_address=str(asset.token_address),
+        token_decimals=int(asset.decimals),
+        equity_balance=equity_balance,
+        sell_fraction=sell_fraction,
+        current_price_usd=spot_px,
+    )
+    if not plan:
+        print(
+            f"{runtime._nanolog()}FE stable runway trim blocked for {sym} | reason={block or 'unknown'}"
+        )
+        return None
+
+    swap_exec._log_fe_stable_runway_trim(
+        sym=sym,
+        sell_fraction=sell_fraction,
+        stable_usd=float(fe_ctx["stable_usd"]),
+        fe_share=float(fe_ctx["fe_share"]),
+        target_stable_usd=float(fe_ctx["target_stable_usd"]),
+    )
+    return TradeDecision(
+        direction=plan.direction,
+        amount_in=int(plan.amount_in),
+        trade_size=float(plan.trade_size or 0.0),
+        message=plan.message,
+        token_in=plan.token_in,
+        token_out=plan.token_out,
+        cooldown_asset=(sym, int(secs_order)),
+        signal_strength=float(plan.signal_strength or 0.0),
+    )
+
+
 def try_high_risk_loss_cut_equity_decision(
     balances: Balances,
     *,
@@ -1514,6 +1649,16 @@ def try_x_signal_equity_decision(
             get_equity_balance=fcb.get_token_balance,
         ),
     )
+    from modules import swap_executor as swap_exec
+
+    if swap_exec._fe_stable_runway_buy_block_active(balances):
+        skip_buys = True
+        fe_block = swap_exec._fe_stable_runway_context(balances)
+        if fe_block is not None:
+            swap_exec._log_fe_stable_runway_defer_buy(
+                stable_usd=float(fe_block["stable_usd"]),
+                fe_share=float(fe_block["fe_share"]),
+            )
     _print_x_signal_buy_risk_status(
         risk_level=risk_level,
         risk_ctx=risk_ctx,

@@ -343,6 +343,136 @@ _TRADE_ATTRIBUTION_ONCHAIN_RE = re.compile(
 )
 
 
+_TRADE_SKIPPED_MARKER = "TRADE SKIPPED"
+_TRADE_SKIPPED_COLON_RE = re.compile(r"TRADE SKIPPED:\s*(.+?)(?:\s*—|\s*$)")
+_TRADE_SKIPPED_PIPE_RE = re.compile(r"TRADE SKIPPED\s*\|\s*([^|]+)")
+
+
+def _normalize_trade_skip_reason(raw: str) -> str:
+    reason = raw.strip()
+    if not reason:
+        return "unknown"
+    paren = reason.find("(")
+    if paren > 0:
+        reason = reason[:paren].strip()
+    return reason or "unknown"
+
+
+def parse_trade_skip_reason(line: str) -> str | None:
+    """Extract a short reason key from a ``TRADE SKIPPED`` log line."""
+    if _TRADE_SKIPPED_MARKER not in line:
+        return None
+    pipe_match = _TRADE_SKIPPED_PIPE_RE.search(line)
+    if pipe_match:
+        return _normalize_trade_skip_reason(pipe_match.group(1))
+    colon_match = _TRADE_SKIPPED_COLON_RE.search(line)
+    if colon_match:
+        return _normalize_trade_skip_reason(colon_match.group(1))
+    return "unknown"
+
+
+def count_trade_skips(
+    log_path: Path | str = LOG_FILE,
+    *,
+    since_utc: datetime | None = None,
+    until_utc: datetime | None = None,
+) -> int:
+    """
+    Count ``TRADE SKIPPED`` lines in ``real_cron.log``.
+
+    When ``since_utc`` / ``until_utc`` are set, each skip is attributed to the
+    preceding ``=== CYCLE <unix_ts>`` line (same as ``count_velocity_fills``).
+    Without a window, every matching line is counted (lifetime grep semantics).
+    """
+    path = Path(log_path)
+    if not path.is_file():
+        return 0
+    since_ts = since_utc.timestamp() if since_utc is not None else None
+    until_ts = until_utc.timestamp() if until_utc is not None else None
+    windowed = since_ts is not None or until_ts is not None
+    last_ts = 0
+    n = 0
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        m = _CYCLE_TS_RE.search(line)
+        if m:
+            last_ts = int(m.group(1))
+            continue
+        if _TRADE_SKIPPED_MARKER not in line:
+            continue
+        if windowed:
+            if last_ts <= 0:
+                continue
+            if since_ts is not None and last_ts < since_ts:
+                continue
+            if until_ts is not None and last_ts >= until_ts:
+                continue
+        n += 1
+    return n
+
+
+def trade_skip_reason_counts(
+    log_path: Path | str = LOG_FILE,
+    *,
+    since_utc: datetime | None = None,
+    until_utc: datetime | None = None,
+) -> dict[str, int]:
+    """Aggregate skip reasons over an optional CYCLE-attributed UTC window."""
+    path = Path(log_path)
+    if not path.is_file():
+        return {}
+    since_ts = since_utc.timestamp() if since_utc is not None else None
+    until_ts = until_utc.timestamp() if until_utc is not None else None
+    windowed = since_ts is not None or until_ts is not None
+    last_ts = 0
+    counts: dict[str, int] = {}
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        m = _CYCLE_TS_RE.search(line)
+        if m:
+            last_ts = int(m.group(1))
+            continue
+        reason = parse_trade_skip_reason(line)
+        if reason is None:
+            continue
+        if windowed:
+            if last_ts <= 0:
+                continue
+            if since_ts is not None and last_ts < since_ts:
+                continue
+            if until_ts is not None and last_ts >= until_ts:
+                continue
+        counts[reason] = counts.get(reason, 0) + 1
+    return counts
+
+
+def format_trade_skip_stats(
+    log_path: Path | str = LOG_FILE,
+    *,
+    now_utc: datetime | None = None,
+    top_n: int = 3,
+) -> list[str]:
+    """Human-readable trade-skip counters for ``nanodaily`` TODAY STATS."""
+    now = now_utc or datetime.now(timezone.utc)
+    since = now - timedelta(hours=24)
+    lifetime = count_trade_skips(log_path)
+    last_24h = count_trade_skips(log_path, since_utc=since, until_utc=now)
+    lines = [
+        f"Trade skips (lifetime): {lifetime}",
+        f"Trade skips (24h UTC): {last_24h}",
+    ]
+    reasons = trade_skip_reason_counts(log_path, since_utc=since, until_utc=now)
+    if reasons:
+        top = sorted(reasons.items(), key=lambda kv: (-kv[1], kv[0]))[:top_n]
+        parts = [f"{name} ({count})" for name, count in top]
+        lines.append(f"Top skip reasons (24h): {', '.join(parts)}")
+    return lines
+
+
+def print_trade_skip_stats() -> int:
+    for line in format_trade_skip_stats():
+        print(line)
+    return 0
+
+
 def count_velocity_fills(
     log_path: Path | str = LOG_FILE,
     *,
@@ -885,11 +1015,18 @@ def _build_parser() -> argparse.ArgumentParser:
             "Default for --daily-summary is 24h; omit to use default."
         ),
     )
+    parser.add_argument(
+        "--trade-skip-stats",
+        action="store_true",
+        help="Print lifetime and 24h UTC TRADE SKIPPED counters (for nanodaily)",
+    )
     return parser
 
 
 def main() -> int:
     args = _build_parser().parse_args()
+    if bool(args.trade_skip_stats):
+        return print_trade_skip_stats()
     if bool(args.velocity_only):
         return print_velocity_only()
     lookback_arg = str(getattr(args, "lookback", "") or "").strip()

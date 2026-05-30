@@ -160,6 +160,49 @@ def test_low_stables_rebuild_rotation_precedence_defers_x_signal_when_stables_cr
     assert _apply_low_stables_rebuild_rotation_precedence(True, balances=b, state={}) is False
 
 
+def test_fe_stable_runway_rotation_precedence_defers_when_fe_heavy_no_wmatic():
+    b = Balances(
+        usdt=0.0,
+        usdc=13.27,
+        wmatic=0.0,
+        pol=1.0,
+        followed_equity_usd=117.0,
+        total_portfolio_usd=131.0,
+    )
+    assert _apply_low_stables_rebuild_rotation_precedence(True, balances=b, state={}, wmatic_usd=0.0) is False
+
+
+def test_fe_stable_runway_context_none_when_wmatic_can_rebuild():
+    b = Balances(
+        usdt=0.0,
+        usdc=9.13,
+        wmatic=156.0,
+        pol=1.0,
+        followed_equity_usd=20.0,
+        total_portfolio_usd=140.0,
+    )
+    from modules.swap_executor import _fe_stable_runway_context
+
+    assert _fe_stable_runway_context(b, wmatic_usd=14.0) is None
+
+
+def test_fe_stable_runway_context_active_when_fe_heavy_no_wmatic():
+    b = Balances(
+        usdt=0.0,
+        usdc=13.27,
+        wmatic=0.0,
+        pol=1.0,
+        followed_equity_usd=117.0,
+        total_portfolio_usd=131.0,
+    )
+    from modules.swap_executor import _fe_stable_runway_context
+
+    ctx = _fe_stable_runway_context(b, wmatic_usd=0.0)
+    assert ctx is not None
+    assert ctx["stable_usd"] == pytest.approx(13.27)
+    assert ctx["fe_share"] == pytest.approx(117.0 / 131.0)
+
+
 def test_low_stables_dust_rebuild_execution_bypass_requires_pending_flag():
     state: dict = {}
     d = TradeDecision(

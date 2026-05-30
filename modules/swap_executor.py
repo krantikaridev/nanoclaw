@@ -831,6 +831,8 @@ _MAIN_STRATEGY_DUST_DEFER_NOTIONAL_USD = float(cfg.MAIN_STRATEGY_DUST_DEFER_NOTI
 _MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_LOG = (
     "Main Strategy dust conversion to USDC for stable buffer rebuild"
 )
+_FE_STABLE_RUNWAY_TRIM_LOG = "[nanoclaw] FE STABLE RUNWAY TRIM"
+_FE_STABLE_RUNWAY_DEFER_BUY_LOG = "[nanoclaw] FE STABLE RUNWAY | defer USDC→EQUITY BUY"
 _MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_STATE_KEY = "low_stables_dust_rebuild"
 _MAIN_STRATEGY_LONG_IDLE_CYCLES_LOW = int(cfg.MAIN_STRATEGY_LONG_IDLE_CYCLES_LOW)
 _MAIN_STRATEGY_LONG_IDLE_CYCLES_MODERATE = int(cfg.MAIN_STRATEGY_LONG_IDLE_CYCLES_MODERATE)
@@ -1384,14 +1386,94 @@ def _record_low_stables_dust_rebuild_allowed(state: dict) -> None:
     _record_low_stables_dust_rebuild_pending(state)
 
 
+def _fe_stable_runway_context(
+    balances: Balances,
+    *,
+    wmatic_usd: float | None = None,
+) -> dict[str, float] | None:
+    """Metrics when FE-heavy book needs stable runway trim (WMATIC rebuild path absent)."""
+    if not bool(getattr(cfg, "FE_STABLE_RUNWAY_ENABLED", True)):
+        return None
+    stable_usd = float(balances.usdt) + float(balances.usdc)
+    max_stable = float(getattr(cfg, "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_MAX_STABLE_USD", 15.0))
+    min_portfolio = float(
+        getattr(cfg, "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_MIN_PORTFOLIO_USD", 130.0)
+    )
+    if stable_usd + 1e-9 >= max_stable:
+        return None
+    total = float(balances.total_portfolio_usd)
+    if total <= min_portfolio:
+        return None
+    fe_usd = float(balances.followed_equity_usd)
+    if total <= 0.0:
+        return None
+    fe_share = fe_usd / total
+    min_fe_share = float(getattr(cfg, "FE_STABLE_RUNWAY_MIN_FE_SHARE", 0.55))
+    if fe_share + 1e-9 < min_fe_share:
+        return None
+    rebuild_floor = float(
+        getattr(cfg, "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_NOTIONAL_FLOOR_USD", 5.0)
+    )
+    if wmatic_usd is not None:
+        if float(wmatic_usd) + 1e-9 >= rebuild_floor:
+            return None
+    elif float(balances.wmatic) > 0.0:
+        return None
+    target_stable = float(getattr(cfg, "FE_STABLE_RUNWAY_TARGET_STABLE_USD", 40.0))
+    return {
+        "stable_usd": stable_usd,
+        "fe_share": fe_share,
+        "target_stable_usd": target_stable,
+        "fe_usd": fe_usd,
+    }
+
+
+def _fe_stable_runway_buy_block_active(
+    balances: Balances,
+    *,
+    wmatic_usd: float | None = None,
+) -> bool:
+    return _fe_stable_runway_context(balances, wmatic_usd=wmatic_usd) is not None
+
+
+def _log_fe_stable_runway_trim(
+    *,
+    sym: str,
+    sell_fraction: float,
+    stable_usd: float,
+    fe_share: float,
+    target_stable_usd: float,
+) -> None:
+    print(
+        f"{_FE_STABLE_RUNWAY_TRIM_LOG} | sym={sym} | sell_fraction={float(sell_fraction):.4f} | "
+        f"stable_usd={float(stable_usd):.2f} | fe_share={float(fe_share):.2f} | "
+        f"target_stable_usd={float(target_stable_usd):.2f}"
+    )
+
+
+def _log_fe_stable_runway_defer_buy(*, stable_usd: float, fe_share: float) -> None:
+    print(
+        f"{_FE_STABLE_RUNWAY_DEFER_BUY_LOG} | stable_usd={float(stable_usd):.2f} | "
+        f"fe_share={float(fe_share):.2f}"
+    )
+
+
 def _apply_low_stables_rebuild_rotation_precedence(
     rotation_first: bool,
     *,
     balances: Balances,
     state: dict | None,
+    wmatic_usd: float | None = None,
 ) -> bool:
     """Stable-first: defer rotation-priority X-SIGNAL BUY when stables rebuild is urgent."""
     if not rotation_first:
+        return False
+    fe_ctx = _fe_stable_runway_context(balances, wmatic_usd=wmatic_usd)
+    if fe_ctx is not None:
+        _log_fe_stable_runway_defer_buy(
+            stable_usd=float(fe_ctx["stable_usd"]),
+            fe_share=float(fe_ctx["fe_share"]),
+        )
         return False
     if not _low_stables_dust_rebuild_enabled():
         return rotation_first
@@ -2777,11 +2859,13 @@ def determine_trade_decision(
         f"WMATIC≈{(balances.wmatic * current_price):.2f} USD | POL={balances.pol:.4f} "
         f"| copy_targets={len(target_wallets_prelude)}"
     )
+    wmatic_usd_cycle = float(balances.wmatic) * float(current_price)
     x_signal_rotation_first = _signal_driven_rotation_x_signal_first()
     x_signal_rotation_first = _apply_low_stables_rebuild_rotation_precedence(
         x_signal_rotation_first,
         balances=balances,
         state=state,
+        wmatic_usd=wmatic_usd_cycle,
     )
     print(
         "🔍 DECISION PATH | precedence: PROTECTION → HIGH_RISK_LOSS_CUT → "
@@ -2888,6 +2972,48 @@ def determine_trade_decision(
                     wmatic_balance=float(balances.wmatic),
                 )
                 return loss_cut_decision
+
+    fe_runway_decision = signal_module.try_fe_stable_runway_trim_equity_decision(
+        balances,
+        dry_run=dry_run,
+        state=state,
+        wmatic_usd=wmatic_usd_cycle,
+    )
+    if fe_runway_decision is not None and fe_runway_decision.should_execute:
+        fe_notional = _decision_notional_usd(fe_runway_decision, current_price_usd=current_price)
+        x_dust_min_fe = _x_signal_equity_effective_dust_min(balances)
+        blocked_fe, edge_fe = _decision_blocked_by_min_net_edge(
+            fe_runway_decision,
+            trade_usd=fe_notional,
+            gas_gwei=planning_gas_gwei,
+            log_skip=cs._log_trade_skipped,
+            stage="fe_stable_runway_trim",
+        )
+        if blocked_fe:
+            decision_log.log_x_signal_decision(
+                _x_signal_symbol_from_decision(fe_runway_decision),
+                "REJECT",
+                "below_min_net_edge",
+                notional_usd=fe_notional,
+                expected_edge_pct=edge_fe,
+                wmatic_balance=float(balances.wmatic),
+                extra=f"floor={_min_net_edge_floor_pct():.2f}%",
+                state=state,
+            )
+        elif not _defer_if_dust(
+            fe_runway_decision,
+            branch_name="FE_STABLE_RUNWAY",
+            current_price_usd=current_price,
+            min_trade_usd=x_dust_min_fe,
+        ):
+            print("🔍 DECISION PATH: FE_STABLE_RUNWAY (EQUITY→USDC trim for stable buffer)")
+            decision_log.record_x_signal_cycle_outcome(
+                state,
+                taken=True,
+                reason="fe_stable_runway_trim",
+                wmatic_balance=float(balances.wmatic),
+            )
+            return fe_runway_decision
 
     def _resolve_x_signal_equity_decision() -> Optional[TradeDecision]:
         if not cs.ENABLE_X_SIGNAL_EQUITY:

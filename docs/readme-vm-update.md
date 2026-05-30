@@ -143,6 +143,51 @@ sleep 180
 grep -A400 "$MARK" real_cron.log | tail -n 120
 ```
 
+## Monitoring (12h unattended)
+
+**`scripts/nano_watch.sh`** appends a compact snapshot every **30 minutes** (default) for **12 hours** (default), so you can leave a deploy and review one file later.
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `NANO_WATCH_INTERVAL_SECONDS` | `1800` | Seconds between snapshots |
+| `NANO_WATCH_DURATION_SECONDS` | `43200` | Total run time (`43200` = 12h) |
+| `NANO_WATCH_LOG` | `~/nanoclaw_watch.log` | Append-only log path |
+| `NANOCLAW_ROOT` | `~/.nanobot/workspace/nanoclaw` | Repo root (same as other `nano*` scripts) |
+
+**Start (VM, from repo root or with `NANOCLAW_ROOT` set):**
+
+```bash
+cd ~/.nanobot/workspace/nanoclaw
+nohup bash scripts/nano_watch.sh >> ~/nano_watch.nohup.log 2>&1 &
+```
+
+**Quick test (two iterations in ~60s):**
+
+```bash
+NANO_WATCH_DURATION_SECONDS=60 NANO_WATCH_INTERVAL_SECONDS=30 \
+  NANO_WATCH_LOG=/tmp/nanoclaw_watch_test.log \
+  bash scripts/nano_watch.sh
+grep -c '^=== ' /tmp/nanoclaw_watch_test.log   # expect 2 snapshot blocks (+ 1 start line)
+```
+
+**Log format** (each snapshot block):
+
+```text
+=== 2026-05-30T14:30:00Z ===
+nanohealth: ok chain_id=137 block=…
+   TOTAL:  $…
+   Stables USD (USDT+USDC): $…
+Session PnL:   $… (…%)
+velocity_fills_session=…
+turnover_multiple_session=…
+risk: …last line in real_cron.log matching Risk=…
+exec: …last EXEC SUCCESS or EXEC FAILED line…
+runway: …last `FE STABLE RUNWAY` line from `real_cron.log` (trim or defer BUY)…
+---
+```
+
+Uses **`scripts/nanohealth.py`** and **`scripts/pnl_report.py`** directly (no shell aliases required). Fix RPC with **`nanohealth`** / §3 before trusting PnL lines in the watch log.
+
 ## `nanoenv_example.py` — credential warning before `git push`
 
 `python scripts/nanoenv_example.py --write` copies **sanitized** values from `.env` into `.env.example` for parity. That is **never** permission to leak **paid RPC URLs** (Ankr project paths, `multichain/…`, etc.), private keys, or API secrets.

@@ -91,6 +91,8 @@ X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD = cfg.X_SIGNAL_FORCE_ELIGIBLE_THRESHOLD
 X_SIGNAL_HIGH_CONVICTION_PREP_MIN_USDC = cfg.X_SIGNAL_HIGH_CONVICTION_PREP_MIN_USDC
 X_SIGNAL_HIGH_CONVICTION_PREP_MIN_WMATIC = cfg.X_SIGNAL_HIGH_CONVICTION_PREP_MIN_WMATIC
 FOLLOWED_EQUITIES_PATH = cfg.FOLLOWED_EQUITIES_PATH
+FE_USD_SPOT_CACHE_MAX_UP_PCT_PER_DAY = cfg.FE_USD_SPOT_CACHE_MAX_UP_PCT_PER_DAY
+FE_USD_SPOT_CACHE_FILE = ".runtime/fe_usd_spot_cache.json"
 X_SIGNAL_USDC_MIN = cfg.X_SIGNAL_USDC_MIN
 X_SIGNAL_WMATIC_MIN_VALUE = cfg.X_SIGNAL_WMATIC_MIN_VALUE
 AUTO_POPULATE_USDC_AMOUNT = cfg.AUTO_POPULATE_USDC_AMOUNT
@@ -838,9 +840,124 @@ def _quote_followed_token_usdt_mtm(
     return out_usdt
 
 
+def _fe_usd_spot_cache_path() -> Path:
+    return Path(FE_USD_SPOT_CACHE_FILE)
+
+
+def _load_fe_usd_spot_cache() -> dict:
+    path = _fe_usd_spot_cache_path()
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            raw = json.load(fh)
+    except Exception:
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _save_fe_usd_spot_cache(cache: dict) -> None:
+    path = _fe_usd_spot_cache_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(cache, fh, indent=2)
+
+
+def _cached_fe_usd_spot(cache: dict, symbol: str) -> float | None:
+    entry = cache.get(str(symbol).strip())
+    if not isinstance(entry, dict):
+        return None
+    try:
+        spot = float(entry.get("spot_usd"))
+    except (TypeError, ValueError):
+        return None
+    return spot if spot > 0 else None
+
+
+def _effective_fe_usd_floor_px(json_floor_px: float, cached_spot_px: float | None) -> float:
+    """``min(json_floor, last_good_spot)`` when cache exists; else JSON floor only."""
+    if cached_spot_px is not None and cached_spot_px > 0:
+        if json_floor_px > 0:
+            return min(json_floor_px, cached_spot_px)
+        return cached_spot_px
+    return json_floor_px
+
+
+def _spot_for_fe_usd_effective_floor(
+    json_floor_px: float,
+    prior_cached_spot: float | None,
+    live_spot: float | None,
+) -> float:
+    """Prior cache anchors floor; first run with live uses live spot vs stale JSON."""
+    if prior_cached_spot is not None and prior_cached_spot > 0:
+        return _effective_fe_usd_floor_px(json_floor_px, prior_cached_spot)
+    if live_spot is not None and live_spot > 0:
+        return _effective_fe_usd_floor_px(json_floor_px, live_spot)
+    return json_floor_px
+
+
+def _capped_fe_usd_spot_persist(
+    live_spot: float,
+    prior_spot: float | None,
+    prior_updated_unix: float | None,
+    *,
+    now: float | None = None,
+) -> float:
+    """Cap upward cache drift per day; downward moves from live always apply."""
+    if live_spot <= 0:
+        return live_spot
+    if prior_spot is None or prior_spot <= 0 or live_spot <= prior_spot:
+        return live_spot
+    ts = time.time() if now is None else float(now)
+    if prior_updated_unix is not None:
+        elapsed_days = max((ts - float(prior_updated_unix)) / 86400.0, 1.0)
+    else:
+        elapsed_days = 1.0
+    max_up = float(FE_USD_SPOT_CACHE_MAX_UP_PCT_PER_DAY) / 100.0
+    max_allowed = prior_spot * (1.0 + max_up * elapsed_days)
+    return min(live_spot, max_allowed)
+
+
+def _maybe_persist_fe_usd_spot_from_live(
+    cache: dict,
+    symbol: str,
+    live_quote_usdt: float,
+    balance: float,
+    *,
+    now: float | None = None,
+) -> tuple[float | None, bool]:
+    """Persist last-good spot from a successful live quote; return (spot, cache_dirty)."""
+    sym = str(symbol).strip()
+    if live_quote_usdt <= 0 or balance <= 0:
+        return _cached_fe_usd_spot(cache, sym), False
+    live_spot = float(live_quote_usdt) / float(balance)
+    entry = cache.get(sym)
+    prior_spot: float | None = None
+    prior_ts: float | None = None
+    if isinstance(entry, dict):
+        try:
+            if entry.get("spot_usd") is not None:
+                prior_spot = float(entry.get("spot_usd"))
+        except (TypeError, ValueError):
+            prior_spot = None
+        try:
+            if entry.get("updated_unix") is not None:
+                prior_ts = float(entry.get("updated_unix"))
+        except (TypeError, ValueError):
+            prior_ts = None
+    persist_spot = _capped_fe_usd_spot_persist(
+        live_spot, prior_spot, prior_ts, now=now
+    )
+    if prior_spot is not None and abs(float(persist_spot) - float(prior_spot)) <= 1e-9:
+        return float(prior_spot), False
+    ts = time.time() if now is None else float(now)
+    cache[sym] = {"spot_usd": float(persist_spot), "updated_unix": ts}
+    return float(persist_spot), True
+
+
 def _followed_equity_tokens_usdt_usd() -> float:
     """Router-quoted USDT value for non-core followed tokens (excludes USDC/USDT/WMATIC already in Balances)."""
     total = 0.0
+    fe_spot_cache = _load_fe_usd_spot_cache()
+    fe_spot_cache_dirty = False
     # region agent log
     wf = ""
     try:
@@ -940,10 +1057,31 @@ def _followed_equity_tokens_usdt_usd() -> float:
         usdt_val = _quote_followed_token_usdt_mtm(w3, token_in=addr, amount_in_raw=amt, slippage_bps=slip)
         px = getattr(a, "current_price_usd", None)
         try:
-            fallback_px = float(px) if px is not None else 0.0
+            json_floor_px = float(px) if px is not None else 0.0
         except (TypeError, ValueError):
-            fallback_px = 0.0
-        fallback_usd = float(bal) * fallback_px if (fallback_px > 0 and bal > 0) else 0.0
+            json_floor_px = 0.0
+        prior_cached_spot = _cached_fe_usd_spot(fe_spot_cache, sym)
+        live_spot = (float(usdt_val) / float(bal)) if (usdt_val > 0 and bal > 0) else None
+        effective_floor_px = _spot_for_fe_usd_effective_floor(
+            json_floor_px, prior_cached_spot, live_spot
+        )
+        fallback_usd = float(bal) * effective_floor_px if (effective_floor_px > 0 and bal > 0) else 0.0
+        # Only persist last-good spot when live confirms at/above the effective floor (Cleanup #3
+        # degraded quotes must not poison prior cache on the same cycle we used it as floor).
+        if usdt_val > 0 and bal > 0 and float(usdt_val) >= fallback_usd:
+            persisted_spot, cache_updated = _maybe_persist_fe_usd_spot_from_live(
+                fe_spot_cache, sym, float(usdt_val), float(bal)
+            )
+            if cache_updated:
+                fe_spot_cache_dirty = True
+                try:
+                    print(
+                        f"[nanoclaw] FE_USD AUTO_FLOOR_UPDATE | sym={sym} | "
+                        f"last_good_spot={persisted_spot:.4f} | json_floor={json_floor_px:.4f} | "
+                        f"effective_floor={effective_floor_px:.4f}"
+                    )
+                except Exception:
+                    pass
         # Cleanup #3 (May 2026): use ``current_price_usd`` as a FALLBACK FLOOR, not just a
         # zero-quote substitute. Pre-cleanup, the live quote always won when > 0, even if
         # it priced 5.676 LINK at $35.78 (~$6.30/LINK against a $9.43 spot fallback) — a
@@ -952,8 +1090,8 @@ def _followed_equity_tokens_usdt_usd() -> float:
         #   * Healthy pool, fresh quote ≥ fallback → live wins (no change vs pre-cleanup).
         #   * Drained pool / large-size impact / stale quote < fallback → fallback floor
         #     wins, TOTAL stays anchored to a known good operator-curated spot price.
-        # Operators MUST refresh ``current_price_usd`` in followed_equities.json
-        # periodically — a stale fallback above true spot will overstate TOTAL.
+        # P1 (May 2026): ``effective_floor_px`` = min(JSON floor, last-good cached spot) so
+        # stale JSON above spot cannot overstate TOTAL when a healthy live quote exists.
         effective_usd = max(float(usdt_val), fallback_usd)
         total += effective_usd
         if usdt_val <= 0 and fallback_usd <= 0:
@@ -962,7 +1100,7 @@ def _followed_equity_tokens_usdt_usd() -> float:
                 print(
                     f"[nanoclaw] FE_USD UNQUOTED | sym={sym} | "
                     f"bal={float(bal):.6f} | live_quote_usdt=$0.00 | "
-                    f"fallback_px_usd={fallback_px:.4f} | "
+                    f"fallback_px_usd={effective_floor_px:.4f} | "
                     f"contributed_to_total=$0.00 | "
                     f"action: refresh `current_price_usd` in followed_equities.json or fix on-chain quote path"
                 )
@@ -974,7 +1112,7 @@ def _followed_equity_tokens_usdt_usd() -> float:
                 print(
                     f"[nanoclaw] FE_USD UNQUOTED | sym={sym} | "
                     f"bal={float(bal):.6f} | live_quote_usdt=$0.00 | "
-                    f"fallback_px_usd={fallback_px:.4f} | "
+                    f"fallback_px_usd={effective_floor_px:.4f} | "
                     f"contributed_to_total=${fallback_usd:.2f} | "
                     f"action: refresh `current_price_usd` in followed_equities.json or fix on-chain quote path"
                 )
@@ -988,7 +1126,7 @@ def _followed_equity_tokens_usdt_usd() -> float:
                 print(
                     f"[nanoclaw] FE_USD FALLBACK FLOOR APPLIED | sym={sym} | "
                     f"bal={float(bal):.6f} | live_quote_usdt=${float(usdt_val):.2f} | "
-                    f"fallback_px_usd={fallback_px:.4f} | "
+                    f"fallback_px_usd={effective_floor_px:.4f} | "
                     f"fallback_total_usd=${fallback_usd:.2f} | "
                     f"contributed_to_total=${effective_usd:.2f} | "
                     f"action: verify on-chain pool depth; refresh fallback when spot moves materially"
@@ -1007,11 +1145,17 @@ def _followed_equity_tokens_usdt_usd() -> float:
                     "amt": int(amt),
                     "usdt_val": float(usdt_val),
                     "fallback_usd": float(fallback_usd),
+                    "effective_floor_px": float(effective_floor_px),
                     "effective_usd": float(effective_usd),
                 },
             }
         )
         # endregion
+    if fe_spot_cache_dirty:
+        try:
+            _save_fe_usd_spot_cache(fe_spot_cache)
+        except Exception:
+            pass
     # region agent log
     _agent_debug_ndjson(
         {

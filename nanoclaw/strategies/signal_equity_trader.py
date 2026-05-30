@@ -1555,6 +1555,48 @@ class SignalEquityTrader:
         print(f"[nanoclaw] PLAN_BUILD_SUCCESS | {sym} | LOSS_CUT_SELL | {frac*100:.0f}%")
         return plan, None
 
+    def build_fe_stable_runway_plan_with_block_reason(
+        self,
+        *,
+        symbol: str,
+        token_address: str,
+        token_decimals: int,
+        equity_balance: float,
+        sell_fraction: float,
+        current_price_usd: float | None = None,
+    ) -> tuple[Optional[EquityTradePlan], Optional[str]]:
+        """Low-stables FE-heavy book: partial EQUITY→USDC trim toward stable runway target."""
+        sym = str(symbol).strip()
+        if equity_balance <= 0:
+            return None, "zero_equity_balance"
+        frac = min(1.0, max(0.05, float(sell_fraction)))
+        spot = float(current_price_usd) if isinstance(current_price_usd, (int, float)) else 0.0
+        min_trade_usd = float(getattr(cfg, "MIN_TRADE_USD", 10.0))
+        if spot > 0 and min_trade_usd > 0:
+            position_usd = float(equity_balance) * spot
+            sell_usd = position_usd * frac
+            if sell_usd + 1e-9 < min_trade_usd:
+                return None, "below_min_sell_notional"
+        amount_in_units = int(float(equity_balance) * frac * (10 ** int(token_decimals)))
+        if amount_in_units <= 0:
+            return None, "sell_amount_below_min_units"
+        price_note = f" @ ${spot:.2f}" if spot > 0 else ""
+        plan = EquityTradePlan(
+            direction="EQUITY_TO_USDC",
+            symbol=sym,
+            token_in=token_address,
+            token_out=self.usdc_address,
+            amount_in=amount_in_units,
+            trade_size=float(equity_balance) * frac * spot if spot > 0 else 0.0,
+            signal_strength=0.0,
+            message=(
+                f"🟦 FE STABLE RUNWAY: {sym}{price_note} | "
+                f"Selling {frac * 100:.0f}% ({sym}→USDC) for stable buffer"
+            ),
+        )
+        print(f"[nanoclaw] PLAN_BUILD_SUCCESS | {sym} | FE_STABLE_RUNWAY_SELL | {frac*100:.0f}%")
+        return plan, None
+
     def build_plan(
         self,
         *,

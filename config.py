@@ -251,6 +251,9 @@ X_SIGNAL_EQUITY_COOLDOWN_SECONDS = env_int(
 X_SIGNAL_EQUITY_STRONG_TP_PCT = env_float("X_SIGNAL_EQUITY_STRONG_TP_PCT", 12.0)
 # Optional per-symbol skip (balance-read workaround). Empty = trade all followed_equities assets.
 X_SIGNAL_TEMP_SKIP_SYMBOLS = env_symbol_frozenset("X_SIGNAL_TEMP_SKIP_SYMBOLS", "")
+# When true, .xsignal_blocked_symbols is never bypassed when it would remove all followed assets
+# (default false preserves legacy "ignoring blocks this cycle" WARNING for X-SIGNAL equity only).
+X_SIGNAL_HONOR_FULL_BLOCKLIST = env_bool("X_SIGNAL_HONOR_FULL_BLOCKLIST", False)
 # TEMPORARY (May 2026): WBTC_* BUY min notional while Polygon WBTC liquidity is poor; 0 disables.
 # Lowered 25.0 -> 10.0 (May 2026): typical X-SIGNAL dynamic sizing on a sub-$30 USDC bankroll
 # is ~$10.25-$10.30, so a $25 floor blocked WBTC_ALPHA 100% of the time even at signal=0.83.
@@ -270,6 +273,8 @@ X_SIGNAL_DYNAMIC_USDC_BELOW_FORCE_ELIGIBLE = env_float("X_SIGNAL_DYNAMIC_USDC_BE
 SWAP_SLIPPAGE_BPS = env_int("SWAP_SLIPPAGE_BPS", 100)
 # Read-only inventory mark-to-USDT for FE_USD (followed equities). Looser than live swap slippage.
 INVENTORY_MTM_SLIPPAGE_BPS = env_int("INVENTORY_MTM_SLIPPAGE_BPS", 300)
+# Max upward drift per day for persisted FE_USD last-good spot (live quote required to raise cache).
+FE_USD_SPOT_CACHE_MAX_UP_PCT_PER_DAY = env_float("FE_USD_SPOT_CACHE_MAX_UP_PCT_PER_DAY", 5.0)
 FALLBACK_ROUTER_SLIPPAGE_BPS_RAW = env_str("FALLBACK_ROUTER_SLIPPAGE_BPS", "")
 FALLBACK_ROUTER_RETRY_SLIPPAGE_BPS_RAW = env_str("FALLBACK_ROUTER_RETRY_SLIPPAGE_BPS", "")
 ONCHAIN_SWAP_RETRY_EXTRA_BPS = env_int("ONCHAIN_SWAP_RETRY_EXTRA_BPS", 50)
@@ -430,6 +435,10 @@ MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_CYCLE_COOLDOWN = env_int(
 )
 # When USDT reserve protection / low-stables rebuild sells WMATIC, prefer USDC if combined stables are critical.
 MAIN_STRATEGY_RESERVE_PREFER_USDC = env_bool("MAIN_STRATEGY_RESERVE_PREFER_USDC", True)
+# FE-heavy + low stables (WMATIC=0): partial EQUITY→USDC trim before USDC→EQUITY BUY (Cleanup #6).
+FE_STABLE_RUNWAY_ENABLED = env_bool("FE_STABLE_RUNWAY_ENABLED", True)
+FE_STABLE_RUNWAY_MIN_FE_SHARE = env_float("FE_STABLE_RUNWAY_MIN_FE_SHARE", 0.55)
+FE_STABLE_RUNWAY_TARGET_STABLE_USD = env_float("FE_STABLE_RUNWAY_TARGET_STABLE_USD", 40.0)
 REDUCED_HIGH_RISK_MIN_TRADE_USD = env_float("REDUCED_HIGH_RISK_MIN_TRADE_USD", 8.0)
 # HIGH-risk loss-cut: trim underwater X-SIGNAL equity (default LINK_ALPHA); block BUYs while underwater.
 ALLOW_HIGH_RISK_LOSS_CUT_XSIGNAL = env_bool("ALLOW_HIGH_RISK_LOSS_CUT_XSIGNAL", True)

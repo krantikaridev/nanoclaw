@@ -177,8 +177,13 @@ class _FakeAsset:
         self.current_price_usd = current_price_usd
 
 
-def test_followed_equity_uses_current_price_fallback_when_quote_zero(monkeypatch, capsys) -> None:
+def test_followed_equity_uses_current_price_fallback_when_quote_zero(monkeypatch, capsys, tmp_path) -> None:
     """When live quote returns 0 but `current_price_usd` is set, fe_usd must use bal*price."""
+    monkeypatch.setattr(
+        runtime,
+        "FE_USD_SPOT_CACHE_FILE",
+        str(tmp_path / "fe_usd_spot_cache.json"),
+    )
     asset = _FakeAsset(
         symbol="LINK_ALPHA",
         addr="0x53E0bca35eC356Bd5DdDFebbD1Fc0FD03FaBad39",
@@ -204,8 +209,13 @@ def test_followed_equity_uses_current_price_fallback_when_quote_zero(monkeypatch
     assert "fallback_px_usd=9.4300" in captured
 
 
-def test_followed_equity_zero_quote_zero_fallback_still_visible(monkeypatch, capsys) -> None:
+def test_followed_equity_zero_quote_zero_fallback_still_visible(monkeypatch, capsys, tmp_path) -> None:
     """Even when no fallback price is set, the operator must see the unquoted line."""
+    monkeypatch.setattr(
+        runtime,
+        "FE_USD_SPOT_CACHE_FILE",
+        str(tmp_path / "fe_usd_spot_cache.json"),
+    )
     asset = _FakeAsset(
         symbol="WBTC_ALPHA",
         addr="0x1BFD67037B42Cf73acf204706795bF64736C834e",
@@ -231,7 +241,7 @@ def test_followed_equity_zero_quote_zero_fallback_still_visible(monkeypatch, cap
     assert "contributed_to_total=$0.00" in captured
 
 
-def test_followed_equity_uses_max_of_live_and_fallback(monkeypatch, capsys) -> None:
+def test_followed_equity_uses_max_of_live_and_fallback(monkeypatch, capsys, tmp_path) -> None:
     """Cleanup #3 (May 2026): effective FE_USD per asset = max(live_quote, bal*fallback).
 
     Pre-cleanup, live quote always won when > 0. That allowed a degraded on-chain
@@ -239,7 +249,14 @@ def test_followed_equity_uses_max_of_live_and_fallback(monkeypatch, capsys) -> N
     the May 2026 LINK_ALPHA incident where 5.676 LINK MTM'd at ~$35.78 while
     spot * bal was ~$53.52. Now ``current_price_usd`` in followed_equities.json
     is a true fallback FLOOR: the larger of (live, fallback × bal) wins.
+    Prior-cycle last-good spot cache anchors the floor when live is degraded.
     """
+    cache_path = tmp_path / "fe_usd_spot_cache.json"
+    cache_path.write_text(
+        '{"LINK_ALPHA": {"spot_usd": 9.43, "updated_unix": 1700000000.0}}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(runtime, "FE_USD_SPOT_CACHE_FILE", str(cache_path))
     asset = _FakeAsset(
         symbol="LINK_ALPHA",
         addr="0x53E0bca35eC356Bd5DdDFebbD1Fc0FD03FaBad39",
@@ -264,10 +281,52 @@ def test_followed_equity_uses_max_of_live_and_fallback(monkeypatch, capsys) -> N
     assert "FE_USD FALLBACK FLOOR APPLIED" in captured
     assert "LINK_ALPHA" in captured
     assert "live_quote_usdt=$35.78" in captured
+    import json
+
+    saved = json.loads(cache_path.read_text(encoding="utf-8"))
+    assert float(saved["LINK_ALPHA"]["spot_usd"]) == pytest.approx(9.43, rel=1e-6)
 
 
-def test_followed_equity_live_quote_wins_when_above_fallback(monkeypatch, capsys) -> None:
+def test_fe_usd_degraded_live_does_not_poison_spot_cache(monkeypatch, tmp_path) -> None:
+    """P1 + Cleanup #3: fallback-winning degraded live must not overwrite prior last-good spot."""
+    import json
+
+    cache_path = tmp_path / "fe_usd_spot_cache.json"
+    cache_path.write_text(
+        '{"LINK_ALPHA": {"spot_usd": 9.43, "updated_unix": 1700000000.0}}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(runtime, "FE_USD_SPOT_CACHE_FILE", str(cache_path))
+    asset = _FakeAsset(
+        symbol="LINK_ALPHA",
+        addr="0x53E0bca35eC356Bd5DdDFebbD1Fc0FD03FaBad39",
+        decimals=18,
+        current_price_usd=9.43,
+    )
+    monkeypatch.setattr(
+        runtime.X_SIGNAL_EQUITY_TRADER,
+        "load_followed_equities",
+        lambda: [asset],
+    )
+    monkeypatch.setattr(runtime, "get_token_balance", lambda *_a, **_k: 5.676)
+    monkeypatch.setattr(
+        runtime,
+        "_quote_followed_token_usdt_mtm",
+        lambda *_a, **_k: 35.78,
+    )
+    runtime._followed_equity_tokens_usdt_usd()
+    saved = json.loads(cache_path.read_text(encoding="utf-8"))
+    assert float(saved["LINK_ALPHA"]["spot_usd"]) == pytest.approx(9.43, rel=1e-6)
+    assert float(saved["LINK_ALPHA"]["updated_unix"]) == pytest.approx(1700000000.0, rel=1e-6)
+
+
+def test_followed_equity_live_quote_wins_when_above_fallback(monkeypatch, capsys, tmp_path) -> None:
     """When live quote ≥ bal*fallback, live wins (no floor logging, no fallback bump)."""
+    monkeypatch.setattr(
+        runtime,
+        "FE_USD_SPOT_CACHE_FILE",
+        str(tmp_path / "fe_usd_spot_cache.json"),
+    )
     asset = _FakeAsset(
         symbol="LINK_ALPHA",
         addr="0x53E0bca35eC356Bd5DdDFebbD1Fc0FD03FaBad39",
@@ -293,18 +352,27 @@ def test_followed_equity_live_quote_wins_when_above_fallback(monkeypatch, capsys
     assert "FALLBACK FLOOR APPLIED" not in captured
 
 
-def test_followed_equity_fe_usd_equals_bal_times_max_of_quote_per_unit_and_fallback(monkeypatch) -> None:
+def test_followed_equity_fe_usd_equals_bal_times_max_of_quote_per_unit_and_fallback(
+    monkeypatch, tmp_path
+) -> None:
     """Acceptance criterion C: FE_USD = bal × max(live_quote_per_unit, fallback_per_unit).
 
     Pins the contract that the task spec calls out explicitly. The function returns
     USDT-notional, which is ``bal × effective_unit_price``, where
     ``effective_unit_price = max(live_quote_total / bal, fallback_usd)``.
+    Prior last-good spot cache supplies the fallback per-unit floor.
     """
     bal = 4.0
     fallback = 5.0
     live_total = 12.0  # equivalent to $3.00 / unit, below the $5 fallback
     expected = bal * max(live_total / bal, fallback)  # = max(12, 20) = 20.0
 
+    cache_path = tmp_path / "fe_usd_spot_cache.json"
+    cache_path.write_text(
+        f'{{"LINK_ALPHA": {{"spot_usd": {fallback}, "updated_unix": 1700000000.0}}}}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(runtime, "FE_USD_SPOT_CACHE_FILE", str(cache_path))
     asset = _FakeAsset(
         symbol="LINK_ALPHA",
         addr="0x53E0bca35eC356Bd5DdDFebbD1Fc0FD03FaBad39",
@@ -336,4 +404,173 @@ def test_followed_equities_json_has_fallback_prices_for_held_assets() -> None:
     for sym in ("WETH_ALPHA", "WBTC_ALPHA", "LINK_ALPHA"):
         assert "current_price_usd" in by_sym[sym], f"missing fallback price for {sym}"
         assert float(by_sym[sym]["current_price_usd"]) > 0
+
+
+def test_fe_usd_stale_json_floor_live_wins_with_spot_cache(monkeypatch, capsys, tmp_path) -> None:
+    """P1: stale JSON floor 2500 + healthy live ~$2000/token → live wins, not inflated fallback."""
+    bal = 0.039756
+    live = 79.53
+    cache_path = tmp_path / "fe_usd_spot_cache.json"
+    cache_path.write_text(
+        '{"WETH_ALPHA": {"spot_usd": 2000.0, "updated_unix": 1700000000.0}}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(runtime, "FE_USD_SPOT_CACHE_FILE", str(cache_path))
+    asset = _FakeAsset(
+        symbol="WETH_ALPHA",
+        addr="0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+        decimals=18,
+        current_price_usd=2500.0,
+    )
+    monkeypatch.setattr(
+        runtime.X_SIGNAL_EQUITY_TRADER,
+        "load_followed_equities",
+        lambda: [asset],
+    )
+    monkeypatch.setattr(runtime, "get_token_balance", lambda *_a, **_k: bal)
+    monkeypatch.setattr(
+        runtime,
+        "_quote_followed_token_usdt_mtm",
+        lambda *_a, **_k: live,
+    )
+    fe_usd = runtime._followed_equity_tokens_usdt_usd()
+    assert fe_usd == pytest.approx(live, abs=0.02)
+    captured = capsys.readouterr().out
+    assert "FE_USD FALLBACK FLOOR APPLIED" not in captured
+
+
+def test_fe_usd_live_zero_uses_last_good_spot_cache(monkeypatch, tmp_path) -> None:
+    """P1: live=0 → MTM from prior last-good spot, not stale JSON alone."""
+    bal = 0.04
+    cached_spot = 2000.0
+    cache_path = tmp_path / "fe_usd_spot_cache.json"
+    cache_path.write_text(
+        f'{{"WETH_ALPHA": {{"spot_usd": {cached_spot}, "updated_unix": 1700000000.0}}}}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(runtime, "FE_USD_SPOT_CACHE_FILE", str(cache_path))
+    asset = _FakeAsset(
+        symbol="WETH_ALPHA",
+        addr="0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+        decimals=18,
+        current_price_usd=2500.0,
+    )
+    monkeypatch.setattr(
+        runtime.X_SIGNAL_EQUITY_TRADER,
+        "load_followed_equities",
+        lambda: [asset],
+    )
+    monkeypatch.setattr(runtime, "get_token_balance", lambda *_a, **_k: bal)
+    monkeypatch.setattr(
+        runtime,
+        "_quote_followed_token_usdt_mtm",
+        lambda *_a, **_k: 0.0,
+    )
+    fe_usd = runtime._followed_equity_tokens_usdt_usd()
+    assert fe_usd == pytest.approx(bal * cached_spot, rel=1e-6)
+
+
+def test_fe_usd_first_run_no_cache_uses_json_when_live_zero(monkeypatch, tmp_path) -> None:
+    """P1: no cache and live=0 → JSON seed floor only."""
+    bal = 8.676
+    json_floor = 9.43
+    cache_path = tmp_path / "fe_usd_spot_cache.json"
+    monkeypatch.setattr(runtime, "FE_USD_SPOT_CACHE_FILE", str(cache_path))
+    asset = _FakeAsset(
+        symbol="LINK_ALPHA",
+        addr="0x53E0bca35eC356Bd5DdDFebbD1Fc0FD03FaBad39",
+        decimals=18,
+        current_price_usd=json_floor,
+    )
+    monkeypatch.setattr(
+        runtime.X_SIGNAL_EQUITY_TRADER,
+        "load_followed_equities",
+        lambda: [asset],
+    )
+    monkeypatch.setattr(runtime, "get_token_balance", lambda *_a, **_k: bal)
+    monkeypatch.setattr(
+        runtime,
+        "_quote_followed_token_usdt_mtm",
+        lambda *_a, **_k: 0.0,
+    )
+    fe_usd = runtime._followed_equity_tokens_usdt_usd()
+    assert fe_usd == pytest.approx(bal * json_floor, rel=1e-6)
+    assert not cache_path.exists()
+
+
+def test_fe_usd_first_run_no_cache_anchors_floor_to_live(monkeypatch, capsys, tmp_path) -> None:
+    """P1: first run with healthy live quote caps stale JSON floor same cycle."""
+    bal = 0.039756
+    live = 79.53
+    cache_path = tmp_path / "fe_usd_spot_cache.json"
+    monkeypatch.setattr(runtime, "FE_USD_SPOT_CACHE_FILE", str(cache_path))
+    asset = _FakeAsset(
+        symbol="WETH_ALPHA",
+        addr="0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+        decimals=18,
+        current_price_usd=2500.0,
+    )
+    monkeypatch.setattr(
+        runtime.X_SIGNAL_EQUITY_TRADER,
+        "load_followed_equities",
+        lambda: [asset],
+    )
+    monkeypatch.setattr(runtime, "get_token_balance", lambda *_a, **_k: bal)
+    monkeypatch.setattr(
+        runtime,
+        "_quote_followed_token_usdt_mtm",
+        lambda *_a, **_k: live,
+    )
+    fe_usd = runtime._followed_equity_tokens_usdt_usd()
+    assert fe_usd == pytest.approx(live, abs=0.02)
+    captured = capsys.readouterr().out
+    assert "FE_USD FALLBACK FLOOR APPLIED" not in captured
+    assert "FE_USD AUTO_FLOOR_UPDATE" in captured
+    assert cache_path.exists()
+
+
+def test_fe_usd_spot_cache_upward_drift_cap(monkeypatch, tmp_path) -> None:
+    """P1: upward drift cap rejects full live bump without allowing runaway cache growth."""
+    import json
+    import time
+
+    bal = 0.04
+    prior_spot = 2000.0
+    now = time.time()
+    cache_path = tmp_path / "fe_usd_spot_cache.json"
+    cache_path.write_text(
+        json.dumps({"WETH_ALPHA": {"spot_usd": prior_spot, "updated_unix": now}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(runtime, "FE_USD_SPOT_CACHE_MAX_UP_PCT_PER_DAY", 5.0)
+    monkeypatch.setattr(runtime, "FE_USD_SPOT_CACHE_FILE", str(cache_path))
+    asset = _FakeAsset(
+        symbol="WETH_ALPHA",
+        addr="0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+        decimals=18,
+        current_price_usd=2500.0,
+    )
+    monkeypatch.setattr(
+        runtime.X_SIGNAL_EQUITY_TRADER,
+        "load_followed_equities",
+        lambda: [asset],
+    )
+    monkeypatch.setattr(runtime, "get_token_balance", lambda *_a, **_k: bal)
+    # Live spot $2500/token would raise cache 25% in one tick — cap to ~5%.
+    monkeypatch.setattr(
+        runtime,
+        "_quote_followed_token_usdt_mtm",
+        lambda *_a, **_k: bal * 2500.0,
+    )
+    runtime._followed_equity_tokens_usdt_usd()
+    saved = json.loads(cache_path.read_text(encoding="utf-8"))
+    persisted = float(saved["WETH_ALPHA"]["spot_usd"])
+    assert persisted == pytest.approx(prior_spot * 1.05, rel=1e-4)
+    assert persisted < 2500.0
+
+
+def test_capped_fe_usd_spot_persist_rejects_upward_without_live() -> None:
+    """Unit: drift cap helper never raises spot when live spot is not above prior."""
+    assert runtime._capped_fe_usd_spot_persist(0.0, 2000.0, 1700000000.0) == 0.0
+    assert runtime._capped_fe_usd_spot_persist(1900.0, 2000.0, 1700000000.0) == 1900.0
 # endregion

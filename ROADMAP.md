@@ -235,13 +235,13 @@ python3 -c "from modules import runtime as r; print('pol', r.get_pol_balance(), 
 
 | Priority | Item | Goal | Sketch (for side chat) |
 |----------|------|------|----------------------|
-| **P1** | **Auto `current_price_usd` fallback floor** | Stop manual `followed_equities.json` edits (e.g. WETH 2500→2000); honest **TOTAL** / session PnL without overstating inventory | On each successful `_quote_followed_token_usdt_mtm` for symbol `S`, persist `last_good_spot_usd[S]` (e.g. in `bot_state.json` or `.runtime/fe_usd_spot_cache.json`). Effective FE leg stays `max(live_quote, bal × floor)` where `floor_px = min(json_floor, last_good_spot)` or auto-set json floor from `last_good_spot` when live &gt; 0. Cap upward drift (e.g. do not raise floor more than X% per day without live confirm). Log when auto-floor updates vs when JSON floor wins. Tests: stale high JSON + good live → live wins; live=0 → last_good; first run → JSON seed only. **Does not** change `signal_strength` (still operator/external). |
+| **P1** | **Auto `current_price_usd` fallback floor** | Stop manual `followed_equities.json` edits (e.g. WETH 2500→2000); honest **TOTAL** / session PnL without overstating inventory | **Merged 2026-05-30:** persist `last_good_spot_usd[S]` in `.runtime/fe_usd_spot_cache.json` (gitignored). Effective FE leg stays `max(live_quote, bal × floor)` where `floor_px = min(json_floor, last_good_spot)` (prior cache or first-run live anchor). Upward drift capped via `FE_USD_SPOT_CACHE_MAX_UP_PCT_PER_DAY` (default 5%). Logs: `FE_USD AUTO_FLOOR_UPDATE`, existing `FE_USD FALLBACK FLOOR APPLIED`. Tests in `tests/unit/test_runtime_inventory_mtm.py`. **Does not** change `signal_strength`. |
 | P2 | X-SIGNAL next-plan on quote fail | Rotation when one symbol unquotable (WBTC) | See §7 |
 | P2 | Cron / lock serialization | No overlapping `clean_swap` during long quote ramp | See §7 |
 | P3 | LLM advisory Phase B | Grok digest, no swap override | §6 table |
 | P3 | X sentiment → structured signals | Not raw tweet → swap | §6 |
 
-**Operator note (2026-05-29):** Until P1 ships, keep `current_price_usd` in `followed_equities.json` **at or below** spot (`≤ live_quote_usdt / balance`). WETH on Instance A set to **2000** — working.
+**Operator note (2026-05-29):** ~~Until P1 ships, keep `current_price_usd` in `followed_equities.json` **at or below** spot~~ **P1 merged 2026-05-30** — last-good spot cache in `.runtime/fe_usd_spot_cache.json` auto-caps stale JSON floors; manual JSON hygiene still useful when cache is cold and live=0.
 
 **Resume tomorrow (Instance A):** no config churn; grep `EXEC SUCCESS | WETH`; optional `nanopnl` (do not reset session unless reporting from $132 TOTAL).
 

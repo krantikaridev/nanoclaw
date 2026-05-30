@@ -7,6 +7,14 @@ if [[ -x "${ROOT}/.venv/bin/python" ]]; then
   PYTHON="${ROOT}/.venv/bin/python"
 fi
 
+_grep_count() {
+  local pattern="$1"
+  local file="${2:-real_cron.log}"
+  local n
+  n="$(grep -c "$pattern" "$file" 2>/dev/null || true)"
+  echo "${n:-0}"
+}
+
 echo "═══════════════════════════════════════════════"
 echo "           NANODAILY HEALTH — $(date '+%Y-%m-%d %H:%M')"
 echo "═══════════════════════════════════════════════"
@@ -24,9 +32,15 @@ else
 fi
 echo ""
 echo "📊 TODAY STATS:"
-echo "Small trades bypassed: $(grep -c 'HARD BYPASS' real_cron.log 2>/dev/null || echo 0)"
-echo "Cooldown skips: $(grep -c 'skip cycle' real_cron.log 2>/dev/null || echo 0)"
-echo "Protection triggers: $(grep -c 'TRADE SKIPPED' real_cron.log 2>/dev/null || echo 0)"
+echo "Small trades bypassed: $(_grep_count 'HARD BYPASS')"
+echo "Cooldown skips: $(_grep_count 'skip cycle')"
+SKIP_STATS="$(PYTHONIOENCODING=utf-8 "${PYTHON}" scripts/pnl_report.py --trade-skip-stats 2>/dev/null || true)"
+if [ -n "${SKIP_STATS//[[:space:]]/}" ]; then
+  printf '%s\n' "$SKIP_STATS"
+else
+  echo "Trade skips (lifetime): $(_grep_count 'TRADE SKIPPED')"
+  echo "Trade skips (24h UTC): n/a"
+fi
 echo ""
 echo "🔧 SYSTEM:"
 echo "Commit: $(git rev-parse --short HEAD)"

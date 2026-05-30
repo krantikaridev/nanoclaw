@@ -1429,6 +1429,220 @@ def test_main_strategy_low_stables_dust_rebuild_instance_a_balances(monkeypatch,
     assert swap_exec._MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_LOG in captured
 
 
+def test_fe_stable_runway_trim_instance_a_post_wmatic_rotation(monkeypatch, capsys):
+    """Post-WMATIC rotation: stables ~$13, WETH FE ~$117, WMATIC=0 → EQUITY→USDC trim, no WETH BUY."""
+    weth_addr = "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619"
+    weth_bal = 0.039756
+    weth_px = 117.0 / weth_bal
+
+    monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))
+    monkeypatch.setattr(clean_swap, "evaluate_take_profit", lambda *_a, **_k: (False, None))
+    monkeypatch.setattr(clean_swap, "MIN_TRADE_USD", 10.0)
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
+    monkeypatch.setattr(swap_exec, "_signal_driven_rotation_x_signal_first", lambda: True)
+    monkeypatch.setattr(clean_swap, "can_trade_asset", lambda *_a, **_k: True)
+    from modules import x_signal_position as xsp
+
+    monkeypatch.setattr(xsp, "resolve_live_spot_usd", lambda **_k: weth_px)
+
+    def _get_bal(token, dec):
+        if str(token).lower() == weth_addr.lower():
+            return weth_bal
+        return 0.0
+
+    monkeypatch.setattr(clean_swap, "get_token_balance", _get_bal)
+
+    class _BaseTrader:
+        def load_followed_equities(self):
+            return [
+                clean_swap.FollowedEquity(
+                    symbol="WETH_ALPHA",
+                    token_address=weth_addr,
+                    decimals=18,
+                    signal_strength=0.87,
+                    current_price_usd=weth_px,
+                ),
+            ]
+
+    class _TunedConfig:
+        min_trade_usdc = 5.0
+        per_asset_cooldown_seconds = 1800
+        min_pol_for_gas = 0.005
+
+    class _TunedTrader:
+        config = _TunedConfig()
+        gas_protector = object()
+
+        def build_fe_stable_runway_plan_with_block_reason(self, **kwargs):
+            frac = kwargs["sell_fraction"]
+            bal = kwargs["equity_balance"]
+            dec = kwargs["token_decimals"]
+            return (
+                type(
+                    "Plan",
+                    (),
+                    {
+                        "direction": "EQUITY_TO_USDC",
+                        "amount_in": int(bal * frac * (10**dec)),
+                        "trade_size": bal * frac * weth_px,
+                        "message": "fe runway trim",
+                        "token_in": weth_addr,
+                        "token_out": "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+                        "signal_strength": 0.0,
+                    },
+                )(),
+                None,
+            )
+
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_EQUITY_TRADER", _BaseTrader())
+    monkeypatch.setattr(clean_swap, "_load_followed_equities_json_dict", lambda: {"enabled": True})
+    monkeypatch.setattr(clean_swap, "_effective_equity_signal_min", lambda _c: 0.60)
+    monkeypatch.setattr(clean_swap, "_tuned_signal_equity_trader", lambda _m: _TunedTrader())
+    monkeypatch.setattr(
+        swap_exec,
+        "select_main_strategy_trade",
+        lambda *_a, **_k: clean_swap.TradeDecision(message="no wmatic reserve"),
+    )
+
+    buy_decision = clean_swap.TradeDecision(
+        direction="USDC_TO_EQUITY",
+        amount_in=10_000_000,
+        trade_size=10.0,
+        message="would buy weth",
+        token_in="0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+        token_out=weth_addr,
+        signal_strength=0.87,
+    )
+    monkeypatch.setattr(
+        clean_swap,
+        "try_x_signal_equity_decision",
+        lambda *_a, **_k: buy_decision,
+    )
+
+    out = clean_swap.determine_trade_decision(
+        state={},
+        balances=clean_swap.Balances(
+            usdt=0.0,
+            usdc=13.27,
+            wmatic=0.0,
+            pol=15.0,
+            followed_equity_usd=117.0,
+            total_portfolio_usd=131.0,
+        ),
+        current_price=1.0,
+    )
+
+    captured = capsys.readouterr().out
+    assert out.direction == "EQUITY_TO_USDC"
+    assert out is not buy_decision
+    assert swap_exec._FE_STABLE_RUNWAY_TRIM_LOG in captured
+    assert swap_exec._FE_STABLE_RUNWAY_DEFER_BUY_LOG in captured
+    assert "FE_STABLE_RUNWAY" in captured or "fe runway trim" in str(out.message).lower()
+
+
+def test_fe_stable_runway_no_trim_when_stables_ample(monkeypatch, capsys):
+    from modules import signal as signal_module
+
+    monkeypatch.setattr(signal_module, "try_fe_stable_runway_trim_equity_decision", lambda *_a, **_k: None)
+    monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))
+    monkeypatch.setattr(clean_swap, "evaluate_take_profit", lambda *_a, **_k: (False, None))
+    monkeypatch.setattr(clean_swap, "MIN_TRADE_USD", 10.0)
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", False)
+    monkeypatch.setattr(clean_swap, "get_target_wallets", lambda: [])
+
+    main_buy = clean_swap.TradeDecision(
+        direction="USDT_TO_WMATIC",
+        amount_in=12_000_000,
+        trade_size=12.0,
+        message="normal main",
+    )
+    monkeypatch.setattr(swap_exec, "select_main_strategy_trade", lambda *_a, **_k: main_buy)
+
+    out = clean_swap.determine_trade_decision(
+        state={},
+        balances=clean_swap.Balances(
+            usdt=30.0,
+            usdc=25.0,
+            wmatic=50.0,
+            pol=1.0,
+            followed_equity_usd=80.0,
+            total_portfolio_usd=200.0,
+        ),
+        current_price=1.0,
+    )
+
+    captured = capsys.readouterr().out
+    assert swap_exec._FE_STABLE_RUNWAY_TRIM_LOG not in captured
+    assert out is main_buy
+
+
+def test_fe_stable_runway_blocks_x_signal_buy_when_fe_heavy(monkeypatch, capsys):
+    from modules import signal as signal_module
+
+    class _Plan:
+        direction = "USDC_TO_EQUITY"
+        amount_in = 10_000_000
+        trade_size = 10.0
+        message = "buy"
+        token_in = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"
+        token_out = "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619"
+
+    class _TunedConfig:
+        min_trade_usdc = 5.0
+        per_asset_cooldown_seconds = 1800
+        min_pol_for_gas = 0.005
+        force_eligible_threshold = 0.75
+
+    class _TunedTrader:
+        config = _TunedConfig()
+        gas_protector = object()
+
+        def build_plan(self, **kwargs):
+            return _Plan()
+
+        def build_plan_with_block_reason(self, **kwargs):
+            return self.build_plan(**kwargs), None
+
+    class _BaseTrader:
+        def load_followed_equities(self):
+            return [
+                clean_swap.FollowedEquity(
+                    symbol="WETH_ALPHA",
+                    token_address="0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+                    decimals=18,
+                    signal_strength=0.87,
+                )
+            ]
+
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(clean_swap, "_load_followed_equities_json_dict", lambda: {"enabled": True, "min_signal_strength": 0.60})
+    monkeypatch.setattr(clean_swap, "_effective_equity_signal_min", lambda cfg: 0.60)
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_EQUITY_TRADER", _BaseTrader())
+    monkeypatch.setattr(clean_swap, "_tuned_signal_equity_trader", lambda min_strength: _TunedTrader())
+    monkeypatch.setattr(clean_swap, "can_trade_asset", lambda symbol, now=None, cooldown_seconds=0: True)
+    monkeypatch.setattr(clean_swap, "get_token_balance", lambda *_args, **_kwargs: 0.0)
+    monkeypatch.setattr(signal_module.cfg, "PROTECTION_FLUCTUATION_USDT_THRESHOLD", 12.0, raising=False)
+    monkeypatch.setattr(signal_module.cfg, "ALLOW_REDUCED_HIGH_RISK_XSIGNAL", True, raising=False)
+
+    decision = clean_swap.try_x_signal_equity_decision(
+        clean_swap.Balances(
+            usdt=0.0,
+            usdc=13.27,
+            wmatic=0.0,
+            pol=15.0,
+            followed_equity_usd=117.0,
+            total_portfolio_usd=131.0,
+        ),
+        dry_run=True,
+    )
+
+    captured = capsys.readouterr().out
+    assert decision is None
+    assert swap_exec._FE_STABLE_RUNWAY_DEFER_BUY_LOG in captured
+    assert "X-SIGNAL BUY SKIPPED" in captured
+
+
 def test_determine_trade_decision_main_strategy_balance_relief_before_dust_defer(monkeypatch, capsys):
     """TEMPORARY: P2 relief precedes MAIN_STRATEGY dust defer for small WMATIC→stable exits."""
     monkeypatch.setattr(clean_swap, "check_exit_conditions", lambda: (False, None))

@@ -59,7 +59,8 @@ def test_nanodaily_script_does_not_depend_on_shell_function_aliases():
     script_path = REPO_ROOT / "nanodaily"
     content = script_path.read_text(encoding="utf-8")
 
-    assert "python scripts/pnl_report.py" in content
+    assert "scripts/pnl_report.py" in content
+    assert '"${PYTHON}"' in content or "python scripts/pnl_report.py" in content
     assert "nanopnl |" not in content
 
 
@@ -416,6 +417,44 @@ def test_nanodaily_falls_back_when_daily_summary_fails(tmp_path: Path):
     assert "TOTAL: $7.00" in run_daily.stdout
 
 
+def test_nanodaily_today_stats_labels_and_no_duplicate_zero(tmp_path: Path):
+    _require_bash()
+    root = _sandbox_root(tmp_path)
+    env = {
+        **os.environ,
+        "PATH": f"{root / 'bin'}{os.pathsep}{os.environ.get('PATH', '')}",
+    }
+    # No HARD BYPASS lines — grep -c exits 1 on zero matches; must not append a second "0".
+    (root / "real_cron.log").write_text(
+        "\n".join(
+            [
+                "skip cycle",
+                "[nanoclaw] === CYCLE 1710000000 | BALANCES ===",
+                "[nanoclaw] TRADE SKIPPED: cooldown (global, ~130s left)",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    shutil.copy2(REPO_ROOT / "scripts" / "pnl_report.py", root / "scripts" / "pnl_report.py")
+
+    run_daily = subprocess.run(
+        ["bash", str(root / "nanodaily")],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert run_daily.returncode == 0, run_daily.stderr
+    out = run_daily.stdout
+    assert "Protection triggers:" not in out
+    assert "Trade skips (lifetime):" in out
+    assert "Trade skips (24h UTC):" in out
+    assert out.count("Small trades bypassed: 0") == 1
+    assert out.count("Cooldown skips: 1") == 1
+
+
 def _sandbox_root_for_nanoup(tmp_path: Path) -> Path:
     root = tmp_path / "nanoup-sandbox"
     scripts = root / "scripts"
@@ -570,3 +609,106 @@ def test_nanoup_preserves_control_json_when_pull_overwrites(tmp_path: Path):
     assert '"paused":false' in restored.replace(" ", "").lower()
     assert "manual unpause" in restored
     assert (root / ".runtime" / "control.json.bak").is_file()
+
+
+def _sandbox_root_for_nano_watch(tmp_path: Path) -> Path:
+    root = tmp_path / "nano-watch-sandbox"
+    scripts = root / "scripts"
+    scripts.mkdir(parents=True)
+
+    watch_src = REPO_ROOT / "scripts" / "nano_watch.sh"
+    watch_dst = scripts / "nano_watch.sh"
+    watch_dst.write_text(watch_src.read_text(encoding="utf-8"), encoding="utf-8")
+    watch_dst.chmod(watch_dst.stat().st_mode | stat.S_IXUSR)
+
+    (scripts / "nanohealth.py").write_text(
+        "#!/usr/bin/env python3\n"
+        "print('nanohealth: ok chain_id=137 block=999')\n",
+        encoding="utf-8",
+    )
+    (scripts / "pnl_report.py").write_text(
+        "\n".join(
+            [
+                "print('   TOTAL:  $100.00')",
+                "print('   Stables USD (USDT+USDC): $80.00')",
+                "print('Session PnL:   $+1.00 (+1.00%)')",
+                "print('velocity_fills_session=2.0 (since test)')",
+                "print('turnover_multiple_session=0.50x (seed=$100.00)')",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (root / "real_cron.log").write_text(
+        "\n".join(
+            [
+                "[nanoclaw] X-SIGNAL BUY RISK | Risk=LOW | usdt=10",
+                "[nanoclaw] X-SIGNAL STF | EXEC SUCCESS | sym=WETH_ALPHA | tx=0xabc",
+                "[nanoclaw] FE STABLE RUNWAY TRIM | sym=WETH | sell_fraction=0.1",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    bin_dir = root / "bin"
+    bin_dir.mkdir()
+    python_stub = bin_dir / "python"
+    python_stub.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        "exec \"${NANO_WATCH_PYTHON:-/usr/bin/env python3}\" \"$@\"\n",
+        encoding="utf-8",
+    )
+    python_stub.chmod(python_stub.stat().st_mode | stat.S_IXUSR)
+    return root
+
+
+def test_nano_watch_script_exists():
+    script_path = REPO_ROOT / "scripts" / "nano_watch.sh"
+    assert script_path.is_file()
+    content = script_path.read_text(encoding="utf-8")
+    assert "NANO_WATCH_INTERVAL_SECONDS" in content
+    assert "NANO_WATCH_DURATION_SECONDS" in content
+    assert "velocity_fills_session" in content
+    assert "FE STABLE RUNWAY" in content
+
+
+def test_nano_watch_runs_two_iterations_in_test_mode(tmp_path: Path):
+    _require_bash()
+    root = _sandbox_root_for_nano_watch(tmp_path)
+    log_path = tmp_path / "nanoclaw_watch_test.log"
+    env = {
+        **os.environ,
+        "NANOCLAW_ROOT": str(root),
+        "NANO_WATCH_LOG": str(log_path),
+        "NANO_WATCH_DURATION_SECONDS": "60",
+        "NANO_WATCH_INTERVAL_SECONDS": "30",
+        "PATH": f"{root / 'bin'}{os.pathsep}{os.environ.get('PATH', '')}",
+        "NANO_WATCH_PYTHON": shutil.which("python") or "python3",
+    }
+
+    result = subprocess.run(
+        ["bash", str(root / "scripts" / "nano_watch.sh")],
+        cwd=root,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "nano_watch: done" in result.stdout
+
+    log_text = log_path.read_text(encoding="utf-8")
+    snapshot_count = sum(1 for line in log_text.splitlines() if line.startswith("=== "))
+    assert snapshot_count == 2, log_text
+    assert "chain_id=137" in log_text
+    assert "TOTAL:" in log_text
+    assert "Stables" in log_text
+    assert "Session PnL" in log_text
+    assert "velocity_fills_session=" in log_text
+    assert "turnover_multiple_session=" in log_text
+    assert "risk:" in log_text and "Risk=LOW" in log_text
+    assert "exec:" in log_text and "EXEC SUCCESS" in log_text
+    assert "runway:" in log_text and "FE STABLE RUNWAY" in log_text
