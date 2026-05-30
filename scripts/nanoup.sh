@@ -106,6 +106,9 @@ if [[ "${DID_STASH}" -eq 1 ]]; then
   echo "✅ nanoup: restored stashed local changes"
 fi
 
+# Git on Windows dev machines often omits +x on *.sh; legacy wrappers exec scripts directly.
+chmod +x scripts/*.sh 2>/dev/null || true
+
 _preserve_runtime_state_after_git
 
 # Keep runtime .env aligned with latest template keys while preserving stage secrets/runtime values.

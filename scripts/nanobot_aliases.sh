@@ -274,12 +274,27 @@ EOF
   cat >"${bindir}/nano48h" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-bash "${NANOCLAW_ROOT}/scripts/nano_48h_green.sh" "\$@"
+bash "${NANOCLAW_ROOT}/scripts/nano_green.sh" --hours 48 "\$@"
 EOF
   cat >"${bindir}/nanogreen" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-exec "${bindir}/nano48h" "\$@"
+bash "${NANOCLAW_ROOT}/scripts/nano_green.sh" "\$@"
+EOF
+  cat >"${bindir}/nano8h" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+bash "${NANOCLAW_ROOT}/scripts/nano_green.sh" --hours 8 "\$@"
+EOF
+  cat >"${bindir}/nano12h" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+bash "${NANOCLAW_ROOT}/scripts/nano_green.sh" --hours 12 "\$@"
+EOF
+  cat >"${bindir}/nano24h" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+bash "${NANOCLAW_ROOT}/scripts/nano_green.sh" --hours 24 "\$@"
 EOF
   cat >"${bindir}/nanodeploy" <<EOF
 #!/usr/bin/env bash
@@ -302,6 +317,9 @@ EOF
     "${bindir}/nanodiag" \
     "${bindir}/nano48h" \
     "${bindir}/nanogreen" \
+    "${bindir}/nano8h" \
+    "${bindir}/nano12h" \
+    "${bindir}/nano24h" \
     "${bindir}/nanodeploy"
 
   if [[ -f "${HOME}/.bashrc" ]] && ! grep -F 'export PATH="$HOME/.local/bin:$PATH"' "${HOME}/.bashrc" >/dev/null 2>&1; then
