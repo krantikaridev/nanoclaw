@@ -1,0 +1,2 @@
+# Shell scripts must use LF so `source` on Linux VMs does not break (CRLF → syntax error at `name()`).
+*.sh text eol=lf

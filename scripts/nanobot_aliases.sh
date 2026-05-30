@@ -244,6 +244,36 @@ if [[ -f ".venv/bin/activate" ]]; then
 fi
 python scripts/pnl_report.py --velocity-only "\$@"
 EOF
+  cat >"${bindir}/nanocopyaudit" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+cd "${NANOCLAW_ROOT}"
+if [[ -f ".venv/bin/activate" ]]; then
+  # shellcheck source=/dev/null
+  source ".venv/bin/activate"
+fi
+python scripts/copy_trading_audit.py "\$@"
+EOF
+  cat >"${bindir}/nanodiag" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+bash "${NANOCLAW_ROOT}/scripts/nanodiag.sh" "\$@"
+EOF
+  cat >"${bindir}/nano48h" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+bash "${NANOCLAW_ROOT}/scripts/nano_48h_green.sh" "\$@"
+EOF
+  cat >"${bindir}/nanogreen" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+exec "${bindir}/nano48h" "\$@"
+EOF
+  cat >"${bindir}/nanodeploy" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+bash "${NANOCLAW_ROOT}/scripts/nanodeploy.sh" "\$@"
+EOF
   chmod +x \
     "${bindir}/nanoup" \
     "${bindir}/nanokill" \
@@ -255,21 +285,26 @@ EOF
     "${bindir}/nanodaily" \
     "${bindir}/nanohealth" \
     "${bindir}/nh" \
-    "${bindir}/nanovel"
+    "${bindir}/nanovel" \
+    "${bindir}/nanocopyaudit" \
+    "${bindir}/nanodiag" \
+    "${bindir}/nano48h" \
+    "${bindir}/nanogreen" \
+    "${bindir}/nanodeploy"
 
   if [[ -f "${HOME}/.bashrc" ]] && ! grep -F 'export PATH="$HOME/.local/bin:$PATH"' "${HOME}/.bashrc" >/dev/null 2>&1; then
     printf '\n# local user bin for nanoclaw command shims\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "${HOME}/.bashrc"
     echo "✅ added ~/.local/bin PATH bootstrap to ${HOME}/.bashrc"
   fi
   echo "✅ installed standalone nano* command shims in ${bindir}"
-  echo "Verify: command -v nanoup nanostatus nanopnl nanodaily nanohealth nanovel nh"
+  echo "Verify: command -v nanoup nanodeploy nanodiag nano48h nanocopyaudit nanohealth nh"
 }
 
 _nanoclaw_install_everything() {
   _nanoclaw_install_aliases
   _nanoclaw_install_cmd_shims
   echo "Run: source ~/.bashrc"
-  echo "Verify: type nanoup && type nanokill && type nanorestart && type nanostatus && type nanodaily && type nanohealth && type nanovel && type nh"
+  echo "Verify: type nanodeploy && type nanodiag && type nanoup && type nanohealth && type nh"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

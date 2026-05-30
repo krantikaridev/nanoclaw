@@ -28,6 +28,7 @@ def test_nanobot_aliases_script_defines_core_functions():
     assert "nanodiag()" in content
     assert "nano48h()" in content
     assert "nanodeploy()" in content
+    assert "Verify: command -v nanoup nanodeploy nanodiag nano48h" in content
     assert "nh()" in content
 
 
