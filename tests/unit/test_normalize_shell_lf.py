@@ -13,6 +13,6 @@ def test_normalize_tree_strips_crlf(tmp_path: Path) -> None:
     target = scripts / "nanobot_aliases.sh"
     target.write_bytes(b"nh() {\r\n  echo ok\r\n}\r\n")
     fixed = normalize_tree(tmp_path)
-    assert "scripts/nanobot_aliases.sh" in fixed
+    assert any(str(p).endswith("nanobot_aliases.sh") for p in fixed)
     assert b"\r" not in target.read_bytes()
     assert target.read_text(encoding="utf-8") == "nh() {\n  echo ok\n}\n"
