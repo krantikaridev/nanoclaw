@@ -113,7 +113,7 @@ class CopyTradingAuditReport:
                 out.append(f"  OK tradeable | {row.address}")
         if self.copy_trading_enabled and not self.tradeable:
             out.append(
-                "ACTION: Replace followed_wallets.json with 1–2 verified trader EOAs "
+                "ACTION: Replace followed_wallets.json with 1-2 verified trader EOAs "
                 "or set COPY_TRADING_ENABLED=false. See docs/COPY_TRADING_AUDIT.md"
             )
         elif self.copy_trading_enabled and self.token_contracts:
