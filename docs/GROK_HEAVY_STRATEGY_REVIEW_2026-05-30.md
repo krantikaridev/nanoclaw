@@ -8,6 +8,8 @@
 
 **Copy trading:** Codified in **`docs/COPY_TRADING_AUDIT.md`** — run **`nanocopyaudit`** on VM; do not use token contracts in `followed_wallets.json`.
 
+**Monitoring in code (May 2026):** Operator playbooks from §F and the 7-day plan are encoded as **`nanodeploy`** (pull+verify), **`nanodiag`**, **`nano48h`**, and **`scripts/unpause_readiness.py`** — no repeated copy/paste after `bash scripts/nanobot_aliases.sh --install`.
+
 ---
 
 ## A. Diagnosis (max 15 bullets)

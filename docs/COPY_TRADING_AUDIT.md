@@ -31,6 +31,8 @@ python scripts/copy_trading_audit.py
 
 Runtime safety: when `COPY_TRADING_REJECT_TOKEN_CONTRACTS=true` (default), `get_target_wallets()` **strips** known token contracts before polycopy.
 
+**Stage safe default (no valid wallets):** Repo ships `followed_wallets.json` with an **empty** `wallets` list. Until you add 1–2 Polygonscan-verified trader EOAs and `nanocopyaudit` exits **0**, set **`COPY_TRADING_ENABLED=false`** in `.env` on the stage VM (`.env.example` uses this default). With copy enabled and zero tradeable wallets, the audit exits **1** — that is intentional.
+
 ---
 
 ## Operator checklist (when re-enabling copy)

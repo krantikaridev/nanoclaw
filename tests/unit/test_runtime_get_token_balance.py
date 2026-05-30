@@ -67,8 +67,8 @@ def test_get_token_balance_failure_logs_once_per_token_then_suppresses(capsys):
     then stays silent for the rest of the process lifetime.
 
     Pre-cleanup, WBTC_ALPHA (0x1BFD6703…6C834E, BadFunctionCallOutput) emitted
-    the line every inventory cycle. The blocklist in .xsignal_blocked_symbols
-    only gates trading, not inventory reads, so the spam continued indefinitely.
+    the line every inventory cycle. Blocklisted symbols now skip balanceOf in
+    the FE_USD scan; this test covers non-blocked unreadable contracts.
     """
     tok = "0x1BFD67037B42Cf73acf204706795bF64736C834e"
     wal = "0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6"
@@ -120,3 +120,90 @@ def test_get_token_balance_failure_latch_is_per_wallet(capsys):
 
     captured = capsys.readouterr().out
     assert captured.count("BALANCE READ FAILED") == 2
+
+
+class _FakeFollowedAsset:
+    def __init__(self, symbol: str, addr: str, decimals: int) -> None:
+        self.symbol = symbol
+        self.token_address = addr
+        self.decimals = decimals
+
+
+def test_followed_equity_scan_skips_balance_of_for_blocked_symbol(monkeypatch, capsys, tmp_path):
+    """FE_USD scan must not call balanceOf for .xsignal_blocked_symbols entries."""
+    wbtc = _FakeFollowedAsset(
+        symbol="WBTC_ALPHA",
+        addr="0x1BFD67037B42Cf73acf204706795bF64736C834e",
+        decimals=8,
+    )
+    monkeypatch.setattr(
+        runtime,
+        "FE_USD_SPOT_CACHE_FILE",
+        str(tmp_path / "fe_usd_spot_cache.json"),
+    )
+    monkeypatch.setattr(
+        runtime.X_SIGNAL_EQUITY_TRADER,
+        "load_followed_equities",
+        lambda: [wbtc],
+    )
+    monkeypatch.setattr(
+        "modules.signal.load_xsignal_blocked_symbols",
+        lambda: (frozenset({"WBTC_ALPHA"}), ".xsignal_blocked_symbols"),
+    )
+
+    def _balance_must_not_run(*_args, **_kwargs):
+        raise AssertionError("get_token_balance must not run for blocked symbols")
+
+    monkeypatch.setattr(runtime, "get_token_balance", _balance_must_not_run)
+
+    assert runtime._followed_equity_tokens_usdt_usd() == 0.0
+    assert "BALANCE READ FAILED" not in capsys.readouterr().out
+
+
+def test_followed_equity_scan_blocked_skip_preserves_log_once_for_other_failures(
+    monkeypatch, capsys, tmp_path
+):
+    """Blocked symbols skip balanceOf; non-blocked failures still log once."""
+    blocked = _FakeFollowedAsset(
+        symbol="WBTC_ALPHA",
+        addr="0x1BFD67037B42Cf73acf204706795bF64736C834e",
+        decimals=8,
+    )
+    readable = _FakeFollowedAsset(
+        symbol="LINK_ALPHA",
+        addr="0x53E0bca35eC356Bd5DdDFebbD1Fc0FD03FaBad39",
+        decimals=18,
+    )
+    monkeypatch.setattr(
+        runtime,
+        "FE_USD_SPOT_CACHE_FILE",
+        str(tmp_path / "fe_usd_spot_cache.json"),
+    )
+    monkeypatch.setattr(
+        runtime.X_SIGNAL_EQUITY_TRADER,
+        "load_followed_equities",
+        lambda: [blocked, readable],
+    )
+    monkeypatch.setattr(
+        "modules.signal.load_xsignal_blocked_symbols",
+        lambda: (frozenset({"WBTC_ALPHA"}), ".xsignal_blocked_symbols"),
+    )
+    client = _RaisingWeb3(exc_class=RuntimeError, msg="BadFunctionCallOutput")
+    orig_get_token_balance = runtime.get_token_balance
+
+    def _balance_for_non_blocked_only(token_address, decimals, **kwargs):
+        if str(token_address).lower() == readable.token_address.lower():
+            return orig_get_token_balance(
+                token_address, decimals, web3_client=client, wallet_address=runtime.WALLET
+            )
+        raise AssertionError("get_token_balance must not run for blocked symbols")
+
+    monkeypatch.setattr(runtime, "get_token_balance", _balance_for_non_blocked_only)
+    monkeypatch.setattr(runtime, "_quote_followed_token_usdt_mtm", lambda *_a, **_k: 0.0)
+
+    for _ in range(3):
+        runtime._followed_equity_tokens_usdt_usd()
+
+    captured = capsys.readouterr().out
+    assert captured.count("BALANCE READ FAILED") == 1
+    assert "BadFunctionCallOutput" in captured

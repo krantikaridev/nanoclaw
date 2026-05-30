@@ -99,6 +99,18 @@ nanodiag() {
   bash "${NANOCLAW_ROOT}/scripts/nanodiag.sh" "$@"
 }
 
+nano48h() {
+  bash "${NANOCLAW_ROOT}/scripts/nano_48h_green.sh" "$@"
+}
+
+nanogreen() {
+  nano48h "$@"
+}
+
+nanodeploy() {
+  bash "${NANOCLAW_ROOT}/scripts/nanodeploy.sh" "$@"
+}
+
 nanobot() {
   _nanoclaw_enter_root || return 1
   tail -f real_cron.log

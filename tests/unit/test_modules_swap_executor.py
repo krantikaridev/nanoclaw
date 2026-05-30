@@ -203,6 +203,27 @@ def test_fe_stable_runway_context_active_when_fe_heavy_no_wmatic():
     assert ctx["fe_share"] == pytest.approx(117.0 / 131.0)
 
 
+def test_fe_stable_runway_buy_block_below_target_without_dust_trim():
+    """FE-heavy BUY guard: stables $15–$40 block entries; trim only when stables < $15."""
+    b = Balances(
+        usdt=0.0,
+        usdc=25.0,
+        wmatic=50.0,
+        pol=1.0,
+        followed_equity_usd=117.0,
+        total_portfolio_usd=192.0,
+    )
+    from modules.swap_executor import (
+        _fe_stable_runway_buy_block_active,
+        _fe_stable_runway_buy_block_context,
+        _fe_stable_runway_context,
+    )
+
+    assert _fe_stable_runway_buy_block_context(b) is not None
+    assert _fe_stable_runway_buy_block_active(b) is True
+    assert _fe_stable_runway_context(b, wmatic_usd=50.0) is None
+
+
 def test_low_stables_dust_rebuild_execution_bypass_requires_pending_flag():
     state: dict = {}
     d = TradeDecision(

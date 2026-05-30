@@ -1386,21 +1386,17 @@ def _record_low_stables_dust_rebuild_allowed(state: dict) -> None:
     _record_low_stables_dust_rebuild_pending(state)
 
 
-def _fe_stable_runway_context(
-    balances: Balances,
-    *,
-    wmatic_usd: float | None = None,
-) -> dict[str, float] | None:
-    """Metrics when FE-heavy book needs stable runway trim (WMATIC rebuild path absent)."""
+def _fe_stable_runway_buy_block_context(balances: Balances) -> dict[str, float] | None:
+    """FE-heavy book below runway target: block USDC→EQUITY / X-SIGNAL BUY (stables < target)."""
     if not bool(getattr(cfg, "FE_STABLE_RUNWAY_ENABLED", True)):
         return None
     stable_usd = float(balances.usdt) + float(balances.usdc)
-    max_stable = float(getattr(cfg, "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_MAX_STABLE_USD", 15.0))
+    target_stable = float(getattr(cfg, "FE_STABLE_RUNWAY_TARGET_STABLE_USD", 40.0))
+    if stable_usd + 1e-9 >= target_stable:
+        return None
     min_portfolio = float(
         getattr(cfg, "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_MIN_PORTFOLIO_USD", 130.0)
     )
-    if stable_usd + 1e-9 >= max_stable:
-        return None
     total = float(balances.total_portfolio_usd)
     if total <= min_portfolio:
         return None
@@ -1411,15 +1407,6 @@ def _fe_stable_runway_context(
     min_fe_share = float(getattr(cfg, "FE_STABLE_RUNWAY_MIN_FE_SHARE", 0.55))
     if fe_share + 1e-9 < min_fe_share:
         return None
-    rebuild_floor = float(
-        getattr(cfg, "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_NOTIONAL_FLOOR_USD", 5.0)
-    )
-    if wmatic_usd is not None:
-        if float(wmatic_usd) + 1e-9 >= rebuild_floor:
-            return None
-    elif float(balances.wmatic) > 0.0:
-        return None
-    target_stable = float(getattr(cfg, "FE_STABLE_RUNWAY_TARGET_STABLE_USD", 40.0))
     return {
         "stable_usd": stable_usd,
         "fe_share": fe_share,
@@ -1428,12 +1415,37 @@ def _fe_stable_runway_context(
     }
 
 
+def _fe_stable_runway_context(
+    balances: Balances,
+    *,
+    wmatic_usd: float | None = None,
+) -> dict[str, float] | None:
+    """Metrics when FE-heavy book needs stable runway trim (WMATIC rebuild path absent)."""
+    fe_buy = _fe_stable_runway_buy_block_context(balances)
+    if fe_buy is None:
+        return None
+    stable_usd = float(fe_buy["stable_usd"])
+    max_stable = float(getattr(cfg, "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_MAX_STABLE_USD", 15.0))
+    if stable_usd + 1e-9 >= max_stable:
+        return None
+    rebuild_floor = float(
+        getattr(cfg, "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_NOTIONAL_FLOOR_USD", 5.0)
+    )
+    if wmatic_usd is not None:
+        if float(wmatic_usd) + 1e-9 >= rebuild_floor:
+            return None
+    elif float(balances.wmatic) > 0.0:
+        return None
+    return fe_buy
+
+
 def _fe_stable_runway_buy_block_active(
     balances: Balances,
     *,
     wmatic_usd: float | None = None,
 ) -> bool:
-    return _fe_stable_runway_context(balances, wmatic_usd=wmatic_usd) is not None
+    del wmatic_usd  # buy guard is stable/fe-share only; trim context uses WMATIC separately
+    return _fe_stable_runway_buy_block_context(balances) is not None
 
 
 def _log_fe_stable_runway_trim(
@@ -1468,11 +1480,11 @@ def _apply_low_stables_rebuild_rotation_precedence(
     """Stable-first: defer rotation-priority X-SIGNAL BUY when stables rebuild is urgent."""
     if not rotation_first:
         return False
-    fe_ctx = _fe_stable_runway_context(balances, wmatic_usd=wmatic_usd)
-    if fe_ctx is not None:
+    fe_buy = _fe_stable_runway_buy_block_context(balances)
+    if fe_buy is not None:
         _log_fe_stable_runway_defer_buy(
-            stable_usd=float(fe_ctx["stable_usd"]),
-            fe_share=float(fe_ctx["fe_share"]),
+            stable_usd=float(fe_buy["stable_usd"]),
+            fe_share=float(fe_buy["fe_share"]),
         )
         return False
     if not _low_stables_dust_rebuild_enabled():
@@ -3482,6 +3494,11 @@ async def main(*, dry_run: bool = False) -> None:
             return
     print(
         f"{runtime._nanolog()}SECRETS CHECK | All sensitive variables loaded from .env only (not hardcoded)"
+    )
+    print(
+        f"{runtime._nanolog()}X_SIGNAL_HONOR_FULL_BLOCKLIST="
+        f"{bool(getattr(cfg, 'X_SIGNAL_HONOR_FULL_BLOCKLIST', False))} | "
+        f"FE_STABLE_RUNWAY_ENABLED={bool(getattr(cfg, 'FE_STABLE_RUNWAY_ENABLED', True))}"
     )
     _log_min_net_edge_policy_once(stage="execution")
     state = cs.load_state()

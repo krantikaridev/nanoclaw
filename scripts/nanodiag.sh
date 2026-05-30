@@ -97,5 +97,10 @@ echo "--- last cycle tail ---"
 tail -4 real_cron.log 2>/dev/null || echo "no real_cron.log"
 
 echo ""
+echo "--- unpause_readiness (hard gates — Grok F / freeze lift) ---"
+python3 scripts/unpause_readiness.py 2>/dev/null || echo "WARN unpause_readiness failed"
+
+echo ""
 echo "PASS = paused+lock + recent log activity + pause skip lines + cron present"
 echo "NOTE: pgrep clean_swap often empty — bot is one cycle per cron tick, then exits"
+echo "TIP: after git pull use nanodeploy (nanoup + all checks in one command)"

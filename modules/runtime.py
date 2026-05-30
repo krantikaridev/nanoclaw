@@ -350,13 +350,12 @@ def _persist_asset_last_trade_to_state(state: dict) -> None:
 
 
 # Cleanup #3 (May 2026): per-(token, wallet) latch of tokens whose ``balanceOf``
-# has already raised once. The blocklist in ``.xsignal_blocked_symbols`` gates
-# trading, but the FE_USD inventory scan still iterates every followed equity
-# every cycle for accurate accounting. When a contract is unreadable (e.g.
-# WBTC_ALPHA at 0x1BFD6703…6C834E returning BadFunctionCallOutput), the loop
-# emitted ``BALANCE READ FAILED`` every cycle indefinitely — a few hundred
-# lines/day of operator noise per broken contract. Now we log the failure
-# once per (token, wallet) pair per process lifetime, then suppress.
+# has already raised once. Symbols in ``.xsignal_blocked_symbols`` skip the
+# FE_USD inventory ``balanceOf`` entirely (same blocklist as X-SIGNAL trading).
+# For other unreadable contracts, the loop used to emit ``BALANCE READ FAILED``
+# every cycle indefinitely — a few hundred lines/day of operator noise per
+# broken contract. Now we log the failure once per (token, wallet) pair per
+# process lifetime, then suppress.
 _BALANCE_READ_FAIL_LOGGED: set[tuple[str, str]] = set()
 
 
@@ -981,6 +980,9 @@ def _followed_equity_tokens_usdt_usd() -> float:
         )
         # endregion
         return 0.0
+    from modules import signal as signal_module
+
+    blocked_syms, _ = signal_module.load_xsignal_blocked_symbols()
     # region agent log
     _agent_debug_ndjson(
         {
@@ -1026,6 +1028,8 @@ def _followed_equity_tokens_usdt_usd() -> float:
                 }
             )
             # endregion
+            continue
+        if sym.upper() in blocked_syms:
             continue
         bal = get_token_balance(addr, int(a.decimals))
         if bal <= 0:

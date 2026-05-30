@@ -29,6 +29,7 @@ ENV_APPLY_PRESERVE_KEYS = (
     # Operator toggles on VM (template defaults must not override stage decisions on nanoup).
     "ALLOW_HIGH_RISK_LOSS_CUT_XSIGNAL",
     "ALLOW_REDUCED_HIGH_RISK_XSIGNAL",
+    "X_SIGNAL_HONOR_FULL_BLOCKLIST",
     "MAIN_STRATEGY_PNL_RECOVERY_MODE",
     "PNL_RECOVERY_MODE",
     # Never clobber custody / trading identity when applying the template (template may hold a placeholder).

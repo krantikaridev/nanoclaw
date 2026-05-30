@@ -1653,7 +1653,7 @@ def try_x_signal_equity_decision(
 
     if swap_exec._fe_stable_runway_buy_block_active(balances):
         skip_buys = True
-        fe_block = swap_exec._fe_stable_runway_context(balances)
+        fe_block = swap_exec._fe_stable_runway_buy_block_context(balances)
         if fe_block is not None:
             swap_exec._log_fe_stable_runway_defer_buy(
                 stable_usd=float(fe_block["stable_usd"]),

@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import copy_trading
+import scripts.copy_trading_audit as audit_cli
 from modules.copy_trading_audit import (
     LEGACY_MISCONFIGURED_WALLETS,
     CopyTradingAuditReport,
@@ -11,6 +15,8 @@ from modules.copy_trading_audit import (
     filter_tradeable_wallets,
     normalize_address,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 OPERATOR_EOA = "0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6"
 USDC_POLYGON = "0x2791bca1f2de4661ed88a30c99a7a9449aa84174"
@@ -86,3 +92,62 @@ def test_copy_trading_audit_report_lines_include_action_when_empty():
     text = "\n".join(report.lines())
     assert "ACTION:" in text
     assert "COPY_TRADING_AUDIT.md" in text
+
+
+def test_repo_followed_wallets_has_no_token_contracts():
+    data = json.loads((REPO_ROOT / "followed_wallets.json").read_text(encoding="utf-8"))
+    wallets = data.get("wallets", [])
+    assert isinstance(wallets, list)
+    for addr in wallets:
+        category, _ = classify_wallet(str(addr))
+        assert category != "token_contract", f"token contract in followed_wallets.json: {addr}"
+
+
+def test_cli_empty_wallets_enabled_exits_1(monkeypatch, tmp_path, capsys):
+    config_path = tmp_path / "followed_wallets.json"
+    config_path.write_text(json.dumps({"wallets": []}), encoding="utf-8")
+    monkeypatch.setattr(audit_cli.cfg, "COPY_TRADING_ENABLED", True)
+    monkeypatch.setattr(audit_cli.cfg, "COPY_TRADING_REJECT_TOKEN_CONTRACTS", True)
+
+    code = audit_cli.main(["--config", str(config_path)])
+
+    assert code == 1
+    out = capsys.readouterr().out
+    assert "tradeable=0" in out
+    assert "COPY_TRADING_ENABLED=false" in out
+
+
+def test_cli_empty_wallets_disabled_exits_0(monkeypatch, tmp_path, capsys):
+    config_path = tmp_path / "followed_wallets.json"
+    config_path.write_text(json.dumps({"wallets": []}), encoding="utf-8")
+    monkeypatch.setattr(audit_cli.cfg, "COPY_TRADING_ENABLED", False)
+
+    code = audit_cli.main(["--config", str(config_path)])
+
+    assert code == 0
+    assert "tradeable=0" in capsys.readouterr().out
+
+
+def test_cli_legacy_token_list_exits_2(monkeypatch, tmp_path, capsys):
+    config_path = tmp_path / "followed_wallets.json"
+    config_path.write_text(
+        json.dumps({"wallets": list(LEGACY_MISCONFIGURED_WALLETS)}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(audit_cli.cfg, "COPY_TRADING_ENABLED", True)
+
+    code = audit_cli.main(["--config", str(config_path)])
+
+    assert code == 2
+    out = capsys.readouterr().out
+    assert "REJECT token_contract" in out
+
+
+def test_cli_tradeable_eoa_exits_0(monkeypatch, tmp_path):
+    config_path = tmp_path / "followed_wallets.json"
+    config_path.write_text(json.dumps({"wallets": [OPERATOR_EOA]}), encoding="utf-8")
+    monkeypatch.setattr(audit_cli.cfg, "COPY_TRADING_ENABLED", True)
+
+    code = audit_cli.main(["--config", str(config_path)])
+
+    assert code == 0

@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 import shutil
@@ -25,6 +26,8 @@ def test_nanobot_aliases_script_defines_core_functions():
     assert "nanovel()" in content
     assert "nanocopyaudit()" in content
     assert "nanodiag()" in content
+    assert "nano48h()" in content
+    assert "nanodeploy()" in content
     assert "nh()" in content
 
 
@@ -714,3 +717,137 @@ def test_nano_watch_runs_two_iterations_in_test_mode(tmp_path: Path):
     assert "risk:" in log_text and "Risk=LOW" in log_text
     assert "exec:" in log_text and "EXEC SUCCESS" in log_text
     assert "runway:" in log_text and "FE STABLE RUNWAY" in log_text
+
+
+def _sandbox_root_for_nano_48h_green(
+    tmp_path: Path,
+    *,
+    session_total: float = 99.0,
+    current_total: float = 100.0,
+    paused: bool = True,
+    cron_lines: list[str] | None = None,
+) -> Path:
+    root = tmp_path / "sandbox_48h"
+    scripts = root / "scripts"
+    scripts.mkdir(parents=True)
+
+    green_src = REPO_ROOT / "scripts" / "nano_48h_green.sh"
+    green_dst = scripts / "nano_48h_green.sh"
+    green_dst.write_text(green_src.read_text(encoding="utf-8"), encoding="utf-8")
+    green_dst.chmod(green_dst.stat().st_mode | stat.S_IXUSR)
+
+    (scripts / "pnl_report.py").write_text(
+        "\n".join(
+            [
+                "def get_current_balance():",
+                "    return {",
+                f'        "total": {current_total},',
+                '        "usdt": 10.0,',
+                '        "usdc": 10.0,',
+                '        "wmatic": 0.0,',
+                '        "stable_usd": 20.0,',
+                '        "source": "test stub",',
+                "    }",
+                "",
+                "def resolve_session_baseline(total, reset=False):",
+                f'    return {session_total}, "2026-05-01T00:00:00Z"',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    control = {"paused": paused, "reason": "test pause"}
+    (root / "control.json").write_text(json.dumps(control) + "\n", encoding="utf-8")
+
+    default_lines = [
+        "[nanoclaw] FE STABLE RUNWAY TRIM | sym=WETH | sell_fraction=0.1 | stable_usd=13.00 | fe_share=0.89",
+        "[nanoclaw] FE STABLE RUNWAY | defer USDC→EQUITY BUY | stable_usd=13.00 | fe_share=0.89",
+        "[nanoclaw] [CONTROL] paused=True → skipping new entry trades (protection exits still allowed)",
+        "2026-05-30 10:00:00 [nanoclaw] WALLET TOTAL USD | TOTAL=$100.00 | USDT=$10.00 | USDC=$10.00 | "
+        "STABLE_USD=$20.00 | WMATIC=0.000000 | POL=1.000000 | POL_USD=$1.00 | FE_USD=$80.00",
+    ]
+    (root / "real_cron.log").write_text(
+        "\n".join(cron_lines if cron_lines is not None else default_lines) + "\n",
+        encoding="utf-8",
+    )
+    return root
+
+
+def _run_nano_48h_green(root: Path) -> subprocess.CompletedProcess[str]:
+    env = {
+        **os.environ,
+        "NANOCLAW_ROOT": str(root),
+        "PATH": f"{root / 'bin'}{os.pathsep}{os.environ.get('PATH', '')}",
+    }
+    return subprocess.run(
+        ["bash", str(root / "scripts" / "nano_48h_green.sh")],
+        cwd=root,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=60,
+    )
+
+
+def test_nanodeploy_script_exists():
+    script_path = REPO_ROOT / "scripts" / "nanodeploy.sh"
+    assert script_path.is_file()
+    content = script_path.read_text(encoding="utf-8")
+    assert "unpause_readiness" in content
+    assert "nano_48h_green" in content
+    assert "nanodiag" in content
+
+
+def test_unpause_readiness_module_exists():
+    assert (REPO_ROOT / "scripts" / "unpause_readiness.py").is_file()
+
+
+def test_nano_48h_green_script_exists():
+    script_path = REPO_ROOT / "scripts" / "nano_48h_green.sh"
+    assert script_path.is_file()
+    content = script_path.read_text(encoding="utf-8")
+    assert "session_pnl:" in content
+    assert "pause_exec:" in content
+    assert "fe_share:" in content
+    assert "FE STABLE RUNWAY" in content
+    assert "OVERALL:" in content
+
+
+def test_nano_48h_green_passes_when_gates_met(tmp_path: Path):
+    _require_bash()
+    root = _sandbox_root_for_nano_48h_green(tmp_path)
+    result = _run_nano_48h_green(root)
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "session_pnl: PASS" in result.stdout
+    assert "pause_exec:  PASS" in result.stdout
+    assert "fe_share=" in result.stdout
+    assert "FE STABLE RUNWAY" in result.stdout
+    assert "OVERALL: PASS" in result.stdout
+
+
+def test_nano_48h_green_fails_when_session_negative(tmp_path: Path):
+    _require_bash()
+    root = _sandbox_root_for_nano_48h_green(
+        tmp_path,
+        session_total=101.0,
+        current_total=100.0,
+    )
+    result = _run_nano_48h_green(root)
+    assert result.returncode == 1, result.stdout
+    assert "session_pnl: FAIL" in result.stdout
+    assert "OVERALL: FAIL" in result.stdout
+
+
+def test_nano_48h_green_fails_exec_success_after_pause(tmp_path: Path):
+    _require_bash()
+    lines = [
+        "[nanoclaw] [CONTROL] paused=True → skipping new entry trades",
+        "[nanoclaw] X-SIGNAL STF | EXEC SUCCESS | sym=WETH_ALPHA | tx=0xabc",
+    ]
+    root = _sandbox_root_for_nano_48h_green(tmp_path, cron_lines=lines)
+    result = _run_nano_48h_green(root)
+    assert result.returncode == 1, result.stdout
+    assert "pause_exec:  FAIL" in result.stdout
+    assert "OVERALL: FAIL" in result.stdout

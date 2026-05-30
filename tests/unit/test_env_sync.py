@@ -78,6 +78,21 @@ def test_merge_env_from_example_preserves_selected_secret_keys():
     assert "X_SIGNAL_ONCHAIN_USDC_RETRY_ATTEMPTS=2\n" in out
 
 
+def test_merge_env_from_example_preserves_x_signal_honor_full_blocklist():
+    current = "X_SIGNAL_HONOR_FULL_BLOCKLIST=true\nSWAP_SLIPPAGE_BPS=80\n"
+    template = "X_SIGNAL_HONOR_FULL_BLOCKLIST=false\nSWAP_SLIPPAGE_BPS=99\n"
+
+    out = merge_env_from_example(
+        current,
+        template,
+        preserve_keys=ENV_APPLY_PRESERVE_KEYS,
+        keep_extra_keys=False,
+    )
+
+    assert "X_SIGNAL_HONOR_FULL_BLOCKLIST=true\n" in out
+    assert "SWAP_SLIPPAGE_BPS=99\n" in out
+
+
 def test_merge_env_from_example_preserves_wallet_from_existing_env():
     current = "WALLET=0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n" "SWAP_SLIPPAGE_BPS=80\n"
     template = "WALLET=0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n" "SWAP_SLIPPAGE_BPS=99\n"
@@ -148,6 +163,7 @@ def test_merge_env_from_example_appends_extra_keys_when_requested():
 def test_env_apply_preserve_keys_include_rpc_runtime_keys():
     keys = set(ENV_APPLY_PRESERVE_KEYS)
     assert "ALLOW_HIGH_RISK_LOSS_CUT_XSIGNAL" in keys
+    assert "X_SIGNAL_HONOR_FULL_BLOCKLIST" in keys
     assert "WALLET" in keys
     assert "MIN_POL_FOR_GAS" not in keys
     assert "ANKR_RPC_KEY" in keys
