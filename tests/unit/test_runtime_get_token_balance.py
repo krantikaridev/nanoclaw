@@ -129,8 +129,8 @@ class _FakeFollowedAsset:
         self.decimals = decimals
 
 
-def test_followed_equity_scan_skips_balance_of_for_blocked_symbol(monkeypatch, capsys, tmp_path):
-    """FE_USD scan must not call balanceOf for .xsignal_blocked_symbols entries."""
+def test_followed_equity_scan_skips_balance_of_for_broken_wbtc_contract(monkeypatch, capsys, tmp_path):
+    """FE_USD scan skips Polygon WBTC contract (BadFunctionCallOutput); not trading blocklist."""
     wbtc = _FakeFollowedAsset(
         symbol="WBTC_ALPHA",
         addr="0x1BFD67037B42Cf73acf204706795bF64736C834e",
@@ -146,13 +146,9 @@ def test_followed_equity_scan_skips_balance_of_for_blocked_symbol(monkeypatch, c
         "load_followed_equities",
         lambda: [wbtc],
     )
-    monkeypatch.setattr(
-        "modules.signal.load_xsignal_blocked_symbols",
-        lambda: (frozenset({"WBTC_ALPHA"}), ".xsignal_blocked_symbols"),
-    )
 
     def _balance_must_not_run(*_args, **_kwargs):
-        raise AssertionError("get_token_balance must not run for blocked symbols")
+        raise AssertionError("get_token_balance must not run for broken WBTC contract")
 
     monkeypatch.setattr(runtime, "get_token_balance", _balance_must_not_run)
 
@@ -160,10 +156,39 @@ def test_followed_equity_scan_skips_balance_of_for_blocked_symbol(monkeypatch, c
     assert "BALANCE READ FAILED" not in capsys.readouterr().out
 
 
-def test_followed_equity_scan_blocked_skip_preserves_log_once_for_other_failures(
+def test_followed_equity_scan_still_reads_balance_when_symbol_blocked_for_trading(
+    monkeypatch, tmp_path
+):
+    """X-SIGNAL blocklist must not zero FE_USD for held WETH (TOTAL accounting)."""
+    weth = _FakeFollowedAsset(
+        symbol="WETH_ALPHA",
+        addr="0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+        decimals=18,
+    )
+    monkeypatch.setattr(
+        runtime,
+        "FE_USD_SPOT_CACHE_FILE",
+        str(tmp_path / "fe_usd_spot_cache.json"),
+    )
+    monkeypatch.setattr(
+        runtime.X_SIGNAL_EQUITY_TRADER,
+        "load_followed_equities",
+        lambda: [weth],
+    )
+    monkeypatch.setattr(
+        "modules.signal.load_xsignal_blocked_symbols",
+        lambda: (frozenset({"WETH_ALPHA"}), ".xsignal_blocked_symbols"),
+    )
+    monkeypatch.setattr(runtime, "get_token_balance", lambda *_a, **_k: 0.0557)
+    monkeypatch.setattr(runtime, "_quote_followed_token_usdt_mtm", lambda *_a, **_k: 112.0)
+
+    assert runtime._followed_equity_tokens_usdt_usd() == pytest.approx(112.0)
+
+
+def test_followed_equity_scan_broken_wbtc_skip_preserves_log_once_for_other_failures(
     monkeypatch, capsys, tmp_path
 ):
-    """Blocked symbols skip balanceOf; non-blocked failures still log once."""
+    """Broken WBTC address skips balanceOf; other contracts still log once on failure."""
     blocked = _FakeFollowedAsset(
         symbol="WBTC_ALPHA",
         addr="0x1BFD67037B42Cf73acf204706795bF64736C834e",
@@ -184,21 +209,17 @@ def test_followed_equity_scan_blocked_skip_preserves_log_once_for_other_failures
         "load_followed_equities",
         lambda: [blocked, readable],
     )
-    monkeypatch.setattr(
-        "modules.signal.load_xsignal_blocked_symbols",
-        lambda: (frozenset({"WBTC_ALPHA"}), ".xsignal_blocked_symbols"),
-    )
     client = _RaisingWeb3(exc_class=RuntimeError, msg="BadFunctionCallOutput")
     orig_get_token_balance = runtime.get_token_balance
 
-    def _balance_for_non_blocked_only(token_address, decimals, **kwargs):
+    def _balance_for_readable_only(token_address, decimals, **kwargs):
         if str(token_address).lower() == readable.token_address.lower():
             return orig_get_token_balance(
                 token_address, decimals, web3_client=client, wallet_address=runtime.WALLET
             )
-        raise AssertionError("get_token_balance must not run for blocked symbols")
+        raise AssertionError("get_token_balance must not run for broken WBTC contract")
 
-    monkeypatch.setattr(runtime, "get_token_balance", _balance_for_non_blocked_only)
+    monkeypatch.setattr(runtime, "get_token_balance", _balance_for_readable_only)
     monkeypatch.setattr(runtime, "_quote_followed_token_usdt_mtm", lambda *_a, **_k: 0.0)
 
     for _ in range(3):

@@ -350,12 +350,15 @@ def _persist_asset_last_trade_to_state(state: dict) -> None:
 
 
 # Cleanup #3 (May 2026): per-(token, wallet) latch of tokens whose ``balanceOf``
-# has already raised once. Symbols in ``.xsignal_blocked_symbols`` skip the
-# FE_USD inventory ``balanceOf`` entirely (same blocklist as X-SIGNAL trading).
-# For other unreadable contracts, the loop used to emit ``BALANCE READ FAILED``
-# every cycle indefinitely — a few hundred lines/day of operator noise per
-# broken contract. Now we log the failure once per (token, wallet) pair per
-# process lifetime, then suppress.
+# has already raised once. Polygon WBTC (``0x1BFD6703…``) reverts on ``balanceOf`` —
+# skip that contract in FE_USD inventory only (log-once still applies elsewhere).
+# **Trading** blocks (``.xsignal_blocked_symbols``) must NOT suppress FE_USD for
+# held WETH/LINK — otherwise TOTAL collapses to stables-only when all symbols blocked.
+_KNOWN_BROKEN_FE_BALANCEOF_ADDRESSES: frozenset[str] = frozenset(
+    {
+        "0x1bfd67037b42cf73acf204706795bf64736c834e",  # WBTC_ALPHA on Polygon PoS
+    }
+)
 _BALANCE_READ_FAIL_LOGGED: set[tuple[str, str]] = set()
 
 
@@ -980,23 +983,6 @@ def _followed_equity_tokens_usdt_usd() -> float:
         )
         # endregion
         return 0.0
-    from modules import signal as signal_module
-
-    blocked_syms, _ = signal_module.load_xsignal_blocked_symbols()
-    # region agent log
-    _agent_debug_ndjson(
-        {
-            "hypothesisId": "H3",
-            "location": "runtime._followed_equity_tokens_usdt_usd:entry",
-            "message": "followed equities scan",
-            "data": {
-                "n_assets": len(assets),
-                "followed_path": str(FOLLOWED_EQUITIES_PATH),
-                "wallet_fingerprint": wf,
-            },
-        }
-    )
-    # endregion
     for a in assets:
         addr = (a.token_address or "").strip()
         sym = str(getattr(a, "symbol", "") or "").strip()
@@ -1029,7 +1015,7 @@ def _followed_equity_tokens_usdt_usd() -> float:
             )
             # endregion
             continue
-        if sym.upper() in blocked_syms:
+        if al in _KNOWN_BROKEN_FE_BALANCEOF_ADDRESSES:
             continue
         bal = get_token_balance(addr, int(a.decimals))
         if bal <= 0:
