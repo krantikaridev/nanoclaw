@@ -317,6 +317,14 @@ Directional milestones only—**capital scales when gates pass**, not on calenda
 - Unit tests for take-profit paths, swap path candidates, and X-Signal threshold helper (`tests/unit/`).
 - No non-core alerting layers in-scope; prioritize strategy code and deterministic logs.
 
+## Today's learnings (30 May 2026 — Copy trading audit backlog)
+
+- **Incident (Instance A)**: `followed_wallets.json` listed **8 Polygon token contracts** (USDC, USDT, WMATIC, DAI, …) — not trader EOAs. Logs showed `copy_targets=8` but polycopy never produced edge; **X-SIGNAL equities** (`followed_equities.json`) drive rotation, not wallet copy.
+- **Fix (ops + code)**: `docs/COPY_TRADING_AUDIT.md` checklist; `python scripts/copy_trading_audit.py` / **`nanocopyaudit`**; `modules/copy_trading_audit.py` static token list; repo `followed_wallets.json` ships **empty** until operator adds verified EOAs.
+- **Runtime guard**: `COPY_TRADING_REJECT_TOKEN_CONTRACTS=true` (default) strips known token addresses in `get_target_wallets()`; log `⚠️ [COPY] followed_wallets.json: rejected N non-tradeable`.
+- **Operator**: Pick 1–2 Polygonscan-verified trader EOAs, `max_copy_ratio` 0.05–0.08, weekly manual review; or `COPY_TRADING_ENABLED=false` until audit exit 0.
+- **Acceptance**: `nanocopyaudit` exit **0**; `copy_targets=N` matches tradeable EOAs only.
+
 ## Today's learnings (30 May 2026 — Cleanup #6: FE stable runway trim)
 
 - **Incident (Instance A post-WMATIC rotation)**: ~$131 TOTAL, stables ~$13, WETH FE_USD ~$117 (~89%), WMATIC=0. MAIN `STABLE RESERVE` plans WMATIC→USDC with `amount_in=0`; reduced-HIGH X-SIGNAL keeps `USDC→WETH` BUY — stables drain further when already FE-overweight.

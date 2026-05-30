@@ -116,6 +116,8 @@ PER_ASSET_COOLDOWN_MINUTES = env_int("PER_ASSET_COOLDOWN_MINUTES", 30)
 PER_ASSET_COOLDOWN_SECONDS = PER_ASSET_COOLDOWN_MINUTES * 60
 PER_WALLET_COOLDOWN = env_int("PER_WALLET_COOLDOWN", 180)
 COPY_TRADING_ENABLED = env_bool("COPY_TRADING_ENABLED", True)
+# Strip known Polygon token contracts from followed_wallets.json at runtime (see docs/COPY_TRADING_AUDIT.md).
+COPY_TRADING_REJECT_TOKEN_CONTRACTS = env_bool("COPY_TRADING_REJECT_TOKEN_CONTRACTS", True)
 
 POL_USD_PRICE = env_float("POL_USD_PRICE", 0.10)
 # Code floor: stale VM .env values like 0.005 skip AUTO-POL until swaps fail on gas.

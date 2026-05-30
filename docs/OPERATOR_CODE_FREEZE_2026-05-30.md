@@ -173,7 +173,7 @@ echo "LOG=$OUT"
 1. **`ENV_APPLY_PRESERVE_KEYS`:** add `X_SIGNAL_HONOR_FULL_BLOCKLIST`, `FE_STABLE_RUNWAY_*` toggles.
 2. **`nanoup.sh`:** default `NANOUP_AUTOSTASH=1` (document in README).
 3. **FE-heavy BUY guard:** block `USDC→EQUITY` when `fe_share > 0.55` and `stables < 40` (even if stables > 15). *(Grok #2 priority.)*
-4. **Copy trading audit** *(operator TODO — review tonight):* `followed_wallets.json` currently lists token contracts, not trader wallets. Either replace with 1–2 verified on-chain leaders or `COPY_TRADING_ENABLED=false` until validated. See **`docs/GROK_HEAVY_STRATEGY_REVIEW_2026-05-30.md` §D/F.**
+4. **Copy trading audit** — run **`nanocopyaudit`** (or `python scripts/copy_trading_audit.py`). Full checklist: **`docs/COPY_TRADING_AUDIT.md`**. Replace `followed_wallets.json` with verified trader EOAs or set `COPY_TRADING_ENABLED=false`.
 5. **Aliases:** install `ns`, `nw`, `nu` in `scripts/nanobot_aliases.sh`.
 6. **Polymarket adapter** scoping (ROADMAP Phase 4) — only after Polygon P0 trend positive.
 
@@ -187,8 +187,9 @@ ROLE: Master operator for nanoclaw — triage only, no code until operator ends 
 READ FIRST:
 1. docs/OPERATOR_CODE_FREEZE_2026-05-30.md (this freeze state)
 2. docs/GROK_HEAVY_STRATEGY_REVIEW_2026-05-30.md (adversarial plan + side-chat diffs)
-3. MASTER_BRAINSTORM.md — append log 2026-05-30
-4. AI_CONTEXT.md — FE runway, P1 spot cache, blocklist honor
+3. docs/COPY_TRADING_AUDIT.md (wallet list audit — nanocopyaudit)
+4. MASTER_BRAINSTORM.md — append log 2026-05-30
+5. AI_CONTEXT.md — FE runway, P1 spot cache, blocklist honor, copy audit
 
 VM: Instance A @ bf849af7 · wallet 0x05eF… · ~$131 TOTAL · session ~−1% · leave until ~7 Jun IST.
 

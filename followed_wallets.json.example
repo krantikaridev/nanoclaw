@@ -1,0 +1,5 @@
+{
+  "wallets": [],
+  "max_copy_ratio": 0.08,
+  "notes": "EOA trader wallets only — NOT token contracts (USDC/WMATIC/etc). Run: python scripts/copy_trading_audit.py"
+}

@@ -89,6 +89,12 @@ nanovel() {
   python scripts/pnl_report.py --velocity-only "$@"
 }
 
+nanocopyaudit() {
+  _nanoclaw_enter_root || return 1
+  _nanoclaw_activate_venv
+  python scripts/copy_trading_audit.py "$@"
+}
+
 nanobot() {
   _nanoclaw_enter_root || return 1
   tail -f real_cron.log

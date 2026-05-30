@@ -6,7 +6,7 @@
 
 **Operator note on Grok Day 1:** Grok suggested `nanopnl --reset-session` — **do not reset session baseline** unless operator explicitly asks; current anchor is the 48h-green measurement target.
 
-**Copy trading:** Added to post-freeze backlog — audit `followed_wallets.json` tonight (operator TODO).
+**Copy trading:** Codified in **`docs/COPY_TRADING_AUDIT.md`** — run **`nanocopyaudit`** on VM; do not use token contracts in `followed_wallets.json`.
 
 ---
 
@@ -104,7 +104,7 @@
 
 1. **ENV / nanoup preserve + enforce `X_SIGNAL_HONOR_FULL_BLOCKLIST`** — log effective flag every cycle.
 2. **FE-heavy BUY guard** — block USDC→EQUITY when `fe_share > 0.55` AND `stables < $40`; force trim toward runway target.
-3. **`followed_wallets.json` audit / replace or disable copy** — operator TODO tonight.
+3. **`followed_wallets.json` audit / replace or disable** — **`docs/COPY_TRADING_AUDIT.md`** + `nanocopyaudit`.
 4. **Default `NANOUP_AUTOSTASH=1` + POL pre-flight** before approve path.
 5. **Polymarket paper adapter** — read-only, no wallet touch.
 
@@ -128,4 +128,4 @@
 1. Read this file + `OPERATOR_CODE_FREEZE_2026-05-30.md` + latest VM snapshot.
 2. Merge Grok **F** with freeze backlog §6 — **max 2 side chats** when freeze lifts.
 3. Operator runs Grok again only if book composition or commit hash changed materially.
-4. **Copy trading audit** (operator tonight): `cat followed_wallets.json`; Polygonscan each address; disable or replace before re-enabling copy path.
+4. **Copy trading audit** (operator tonight): **`nanocopyaudit`** — see **`docs/COPY_TRADING_AUDIT.md`**.

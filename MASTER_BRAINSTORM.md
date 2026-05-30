@@ -256,8 +256,8 @@ OUT OF SCOPE: blocklist edits, manual operator swaps, multi-venue.
 - **Session:** −1.04%; 3× WETH BUY drained stables $50→$18 post-deploy; dust defer now blocks $9.33 BUYs.
 - **Blocklist:** all 4 symbols listed; `HONOR_FULL_BLOCKLIST=false` after nanoup → ignore-all-blocks warning once; execution blocks WMATIC individually.
 - **Leave:** `control.json` **paused=true** + **operator_pause_lock=true**; `PLAN SELECTED` may still log (plan-only); verify `[CONTROL] paused=True` + no post-pause `EXEC SUCCESS`.
-- **Docs:** `docs/OPERATOR_CODE_FREEZE_2026-05-30.md` @ `78ea6948`; **`docs/GROK_HEAVY_STRATEGY_REVIEW_2026-05-30.md`** (full Grok Heavy output + Cursor synthesis).
-- **TODO (operator):** copy-trading audit tonight — `followed_wallets.json` likely token addresses not X/trader wallets.
+- **Docs:** `docs/OPERATOR_CODE_FREEZE_2026-05-30.md`; **`docs/GROK_HEAVY_STRATEGY_REVIEW_2026-05-30.md`**; **`docs/COPY_TRADING_AUDIT.md`** + `nanocopyaudit` CLI.
+- **TODO (operator):** copy-trading — **`docs/COPY_TRADING_AUDIT.md`** + **`nanocopyaudit`** (VM still has legacy token list until pull + edit).
 - **Grok verdict:** fix plumbing (FE guard, blocklist preserve, wallet list) before expecting 48h green; Polygon-only until proof; content pivot over SaaS if 30 Jun fail.
 
 ### 2026-05-30 — P0 triage: FE overweight / stables deadlock (Instance A)
