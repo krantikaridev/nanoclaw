@@ -1,4 +1,18 @@
 #!/usr/bin/env bash
+# Self-heal CRLF (Windows checkout / git stash pop) before bash parses "name()" defs.
+_nanoclaw_aliases_self="${BASH_SOURCE[0]}"
+if [[ -f "${_nanoclaw_aliases_self}" ]] && grep -q $'\r' "${_nanoclaw_aliases_self}" 2>/dev/null; then
+  sed -i 's/\r$//' "${_nanoclaw_aliases_self}"
+  if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    exec bash "${_nanoclaw_aliases_self}" "$@"
+  elif [[ -z "${_NANOCLAW_ALIASES_CRLF_FIXED:-}" ]]; then
+    _NANOCLAW_ALIASES_CRLF_FIXED=1
+    # shellcheck source=/dev/null
+    source "${_nanoclaw_aliases_self}"
+    return 0 2>/dev/null || true
+  fi
+fi
+unset _nanoclaw_aliases_self
 # shellcheck shell=bash
 # Usage:
 #   source scripts/nanobot_aliases.sh
