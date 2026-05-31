@@ -113,7 +113,17 @@ A prior thread noted **`portfolio_history.csv` as a transitional store** — acc
 
 ---
 
-## V2.5.3 Status (as of 1 May 2026, 13:30 IST)
+## **Current Situation (31 May 2026 — stage VM)**
+
+- **TOTAL:** ~**$131.96** · **Session PnL:** **−0.24%** (floor −1%) · **Since baseline:** +0.78%
+- **Control:** **Unpaused** (`auto_unpause | window=12h`) · **`external_layer/control.py`** running
+- **Green gate:** **`nano12h` OVERALL PASS** · FE runway deferring USDC→EQUITY BUY (~85% FE)
+- **Bleed:** **Stopped** — portfolio held **>$132** overnight vs sub-$132 prior session; quiet night (**0 fills UTC**)
+- **RPC (P0):** Ankr **401 Unauthorized** on project key despite **$10 top-up** — billing ≠ valid key; **1rpc** rate-limited; **`polygon.llamarpc.com`** DNS dead. Bot still computes TOTAL in-process; **`nanohealth` / live quotes degraded**
+- **Capital plan:** Target **$150–200 seed** + **10% operating reserve** (gas + Ankr + hosting) once **net PnL after opex > 0** over 7d — see **`ROADMAP.md`** Phase 0.5
+- **Next ops:** Rotate **`ANKR_RPC_KEY`** on VM → **`nanohealth`** → **`nano12h`**; no session reset
+
+## V2.5.3 Status (as of 1 May 2026, 13:30 IST) — historical
 
 **Current Situation**:
 - Portfolio: ~$101.25 (stable, no major loss)
@@ -600,6 +610,17 @@ nanokill
 nanoup
 ```
 
+
+### TODO - High Priority (add 2026-05-31)
+
+| ID | Item | Owner | Done when |
+|----|------|-------|-----------|
+| **P0** | Fix Ankr RPC **401** on VM | Operator | New key from [Ankr RPC](https://www.ankr.com/rpc/) in **`ANKR_RPC_KEY`**; **`nanohealth: ok chain_id=137`** |
+| **P0** | RPC endpoint list cleanup | Operator | Remove dead **`llamarpc`**; add 2nd paid/free provider; **`RPC_ENDPOINTS`** order documented in VM `.env` |
+| **P1** | Operating reserve guard (10%) | Code | **`OPERATING_RESERVE_PCT`** + defer new entries when stables below reserve — **`ROADMAP.md`** |
+| **P1** | Net PnL after opex line | Code | **`nanodaily`** shows gas + **`OPEX_USD`** estimate |
+| **P1** | Capital ramp gate ($150–200) | Operator + code | 7d green + net-after-opex > 0 before USDC top-up |
+| **P2** | RPC health alert (Telegram/cron) | Code | Alert when all endpoints fail 3 cycles |
 
 ### TODO - High Priority (add 2026-05-03)
 - **Sizing bug from Cursor refactor**: Bot deployed full available USDC/USDT balance on high-conviction signals instead of fixed $12–$20 per signal. Happened once (large WMATIC/USDT/WETH buys) before crash. Fix: enforce fixed-size logic + proper balance checks before any swap.

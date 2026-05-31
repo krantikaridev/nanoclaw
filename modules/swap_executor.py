@@ -1470,6 +1470,49 @@ def _log_fe_stable_runway_defer_buy(*, stable_usd: float, fe_share: float) -> No
     )
 
 
+_OPERATING_RESERVE_LOG = "[nanoclaw] OPERATING RESERVE FLOOR | defer new entry"
+
+
+def _operating_reserve_seed_usd(balances: Balances) -> float:
+    explicit = float(getattr(cfg, "STAGE_SEED_USD", 0.0) or 0.0)
+    if explicit > 0.0:
+        return explicit
+    return max(float(balances.total_portfolio_usd), 0.0)
+
+
+def _operating_reserve_buy_block_context(balances: Balances) -> dict[str, float] | None:
+    """Block new entries when stables fall below seed × OPERATING_RESERVE_PCT."""
+    if not bool(getattr(cfg, "OPERATING_RESERVE_ENABLED", True)):
+        return None
+    pct = float(getattr(cfg, "OPERATING_RESERVE_PCT", 10.0))
+    if pct <= 0.0:
+        return None
+    seed = _operating_reserve_seed_usd(balances)
+    if seed <= 0.0:
+        return None
+    floor_usd = seed * (pct / 100.0)
+    stable_usd = float(balances.usdt) + float(balances.usdc)
+    if stable_usd + 1e-9 >= floor_usd:
+        return None
+    return {
+        "stable_usd": stable_usd,
+        "reserve_floor_usd": floor_usd,
+        "seed_usd": seed,
+        "reserve_pct": pct,
+    }
+
+
+def _operating_reserve_buy_block_active(balances: Balances) -> bool:
+    return _operating_reserve_buy_block_context(balances) is not None
+
+
+def _log_operating_reserve_defer(*, stable_usd: float, reserve_floor_usd: float, seed_usd: float) -> None:
+    print(
+        f"{_OPERATING_RESERVE_LOG} | stable_usd={float(stable_usd):.2f} | "
+        f"reserve_floor={float(reserve_floor_usd):.2f} | seed={float(seed_usd):.2f}"
+    )
+
+
 def _apply_low_stables_rebuild_rotation_precedence(
     rotation_first: bool,
     *,
@@ -2835,7 +2878,9 @@ def determine_trade_decision(
     # Operator/agent knobs from repo-root ``control.json``. Production loads via ``load_cycle_control()`` in
     # ``main()`` each cron cycle; unit tests omit ``cycle_control`` → neutral defaults (no disk read).
     ctrl = cycle_control if cycle_control is not None else CycleControlSnapshot()
-    entries_paused = bool(ctrl.paused)
+    operator_paused = bool(ctrl.paused)
+    reserve_ctx = _operating_reserve_buy_block_context(balances)
+    entries_paused = operator_paused or reserve_ctx is not None
     # Copy-trade sizing only (USDT polycopy + USDC copy). Main-strategy buys keep ``COPY_TRADE_PCT`` from env.
     env_pct = float(cs.COPY_TRADE_PCT)
     if ctrl.max_copy_trade_pct is not None:
@@ -2849,8 +2894,14 @@ def determine_trade_decision(
     )
     if ctrl.reason:
         print(f"[CONTROL] External layer reason: {ctrl.reason}")
-    if entries_paused:
+    if operator_paused:
         print("[CONTROL] paused=True → skipping new entry trades (protection exits still allowed)")
+    elif reserve_ctx is not None:
+        _log_operating_reserve_defer(
+            stable_usd=float(reserve_ctx["stable_usd"]),
+            reserve_floor_usd=float(reserve_ctx["reserve_floor_usd"]),
+            seed_usd=float(reserve_ctx["seed_usd"]),
+        )
     # ``ctrl.force_defensive`` is parsed in ``load_cycle_control`` for future wiring — does not alter protection yet.
 
     # TEMPORARY (May 2026 sprint): track cycles since last WMATIC→stable profit exit for force-relief.

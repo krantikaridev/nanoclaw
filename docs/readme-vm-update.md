@@ -26,6 +26,23 @@ Role split and decision loop: `docs/OPERATING_MODEL.md`.
 - **After deploy:** `scripts/nanoup.sh` runs it automatically at the end; **`nanorestart`** runs it before `pnl_report`.
 - **Unhealthy:** fix **§3 RPC** first (keys, egress, provider); rotate leaked provider tokens per **`AI_CONTEXT.md`** v2.9 “green environment” notes.
 
+## `rpc_probe` (per-endpoint diagnostics)
+
+**`python scripts/rpc_probe.py`** probes **each** URL in `RPC_ENDPOINTS` / fallbacks individually (redacts API keys in output). Exit **0** if any endpoint is healthy; **1** if all fail.
+
+```bash
+python scripts/rpc_probe.py
+python scripts/rpc_probe.py --alert   # Telegram when all fail (needs TELEGRAM_* in .env)
+```
+
+Optional cron (every 15 min):
+
+```bash
+*/15 * * * * cd /home/ubuntu/.nanobot/workspace/nanoclaw && .venv/bin/python scripts/rpc_probe.py --alert >> rpc_probe.log 2>&1
+```
+
+After Ankr billing top-up, you still need a valid **`ANKR_RPC_KEY`** in `.env` — [Ankr RPC](https://www.ankr.com/rpc/) dashboard → generate/copy key.
+
 ## Explicit checklist: RPC and `MAX_GWEI` on the VM
 
 Follow when logs show placeholder hosts (`YOUR_ACTUAL`, `PASTE_*`), `All RPC endpoints failed`, `fallback_after_all_rpcs_failed`, or `AUTO-USDC skipped — gas/POL guard (gas_ok=False)` while live gas is obviously above `MAX_GWEI`.

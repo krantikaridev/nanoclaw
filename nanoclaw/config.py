@@ -18,9 +18,8 @@ from config import (
 )
 _DEFAULT_POLYGON_PUBLIC_RPCS: tuple[str, ...] = (
     "https://rpc.ankr.com/polygon",
-    "https://polygon.llamarpc.com",
-    "https://polygon.drpc.org",
     "https://polygon-rpc.com",
+    "https://polygon.drpc.org",
 )
 
 # Per-endpoint: first attempt + retries, 1s apart (transient 401 / connection / timeout).

@@ -15,7 +15,44 @@
 
 ---
 
-## Current Status (as of 29 May 2026 — Instance A stage VM)
+## Current Status (as of 31 May 2026 — Instance A stage VM)
+
+- **Wallet:** `0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6` · **Branch:** `V2` · **Head:** `a42ed2c9`+
+- **Portfolio:** ~**$131.96** TOTAL · session **−0.24%** (seed $132.27 @ 2026-05-29) · **bleed stopped** vs prior session lows
+- **Control:** **Unpaused** — `auto_unpause | window=12h | session≥−1.0%` · `EXTERNAL_AUTO_PAUSE_ENABLED=true`
+- **Green gate (`nano12h`):** **OVERALL PASS** · FE runway deferring USDC→EQUITY BUY (~85% FE / ~$18 stables)
+- **Rotation:** WETH_ALPHA + WMATIC_ALPHA open · **0 fills UTC today** (quiet night; RPC degraded)
+- **Blocker (P0 ops):** **RPC 401** on Ankr project key + **1rpc rate limit** + dead `polygon.llamarpc.com` DNS — bot still reports TOTAL via in-process wallet truth but **`nanohealth` fails** until key fixed
+- **Capital target:** ramp seed to **$150–200** once **net PnL > 0** after gas + RPC + hosting (see [Phase 0.5](#phase-05-infrastructure-economics-net-pnl-after-opex))
+
+Full incident + operator playbook: **[Session log 2026-05-29](#session-log-2026-05-29-stage-instance-a--stop-bleed--rotation--llm)** · RPC fix: **`docs/readme-vm-update.md`** § RPC · Ankr keys: [Ankr RPC](https://www.ankr.com/rpc/)
+
+---
+
+## Phase 0.5: Infrastructure economics (net PnL after opex)
+
+**Goal:** Stage must show **positive net PnL** after **all recurring costs**, not just on-chain mark-to-market.
+
+| Bucket | Target | Notes |
+|--------|--------|-------|
+| **Trading seed** | **$150–200** (operator intent) | Only after 7d validation at ~$132 shows stable gates + RPC green |
+| **Operating reserve** | **≥10% of seed** (~$15–20 at $150) | Held in wallet as **USDC/POL** — covers gas spikes, Ankr/RPC credits, VM/hosting |
+| **Gas (on-chain)** | Track in `real_cron.log` / tx receipts | Already largest variable cost at small size |
+| **RPC subscription** | Ankr ~$10 top-up (May 2026) | Must rotate **`ANKR_RPC_KEY`** in VM `.env` after billing — top-up alone does not fix **401 Unauthorized** |
+| **Hosting** | GCP/OCI VM (if any) | Book monthly; target **included in net PnL** by v3.1 |
+
+**Definition of “green” (economic, not just session %):**
+
+```text
+net_pnl_usd = (TOTAL_now − TOTAL_baseline) − gas_usd − rpc_usd − hosting_usd − bridge_fees
+net_pnl_usd > 0  over rolling 7d  AND  session floor held  AND  nanohealth green ≥99% of cycles
+```
+
+**Backlog (code — see table below):** RPC health alerts, opex ledger in `portfolio_history` / `pnl_report`, auto-failover provider list, reserve floor guard (defer trades when stables < 10% seed).
+
+---
+
+## Current Status (as of 29 May 2026 — Instance A stage VM) — superseded
 
 - **Wallet:** `0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6` · **Branch:** `V2` · **Head (post-fix):** `15723c3f`+ (POL execution target + `_pol_target_for_trade` façade fix)
 - **Session PnL:** ~**+0.18%** after `nanopnl --reset-session` (2026-05-29T11:11:38Z) — no longer in free-fall from LINK loss-cut / gas bleed
@@ -235,7 +272,12 @@ python3 -c "from modules import runtime as r; print('pol', r.get_pol_balance(), 
 
 | Priority | Item | Goal | Sketch (for side chat) |
 |----------|------|------|----------------------|
+| **P0** | **RPC key hygiene + failover** | No silent 401/rate-limit nights; **`nanohealth` green** before trading | VM: rotate **`ANKR_RPC_KEY`** at [Ankr RPC](https://www.ankr.com/rpc/) after billing; reorder **`RPC_ENDPOINTS`** (paid Ankr first, then `polygon-rpc.com` / second provider); drop dead **`polygon.llamarpc.com`**; add **Alchemy/QuickNode free tier** as #2. Code: Telegram/log alert on all-endpoints-fail; optional **`scripts/rpc_probe.sh`** in cron. |
+| **P0** | **Operating reserve guard (10%)** | Never trade seed below gas+subscription buffer | Env **`OPERATING_RESERVE_PCT=10`** (default): external layer or protection defers **new entries** when **`stable_usd < seed × reserve_pct`**; log **`RESERVE_FLOOR`**. Seed from session baseline or env **`STAGE_SEED_USD`**. |
+| **P1** | **Net PnL / opex ledger** | Answer “are we green after Ankr + gas + VM?” | Extend **`pnl_report.py`**: monthly **`OPEX_USD`** env (Ankr, hosting); estimate gas from tx hashes; print **`NET_PNL_AFTER_OPEX`** line in **`nanodaily`**. |
+| **P1** | **Capital ramp gate ($150–200)** | Top-up only when economics prove out | Checklist: 7d **`nano12h` PASS**, **`velocity_fills_per_day_utc ≥ 0.5`**, **`nanohealth` OK**, net-after-opex **> 0** → operator adds USDC to hit target seed. |
 | **P1** | **Auto `current_price_usd` fallback floor** | Stop manual `followed_equities.json` edits (e.g. WETH 2500→2000); honest **TOTAL** / session PnL without overstating inventory | **Merged 2026-05-30:** persist `last_good_spot_usd[S]` in `.runtime/fe_usd_spot_cache.json` (gitignored). Effective FE leg stays `max(live_quote, bal × floor)` where `floor_px = min(json_floor, last_good_spot)` (prior cache or first-run live anchor). Upward drift capped via `FE_USD_SPOT_CACHE_MAX_UP_PCT_PER_DAY` (default 5%). Logs: `FE_USD AUTO_FLOOR_UPDATE`, existing `FE_USD FALLBACK FLOOR APPLIED`. Tests in `tests/unit/test_runtime_inventory_mtm.py`. **Does not** change `signal_strength`. |
+| P2 | **Multi-provider RPC automation** | Cheaper/smooth failover without manual `.env` edits | Provider registry JSON; health scores; auto-deprioritize 401/429 endpoints (extend **`nanoclaw.config`** cooldown). Compare [Ankr](https://www.ankr.com/) vs Alchemy/1rpc paid tiers on cost per 1M requests. |
 | P2 | X-SIGNAL next-plan on quote fail | Rotation when one symbol unquotable (WBTC) | See §7 |
 | P2 | Cron / lock serialization | No overlapping `clean_swap` during long quote ramp | See §7 |
 | P3 | LLM advisory Phase B | Grok digest, no swap override | §6 table |
@@ -243,7 +285,7 @@ python3 -c "from modules import runtime as r; print('pol', r.get_pol_balance(), 
 
 **Operator note (2026-05-29):** ~~Until P1 ships, keep `current_price_usd` in `followed_equities.json` **at or below** spot~~ **P1 merged 2026-05-30** — last-good spot cache in `.runtime/fe_usd_spot_cache.json` auto-caps stale JSON floors; manual JSON hygiene still useful when cache is cold and live=0.
 
-**Resume tomorrow (Instance A):** no config churn; grep `EXEC SUCCESS | WETH`; optional `nanopnl` (do not reset session unless reporting from $132 TOTAL).
+**Resume (Instance A, 31 May 2026):** Fix **Ankr 401** (new API key in VM `.env` → `nanohealth`); keep **`nano12h`** green; watch **`velocity_fills_per_day_utc`**; do **not** reset session; consider **$150 seed top-up** only after 7d net-after-opex green.
 
 ### 8. Related docs
 

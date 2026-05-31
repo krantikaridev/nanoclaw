@@ -441,6 +441,11 @@ MAIN_STRATEGY_RESERVE_PREFER_USDC = env_bool("MAIN_STRATEGY_RESERVE_PREFER_USDC"
 FE_STABLE_RUNWAY_ENABLED = env_bool("FE_STABLE_RUNWAY_ENABLED", True)
 FE_STABLE_RUNWAY_MIN_FE_SHARE = env_float("FE_STABLE_RUNWAY_MIN_FE_SHARE", 0.55)
 FE_STABLE_RUNWAY_TARGET_STABLE_USD = env_float("FE_STABLE_RUNWAY_TARGET_STABLE_USD", 40.0)
+# Operating reserve: keep stables ≥ seed × pct for gas + RPC/hosting (defer new entries only).
+OPERATING_RESERVE_ENABLED = env_bool("OPERATING_RESERVE_ENABLED", True)
+OPERATING_RESERVE_PCT = env_float("OPERATING_RESERVE_PCT", 10.0)
+# Stage seed for reserve floor; 0 = use current TOTAL at cycle time.
+STAGE_SEED_USD = env_float("STAGE_SEED_USD", 0.0)
 # External layer: portfolio-driven auto pause/unpause (writes control.json every ~30s).
 EXTERNAL_AUTO_PAUSE_ENABLED = env_bool("EXTERNAL_AUTO_PAUSE_ENABLED", False)
 EXTERNAL_AUTO_GREEN_HOURS = env_float("EXTERNAL_AUTO_GREEN_HOURS", 12.0)

@@ -36,6 +36,9 @@ ENV_APPLY_PRESERVE_KEYS = (
     "EXTERNAL_AUTO_GREEN_HOURS",
     "EXTERNAL_AUTO_SESSION_MIN_PCT",
     "EXTERNAL_AUTO_WINDOW_MIN_PCT",
+    "OPERATING_RESERVE_ENABLED",
+    "OPERATING_RESERVE_PCT",
+    "STAGE_SEED_USD",
     # Never clobber custody / trading identity when applying the template (template may hold a placeholder).
     "WALLET",
     # Preserve stage-specific RPC runtime selection when applying template.
