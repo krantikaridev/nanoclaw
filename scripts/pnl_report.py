@@ -23,7 +23,9 @@ LOG_FILE = "real_cron.log"
 PORTFOLIO_HISTORY_FILE = "portfolio_history.csv"
 SESSION_BASELINE_FILE = "portfolio_session_baseline.json"
 FE_USD_SPOT_CACHE_FILE = ".runtime/fe_usd_spot_cache.json"
+PNL_FLOW_EVENTS_FILE = ".runtime/pnl_flow_events.jsonl"
 _MARK_DELTA_SPOT_PCT_THRESHOLD = 0.01
+_FLOW_STABLE_EXPLAIN_RATIO = 0.6
 _MAX_REASONABLE_BALANCE_COMPONENT = 10_000_000.0
 MANUAL_PATTERN = re.compile(
     r"MANUAL CORRECT BALANCE.*USDC=\$?([\d.]+).*WMATIC=\$?([\d.]+).*USDT=\$?([\d.]+).*Source=([A-Za-z0-9_-]+)",
@@ -338,7 +340,11 @@ def print_daily_summary(*, reset_session: bool = False, lookback: str | None = N
     if mark_line:
         print(mark_line)
     print(format_net_after_opex_line(session_delta, session_started_at))
+    flow_line = format_flow_adjusted_line(session_delta, session_total, session_started_at)
+    if flow_line:
+        print(flow_line)
     print(pnl_24h_line)
+    _print_adverse_day_oneliner(total)
     _print_velocity_block(session_started_at=session_started_at, seed_usd=total)
 
     win_spec = lookback if (lookback and str(lookback).strip()) else "24h"
@@ -632,6 +638,26 @@ def format_turnover_lines(
             f"turnover_multiple_session={sess_mult:.2f}x (seed=${seed:.2f})"
         )
     return lines
+
+
+def _print_adverse_day_oneliner(current_total_usd: float) -> None:
+    try:
+        from nanoclaw.pnl_adverse_day import (
+            compute_adverse_day_metrics,
+            format_adverse_day_oneliner,
+            pnl_adverse_day_enabled,
+        )
+    except Exception:
+        return
+    if not pnl_adverse_day_enabled():
+        return
+    try:
+        metrics = compute_adverse_day_metrics(current_total_usd=float(current_total_usd))
+        line = format_adverse_day_oneliner(metrics)
+        if line:
+            print(line)
+    except Exception:
+        return
 
 
 def _print_velocity_block(*, session_started_at: str | None = None, seed_usd: float | None = None) -> None:
@@ -936,6 +962,280 @@ def format_mark_delta_est_line(
     return f"mark_delta_est: ${delta:+.2f} (FE spot cache)"
 
 
+@dataclass(frozen=True)
+class FlowEvent:
+    """Capital flow tag (deposit/withdraw) for flow-adjusted session PnL."""
+
+    ts: datetime
+    kind: str  # deposit_est | withdraw_est | deposit | withdraw
+    amount_usd: float
+    source: str  # heuristic | manual
+    confidence: float | None = None
+
+    @property
+    def signed_usd(self) -> float:
+        if self.kind in {"deposit_est", "deposit"}:
+            return float(self.amount_usd)
+        return -float(self.amount_usd)
+
+
+def _parse_env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None or not str(raw).strip():
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _parse_env_positive_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None or not str(raw).strip():
+        return default
+    try:
+        value = float(str(raw).strip())
+    except ValueError:
+        return default
+    if not math.isfinite(value) or value <= 0.0:
+        return default
+    return value
+
+
+def pnl_flow_tag_enabled() -> bool:
+    return _parse_env_bool("PNL_FLOW_TAG_ENABLED", default=True)
+
+
+def pnl_flow_step_min_usd() -> float:
+    return _parse_env_positive_float("PNL_FLOW_STEP_MIN_USD", 5.0)
+
+
+def pnl_flow_lookback_hours() -> float:
+    return _parse_env_positive_float("PNL_FLOW_LOOKBACK_HOURS", 24.0)
+
+
+def _stable_usd_from_history_row(row: dict) -> float | None:
+    try:
+        usdt = float(row.get("usdt", "") or 0.0)
+        usdc = float(row.get("usdc", "") or 0.0)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(usdt) or not math.isfinite(usdc):
+        return None
+    return usdt + usdc
+
+
+def load_portfolio_history_rows() -> list[tuple[datetime, float, float]]:
+    """Chronological ``(timestamp, total_value, stable_usd)`` from portfolio_history.csv."""
+    csv_path = Path(PORTFOLIO_HISTORY_FILE)
+    if not csv_path.is_file():
+        return []
+    out: list[tuple[datetime, float, float]] = []
+    try:
+        with csv_path.open("r", encoding="utf-8", newline="") as fh:
+            reader = csv.DictReader(fh)
+            for row in reader:
+                ts = _parse_iso_ts(row.get("timestamp", ""))
+                if ts is None:
+                    continue
+                try:
+                    total = float(row.get("total_value", ""))
+                except (TypeError, ValueError):
+                    continue
+                stable = _stable_usd_from_history_row(row)
+                if stable is None or not math.isfinite(total):
+                    continue
+                out.append((ts, total, stable))
+    except Exception:
+        return []
+    out.sort(key=lambda x: x[0])
+    dedup: list[tuple[datetime, float, float]] = []
+    for ts, total, stable in out:
+        if dedup and dedup[-1][0] == ts:
+            dedup[-1] = (ts, total, stable)
+        else:
+            dedup.append((ts, total, stable))
+    return dedup
+
+
+def _classify_flow_step(
+    delta_total: float,
+    delta_stable: float,
+    *,
+    min_usd: float,
+    stable_ratio: float = _FLOW_STABLE_EXPLAIN_RATIO,
+) -> tuple[str, float] | None:
+    """Return ``(kind, confidence)`` when a TOTAL step looks like capital in/out."""
+    if abs(delta_total) < min_usd:
+        return None
+    if delta_total == 0.0 or delta_stable == 0.0:
+        return None
+    if (delta_total > 0) != (delta_stable > 0):
+        return None
+    explain = abs(delta_stable) / abs(delta_total)
+    if explain < stable_ratio:
+        return None
+    residual = abs(delta_total - delta_stable)
+    if residual > abs(delta_total) * (1.0 - stable_ratio):
+        return None
+    kind = "deposit_est" if delta_total > 0 else "withdraw_est"
+    confidence = min(1.0, explain)
+    return kind, confidence
+
+
+def detect_flow_events_heuristic(
+    *,
+    min_usd: float | None = None,
+    lookback_hours: float | None = None,
+    now_utc: datetime | None = None,
+    history_rows: list[tuple[datetime, float, float]] | None = None,
+) -> list[FlowEvent]:
+    """Detect sudden TOTAL steps explained mostly by stable-leg change (v1 heuristic)."""
+    threshold = float(min_usd if min_usd is not None else pnl_flow_step_min_usd())
+    lookback = float(lookback_hours if lookback_hours is not None else pnl_flow_lookback_hours())
+    now = now_utc or datetime.now(timezone.utc)
+    rows = history_rows if history_rows is not None else load_portfolio_history_rows()
+    if len(rows) < 2:
+        return []
+    cutoff = now - timedelta(hours=lookback)
+    events: list[FlowEvent] = []
+    for idx in range(1, len(rows)):
+        ts_prev, total_prev, stable_prev = rows[idx - 1]
+        ts_cur, total_cur, stable_cur = rows[idx]
+        if ts_cur < cutoff:
+            continue
+        delta_total = total_cur - total_prev
+        delta_stable = stable_cur - stable_prev
+        classified = _classify_flow_step(delta_total, delta_stable, min_usd=threshold)
+        if classified is None:
+            continue
+        kind, confidence = classified
+        events.append(
+            FlowEvent(
+                ts=ts_cur,
+                kind=kind,
+                amount_usd=abs(delta_total),
+                source="heuristic",
+                confidence=confidence,
+            )
+        )
+    return events
+
+
+def load_manual_flow_events(path: Path | str | None = None) -> list[FlowEvent]:
+    """Operator tags from ``.runtime/pnl_flow_events.jsonl`` (one JSON object per line)."""
+    p = Path(path or PNL_FLOW_EVENTS_FILE)
+    if not p.is_file():
+        return []
+    events: list[FlowEvent] = []
+    for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
+        raw = line.strip()
+        if not raw or raw.startswith("#"):
+            continue
+        try:
+            obj = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(obj, dict):
+            continue
+        ts_raw = obj.get("timestamp") or obj.get("ts")
+        kind = str(obj.get("kind") or "").strip().lower()
+        if kind not in {"deposit", "withdraw", "deposit_est", "withdraw_est"}:
+            continue
+        try:
+            amount = float(obj.get("amount_usd"))
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(amount) or amount <= 0.0:
+            continue
+        ts = _parse_iso_ts(str(ts_raw or ""))
+        if ts is None:
+            continue
+        events.append(
+            FlowEvent(
+                ts=ts,
+                kind=kind,
+                amount_usd=amount,
+                source="manual",
+                confidence=None,
+            )
+        )
+    events.sort(key=lambda e: e.ts)
+    return events
+
+
+def collect_session_flow_events(
+    session_started_at: str,
+    *,
+    min_usd: float | None = None,
+    lookback_hours: float | None = None,
+    now_utc: datetime | None = None,
+    history_rows: list[tuple[datetime, float, float]] | None = None,
+    manual_path: Path | str | None = None,
+) -> list[FlowEvent]:
+    """Merge heuristic + manual flow tags within the session window."""
+    sess_dt = _parse_iso_ts(session_started_at)
+    if sess_dt is None:
+        return []
+    now = now_utc or datetime.now(timezone.utc)
+    heuristic = detect_flow_events_heuristic(
+        min_usd=min_usd,
+        lookback_hours=lookback_hours,
+        now_utc=now,
+        history_rows=history_rows,
+    )
+    manual = load_manual_flow_events(manual_path)
+    merged: list[FlowEvent] = []
+    for event in sorted(heuristic + manual, key=lambda e: (e.ts, e.source != "manual")):
+        if event.ts < sess_dt or event.ts > now:
+            continue
+        merged.append(event)
+    return merged
+
+
+def compute_flow_adjusted_session_pnl(
+    session_delta_usd: float,
+    session_start_total: float,
+    events: list[FlowEvent],
+) -> tuple[float, float]:
+    """Return ``(flow_adjusted_usd, flow_adjusted_pct)`` after removing capital flows."""
+    net_flow = sum(event.signed_usd for event in events)
+    adjusted = float(session_delta_usd) - net_flow
+    pct = _pct_change(float(session_start_total) + adjusted, float(session_start_total))
+    return adjusted, pct
+
+
+def format_flow_event_tag(event: FlowEvent) -> str:
+    label = "deposit" if event.kind in {"deposit_est", "deposit"} else "withdraw"
+    sign = "+" if label == "deposit" else "-"
+    suffix = "(manual)" if event.source == "manual" else "(est)"
+    return f"{label} {sign}${event.amount_usd:.2f} @ {event.ts.isoformat()} {suffix}"
+
+
+def format_flow_adjusted_line(
+    session_delta_usd: float,
+    session_start_total: float,
+    session_started_at: str,
+    *,
+    now_utc: datetime | None = None,
+    history_rows: list[tuple[datetime, float, float]] | None = None,
+    manual_path: Path | str | None = None,
+) -> str | None:
+    if not pnl_flow_tag_enabled():
+        return None
+    events = collect_session_flow_events(
+        session_started_at,
+        now_utc=now_utc,
+        history_rows=history_rows,
+        manual_path=manual_path,
+    )
+    adjusted, pct = compute_flow_adjusted_session_pnl(
+        session_delta_usd, session_start_total, events
+    )
+    flows_part = ", ".join(format_flow_event_tag(e) for e in events) if events else "none"
+    return (
+        f"Flow-adjusted session PnL: ${adjusted:+.2f} ({pct:+.2f}%) | "
+        f"detected flows: {flows_part}"
+    )
+
+
 def _parse_iso_ts(raw: str) -> datetime | None:
     text = str(raw or "").strip()
     if not text:
@@ -1192,7 +1492,7 @@ def _print_lookback_table(current_total: float, windows: list[tuple[str, float]]
     print("📅 LOOKBACK (portfolio_history.csv — bot TOTAL at snapshot time)")
     print(
         "   Deposits/top-ups show as sudden steps up; same for large withdrawals "
-        "(not performance — v3+ can tag flows if needed)."
+        "(see Flow-adjusted session PnL in nanodaily when PNL_FLOW_TAG_ENABLED=true)."
     )
     for label, hours in windows:
         cutoff = now_utc - timedelta(hours=hours)
@@ -1253,6 +1553,9 @@ def print_report(*, reset_session: bool = False) -> int:
     if mark_line:
         print(mark_line)
     print(format_net_after_opex_line(session_delta, session_started_at))
+    flow_line = format_flow_adjusted_line(session_delta, session_total, session_started_at)
+    if flow_line:
+        print(flow_line)
     print(pnl_24h_line)
     _print_velocity_block(session_started_at=session_started_at, seed_usd=total)
     print("Reset session baseline: nanopnl --reset-session")
@@ -1297,11 +1600,27 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print lifetime and 24h UTC TRADE SKIPPED counters (for nanodaily)",
     )
+    parser.add_argument(
+        "--adverse-day",
+        action="store_true",
+        help="Print adverse-window mark/churn/fill metrics (read-only)",
+    )
     return parser
+
+
+def print_adverse_day_report() -> int:
+    from nanoclaw.pnl_adverse_day import build_adverse_day_report
+
+    _metrics, lines = build_adverse_day_report()
+    for line in lines:
+        print(line)
+    return 0
 
 
 def main() -> int:
     args = _build_parser().parse_args()
+    if bool(getattr(args, "adverse_day", False)):
+        return print_adverse_day_report()
     if bool(args.trade_skip_stats):
         return print_trade_skip_stats()
     if bool(args.velocity_only):

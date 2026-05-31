@@ -450,6 +450,17 @@ OPERATING_RESERVE_ENABLED = env_bool("OPERATING_RESERVE_ENABLED", True)
 OPERATING_RESERVE_PCT = env_float("OPERATING_RESERVE_PCT", 10.0)
 # Stage seed for reserve floor; 0 = use current TOTAL at cycle time.
 STAGE_SEED_USD = env_float("STAGE_SEED_USD", 0.0)
+# Optional: scale reserve seed from portfolio_history TOTAL EMA (max with STAGE_SEED_USD).
+STAGE_SEED_AUTO_SYNC_ENABLED = env_bool("STAGE_SEED_AUTO_SYNC_ENABLED", False)
+STAGE_SEED_AUTO_SYNC_EMA_DAYS = env_int("STAGE_SEED_AUTO_SYNC_EMA_DAYS", 7)
+STAGE_SEED_AUTO_SYNC_MIN_USD = env_float("STAGE_SEED_AUTO_SYNC_MIN_USD", 50.0)
+# Wallet opex runway alert (scripts/opex_runway.py; operator pays Ankr from stage wallet).
+OPEX_MONTHLY_USD = env_float("OPEX_MONTHLY_USD", 10.0)
+OPEX_CURSOR_MONTHLY_USD = env_float("OPEX_CURSOR_MONTHLY_USD", 0.0)
+OPEX_GROK_MONTHLY_USD = env_float("OPEX_GROK_MONTHLY_USD", 0.0)
+OPEX_HOSTING_MONTHLY_USD = env_float("OPEX_HOSTING_MONTHLY_USD", 0.0)
+OPEX_RUNWAY_ALERT_DAYS = env_int("OPEX_RUNWAY_ALERT_DAYS", 14)
+OPEX_RUNWAY_TELEGRAM_ENABLED = env_bool("OPEX_RUNWAY_TELEGRAM_ENABLED", False)
 # External layer: portfolio-driven auto pause/unpause (writes control.json every ~30s).
 EXTERNAL_AUTO_PAUSE_ENABLED = env_bool("EXTERNAL_AUTO_PAUSE_ENABLED", False)
 EXTERNAL_RPC_PAUSE_ENABLED = env_bool("EXTERNAL_RPC_PAUSE_ENABLED", False)

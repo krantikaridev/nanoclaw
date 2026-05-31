@@ -1531,10 +1531,9 @@ _OPERATING_RESERVE_LOG = "[nanoclaw] OPERATING RESERVE FLOOR | defer new entry"
 
 
 def _operating_reserve_seed_usd(balances: Balances) -> float:
-    explicit = float(getattr(cfg, "STAGE_SEED_USD", 0.0) or 0.0)
-    if explicit > 0.0:
-        return explicit
-    return max(float(balances.total_portfolio_usd), 0.0)
+    from nanoclaw.stage_seed import resolve_operating_reserve_seed_usd
+
+    return resolve_operating_reserve_seed_usd(float(balances.total_portfolio_usd))
 
 
 def _operating_reserve_buy_block_context(balances: Balances) -> dict[str, float] | None:

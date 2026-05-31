@@ -172,3 +172,12 @@ def test_env_apply_preserve_keys_include_rpc_runtime_keys():
     assert "RPC_URL" in keys
     assert "WEB3_PROVIDER_URI" in keys
     assert "RPC_FALLBACKS" in keys
+    assert "PNL_FLOW_TAG_ENABLED" in keys
+    assert "PNL_FLOW_STEP_MIN_USD" in keys
+    assert "PNL_FLOW_LOOKBACK_HOURS" in keys
+    assert "PNL_ADVERSE_DAY_ENABLED" in keys
+    assert "PNL_ADVERSE_DAY_WINDOW_HOURS" in keys
+    assert "PNL_ADVERSE_DAY_MIN_FILLS" in keys
+    assert "GAS_USD_EST_PER_FILL" in keys
+    assert "STAGE_SEED_AUTO_SYNC_ENABLED" in keys
+    assert "OPEX_RUNWAY_ALERT_DAYS" in keys

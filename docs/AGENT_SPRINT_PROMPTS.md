@@ -123,9 +123,139 @@ Expect at ~$27 stables + WETH signal ≥0.85: tiered allow log, then first cappe
 
 ---
 
+## Agent G — Deposit / withdraw flow tags in PnL (P1) — **DONE**
+
+**Goal:** Separate **capital flows** (deposits, withdrawals, subscription wallet payments) from **trade/mark PnL** so session % is not misleading after top-ups.
+
+**Context (31 May 2026):** Session +19.8% included ~$18 USDT deposit + WETH rotation; operator could not see “real alpha” vs “money in”.
+
+**Files:** `scripts/pnl_report.py`, `nanoclaw/pnl/` or portfolio history helpers, `portfolio_history.csv` schema if needed, `.env.example`, `docs/OPERATOR_PNL_MARK_VS_TRADE.md`, `tests/unit/test_pnl_report.py`
+
+**Env (`.env.example`):**
+```bash
+PNL_FLOW_TAG_ENABLED=true
+PNL_FLOW_STEP_MIN_USD=5          # ignore dust steps
+PNL_FLOW_LOOKBACK_HOURS=24       # detect sudden TOTAL steps vs prior snapshot
+```
+
+**Acceptance:**
+- [x] `nanodaily` prints: `Flow-adjusted session PnL: $X (+Y%) | detected flows: deposit +$Z @ ts (est)`
+- [x] Heuristic v1: sudden TOTAL step up/down with stable/cash leg change → tag as `deposit_est` / `withdraw_est`; log confidence
+- [x] Optional manual override file `.runtime/pnl_flow_events.jsonl` (operator tags) merged into report
+- [x] Does **not** change trading logic or session baseline automatically
+- [x] Unit tests: deposit step, flat market, withdrawal step, below threshold ignored
+- [x] `nanoclaw/env_sync.py` preserves new keys
+
+**Do not:** auto-reset session baseline; change swap execution.
+
+**VM verify:**
+```bash
+nanodaily | grep -E 'Flow-adjusted|detected flows'
+```
+
+---
+
+## Agent H — WETH fallback spot refresh (P1) — **OPEN**
+
+**Goal:** When live WETH quote diverges materially from cached fallback (`FE_USD FALLBACK FLOOR`), refresh fallback or prefer live quote so TOTAL matches MetaMask and mark PnL is honest.
+
+**Context:** Logs show `live_quote_usdt=$129.70` vs `fallback_px_usd=2022.7890` — TOTAL still OK via fallback total but operator sees scary warnings; mark attribution is wrong.
+
+**Files:** FE USD / valuation module (grep `FALLBACK FLOOR`, `FE_USD`, `last_good_spot`), `modules/swap_executor.py` or dedicated `modules/fe_valuation.py`, tests, `docs/OPERATOR_PNL_MARK_VS_TRADE.md` (one paragraph)
+
+**Env (`.env.example`):**
+```bash
+FE_USD_FALLBACK_REFRESH_ENABLED=true
+FE_USD_FALLBACK_MAX_STALE_PCT=5.0    # refresh when |live-fallback|/live > 5%
+FE_USD_FALLBACK_MIN_LIVE_USD=1.0     # skip refresh on dust balances
+```
+
+**Acceptance:**
+- [ ] On cycle: if divergence > threshold, update in-memory fallback from live quote (or always use live when quote succeeds)
+- [ ] Log: `[nanoclaw] FE_USD FALLBACK REFRESH | sym=WETH_ALPHA | old_px=… | new_px=… | source=live_quote`
+- [ ] If live quote fails, keep last good fallback (no regression)
+- [ ] Unit tests: stale fallback refreshed, failed quote keeps fallback, dust skipped
+- [ ] `nanohealth` TOTAL within ~1% of MetaMask after refresh on stage book fixture
+
+**Do not:** change FE runway / tiered / operating reserve thresholds.
+
+---
+
+## Agent I — STAGE_SEED auto-sync + wallet opex runway alert (P2) — **DONE**
+
+**Goal (A):** Optional auto-update of effective seed for operating reserve from rolling TOTAL so reserve floor scales with book without manual `.env` edits.
+
+**Goal (B):** Telegram (or log) alert when wallet stables approach opex runway (Ankr + hosting + optional Cursor/Grok budgets).
+
+**Files:** `config.py`, `modules/swap_executor.py` (`_operating_reserve_seed_usd`), `external_layer/` or `scripts/opex_runway.py`, `.env.example`, `nanoclaw/env_sync.py`, tests
+
+**Env (`.env.example`):**
+```bash
+STAGE_SEED_AUTO_SYNC_ENABLED=false   # default off; operator opt-in
+STAGE_SEED_AUTO_SYNC_EMA_DAYS=7      # smooth seed from portfolio_history
+STAGE_SEED_AUTO_SYNC_MIN_USD=50
+OPEX_MONTHLY_USD=10
+OPEX_CURSOR_MONTHLY_USD=0
+OPEX_GROK_MONTHLY_USD=0
+OPEX_HOSTING_MONTHLY_USD=0
+OPEX_RUNWAY_ALERT_DAYS=14            # alert when stables < N days of opex at current burn
+OPEX_RUNWAY_TELEGRAM_ENABLED=false
+```
+
+**Acceptance (A):**
+- [x] When `STAGE_SEED_AUTO_SYNC_ENABLED=true`, reserve seed = max(`STAGE_SEED_USD` env, EMA of daily TOTAL closes) capped sensibly
+- [x] Log once per day: `[nanoclaw] STAGE_SEED_EMA | seed_usd=… | reserve_floor=…`
+- [x] `STAGE_SEED_USD=158` in env still acts as floor minimum when auto-sync on
+
+**Acceptance (B):**
+- [x] Script or external-layer tick: if `stables_usd < (sum monthly opex / 30) * OPEX_RUNWAY_ALERT_DAYS`, emit alert
+- [x] Message includes wallet `0x05eF…1FBe6`, stables, days runway, line items
+- [x] Tests with stub env + mocked Telegram
+
+**Do not:** auto-pull funds from wallet; change green gate floors.
+
+**VM verify:**
+```bash
+grep STAGE_SEED_EMA real_cron.log | tail -3
+python scripts/opex_runway.py --dry-run
+```
+
+---
+
+## Agent J — Adverse-day metrics (P3) — **DONE**
+
+**Goal:** Read-only diagnostics answering: “Did high velocity help or hurt?” on red days — **realized trade PnL** vs **mark delta** vs **gas/churn cost**.
+
+**Files:** `scripts/pnl_report.py`, new `scripts/pnl_adverse_day.py` or extend `nanodaily`, trade log parser (grep `EXEC SUCCESS` / receipts if available), `tests/unit/test_pnl_adverse_day.py`, `docs/OPERATOR_PNL_MARK_VS_TRADE.md`
+
+**Env (`.env.example`):**
+```bash
+PNL_ADVERSE_DAY_ENABLED=true
+PNL_ADVERSE_DAY_WINDOW_HOURS=24
+PNL_ADVERSE_DAY_MIN_FILLS=3
+GAS_USD_EST_PER_FILL=0.05        # v1 manual; v2 from receipts optional
+```
+
+**Acceptance:**
+- [x] `python scripts/pnl_adverse_day.py` (or `nanodaily --adverse`) prints for last 24h when TOTAL Δ < 0:
+  - `mark_delta_usd`, `turnover_usd`, `fill_count`, `gas_est_usd`, `realized_trade_est_usd`, `churn_cost_est_usd`
+- [x] `nanodaily` one-liner when window is red: `Adverse window: mark $X | churn est $Y | fills N`
+- [x] Uses existing portfolio_history + log scrape; no new on-chain indexer required for v1
+- [x] Unit tests with fixture logs (10 fills, flat mark vs dump mark)
+
+**Do not:** change trading parameters based on metrics (read-only v1).
+
+**VM verify:**
+```bash
+python scripts/pnl_adverse_day.py --hours 24
+```
+
+---
+
 ## Parent review checklist (before push)
 
 ```bash
+python -m pytest tests/unit/test_pnl_report.py tests/unit/test_pnl_adverse_day.py tests/unit/test_opex_runway.py tests/unit/test_stage_seed_auto_sync.py -q
 python -m pytest tests/unit/test_rpc_probe.py tests/unit/test_operating_reserve.py tests/unit/test_rpc_health.py tests/unit/test_fe_stable_runway_tiered.py -q
 python -m pytest tests/unit/test_external_auto_pause.py tests/unit/test_nano_green.py -q
 python scripts/rpc_probe.py
@@ -136,7 +266,7 @@ python -m compileall -q nanoclaw modules scripts external_layer
 ```bash
 NANOUP_AUTOSTASH=1 nanodeploy
 # Fix Ankr key (operator): ANKR_RPC_KEY in .env → nanohealth ok
-STAGE_SEED_USD=132  # optional in .env for reserve floor
+STAGE_SEED_USD=158  # stage VM book (~May 2026); reserve floor = 158 × 10% = $15.80
 grep OPERATING_RESERVE real_cron.log | tail -5
 nano12h
 python3 -c "import json; print(json.load(open('control.json')))"

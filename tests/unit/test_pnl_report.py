@@ -942,3 +942,239 @@ def test_format_mark_delta_est_line_contract(tmp_path: Path) -> None:
         cache_path=cache_file,
     )
     assert line == "mark_delta_est: $-10.00 (FE spot cache)"
+
+
+def _write_portfolio_history(
+    tmp_path: Path,
+    rows: list[tuple[str, float, float, float]],
+) -> Path:
+    """Write CSV with ``(timestamp, usdt, usdc, total_value)`` tuples."""
+    csv_file = tmp_path / "portfolio_history.csv"
+    lines = ["timestamp,usdt,usdc,wmatic,pol,pol_usd_price,total_value"]
+    for ts, usdt, usdc, total in rows:
+        lines.append(f"{ts},{usdt:.6f},{usdc:.6f},0,0,0.1,{total:.6f}")
+    csv_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return csv_file
+
+
+def test_detect_flow_events_deposit_step(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("PNL_FLOW_STEP_MIN_USD", "5")
+    csv_file = _write_portfolio_history(
+        tmp_path,
+        [
+            ("2026-05-30T08:00:00+00:00", 10.0, 20.0, 100.0),
+            ("2026-05-30T10:00:00+00:00", 28.0, 20.0, 118.0),
+        ],
+    )
+    monkeypatch.setattr(pnl_report, "PORTFOLIO_HISTORY_FILE", str(csv_file))
+    now = datetime(2026, 5, 30, 12, 0, 0, tzinfo=timezone.utc)
+    events = pnl_report.detect_flow_events_heuristic(
+        min_usd=5.0,
+        lookback_hours=24.0,
+        now_utc=now,
+    )
+    assert len(events) == 1
+    assert events[0].kind == "deposit_est"
+    assert events[0].amount_usd == pytest.approx(18.0)
+    assert events[0].source == "heuristic"
+    assert events[0].confidence == pytest.approx(1.0)
+
+
+def test_detect_flow_events_flat_market_no_tag(tmp_path: Path, monkeypatch) -> None:
+    csv_file = _write_portfolio_history(
+        tmp_path,
+        [
+            ("2026-05-30T08:00:00+00:00", 30.0, 30.0, 100.0),
+            ("2026-05-30T10:00:00+00:00", 30.0, 30.0, 101.0),
+            ("2026-05-30T12:00:00+00:00", 30.0, 30.0, 99.5),
+        ],
+    )
+    monkeypatch.setattr(pnl_report, "PORTFOLIO_HISTORY_FILE", str(csv_file))
+    now = datetime(2026, 5, 30, 14, 0, 0, tzinfo=timezone.utc)
+    events = pnl_report.detect_flow_events_heuristic(
+        min_usd=5.0,
+        lookback_hours=24.0,
+        now_utc=now,
+    )
+    assert events == []
+
+
+def test_detect_flow_events_withdrawal_step(tmp_path: Path, monkeypatch) -> None:
+    csv_file = _write_portfolio_history(
+        tmp_path,
+        [
+            ("2026-05-30T08:00:00+00:00", 40.0, 40.0, 120.0),
+            ("2026-05-30T10:00:00+00:00", 25.0, 25.0, 90.0),
+        ],
+    )
+    monkeypatch.setattr(pnl_report, "PORTFOLIO_HISTORY_FILE", str(csv_file))
+    now = datetime(2026, 5, 30, 12, 0, 0, tzinfo=timezone.utc)
+    events = pnl_report.detect_flow_events_heuristic(
+        min_usd=5.0,
+        lookback_hours=24.0,
+        now_utc=now,
+    )
+    assert len(events) == 1
+    assert events[0].kind == "withdraw_est"
+    assert events[0].amount_usd == pytest.approx(30.0)
+
+
+def test_detect_flow_events_below_threshold_ignored(tmp_path: Path, monkeypatch) -> None:
+    csv_file = _write_portfolio_history(
+        tmp_path,
+        [
+            ("2026-05-30T08:00:00+00:00", 10.0, 10.0, 100.0),
+            ("2026-05-30T10:00:00+00:00", 13.0, 10.0, 103.0),
+        ],
+    )
+    monkeypatch.setattr(pnl_report, "PORTFOLIO_HISTORY_FILE", str(csv_file))
+    now = datetime(2026, 5, 30, 12, 0, 0, tzinfo=timezone.utc)
+    events = pnl_report.detect_flow_events_heuristic(
+        min_usd=5.0,
+        lookback_hours=24.0,
+        now_utc=now,
+    )
+    assert events == []
+
+
+def test_detect_flow_events_weth_rotation_not_deposit(tmp_path: Path, monkeypatch) -> None:
+    """Stable down + equity mark up: TOTAL step not aligned with stables → no deposit tag."""
+    csv_file = _write_portfolio_history(
+        tmp_path,
+        [
+            ("2026-05-30T08:00:00+00:00", 50.0, 50.0, 150.0),
+            ("2026-05-30T10:00:00+00:00", 30.0, 30.0, 152.0),
+        ],
+    )
+    monkeypatch.setattr(pnl_report, "PORTFOLIO_HISTORY_FILE", str(csv_file))
+    now = datetime(2026, 5, 30, 12, 0, 0, tzinfo=timezone.utc)
+    events = pnl_report.detect_flow_events_heuristic(
+        min_usd=5.0,
+        lookback_hours=24.0,
+        now_utc=now,
+    )
+    assert events == []
+
+
+def test_load_manual_flow_events_jsonl(tmp_path: Path) -> None:
+    path = tmp_path / "pnl_flow_events.jsonl"
+    path.write_text(
+        "\n".join(
+            [
+                '{"timestamp": "2026-05-31T12:00:00+00:00", "kind": "deposit", "amount_usd": 18.0}',
+                "# comment",
+                '{"ts": "2026-05-30T08:00:00+00:00", "kind": "withdraw", "amount_usd": 5.0}',
+                "not json",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    events = pnl_report.load_manual_flow_events(path)
+    assert len(events) == 2
+    assert events[0].kind == "withdraw"
+    assert events[0].source == "manual"
+    assert events[1].kind == "deposit"
+    assert events[1].amount_usd == pytest.approx(18.0)
+
+
+def test_compute_flow_adjusted_session_pnl_subtracts_deposits() -> None:
+    events = [
+        pnl_report.FlowEvent(
+            ts=datetime(2026, 5, 31, 10, 0, 0, tzinfo=timezone.utc),
+            kind="deposit_est",
+            amount_usd=18.0,
+            source="heuristic",
+            confidence=1.0,
+        )
+    ]
+    adjusted, pct = pnl_report.compute_flow_adjusted_session_pnl(20.0, 100.0, events)
+    assert adjusted == pytest.approx(2.0)
+    assert pct == pytest.approx(2.0)
+
+
+def test_format_flow_adjusted_line_contract(tmp_path: Path, monkeypatch) -> None:
+    csv_file = _write_portfolio_history(
+        tmp_path,
+        [
+            ("2026-05-30T08:00:00+00:00", 10.0, 20.0, 100.0),
+            ("2026-05-30T10:00:00+00:00", 28.0, 20.0, 118.0),
+        ],
+    )
+    monkeypatch.setattr(pnl_report, "PORTFOLIO_HISTORY_FILE", str(csv_file))
+    monkeypatch.setenv("PNL_FLOW_TAG_ENABLED", "true")
+    session_start = "2026-05-30T00:00:00+00:00"
+    now = datetime(2026, 5, 30, 12, 0, 0, tzinfo=timezone.utc)
+    line = pnl_report.format_flow_adjusted_line(
+        19.8,
+        100.0,
+        session_start,
+        now_utc=now,
+    )
+    assert line is not None
+    assert line.startswith("Flow-adjusted session PnL: $+1.80 (+1.80%)")
+    assert "detected flows: deposit +$18.00 @ 2026-05-30T10:00:00+00:00 (est)" in line
+
+
+def test_format_flow_adjusted_line_disabled_returns_none(monkeypatch) -> None:
+    monkeypatch.setenv("PNL_FLOW_TAG_ENABLED", "false")
+    line = pnl_report.format_flow_adjusted_line(
+        10.0,
+        100.0,
+        "2026-05-30T00:00:00+00:00",
+    )
+    assert line is None
+
+
+def test_print_daily_summary_includes_flow_adjusted_line(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    csv_file = _write_portfolio_history(
+        tmp_path,
+        [
+            ("2026-05-05T00:00:00+00:00", 10.0, 75.0, 85.0),
+            ("2026-05-06T09:00:00+00:00", 28.0, 75.0, 103.0),
+        ],
+    )
+    log_file = tmp_path / "real_cron.log"
+    log_file.write_text(
+        "2026-05-06 10:02:00 [nanoclaw] WALLET TOTAL USD | TOTAL=$103.80 | USDT=$28.00 | "
+        "USDC=$75.00 | STABLE_USD=$103.00 | WMATIC=0.000000 | POL=0 | FE_USD=$0.80\n",
+        encoding="utf-8",
+    )
+    session_file = tmp_path / "portfolio_session_baseline.json"
+    session_file.write_text(
+        json.dumps(
+            {
+                "session_start_total": 85.0,
+                "session_started_at": "2026-05-05T00:00:00+00:00",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(pnl_report, "LOG_FILE", str(log_file))
+    monkeypatch.setattr(pnl_report, "PORTFOLIO_HISTORY_FILE", str(csv_file))
+    monkeypatch.setattr(pnl_report, "SESSION_BASELINE_FILE", str(session_file))
+    monkeypatch.setenv("PNL_FLOW_TAG_ENABLED", "true")
+    monkeypatch.setenv("PNL_FLOW_STEP_MIN_USD", "5")
+
+    fixed_now = datetime(2026, 5, 6, 12, 0, 0, tzinfo=timezone.utc)
+
+    class _FakeDateTime:
+        @staticmethod
+        def now(tz=None):
+            return fixed_now
+
+        @staticmethod
+        def fromisoformat(raw):
+            text = str(raw or "").strip()
+            return datetime.fromisoformat(text.replace("Z", "+00:00") if text.endswith("Z") else text)
+
+    monkeypatch.setattr(pnl_report, "datetime", _FakeDateTime)
+    monkeypatch.setattr(pnl_report, "resolve_portfolio_baseline_usd", lambda total: 100.0)
+
+    pnl_report.print_daily_summary(lookback="24h")
+    out = capsys.readouterr().out
+    assert "Flow-adjusted session PnL:" in out
+    assert "detected flows:" in out

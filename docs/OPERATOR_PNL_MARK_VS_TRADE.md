@@ -89,6 +89,28 @@ That line is an **estimate** from `FE_USD` at session start vs now (log + cache)
 
 ---
 
+## Capital flows vs trade PnL (flow-adjusted session line)
+
+When you **deposit or withdraw** stables, raw **Session PnL** includes that capital movement. A +$18 USDT top-up can make session % look like “alpha” even when marks and trades were flat.
+
+With **`PNL_FLOW_TAG_ENABLED=true`** (default), `nanodaily` / `nanopnl` print:
+
+```
+Flow-adjusted session PnL: $+2.50 (+2.1%) | detected flows: deposit +$18.00 @ 2026-05-31T10:00:00+00:00 (est)
+```
+
+**Heuristic v1** scans `portfolio_history.csv` for sudden **TOTAL** steps where **USDT+USDC** moved in the same direction and explains most of the step (`PNL_FLOW_STEP_MIN_USD`, default **$5**; lookback **`PNL_FLOW_LOOKBACK_HOURS`**, default **24**). WETH rotation (stables down, `FE_USD` up) should **not** tag as a deposit.
+
+**Manual overrides:** append JSON lines to **`.runtime/pnl_flow_events.jsonl`**:
+
+```json
+{"timestamp": "2026-05-31T12:00:00+00:00", "kind": "deposit", "amount_usd": 18.0, "note": "USDT top-up"}
+```
+
+Flow tagging is **read-only** — it does **not** reset `portfolio_session_baseline.json` or change swap execution.
+
+---
+
 ## MetaMask parity — what matches and what does not
 
 The bot is **Polygon PoS only** (chain **137**). **`TOTAL`** is **not** promised to equal MetaMask’s **all-network** headline.
@@ -129,7 +151,7 @@ Reset **only** when the session baseline no longer matches the story you want to
 **Good reasons:**
 
 - After a **deploy / config change** where you want PnL from “now” forward.
-- After a **deposit or withdrawal** you intentionally exclude from performance view (until v3 flow tagging).
+- After a **deposit or withdrawal** you intentionally exclude from performance view (optional; see flow tagging below).
 - You previously reset at a bad RPC snapshot and want a clean anchor after **`nanohealth`** is green.
 
 **Usually wrong reasons:**
@@ -148,12 +170,43 @@ This writes current `TOTAL` into `portfolio_session_baseline.json` and sets `ses
 
 ---
 
+## Adverse-day window (churn vs mark on red days)
+
+When **TOTAL** drops over the last **24h** (configurable), high fill velocity may be **mark pain** (FE spot) or **churn cost** (gas + turnover friction), not a single bad trade.
+
+With **`PNL_ADVERSE_DAY_ENABLED=true`**, `nanodaily` prints a one-liner when the window is red and fills ≥ **`PNL_ADVERSE_DAY_MIN_FILLS`** (default **3**):
+
+```
+Adverse window: mark $-8.00 | churn est $0.61 | fills 10
+```
+
+Full breakdown:
+
+```bash
+python scripts/pnl_adverse_day.py --hours 24
+# or: python scripts/pnl_report.py --adverse-day
+```
+
+| Field | Meaning (v1) |
+|-------|----------------|
+| `mark_delta_usd` | `FE_USD` at window end − start (log scrape) |
+| `turnover_usd` | Sum of on-chain `TRADE_ATTRIBUTION` notionals in window |
+| `fill_count` | `EXEC SUCCESS` lines in window |
+| `gas_est_usd` | `fill_count × GAS_USD_EST_PER_FILL` (default **$0.05**) |
+| `churn_cost_est_usd` | Gas est + **10 bps** of turnover (slippage proxy) |
+| `realized_trade_est_usd` | `total Δ − mark_delta + churn_cost` (residual) |
+
+**Read-only** — metrics do not change swap sizing, gates, or baselines.
+
+---
+
 ## Commands reference
 
 ```bash
 nanohealth                    # RPC before trusting PnL
 nanopnl                       # full report (+ mark_delta_est when applicable)
-nanodaily                     # compact daily summary
+nanodaily                     # compact daily summary (+ adverse one-liner when red)
+python scripts/pnl_adverse_day.py --hours 24
 grep 'WALLET TOTAL USD' real_cron.log | tail -5
 grep 'FE_USD AUTO_FLOOR' real_cron.log | tail -10
 cat .runtime/fe_usd_spot_cache.json   # VM only; spot cache per symbol
