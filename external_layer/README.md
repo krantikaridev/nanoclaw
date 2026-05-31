@@ -216,6 +216,7 @@ The previous issue where **USDT-only** rules paused the bot despite **healthy US
 ## Troubleshooting
 
 - **RPC or balance read failures**: The layer logs a WARNING, keeps the **last successful** `paused`/`reason` state when possible, and still bumps `last_updated` (heartbeat). The bot continues running. Verify with `nc-health` and check RPC URLs / `WALLET` in `.env`.
+- **RPC endpoint auto-pause** (`EXTERNAL_RPC_PAUSE_ENABLED=true`, default `false`): Each ~30s tick probes every URL in `RPC_ENDPOINTS` via `nanoclaw.rpc_probe`. When **all** endpoints fail for **2 consecutive** ticks (~60s), `control.json` sets `paused=true` with reason `auto_pause | RPC all endpoints failed`. Recovery requires a healthy probe **and** portfolio green gates (`scripts/nano_green.py`, same checks as `EXTERNAL_AUTO_PAUSE_ENABLED` unpause). See `external_layer/rpc_gate.py`.
 - **`control.json` not updating**: Confirm the screen session is alive (`screen -ls`), the process is printing `[EXTERNAL]` lines, and `WALLET` address is correct. Check file permissions on repo root.
 - **Stopping the layer**: Use `nc-ext-stop` or `screen -S nc-ext -X quit`. Stopping the external layer does **not** stop nanoclaw — `control.json` simply stops being refreshed until the layer restarts.
 - **Stale `last_updated`**: External layer is likely down or has lost connectivity. Restart it and investigate logs.
@@ -223,6 +224,7 @@ The previous issue where **USDT-only** rules paused the bot despite **healthy US
 ## See Also
 
 - `external_layer/control.py` — orchestration, JSON I/O, and integration with risk evaluation.
+- `external_layer/rpc_gate.py` — optional RPC all-fail auto pause (`EXTERNAL_RPC_PAUSE_ENABLED`).
 - `external_layer/risk_checker.py` — core `evaluate_risk()` logic, balance fetching via Web3, tier decisions, and defensive clamp.
 - Main nanoclaw trading loop (how `load_cycle_control()` is called on each cycle).
 - Project root `start_external.sh` — simple launcher script.

@@ -48,7 +48,7 @@ net_pnl_usd = (TOTAL_now − TOTAL_baseline) − gas_usd − rpc_usd − hosting
 net_pnl_usd > 0  over rolling 7d  AND  session floor held  AND  nanohealth green ≥99% of cycles
 ```
 
-**Backlog (code — see table below):** RPC health alerts, opex ledger in `portfolio_history` / `pnl_report`, auto-failover provider list, reserve floor guard (defer trades when stables < 10% seed).
+**Backlog (code — see table below):** RPC health alerts, **`pnl_report`/`nanodaily` net-after-opex line done (env proration v1)**; portfolio_history opex ledger TBD, auto-failover provider list, reserve floor guard (defer trades when stables < 10% seed).
 
 ---
 

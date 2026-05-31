@@ -9,6 +9,8 @@ import pytest
 from external_layer import clamp_policy
 from external_layer import control
 from external_layer import risk_checker
+from external_layer import rpc_gate
+from nanoclaw.rpc_probe import RpcEndpointProbe
 
 
 @pytest.fixture(autouse=True)
@@ -21,6 +23,7 @@ def _reset_control_last_successful_risk():
     risk_checker._reset_clamp_log_state()
     clamp_policy.reload_risk_policy_for_tests()
     risk_checker._reset_protection_eval_deque()
+    rpc_gate.reset_rpc_gate_state_for_tests()
     yield
     control._last_successful_risk = None
     risk_checker._RECENT_PROTECTION_EVALS.clear()
@@ -29,6 +32,7 @@ def _reset_control_last_successful_risk():
     risk_checker._reset_clamp_log_state()
     clamp_policy.reload_risk_policy_for_tests()
     risk_checker._reset_protection_eval_deque()
+    rpc_gate.reset_rpc_gate_state_for_tests()
 
 
 def test_control_command_defaults():
@@ -574,3 +578,178 @@ def test_update_control_failure_reuses_last_good_state(tmp_path: Path, monkeypat
 
     captured = capsys.readouterr()
     assert "WARNING" in captured.out
+
+
+def _healthy_risk() -> dict[str, bool | str | float]:
+    return {
+        "paused": False,
+        "max_copy_trade_pct": 0.06,
+        "reason": "Healthy balance",
+        "usdt_balance": 100.0,
+        "usdc_balance": 0.0,
+        "stable_usd": 100.0,
+        "wmatic_balance": 100.0,
+    }
+
+
+def _fail_probes() -> list[RpcEndpointProbe]:
+    return [
+        RpcEndpointProbe(
+            url="https://rpc.test/a",
+            ok=False,
+            chain_id=None,
+            block_number=None,
+            latency_ms=None,
+            error="timeout",
+        ),
+        RpcEndpointProbe(
+            url="https://rpc.test/b",
+            ok=False,
+            chain_id=None,
+            block_number=None,
+            latency_ms=None,
+            error="timeout",
+        ),
+    ]
+
+
+def _ok_probes() -> list[RpcEndpointProbe]:
+    return [
+        RpcEndpointProbe(
+            url="https://rpc.test/a",
+            ok=True,
+            chain_id=137,
+            block_number=1,
+            latency_ms=12.0,
+            error=None,
+        ),
+    ]
+
+
+def test_rpc_pause_disabled_passthrough(tmp_path: Path, monkeypatch) -> None:
+    out_path = tmp_path / "control.json"
+    monkeypatch.setattr(control, "CONTROL_JSON_PATH", out_path)
+    monkeypatch.setenv("EXTERNAL_RPC_PAUSE_ENABLED", "false")
+    monkeypatch.setattr(control, "evaluate_risk", _healthy_risk)
+    monkeypatch.setattr(
+        "nanoclaw.rpc_probe.probe_configured_endpoints",
+        lambda: _fail_probes(),
+    )
+    control.update_control()
+    control.update_control()
+    written = json.loads(out_path.read_text(encoding="utf-8"))
+    assert written["paused"] is False
+
+
+def test_rpc_pause_one_fail_tick_does_not_pause(tmp_path: Path, monkeypatch) -> None:
+    out_path = tmp_path / "control.json"
+    monkeypatch.setattr(control, "CONTROL_JSON_PATH", out_path)
+    monkeypatch.setenv("EXTERNAL_RPC_PAUSE_ENABLED", "true")
+    monkeypatch.setattr(control, "evaluate_risk", _healthy_risk)
+    monkeypatch.setattr(
+        "nanoclaw.rpc_probe.probe_configured_endpoints",
+        lambda: _fail_probes(),
+    )
+    control.update_control()
+    written = json.loads(out_path.read_text(encoding="utf-8"))
+    assert written["paused"] is False
+    assert "RPC all endpoints failed" not in str(written.get("reason", ""))
+
+
+def test_rpc_pause_two_consecutive_fail_ticks_pauses(tmp_path: Path, monkeypatch) -> None:
+    out_path = tmp_path / "control.json"
+    monkeypatch.setattr(control, "CONTROL_JSON_PATH", out_path)
+    monkeypatch.setenv("EXTERNAL_RPC_PAUSE_ENABLED", "true")
+    monkeypatch.setattr(control, "evaluate_risk", _healthy_risk)
+    monkeypatch.setattr(
+        "nanoclaw.rpc_probe.probe_configured_endpoints",
+        lambda: _fail_probes(),
+    )
+    control.update_control()
+    control.update_control()
+    written = json.loads(out_path.read_text(encoding="utf-8"))
+    assert written["paused"] is True
+    assert written["reason"] == "auto_pause | RPC all endpoints failed"
+    assert written["rpc_pause_control"] is True
+
+
+def test_rpc_pause_recovery_unpauses_when_probe_and_green_pass(
+    tmp_path: Path, monkeypatch
+) -> None:
+    out_path = tmp_path / "control.json"
+    monkeypatch.setattr(control, "CONTROL_JSON_PATH", out_path)
+    monkeypatch.setenv("EXTERNAL_RPC_PAUSE_ENABLED", "true")
+    monkeypatch.setattr(control, "evaluate_risk", _healthy_risk)
+    monkeypatch.setattr(
+        "nanoclaw.rpc_probe.probe_configured_endpoints",
+        lambda: _fail_probes(),
+    )
+    control.update_control()
+    control.update_control()
+    written = json.loads(out_path.read_text(encoding="utf-8"))
+    assert written["paused"] is True
+
+    monkeypatch.setattr(
+        "nanoclaw.rpc_probe.probe_configured_endpoints",
+        lambda: _ok_probes(),
+    )
+    monkeypatch.setattr(
+        "external_layer.rpc_gate._evaluate_green_unpause",
+        lambda: (True, "auto_unpause | window=12h | session≥-1.0% | rotation=none", ()),
+    )
+    control.update_control()
+    written = json.loads(out_path.read_text(encoding="utf-8"))
+    assert written["paused"] is False
+    assert str(written["reason"]).startswith("auto_unpause |")
+
+
+def test_rpc_pause_recovery_stays_paused_when_green_gate_fails(
+    tmp_path: Path, monkeypatch
+) -> None:
+    out_path = tmp_path / "control.json"
+    monkeypatch.setattr(control, "CONTROL_JSON_PATH", out_path)
+    monkeypatch.setenv("EXTERNAL_RPC_PAUSE_ENABLED", "true")
+    monkeypatch.setattr(control, "evaluate_risk", _healthy_risk)
+    monkeypatch.setattr(
+        "nanoclaw.rpc_probe.probe_configured_endpoints",
+        lambda: _fail_probes(),
+    )
+    control.update_control()
+    control.update_control()
+
+    monkeypatch.setattr(
+        "nanoclaw.rpc_probe.probe_configured_endpoints",
+        lambda: _ok_probes(),
+    )
+    monkeypatch.setattr(
+        "external_layer.rpc_gate._evaluate_green_unpause",
+        lambda: (False, "auto_pause | session below -1.0% floor", ()),
+    )
+    control.update_control()
+    written = json.loads(out_path.read_text(encoding="utf-8"))
+    assert written["paused"] is True
+    assert written["reason"] == "auto_pause | session below -1.0% floor"
+
+
+def test_rpc_pause_overrides_operator_pause_lock_on_all_fail(
+    tmp_path: Path, monkeypatch
+) -> None:
+    out_path = tmp_path / "control.json"
+    out_path.write_text(
+        '{"paused": false, "operator_pause_lock": true, "reason": "manual unpause", '
+        '"max_copy_trade_pct": 0.08}\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(control, "CONTROL_JSON_PATH", out_path)
+    monkeypatch.setenv("EXTERNAL_RPC_PAUSE_ENABLED", "true")
+    monkeypatch.setattr(control, "evaluate_risk", _healthy_risk)
+    monkeypatch.setattr(
+        "nanoclaw.rpc_probe.probe_configured_endpoints",
+        lambda: _fail_probes(),
+    )
+    control.update_control()
+    control.update_control()
+    written = json.loads(out_path.read_text(encoding="utf-8"))
+    assert written["paused"] is True
+    assert written["reason"] == "auto_pause | RPC all endpoints failed"
+    assert written["operator_pause_lock"] is False

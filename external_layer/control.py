@@ -228,13 +228,22 @@ def _risk_to_control_payload(risk: dict[str, bool | str | float]) -> dict[str, o
     if w is not None:
         payload["wmatic_balance"] = w
     payload = _apply_manual_unpause_over_wmatic(payload, risk)
+    return _apply_post_risk_overrides(payload)
+
+
+def _apply_post_risk_overrides(payload: dict[str, object]) -> dict[str, object]:
+    """Portfolio auto pause, operator lock, then RPC endpoint gate (RPC gate runs last)."""
     try:
         from .auto_pause import apply_auto_pause_control, auto_pause_enabled
+        from .rpc_gate import apply_rpc_pause_control
     except ImportError:
         from auto_pause import apply_auto_pause_control, auto_pause_enabled  # type: ignore[no-redef]
+        from rpc_gate import apply_rpc_pause_control  # type: ignore[no-redef]
     if auto_pause_enabled():
-        return apply_auto_pause_control(payload)
-    return _apply_operator_pause_lock(payload)
+        payload = apply_auto_pause_control(payload)
+    else:
+        payload = _apply_operator_pause_lock(payload)
+    return apply_rpc_pause_control(payload)
 
 
 def _load_full_control_dict() -> dict[str, object]:
@@ -320,6 +329,7 @@ def update_control() -> dict[str, bool | str | float]:
         # moves and operators can see the loop is alive (preserves file contents).
         snap = load_cycle_control()
         payload = _heartbeat_payload_after_failure(snap=snap)
+        payload = _apply_post_risk_overrides(payload)
         write_control(payload)
         print(
             "[EXTERNAL] heartbeat | refreshed last_updated only (no fresh balances) | "

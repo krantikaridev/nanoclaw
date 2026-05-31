@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import json
 from pathlib import Path
 
 import pytest
@@ -702,3 +703,242 @@ def test_format_trade_skip_stats_includes_top_reasons(tmp_path: Path) -> None:
     assert lines[0] == "Trade skips (lifetime): 3"
     assert lines[1] == "Trade skips (24h UTC): 3"
     assert lines[2] == "Top skip reasons (24h): cooldown (2), dust_deferred (1)"
+
+
+def test_monthly_opex_usd_sums_env(monkeypatch) -> None:
+    monkeypatch.setenv("OPEX_MONTHLY_USD", "10")
+    monkeypatch.setenv("HOSTING_MONTHLY_USD", "5.5")
+    assert pnl_report.monthly_opex_usd() == pytest.approx(15.5)
+
+
+def test_monthly_opex_usd_treats_invalid_as_zero(monkeypatch) -> None:
+    monkeypatch.setenv("OPEX_MONTHLY_USD", "not-a-number")
+    monkeypatch.setenv("HOSTING_MONTHLY_USD", "-3")
+    assert pnl_report.monthly_opex_usd() == pytest.approx(0.0)
+
+
+def test_prorate_opex_to_session_scales_by_elapsed_days(monkeypatch) -> None:
+    monkeypatch.setenv("OPEX_MONTHLY_USD", "30")
+    monkeypatch.setenv("HOSTING_MONTHLY_USD", "0")
+    session_start = datetime(2026, 5, 1, 0, 0, 0, tzinfo=timezone.utc)
+    now = session_start + timedelta(days=15)
+    prorated, elapsed_days, monthly = pnl_report.prorate_opex_to_session(
+        session_start.isoformat(),
+        now_utc=now,
+    )
+    assert monthly == pytest.approx(30.0)
+    assert elapsed_days == pytest.approx(15.0)
+    assert prorated == pytest.approx(15.0)
+
+
+def test_compute_net_after_opex_subtracts_prorated_opex(monkeypatch) -> None:
+    monkeypatch.setenv("OPEX_MONTHLY_USD", "30")
+    monkeypatch.setenv("HOSTING_MONTHLY_USD", "0")
+    session_start = datetime(2026, 5, 1, 0, 0, 0, tzinfo=timezone.utc)
+    now = session_start + timedelta(days=15)
+    info = pnl_report.compute_net_after_opex(
+        20.0,
+        session_start.isoformat(),
+        now_utc=now,
+    )
+    assert info["prorated_opex"] == pytest.approx(15.0)
+    assert info["net_after_opex"] == pytest.approx(5.0)
+
+
+def test_format_net_after_opex_line_when_env_unset(monkeypatch) -> None:
+    monkeypatch.delenv("OPEX_MONTHLY_USD", raising=False)
+    monkeypatch.delenv("HOSTING_MONTHLY_USD", raising=False)
+    line = pnl_report.format_net_after_opex_line(
+        10.0,
+        "2026-05-01T00:00:00+00:00",
+    )
+    assert "n/a" in line
+    assert "OPEX_MONTHLY_USD" in line
+
+
+def test_format_net_after_opex_line_matches_nanodaily_contract(monkeypatch) -> None:
+    monkeypatch.setenv("OPEX_MONTHLY_USD", "10")
+    monkeypatch.setenv("HOSTING_MONTHLY_USD", "0")
+    session_start = datetime(2026, 5, 1, 0, 0, 0, tzinfo=timezone.utc)
+    now = session_start + timedelta(days=3)
+    line = pnl_report.format_net_after_opex_line(
+        5.0,
+        session_start.isoformat(),
+        now_utc=now,
+    )
+    assert line == "Net after opex (est): $+4.00 (session) | opex_budget=$10.00/mo prorated"
+
+
+def test_print_daily_summary_includes_net_after_opex(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    from datetime import datetime, timezone
+
+    log_file = tmp_path / "real_cron.log"
+    log_file.write_text(
+        "2026-05-06 10:02:00 [nanoclaw] WALLET TOTAL USD | TOTAL=$90.00 | USDT=$10.00 | "
+        "USDC=$80.00 | STABLE_USD=$90.00 | WMATIC=0.000000 | POL=0 | FE_USD=$0\n",
+        encoding="utf-8",
+    )
+    csv_file = tmp_path / "portfolio_history.csv"
+    csv_file.write_text(
+        "\n".join(
+            [
+                "timestamp,usdt,usdc,wmatic,pol,pol_usd_price,total_value",
+                "2026-05-05T00:00:00+00:00,1,1,1,1,0.1,100",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    session_file = tmp_path / "portfolio_session_baseline.json"
+    session_file.write_text(
+        json.dumps(
+            {
+                "session_start_total": 85.0,
+                "session_started_at": "2026-05-05T00:00:00+00:00",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(pnl_report, "LOG_FILE", str(log_file))
+    monkeypatch.setattr(pnl_report, "PORTFOLIO_HISTORY_FILE", str(csv_file))
+    monkeypatch.setattr(pnl_report, "SESSION_BASELINE_FILE", str(session_file))
+    monkeypatch.setenv("OPEX_MONTHLY_USD", "30")
+    monkeypatch.setenv("HOSTING_MONTHLY_USD", "0")
+
+    fixed_now = datetime(2026, 5, 20, 0, 0, 0, tzinfo=timezone.utc)
+
+    class _FakeDateTime:
+        @staticmethod
+        def now(tz=None):
+            return fixed_now
+
+        @staticmethod
+        def fromisoformat(raw):
+            text = str(raw or "").strip()
+            return datetime.fromisoformat(text.replace("Z", "+00:00") if text.endswith("Z") else text)
+
+    monkeypatch.setattr(pnl_report, "datetime", _FakeDateTime)
+    monkeypatch.setattr(pnl_report, "resolve_portfolio_baseline_usd", lambda total: 100.0)
+
+    pnl_report.print_daily_summary(lookback="24h")
+    out = capsys.readouterr().out
+    assert "Net after opex (est):" in out
+    assert "opex_budget=$30.00/mo prorated" in out
+
+
+def test_max_fe_spot_cache_session_pct_move_detects_large_drift(tmp_path: Path) -> None:
+    session_start = datetime(2026, 5, 30, 0, 0, 0, tzinfo=timezone.utc)
+    before_ts = int((session_start - timedelta(hours=12)).timestamp())
+    after_ts = int((session_start + timedelta(hours=6)).timestamp())
+    log_file = tmp_path / "real_cron.log"
+    log_file.write_text(
+        "\n".join(
+            [
+                f"=== CYCLE {before_ts}",
+                "[nanoclaw] FE_USD AUTO_FLOOR_UPDATE | sym=WETH_ALPHA | last_good_spot=2500.0000 | json_floor=2500.0000 | effective_floor=2500.0000",
+                f"=== CYCLE {after_ts}",
+                "[nanoclaw] FE_USD AUTO_FLOOR_UPDATE | sym=WETH_ALPHA | last_good_spot=2022.0000 | json_floor=2500.0000 | effective_floor=2022.0000",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    cache_file = tmp_path / "fe_usd_spot_cache.json"
+    cache_file.write_text(
+        json.dumps({"WETH_ALPHA": {"spot_usd": 2022.0, "updated_unix": float(after_ts)}}),
+        encoding="utf-8",
+    )
+    pct = pnl_report.max_fe_spot_cache_session_pct_move(
+        session_start.isoformat(),
+        log_path=log_file,
+        cache_path=cache_file,
+    )
+    assert pct == pytest.approx(0.1912, rel=1e-3)
+
+
+def test_compute_mark_delta_est_when_spot_cache_moved(tmp_path: Path) -> None:
+    session_start = datetime(2026, 5, 30, 0, 0, 0, tzinfo=timezone.utc)
+    before_ts = int((session_start - timedelta(hours=12)).timestamp())
+    after_ts = int((session_start + timedelta(hours=6)).timestamp())
+    log_file = tmp_path / "real_cron.log"
+    log_file.write_text(
+        "\n".join(
+            [
+                f"=== CYCLE {before_ts}",
+                "[nanoclaw] FE_USD AUTO_FLOOR_UPDATE | sym=WETH_ALPHA | last_good_spot=2500.0000 | json_floor=2500.0000 | effective_floor=2500.0000",
+                "2026-05-29 12:00:00 [nanoclaw] WALLET TOTAL USD | TOTAL=$132.00 | USDT=$10.00 | "
+                "USDC=$20.00 | STABLE_USD=$30.00 | WMATIC=0.000000 | POL=0 | POL_USD=$0.00 | FE_USD=$102.00",
+                f"=== CYCLE {after_ts}",
+                "[nanoclaw] FE_USD AUTO_FLOOR_UPDATE | sym=WETH_ALPHA | last_good_spot=2022.0000 | json_floor=2500.0000 | effective_floor=2022.0000",
+                "2026-05-31 12:00:00 [nanoclaw] WALLET TOTAL USD | TOTAL=$122.00 | USDT=$10.00 | "
+                "USDC=$20.00 | STABLE_USD=$30.00 | WMATIC=0.000000 | POL=0 | POL_USD=$0.00 | FE_USD=$92.00",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    cache_file = tmp_path / "fe_usd_spot_cache.json"
+    cache_file.write_text(
+        json.dumps({"WETH_ALPHA": {"spot_usd": 2022.0, "updated_unix": float(after_ts)}}),
+        encoding="utf-8",
+    )
+    delta = pnl_report.compute_mark_delta_est(
+        session_start.isoformat(),
+        current_fe_usd=92.0,
+        log_path=log_file,
+        cache_path=cache_file,
+    )
+    assert delta == pytest.approx(-10.0)
+
+
+def test_format_mark_delta_est_line_hidden_when_spot_stable(tmp_path: Path) -> None:
+    session_start = datetime(2026, 5, 30, 0, 0, 0, tzinfo=timezone.utc)
+    ts = int((session_start - timedelta(hours=1)).timestamp())
+    log_file = tmp_path / "real_cron.log"
+    log_file.write_text(
+        f"=== CYCLE {ts}\n"
+        "[nanoclaw] FE_USD AUTO_FLOOR_UPDATE | sym=WETH_ALPHA | last_good_spot=2000.0000 | json_floor=2000.0000 | effective_floor=2000.0000\n",
+        encoding="utf-8",
+    )
+    cache_file = tmp_path / "fe_usd_spot_cache.json"
+    cache_file.write_text(
+        json.dumps({"WETH_ALPHA": {"spot_usd": 2010.0, "updated_unix": float(ts)}}),
+        encoding="utf-8",
+    )
+    assert (
+        pnl_report.format_mark_delta_est_line(
+            session_start.isoformat(),
+            log_path=log_file,
+            cache_path=cache_file,
+        )
+        is None
+    )
+
+
+def test_format_mark_delta_est_line_contract(tmp_path: Path) -> None:
+    session_start = datetime(2026, 5, 30, 0, 0, 0, tzinfo=timezone.utc)
+    before_ts = int((session_start - timedelta(hours=12)).timestamp())
+    log_file = tmp_path / "real_cron.log"
+    log_file.write_text(
+        "\n".join(
+            [
+                f"=== CYCLE {before_ts}",
+                "[nanoclaw] FE_USD AUTO_FLOOR_UPDATE | sym=WETH_ALPHA | last_good_spot=2500.0000 | json_floor=2500.0000 | effective_floor=2500.0000",
+                "2026-05-29 12:00:00 [nanoclaw] WALLET TOTAL USD | TOTAL=$132.00 | USDT=$0 | "
+                "USDC=$30.00 | STABLE_USD=$30.00 | WMATIC=0 | POL=0 | POL_USD=$0 | FE_USD=$102.00",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    cache_file = tmp_path / "fe_usd_spot_cache.json"
+    cache_file.write_text(
+        json.dumps({"WETH_ALPHA": {"spot_usd": 2022.0, "updated_unix": float(before_ts) + 3600}}),
+        encoding="utf-8",
+    )
+    line = pnl_report.format_mark_delta_est_line(
+        session_start.isoformat(),
+        current_fe_usd=92.0,
+        log_path=log_file,
+        cache_path=cache_file,
+    )
+    assert line == "mark_delta_est: $-10.00 (FE spot cache)"

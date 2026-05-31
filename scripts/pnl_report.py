@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import json
 import math
+import os
 from pathlib import Path
 import re
 import sys
@@ -21,6 +22,8 @@ from modules.baseline import resolve_portfolio_baseline_usd  # noqa: E402
 LOG_FILE = "real_cron.log"
 PORTFOLIO_HISTORY_FILE = "portfolio_history.csv"
 SESSION_BASELINE_FILE = "portfolio_session_baseline.json"
+FE_USD_SPOT_CACHE_FILE = ".runtime/fe_usd_spot_cache.json"
+_MARK_DELTA_SPOT_PCT_THRESHOLD = 0.01
 _MAX_REASONABLE_BALANCE_COMPONENT = 10_000_000.0
 MANUAL_PATTERN = re.compile(
     r"MANUAL CORRECT BALANCE.*USDC=\$?([\d.]+).*WMATIC=\$?([\d.]+).*USDT=\$?([\d.]+).*Source=([A-Za-z0-9_-]+)",
@@ -47,6 +50,11 @@ AUTHORITATIVE_TOTAL_PATTERN_V1 = re.compile(
 REAL_PATTERN = re.compile(
     r"Real USDT:\s*\$?([\d.]+)\s*\|\s*USDC:\s*\$?([\d.]+)\s*\|\s*WMATIC:\s*\$?([\d.]+)",
     re.IGNORECASE,
+)
+_LOG_CAL_TS_RE = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s")
+_FE_USD_COMPONENT_RE = re.compile(r"FE_USD=\$?([\d.]+)")
+_AUTO_FLOOR_UPDATE_RE = re.compile(
+    r"FE_USD AUTO_FLOOR_UPDATE\s*\|\s*sym=([^|\s]+)\s*\|\s*last_good_spot=([\d.]+)"
 )
 
 
@@ -326,6 +334,10 @@ def print_daily_summary(*, reset_session: bool = False, lookback: str | None = N
     print(f"Since baseline: ${baseline_delta:+.2f} ({baseline_pct:+.2f}%)")
     print(f"Session PnL:   ${session_delta:+.2f} ({session_pct:+.2f}%)")
     print(f"Session start: {session_started_at}")
+    mark_line = format_mark_delta_est_line(session_started_at)
+    if mark_line:
+        print(mark_line)
+    print(format_net_after_opex_line(session_delta, session_started_at))
     print(pnl_24h_line)
     _print_velocity_block(session_started_at=session_started_at, seed_usd=total)
 
@@ -663,6 +675,267 @@ def _pct_change(current: float, baseline: float) -> float:
     return ((current - baseline) / baseline) * 100.0
 
 
+_DAYS_PER_MONTH_OPEX = 30.0
+
+
+def _parse_env_usd(name: str, default: float = 0.0) -> float:
+    raw = os.getenv(name)
+    if raw is None or not str(raw).strip():
+        return default
+    try:
+        value = float(str(raw).strip())
+    except ValueError:
+        return default
+    if not math.isfinite(value) or value < 0.0:
+        return default
+    return value
+
+
+def monthly_opex_usd() -> float:
+    """Sum of monthly RPC/misc and hosting opex from env (USD)."""
+    return _parse_env_usd("OPEX_MONTHLY_USD") + _parse_env_usd("HOSTING_MONTHLY_USD")
+
+
+def prorate_opex_to_session(
+    session_started_at: str,
+    *,
+    now_utc: datetime | None = None,
+) -> tuple[float, float, float]:
+    """Return ``(prorated_usd, elapsed_days, monthly_total_usd)`` for the session window."""
+    monthly = monthly_opex_usd()
+    if monthly <= 0.0:
+        return 0.0, 0.0, 0.0
+    sess_dt = _parse_iso_ts(session_started_at)
+    if sess_dt is None:
+        return 0.0, 0.0, monthly
+    now = now_utc or datetime.now(timezone.utc)
+    elapsed_seconds = max(0.0, (now - sess_dt).total_seconds())
+    elapsed_days = elapsed_seconds / 86400.0
+    prorated = monthly * (elapsed_days / _DAYS_PER_MONTH_OPEX)
+    return prorated, elapsed_days, monthly
+
+
+def compute_net_after_opex(
+    session_pnl_usd: float,
+    session_started_at: str,
+    *,
+    now_utc: datetime | None = None,
+) -> dict[str, float]:
+    prorated, elapsed_days, monthly = prorate_opex_to_session(
+        session_started_at, now_utc=now_utc
+    )
+    return {
+        "net_after_opex": float(session_pnl_usd) - prorated,
+        "session_pnl": float(session_pnl_usd),
+        "prorated_opex": prorated,
+        "monthly_opex": monthly,
+        "elapsed_days": elapsed_days,
+    }
+
+
+def format_net_after_opex_line(
+    session_pnl_usd: float,
+    session_started_at: str,
+    *,
+    now_utc: datetime | None = None,
+) -> str:
+    info = compute_net_after_opex(session_pnl_usd, session_started_at, now_utc=now_utc)
+    if info["monthly_opex"] <= 0.0:
+        return "Net after opex (est): n/a (set OPEX_MONTHLY_USD / HOSTING_MONTHLY_USD in .env)"
+    return (
+        f"Net after opex (est): ${info['net_after_opex']:+.2f} (session) | "
+        f"opex_budget=${info['monthly_opex']:.2f}/mo prorated"
+    )
+
+
+def _load_fe_usd_spot_cache(path: Path | None = None) -> dict:
+    p = path or Path(FE_USD_SPOT_CACHE_FILE)
+    try:
+        raw = json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _parse_fe_usd_auto_floor_updates(log_path: Path) -> list[tuple[int, str, float]]:
+    if not log_path.is_file():
+        return []
+    out: list[tuple[int, str, float]] = []
+    last_ts = 0
+    for line in log_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        m = _CYCLE_TS_RE.search(line)
+        if m:
+            last_ts = int(m.group(1))
+            continue
+        um = _AUTO_FLOOR_UPDATE_RE.search(line)
+        if not um or last_ts <= 0:
+            continue
+        try:
+            out.append((last_ts, um.group(1).strip(), float(um.group(2))))
+        except ValueError:
+            continue
+    return out
+
+
+def _session_start_spots_per_symbol(
+    session_ts: float,
+    *,
+    log_path: Path | str = LOG_FILE,
+    cache_path: Path | str = FE_USD_SPOT_CACHE_FILE,
+) -> dict[str, float]:
+    spots: dict[str, float] = {}
+    for cycle_ts, sym, spot in _parse_fe_usd_auto_floor_updates(Path(log_path)):
+        if cycle_ts <= session_ts and spot > 0:
+            spots[sym] = spot
+    cache = _load_fe_usd_spot_cache(Path(cache_path))
+    for sym, entry in cache.items():
+        if not isinstance(entry, dict):
+            continue
+        try:
+            spot = float(entry.get("spot_usd"))
+            updated = float(entry.get("updated_unix"))
+        except (TypeError, ValueError):
+            continue
+        if spot > 0 and updated > 0 and updated <= session_ts:
+            spots.setdefault(sym, spot)
+    return spots
+
+
+def max_fe_spot_cache_session_pct_move(
+    session_started_at: str,
+    *,
+    log_path: Path | str = LOG_FILE,
+    cache_path: Path | str = FE_USD_SPOT_CACHE_FILE,
+) -> float:
+    """Largest |spot change| / session-start spot across followed-equity cache symbols."""
+    sess_dt = _parse_iso_ts(session_started_at)
+    if sess_dt is None:
+        return 0.0
+    session_ts = sess_dt.timestamp()
+    start_spots = _session_start_spots_per_symbol(
+        session_ts, log_path=log_path, cache_path=cache_path
+    )
+    if not start_spots:
+        return 0.0
+    cache = _load_fe_usd_spot_cache(Path(cache_path))
+    max_pct = 0.0
+    for sym, start_spot in start_spots.items():
+        entry = cache.get(sym)
+        if not isinstance(entry, dict):
+            continue
+        try:
+            cur_spot = float(entry.get("spot_usd"))
+        except (TypeError, ValueError):
+            continue
+        if cur_spot > 0 and start_spot > 0:
+            max_pct = max(max_pct, abs(cur_spot - start_spot) / start_spot)
+    return max_pct
+
+
+def _fe_usd_from_log_at_or_before(session_dt: datetime, log_path: Path) -> float | None:
+    if not log_path.is_file():
+        return None
+    session_ts = session_dt.timestamp()
+    best_ts: float | None = None
+    best_fe: float | None = None
+    last_cycle_ts = 0
+    for line in log_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        m = _CYCLE_TS_RE.search(line)
+        if m:
+            last_cycle_ts = int(m.group(1))
+            continue
+        if "WALLET TOTAL USD" not in line or "FE_USD=" not in line:
+            continue
+        fe_m = _FE_USD_COMPONENT_RE.search(line)
+        if not fe_m:
+            continue
+        try:
+            fe = float(fe_m.group(1))
+        except ValueError:
+            continue
+        line_ts: float | None = None
+        cal = _LOG_CAL_TS_RE.match(line)
+        if cal:
+            try:
+                dt = datetime.strptime(cal.group(1), "%Y-%m-%d %H:%M:%S").replace(
+                    tzinfo=timezone.utc
+                )
+                line_ts = dt.timestamp()
+            except ValueError:
+                line_ts = None
+        elif last_cycle_ts > 0:
+            line_ts = float(last_cycle_ts)
+        if line_ts is None or line_ts > session_ts:
+            continue
+        if best_ts is None or line_ts >= best_ts:
+            best_ts = line_ts
+            best_fe = fe
+    return best_fe
+
+
+def _current_fe_usd_usd(log_path: Path) -> float | None:
+    try:
+        from modules import runtime
+
+        return float(runtime.get_balances().followed_equity_usd)
+    except Exception:
+        pass
+    if not log_path.is_file():
+        return None
+    for line in reversed(log_path.read_text(encoding="utf-8", errors="replace").splitlines()):
+        if "WALLET TOTAL USD" not in line or "FE_USD=" not in line:
+            continue
+        fe_m = _FE_USD_COMPONENT_RE.search(line)
+        if fe_m:
+            try:
+                return float(fe_m.group(1))
+            except ValueError:
+                continue
+    return None
+
+
+def compute_mark_delta_est(
+    session_started_at: str,
+    *,
+    current_fe_usd: float | None = None,
+    log_path: Path | str = LOG_FILE,
+    cache_path: Path | str = FE_USD_SPOT_CACHE_FILE,
+) -> float | None:
+    """Read-only FE MTM delta estimate when spot cache moved >1% since session start."""
+    pct = max_fe_spot_cache_session_pct_move(
+        session_started_at, log_path=log_path, cache_path=cache_path
+    )
+    if pct <= _MARK_DELTA_SPOT_PCT_THRESHOLD:
+        return None
+    sess_dt = _parse_iso_ts(session_started_at)
+    if sess_dt is None:
+        return None
+    lp = Path(log_path)
+    start_fe = _fe_usd_from_log_at_or_before(sess_dt, lp)
+    cur_fe = current_fe_usd if current_fe_usd is not None else _current_fe_usd_usd(lp)
+    if start_fe is None or cur_fe is None:
+        return None
+    return float(cur_fe) - float(start_fe)
+
+
+def format_mark_delta_est_line(
+    session_started_at: str,
+    *,
+    current_fe_usd: float | None = None,
+    log_path: Path | str = LOG_FILE,
+    cache_path: Path | str = FE_USD_SPOT_CACHE_FILE,
+) -> str | None:
+    delta = compute_mark_delta_est(
+        session_started_at,
+        current_fe_usd=current_fe_usd,
+        log_path=log_path,
+        cache_path=cache_path,
+    )
+    if delta is None:
+        return None
+    return f"mark_delta_est: ${delta:+.2f} (FE spot cache)"
+
+
 def _parse_iso_ts(raw: str) -> datetime | None:
     text = str(raw or "").strip()
     if not text:
@@ -976,6 +1249,10 @@ def print_report(*, reset_session: bool = False) -> int:
     print(f"Since baseline: ${baseline_delta:+.2f} ({baseline_pct:+.2f}%)")
     print(f"Session PnL:   ${session_delta:+.2f} ({session_pct:+.2f}%)")
     print(f"Session start: {session_started_at}")
+    mark_line = format_mark_delta_est_line(session_started_at)
+    if mark_line:
+        print(mark_line)
+    print(format_net_after_opex_line(session_delta, session_started_at))
     print(pnl_24h_line)
     _print_velocity_block(session_started_at=session_started_at, seed_usd=total)
     print("Reset session baseline: nanopnl --reset-session")

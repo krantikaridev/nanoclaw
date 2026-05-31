@@ -244,7 +244,7 @@ Verify shims are on PATH:
 command -v nanoup nanogreen nano12h
 ```
 
-`nanostatus`, `nanopnl`, and `nanorestart` forward CLI flags to `scripts/pnl_report.py` (example: `--reset-session`). Run **`nanohealth`** before trusting PnL when RPC has been flaky.
+`nanostatus`, `nanopnl`, and `nanorestart` forward CLI flags to `scripts/pnl_report.py` (example: `--reset-session`). Run **`nanohealth`** before trusting PnL when RPC has been flaky. When Session PnL drops with zero fills, see **`docs/OPERATOR_PNL_MARK_VS_TRADE.md`** (`FE_USD AUTO_FLOOR_UPDATE`, MetaMask Polygon tab vs bot `TOTAL`).
 `scripts/pnl_report.py` prefers live balance snapshots (paired `WALLET BALANCE` + `Real USDT` and direct `Real USDT`), chooses the most recent usable live snapshot, and only falls back to `MANUAL CORRECT BALANCE` when live data is not usable. Live/manual snapshots are filtered by sanity checks (finite, non-negative, and reasonable component bounds) before source preference is applied.
 
 Verify standalone shims are discoverable on `PATH`:
