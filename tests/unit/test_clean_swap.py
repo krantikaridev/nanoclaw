@@ -1612,7 +1612,7 @@ def test_fe_stable_runway_blocks_x_signal_buy_below_runway_target(monkeypatch, c
                     symbol="WETH_ALPHA",
                     token_address="0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
                     decimals=18,
-                    signal_strength=0.87,
+                    signal_strength=0.82,
                 )
             ]
 
@@ -1647,6 +1647,83 @@ def test_fe_stable_runway_blocks_x_signal_buy_below_runway_target(monkeypatch, c
     assert swap_exec._FE_STABLE_RUNWAY_DEFER_BUY_LOG in captured
     assert swap_exec._FE_STABLE_RUNWAY_TRIM_LOG not in captured
     assert "X-SIGNAL BUY SKIPPED" in captured
+
+
+def test_fe_stable_runway_tiered_allows_high_signal_buy_below_runway_target(monkeypatch, capsys):
+    """Tiered runway: stables $27 / 79% FE — allow capped BUY when signal ≥ 0.85."""
+    from modules import signal as signal_module
+
+    class _Plan:
+        direction = "USDC_TO_EQUITY"
+        amount_in = 12_000_000
+        trade_size = 12.0
+        message = "buy"
+        token_in = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"
+        token_out = "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619"
+
+    class _TunedConfig:
+        min_trade_usdc = 5.0
+        per_asset_cooldown_seconds = 1800
+        min_pol_for_gas = 0.005
+        force_eligible_threshold = 0.75
+
+    class _TunedTrader:
+        config = _TunedConfig()
+        gas_protector = object()
+
+        def build_plan(self, **kwargs):
+            return _Plan()
+
+        def build_plan_with_block_reason(self, **kwargs):
+            return self.build_plan(**kwargs), None
+
+    class _BaseTrader:
+        def load_followed_equities(self):
+            return [
+                clean_swap.FollowedEquity(
+                    symbol="WETH_ALPHA",
+                    token_address="0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+                    decimals=18,
+                    signal_strength=0.87,
+                )
+            ]
+
+    monkeypatch.setattr(clean_swap, "ENABLE_X_SIGNAL_EQUITY", True)
+    monkeypatch.setattr(
+        clean_swap,
+        "_load_followed_equities_json_dict",
+        lambda: {"enabled": True, "min_signal_strength": 0.60},
+    )
+    monkeypatch.setattr(clean_swap, "_effective_equity_signal_min", lambda cfg: 0.60)
+    monkeypatch.setattr(clean_swap, "X_SIGNAL_EQUITY_TRADER", _BaseTrader())
+    monkeypatch.setattr(clean_swap, "_tuned_signal_equity_trader", lambda min_strength: _TunedTrader())
+    monkeypatch.setattr(clean_swap, "can_trade_asset", lambda symbol, now=None, cooldown_seconds=0: True)
+    monkeypatch.setattr(clean_swap, "get_token_balance", lambda *_args, **_kwargs: 0.0)
+    monkeypatch.setattr(signal_module.cfg, "PROTECTION_FLUCTUATION_USDT_THRESHOLD", 12.0, raising=False)
+    monkeypatch.setattr(signal_module.cfg, "ALLOW_REDUCED_HIGH_RISK_XSIGNAL", True, raising=False)
+    monkeypatch.setattr(signal_module.cfg, "FE_STABLE_RUNWAY_TIERED_ENABLED", True, raising=False)
+    monkeypatch.setattr(signal_module.cfg, "FE_STABLE_RUNWAY_TIERED_MIN_SIGNAL", 0.85, raising=False)
+    monkeypatch.setattr(signal_module.cfg, "FE_STABLE_RUNWAY_TIERED_MAX_NOTIONAL_USD", 10.0, raising=False)
+    monkeypatch.setattr(signal_module.cfg, "STAGE_SEED_USD", 132.0, raising=False)
+    monkeypatch.setattr(signal_module.cfg, "OPERATING_RESERVE_ENABLED", True, raising=False)
+    monkeypatch.setattr(signal_module.cfg, "OPERATING_RESERVE_PCT", 10.0, raising=False)
+
+    decision = clean_swap.try_x_signal_equity_decision(
+        clean_swap.Balances(
+            usdt=0.93,
+            usdc=26.53,
+            wmatic=0.0,
+            pol=14.0,
+            followed_equity_usd=111.0,
+            total_portfolio_usd=140.0,
+        ),
+        dry_run=True,
+    )
+
+    captured = capsys.readouterr().out
+    assert swap_exec._FE_STABLE_RUNWAY_TIERED_ALLOW_LOG in captured
+    assert swap_exec._FE_STABLE_RUNWAY_DEFER_BUY_LOG not in captured
+    assert decision is not None
 
 
 def test_fe_stable_runway_blocks_x_signal_buy_when_fe_heavy(monkeypatch, capsys):

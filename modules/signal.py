@@ -1652,13 +1652,29 @@ def try_x_signal_equity_decision(
     from modules import swap_executor as swap_exec
 
     if swap_exec._fe_stable_runway_buy_block_active(balances):
-        skip_buys = True
         fe_block = swap_exec._fe_stable_runway_buy_block_context(balances)
-        if fe_block is not None:
-            swap_exec._log_fe_stable_runway_defer_buy(
-                stable_usd=float(fe_block["stable_usd"]),
-                fe_share=float(fe_block["fe_share"]),
+        max_buy_sig = max(
+            (float(a.signal_strength) for a in eligible if float(a.signal_strength) > 0),
+            default=0.0,
+        )
+        tiered = swap_exec._fe_stable_runway_tiered_bypass_context(
+            balances,
+            signal_strength=max_buy_sig,
+        )
+        if tiered is not None:
+            swap_exec._log_fe_stable_runway_tiered_allow(
+                stable_usd=float(tiered["stable_usd"]),
+                fe_share=float(tiered["fe_share"]),
+                signal_strength=float(tiered["signal_strength"]),
+                max_notional_usd=float(tiered["max_notional_usd"]),
             )
+        else:
+            skip_buys = True
+            if fe_block is not None:
+                swap_exec._log_fe_stable_runway_defer_buy(
+                    stable_usd=float(fe_block["stable_usd"]),
+                    fe_share=float(fe_block["fe_share"]),
+                )
     _print_x_signal_buy_risk_status(
         risk_level=risk_level,
         risk_ctx=risk_ctx,
@@ -1916,6 +1932,16 @@ def try_x_signal_equity_decision(
             try:
                 equity_balance = fcb.get_token_balance(a.token_address, int(a.decimals))
                 is_buy = float(a.signal_strength) > 0
+                if is_buy and swap_exec._fe_stable_runway_buy_block_active(balances):
+                    if swap_exec._fe_stable_runway_tiered_bypass_context(
+                        balances,
+                        signal_strength=float(a.signal_strength),
+                    ) is None:
+                        print(
+                            f"{runtime._nanolog()}X-SIGNAL BUY SKIPPED | symbol={sym} | "
+                            "reason=fe_stable_runway_tier"
+                        )
+                        continue
                 if is_buy and skip_buys:
                     reasons = ",".join(list(risk_ctx.get("reasons") or []))
                     print(
@@ -1977,6 +2003,11 @@ def try_x_signal_equity_decision(
                 # Plan trade_size already uses FIXED SIZING $12–$20 (signal_equity_trader); never re-expand to full USDC.
                 dynamic_trade_size_usdc = float(plan.trade_size)
                 if str(plan.direction) == "USDC_TO_EQUITY":
+                    dynamic_trade_size_usdc = swap_exec.fe_stable_runway_tiered_cap_notional_usd(
+                        balances,
+                        signal_strength=float(a.signal_strength),
+                        proposed_notional_usd=float(dynamic_trade_size_usdc),
+                    )
                     dynamic_trade_size_usdc = min(dynamic_trade_size_usdc, float(balances.usdc))
                     if state is not None:
                         _px = (

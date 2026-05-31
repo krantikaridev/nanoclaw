@@ -1448,6 +1448,63 @@ def _fe_stable_runway_buy_block_active(
     return _fe_stable_runway_buy_block_context(balances) is not None
 
 
+_FE_STABLE_RUNWAY_TIERED_ALLOW_LOG = "[nanoclaw] FE STABLE RUNWAY TIERED | allow USDC→EQUITY BUY"
+
+
+def _fe_stable_runway_tiered_bypass_context(
+    balances: Balances,
+    *,
+    signal_strength: float,
+) -> dict[str, float] | None:
+    """Allow capped X-SIGNAL BUY when full runway blocks but stables ≥ operating reserve."""
+    if not bool(getattr(cfg, "FE_STABLE_RUNWAY_TIERED_ENABLED", True)):
+        return None
+    base = _fe_stable_runway_buy_block_context(balances)
+    if base is None:
+        return None
+    if _operating_reserve_buy_block_context(balances) is not None:
+        return None
+    min_sig = float(getattr(cfg, "FE_STABLE_RUNWAY_TIERED_MIN_SIGNAL", 0.85))
+    if abs(float(signal_strength)) + 1e-9 < min_sig:
+        return None
+    max_notional = float(getattr(cfg, "FE_STABLE_RUNWAY_TIERED_MAX_NOTIONAL_USD", 10.0))
+    if max_notional <= 0.0:
+        return None
+    return {
+        **base,
+        "signal_strength": float(signal_strength),
+        "max_notional_usd": max_notional,
+    }
+
+
+def _log_fe_stable_runway_tiered_allow(
+    *,
+    stable_usd: float,
+    fe_share: float,
+    signal_strength: float,
+    max_notional_usd: float,
+) -> None:
+    print(
+        f"{_FE_STABLE_RUNWAY_TIERED_ALLOW_LOG} | stable_usd={float(stable_usd):.2f} | "
+        f"fe_share={float(fe_share):.2f} | signal={float(signal_strength):.2f} | "
+        f"max_notional=${float(max_notional_usd):.2f}"
+    )
+
+
+def fe_stable_runway_tiered_cap_notional_usd(
+    balances: Balances,
+    *,
+    signal_strength: float,
+    proposed_notional_usd: float,
+) -> float:
+    ctx = _fe_stable_runway_tiered_bypass_context(balances, signal_strength=signal_strength)
+    if ctx is None:
+        return float(proposed_notional_usd)
+    stable_usd = float(balances.usdt) + float(balances.usdc)
+    cap = min(float(ctx["max_notional_usd"]), stable_usd)
+    return min(float(proposed_notional_usd), cap)
+
+
 def _log_fe_stable_runway_trim(
     *,
     sym: str,

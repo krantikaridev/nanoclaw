@@ -40,6 +40,9 @@ ENV_APPLY_PRESERVE_KEYS = (
     "OPERATING_RESERVE_ENABLED",
     "OPERATING_RESERVE_PCT",
     "STAGE_SEED_USD",
+    "FE_STABLE_RUNWAY_TIERED_ENABLED",
+    "FE_STABLE_RUNWAY_TIERED_MIN_SIGNAL",
+    "FE_STABLE_RUNWAY_TIERED_MAX_NOTIONAL_USD",
     # Never clobber custody / trading identity when applying the template (template may hold a placeholder).
     "WALLET",
     # Preserve stage-specific RPC runtime selection when applying template.
