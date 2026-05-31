@@ -218,7 +218,7 @@ def test_followed_equity_zero_quote_zero_fallback_still_visible(monkeypatch, cap
     )
     asset = _FakeAsset(
         symbol="WBTC_ALPHA",
-        addr="0x1BFD67037B42Cf73acf204706795bF64736C834e",
+        addr="0xdead000000000000000000000000000000000001",
         decimals=8,
         current_price_usd=None,
     )
@@ -436,6 +436,43 @@ def test_fe_usd_stale_json_floor_live_wins_with_spot_cache(monkeypatch, capsys, 
     fe_usd = runtime._followed_equity_tokens_usdt_usd()
     assert fe_usd == pytest.approx(live, abs=0.02)
     captured = capsys.readouterr().out
+    assert "FE_USD FALLBACK FLOOR APPLIED" not in captured
+
+
+def test_fe_usd_slight_cache_drift_refreshes_to_live(monkeypatch, capsys, tmp_path) -> None:
+    """Agent H: stage VM — cache 2022 vs live ~1995/token → refresh, live wins, no fallback log."""
+    bal = 0.065007
+    live = 129.70
+    cached_spot = 2022.7890
+    cache_path = tmp_path / "fe_usd_spot_cache.json"
+    cache_path.write_text(
+        f'{{"WETH_ALPHA": {{"spot_usd": {cached_spot}, "updated_unix": 1700000000.0}}}}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(runtime, "FE_USD_SPOT_CACHE_FILE", str(cache_path))
+    monkeypatch.setattr(runtime.cfg, "FE_USD_FALLBACK_REFRESH_ENABLED", True, raising=False)
+    monkeypatch.setattr(runtime.cfg, "FE_USD_FALLBACK_MAX_STALE_PCT", 5.0, raising=False)
+    asset = _FakeAsset(
+        symbol="WETH_ALPHA",
+        addr="0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+        decimals=18,
+        current_price_usd=2500.0,
+    )
+    monkeypatch.setattr(
+        runtime.X_SIGNAL_EQUITY_TRADER,
+        "load_followed_equities",
+        lambda: [asset],
+    )
+    monkeypatch.setattr(runtime, "get_token_balance", lambda *_a, **_k: bal)
+    monkeypatch.setattr(
+        runtime,
+        "_quote_followed_token_usdt_mtm",
+        lambda *_a, **_k: live,
+    )
+    fe_usd = runtime._followed_equity_tokens_usdt_usd()
+    assert fe_usd == pytest.approx(live, abs=0.05)
+    captured = capsys.readouterr().out
+    assert "FE_USD FALLBACK REFRESH" in captured
     assert "FE_USD FALLBACK FLOOR APPLIED" not in captured
 
 

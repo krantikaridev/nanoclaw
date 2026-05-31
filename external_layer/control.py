@@ -232,18 +232,26 @@ def _risk_to_control_payload(risk: dict[str, bool | str | float]) -> dict[str, o
 
 
 def _apply_post_risk_overrides(payload: dict[str, object]) -> dict[str, object]:
-    """Portfolio auto pause, operator lock, then RPC endpoint gate (RPC gate runs last)."""
+    """Portfolio auto pause, operator lock, RPC gate, then opex runway check."""
     try:
         from .auto_pause import apply_auto_pause_control, auto_pause_enabled
+        from .opex_gate import maybe_run_opex_runway_check
         from .rpc_gate import apply_rpc_pause_control
     except ImportError:
         from auto_pause import apply_auto_pause_control, auto_pause_enabled  # type: ignore[no-redef]
+        from opex_gate import maybe_run_opex_runway_check  # type: ignore[no-redef]
         from rpc_gate import apply_rpc_pause_control  # type: ignore[no-redef]
     if auto_pause_enabled():
         payload = apply_auto_pause_control(payload)
     else:
         payload = _apply_operator_pause_lock(payload)
-    return apply_rpc_pause_control(payload)
+    payload = apply_rpc_pause_control(payload)
+    stable = _optional_json_balance(payload.get("stable_usd"))
+    try:
+        maybe_run_opex_runway_check(stable_usd=stable)
+    except Exception as exc:
+        print(f"[EXTERNAL] opex_runway check failed ({exc!s})", flush=True)
+    return payload
 
 
 def _load_full_control_dict() -> dict[str, object]:

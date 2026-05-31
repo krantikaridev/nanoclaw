@@ -155,7 +155,7 @@ nanodaily | grep -E 'Flow-adjusted|detected flows'
 
 ---
 
-## Agent H — WETH fallback spot refresh (P1) — **OPEN**
+## Agent H — WETH fallback spot refresh (P1) — **DONE**
 
 **Goal:** When live WETH quote diverges materially from cached fallback (`FE_USD FALLBACK FLOOR`), refresh fallback or prefer live quote so TOTAL matches MetaMask and mark PnL is honest.
 
@@ -171,11 +171,11 @@ FE_USD_FALLBACK_MIN_LIVE_USD=1.0     # skip refresh on dust balances
 ```
 
 **Acceptance:**
-- [ ] On cycle: if divergence > threshold, update in-memory fallback from live quote (or always use live when quote succeeds)
-- [ ] Log: `[nanoclaw] FE_USD FALLBACK REFRESH | sym=WETH_ALPHA | old_px=… | new_px=… | source=live_quote`
-- [ ] If live quote fails, keep last good fallback (no regression)
-- [ ] Unit tests: stale fallback refreshed, failed quote keeps fallback, dust skipped
-- [ ] `nanohealth` TOTAL within ~1% of MetaMask after refresh on stage book fixture
+- [x] On cycle: if divergence > threshold, update in-memory fallback from live quote (or always use live when quote succeeds)
+- [x] Log: `[nanoclaw] FE_USD FALLBACK REFRESH | sym=WETH_ALPHA | old_px=… | new_px=… | source=live_quote`
+- [x] If live quote fails, keep last good fallback (no regression)
+- [x] Unit tests: stale fallback refreshed, failed quote keeps fallback, dust skipped
+- [x] `nanohealth` TOTAL within ~1% of MetaMask after refresh on stage book fixture
 
 **Do not:** change FE runway / tiered / operating reserve thresholds.
 
@@ -252,10 +252,36 @@ python scripts/pnl_adverse_day.py --hours 24
 
 ---
 
+## Agent K — On-chain deposit/withdraw tags v2 (P2)
+
+**Goal:** Upgrade flow tags from portfolio_history heuristics to **on-chain tx attribution** (Polygonscan-style): tag USDT/USDC/MATIC transfers in/out of stage wallet as capital flows.
+
+**Context:** Flow-adjusted PnL v1 tagged deposit +$18.67 and withdraw -$10.02 (Ankr) correctly; v2 confirms via tx receipts.
+
+**Files:** `nanoclaw/pnl_flow_onchain.py`, `scripts/pnl_flow_sync.py`, extend `scripts/pnl_report.py`, `.env.example`, tests
+
+**Env:**
+```bash
+PNL_FLOW_ONCHAIN_ENABLED=true
+PNL_FLOW_ONCHAIN_LOOKBACK_HOURS=168
+PNL_FLOW_WALLET=0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6
+```
+
+**Acceptance:**
+- [ ] Scrape wallet ERC20 transfers via RPC logs (USDT/USDC); classify in/out vs bot wallet
+- [ ] Merge into `.runtime/pnl_flow_events.jsonl` with tx hash + block time
+- [ ] `nanodaily` prefers on-chain tags over heuristic when both present
+- [ ] Does not change trading logic or session baseline
+- [ ] Tests with fixture log topics / mocked eth_getLogs
+
+**Do not:** auto-move funds; change green gates.
+
+---
+
 ## Parent review checklist (before push)
 
 ```bash
-python -m pytest tests/unit/test_pnl_report.py tests/unit/test_pnl_adverse_day.py tests/unit/test_opex_runway.py tests/unit/test_stage_seed_auto_sync.py -q
+python -m pytest tests/unit/test_runtime_inventory_mtm.py tests/unit/test_opex_gate.py tests/unit/test_pnl_report.py tests/unit/test_pnl_adverse_day.py tests/unit/test_opex_runway.py tests/unit/test_stage_seed_auto_sync.py -q
 python -m pytest tests/unit/test_rpc_probe.py tests/unit/test_operating_reserve.py tests/unit/test_rpc_health.py tests/unit/test_fe_stable_runway_tiered.py -q
 python -m pytest tests/unit/test_external_auto_pause.py tests/unit/test_nano_green.py -q
 python scripts/rpc_probe.py

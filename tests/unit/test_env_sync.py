@@ -181,3 +181,5 @@ def test_env_apply_preserve_keys_include_rpc_runtime_keys():
     assert "GAS_USD_EST_PER_FILL" in keys
     assert "STAGE_SEED_AUTO_SYNC_ENABLED" in keys
     assert "OPEX_RUNWAY_ALERT_DAYS" in keys
+    assert "OPEX_RUNWAY_AUTO_CHECK_ENABLED" in keys
+    assert "FE_USD_FALLBACK_REFRESH_ENABLED" in keys

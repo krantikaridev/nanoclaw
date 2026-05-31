@@ -169,7 +169,7 @@ def resolve_operating_reserve_seed_usd(
     auto_sync = bool(
         auto_sync_enabled
         if auto_sync_enabled is not None
-        else getattr(cfg, "STAGE_SEED_AUTO_SYNC_ENABLED", False)
+        else getattr(cfg, "STAGE_SEED_AUTO_SYNC_ENABLED", True)
     )
     pct = float(
         reserve_pct if reserve_pct is not None else getattr(cfg, "OPERATING_RESERVE_PCT", 10.0)

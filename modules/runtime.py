@@ -955,6 +955,46 @@ def _maybe_persist_fe_usd_spot_from_live(
     return float(persist_spot), True
 
 
+def _maybe_refresh_stale_fe_usd_floor_from_live(
+    cache: dict,
+    symbol: str,
+    *,
+    live_quote_usdt: float,
+    balance: float,
+    json_floor_px: float,
+    prior_cached_spot: float | None,
+    effective_floor_px: float,
+    live_spot: float | None,
+) -> tuple[float | None, bool]:
+    """Refresh cached floor down to live when drift is small (healthy quote, stale cache)."""
+    if not bool(getattr(cfg, "FE_USD_FALLBACK_REFRESH_ENABLED", True)):
+        return prior_cached_spot, False
+    min_live = float(getattr(cfg, "FE_USD_FALLBACK_MIN_LIVE_USD", 1.0))
+    max_stale_pct = float(getattr(cfg, "FE_USD_FALLBACK_MAX_STALE_PCT", 5.0))
+    if float(live_quote_usdt) < min_live or balance <= 0 or live_spot is None or live_spot <= 0:
+        return prior_cached_spot, False
+    if effective_floor_px <= float(live_spot) + 1e-9:
+        return prior_cached_spot, False
+    if prior_cached_spot is None or prior_cached_spot <= 0:
+        return prior_cached_spot, False
+    stale_pct = (float(prior_cached_spot) - float(live_spot)) / float(live_spot) * 100.0
+    if stale_pct <= 0 or stale_pct > max_stale_pct:
+        return prior_cached_spot, False
+    sym = str(symbol).strip()
+    old_px = float(prior_cached_spot)
+    new_px = float(live_spot)
+    cache[sym] = {"spot_usd": new_px, "updated_unix": time.time()}
+    try:
+        print(
+            f"[nanoclaw] FE_USD FALLBACK REFRESH | sym={sym} | "
+            f"old_px={old_px:.4f} | new_px={new_px:.4f} | source=live_quote | "
+            f"stale_pct={stale_pct:.2f}"
+        )
+    except Exception:
+        pass
+    return new_px, True
+
+
 def _followed_equity_tokens_usdt_usd() -> float:
     """Router-quoted USDT value for non-core followed tokens (excludes USDC/USDT/WMATIC already in Balances)."""
     total = 0.0
@@ -1055,6 +1095,20 @@ def _followed_equity_tokens_usdt_usd() -> float:
         effective_floor_px = _spot_for_fe_usd_effective_floor(
             json_floor_px, prior_cached_spot, live_spot
         )
+        refreshed_spot, did_refresh = _maybe_refresh_stale_fe_usd_floor_from_live(
+            fe_spot_cache,
+            sym,
+            live_quote_usdt=float(usdt_val),
+            balance=float(bal),
+            json_floor_px=json_floor_px,
+            prior_cached_spot=prior_cached_spot,
+            effective_floor_px=effective_floor_px,
+            live_spot=live_spot,
+        )
+        if did_refresh:
+            fe_spot_cache_dirty = True
+            prior_cached_spot = refreshed_spot
+            effective_floor_px = _effective_fe_usd_floor_px(json_floor_px, prior_cached_spot)
         fallback_usd = float(bal) * effective_floor_px if (effective_floor_px > 0 and bal > 0) else 0.0
         # Only persist last-good spot when live confirms at/above the effective floor (Cleanup #3
         # degraded quotes must not poison prior cache on the same cycle we used it as floor).
