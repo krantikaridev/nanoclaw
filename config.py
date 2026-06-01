@@ -434,7 +434,7 @@ MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_MIN_PORTFOLIO_USD = env_float(
     "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_MIN_PORTFOLIO_USD", 130.0
 )
 MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_NOTIONAL_FLOOR_USD = env_float(
-    "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_NOTIONAL_FLOOR_USD", 5.0
+    "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_NOTIONAL_FLOOR_USD", 4.0
 )
 MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_CYCLE_COOLDOWN = env_int(
     "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_CYCLE_COOLDOWN", 3
@@ -452,8 +452,8 @@ FE_STABLE_RUNWAY_TIERED_MAX_NOTIONAL_USD = env_float("FE_STABLE_RUNWAY_TIERED_MA
 # Operating reserve: keep stables ≥ seed × pct for gas + RPC/hosting (defer new entries only).
 OPERATING_RESERVE_ENABLED = env_bool("OPERATING_RESERVE_ENABLED", True)
 OPERATING_RESERVE_PCT = env_float("OPERATING_RESERVE_PCT", 10.0)
-# Tiered X-SIGNAL (capped, high signal) may proceed when full reserve floor blocks other entries.
-OPERATING_RESERVE_TIERED_EXEMPT_ENABLED = env_bool("OPERATING_RESERVE_TIERED_EXEMPT_ENABLED", True)
+# Tiered X-SIGNAL only when stables ≥ reserve floor (default off — do not buy below reserve).
+OPERATING_RESERVE_TIERED_EXEMPT_ENABLED = env_bool("OPERATING_RESERVE_TIERED_EXEMPT_ENABLED", False)
 # Stage seed for reserve floor; 0 = use current TOTAL at cycle time.
 STAGE_SEED_USD = env_float("STAGE_SEED_USD", 0.0)
 # Optional: scale reserve seed from portfolio_history TOTAL EMA (max with STAGE_SEED_USD).

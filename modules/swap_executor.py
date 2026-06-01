@@ -1451,6 +1451,20 @@ def _fe_stable_runway_buy_block_active(
 _FE_STABLE_RUNWAY_TIERED_ALLOW_LOG = "[nanoclaw] FE STABLE RUNWAY TIERED | allow USDC→EQUITY BUY"
 
 
+def _low_stables_rebuild_urgent(balances: Balances) -> bool:
+    """Stables below rebuild threshold — prefer WMATIC→stable over X-SIGNAL BUY."""
+    if not _low_stables_dust_rebuild_enabled():
+        return False
+    stable_usd = float(balances.usdt) + float(balances.usdc)
+    max_stable = float(getattr(cfg, "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_MAX_STABLE_USD", 15.0))
+    if stable_usd + 1e-9 >= max_stable:
+        return False
+    min_portfolio = float(
+        getattr(cfg, "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_MIN_PORTFOLIO_USD", 130.0)
+    )
+    return float(balances.total_portfolio_usd) > min_portfolio
+
+
 def _operating_reserve_tiered_exempt_for_signal(
     balances: Balances,
     signal_strength: float,
@@ -1680,7 +1694,7 @@ def _main_strategy_low_stables_dust_rebuild_eligible(
 
     notional_usd = _decision_notional_usd(decision, current_price_usd=current_price_usd)
     rebuild_floor = float(
-        getattr(cfg, "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_NOTIONAL_FLOOR_USD", 5.0)
+        getattr(cfg, "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_NOTIONAL_FLOOR_USD", 4.0)
     )
     dust_floor = float(_MAIN_STRATEGY_DUST_DEFER_NOTIONAL_USD)
     if notional_usd is None:
@@ -3396,10 +3410,16 @@ def determine_trade_decision(
                 decision_log.log_tracking_summary(state)
                 return hold_idle
 
-    if not x_signal_rotation_first:
+    if not x_signal_rotation_first and not _low_stables_rebuild_urgent(balances):
         xd = _resolve_x_signal_equity_decision()
         if xd is not None:
             return xd
+    elif _low_stables_rebuild_urgent(balances):
+        print(
+            f"{runtime._nanolog()}Signal-Driven Rotation: X-Signal BUY skipped — "
+            "low-stables rebuild urgent (stables below $"
+            f"{float(getattr(cfg, 'MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_MAX_STABLE_USD', 15.0)):.0f})"
+        )
 
     target_wallets = target_wallets_prelude or cs.get_target_wallets()
     if is_copy_trading_enabled() and target_wallets:

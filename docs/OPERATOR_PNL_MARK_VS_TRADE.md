@@ -40,6 +40,8 @@ Check **velocity** lines in the report (`velocity_fills_session`, turnover) befo
 
 After **abc**, stables fell below **10% reserve** (~$15.80 on $158 seed) → tiered buys and WMATIC→stable rebuild both stalled until velocity2.
 
+**Jun 2026 fix:** When stables **< $15** rebuild threshold, **no tiered BUY** (rebuild only). WMATIC→USDC dust bypass floor lowered to **$4** so ~$4.90 reserve-protection sells execute.
+
 ---
 
 ## `FE_USD` and `FE_USD AUTO_FLOOR_UPDATE`
