@@ -452,6 +452,8 @@ FE_STABLE_RUNWAY_TIERED_MAX_NOTIONAL_USD = env_float("FE_STABLE_RUNWAY_TIERED_MA
 # Operating reserve: keep stables ≥ seed × pct for gas + RPC/hosting (defer new entries only).
 OPERATING_RESERVE_ENABLED = env_bool("OPERATING_RESERVE_ENABLED", True)
 OPERATING_RESERVE_PCT = env_float("OPERATING_RESERVE_PCT", 10.0)
+# Tiered X-SIGNAL (capped, high signal) may proceed when full reserve floor blocks other entries.
+OPERATING_RESERVE_TIERED_EXEMPT_ENABLED = env_bool("OPERATING_RESERVE_TIERED_EXEMPT_ENABLED", True)
 # Stage seed for reserve floor; 0 = use current TOTAL at cycle time.
 STAGE_SEED_USD = env_float("STAGE_SEED_USD", 0.0)
 # Optional: scale reserve seed from portfolio_history TOTAL EMA (max with STAGE_SEED_USD).

@@ -29,6 +29,19 @@ Check **velocity** lines in the report (`velocity_fills_session`, turnover) befo
 
 ---
 
+## Stage velocity commits (May–Jun 2026)
+
+| Tag | Commit | What it did |
+|-----|--------|-------------|
+| **abc** | `61adb81b` | Tiered FE runway — **$140→~$160** velocity day (10 fills, capped $10); deposit + rotation |
+| **abc+ops** | `9d171080` | Flow-adjusted PnL, opex runway script, adverse-day metrics (no trading change) |
+| **abc+auto** | `e06cd360` | WETH fallback refresh, seed EMA auto-sync, opex auto-check in external layer |
+| **abc+velocity2** | (latest) | Reserve tiered exempt + low-stables rebuild fix (unblocks flat ~$158 book) |
+
+After **abc**, stables fell below **10% reserve** (~$15.80 on $158 seed) → tiered buys and WMATIC→stable rebuild both stalled until velocity2.
+
+---
+
 ## `FE_USD` and `FE_USD AUTO_FLOOR_UPDATE`
 
 **`FE_USD`** is the USDT-notional value of tokens listed in `followed_equities.json` (e.g. Polygon WETH `0x7ceB…`, LINK, WBTC). The runtime quotes each balance via Uniswap paths and applies a **floor** so drained pools do not silently undercount inventory.
@@ -108,6 +121,8 @@ Flow-adjusted session PnL: $+2.50 (+2.1%) | detected flows: deposit +$18.00 @ 20
 ```
 
 Flow tagging is **read-only** — it does **not** reset `portfolio_session_baseline.json` or change swap execution.
+
+**On-chain v2:** with **`PNL_FLOW_ONCHAIN_ENABLED=true`**, run **`python scripts/pnl_flow_sync.py`** (or cron) to scrape Polygon **USDT/USDC Transfer** logs for **`PNL_FLOW_WALLET`** via RPC and append tx-attributed rows to **`.runtime/pnl_flow_events.jsonl`**. `nanodaily` **prefers on-chain tags over heuristic** when both detect the same flow. Env: **`PNL_FLOW_ONCHAIN_LOOKBACK_HOURS`** (default **168**).
 
 ---
 

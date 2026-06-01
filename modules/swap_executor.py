@@ -1451,6 +1451,21 @@ def _fe_stable_runway_buy_block_active(
 _FE_STABLE_RUNWAY_TIERED_ALLOW_LOG = "[nanoclaw] FE STABLE RUNWAY TIERED | allow USDC→EQUITY BUY"
 
 
+def _operating_reserve_tiered_exempt_for_signal(
+    balances: Balances,
+    signal_strength: float,
+) -> bool:
+    """High-conviction tiered X-SIGNAL may bypass reserve floor (notional still capped)."""
+    if not bool(getattr(cfg, "OPERATING_RESERVE_TIERED_EXEMPT_ENABLED", True)):
+        return False
+    if _operating_reserve_buy_block_context(balances) is None:
+        return False
+    if not bool(getattr(cfg, "FE_STABLE_RUNWAY_TIERED_ENABLED", True)):
+        return False
+    min_sig = float(getattr(cfg, "FE_STABLE_RUNWAY_TIERED_MIN_SIGNAL", 0.85))
+    return abs(float(signal_strength)) + 1e-9 >= min_sig
+
+
 def _fe_stable_runway_tiered_bypass_context(
     balances: Balances,
     *,
@@ -1462,7 +1477,9 @@ def _fe_stable_runway_tiered_bypass_context(
     base = _fe_stable_runway_buy_block_context(balances)
     if base is None:
         return None
-    if _operating_reserve_buy_block_context(balances) is not None:
+    reserve_block = _operating_reserve_buy_block_context(balances)
+    tiered_exempt = _operating_reserve_tiered_exempt_for_signal(balances, signal_strength)
+    if reserve_block is not None and not tiered_exempt:
         return None
     min_sig = float(getattr(cfg, "FE_STABLE_RUNWAY_TIERED_MIN_SIGNAL", 0.85))
     if abs(float(signal_strength)) + 1e-9 < min_sig:
@@ -1585,9 +1602,9 @@ def _apply_low_stables_rebuild_rotation_precedence(
             stable_usd=float(fe_buy["stable_usd"]),
             fe_share=float(fe_buy["fe_share"]),
         )
-        return False
+        # Do not return early — stables below runway still need WMATIC→stable rebuild path.
     if not _low_stables_dust_rebuild_enabled():
-        return rotation_first
+        return rotation_first if fe_buy is None else False
     stable_usd = float(balances.usdt) + float(balances.usdc)
     max_stable = float(getattr(cfg, "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_MAX_STABLE_USD", 15.0))
     min_portfolio = float(
@@ -3248,7 +3265,15 @@ def determine_trade_decision(
                 )
                 return xd_local
         cycle_reason = "no_plan" if xd_local is None else "not_executable"
-        if xd_local is not None and (pause_active or entries_paused):
+        reserve_blocks_x = (
+            reserve_ctx is not None
+            and xd_local is not None
+            and not _operating_reserve_tiered_exempt_for_signal(
+                balances,
+                float(getattr(xd_local, "signal_strength", 0) or 0),
+            )
+        )
+        if xd_local is not None and (pause_active or operator_paused or reserve_blocks_x):
             cycle_reason = "paused_or_defensive"
         decision_log.record_x_signal_cycle_outcome(
             state,
