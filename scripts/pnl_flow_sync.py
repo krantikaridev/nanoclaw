@@ -13,7 +13,6 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-PNL_FLOW_EVENTS_FILE = ".runtime/pnl_flow_events.jsonl"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -39,11 +38,12 @@ def main(argv: list[str] | None = None) -> int:
 
     import config  # noqa: F401 — load_dotenv
 
+    from nanoclaw.opex_runway import format_wallet_short
     from nanoclaw.pnl_flow_onchain import (
-        merge_onchain_records_into_jsonl,
+        PNL_FLOW_EVENTS_FILE,
         pnl_flow_onchain_enabled,
         pnl_flow_wallet,
-        scrape_onchain_flows,
+        run_pnl_flow_sync,
     )
 
     if not pnl_flow_onchain_enabled():
@@ -55,23 +55,29 @@ def main(argv: list[str] | None = None) -> int:
         print("[pnl_flow_sync] PNL_FLOW_WALLET / WALLET unset — skip", file=sys.stderr)
         return 1
 
-    records = scrape_onchain_flows(
-        wallet=wallet,
+    result = run_pnl_flow_sync(
         lookback_hours=args.lookback_hours,
+        dry_run=args.dry_run,
     )
+    if result is None:
+        print("[pnl_flow_sync] sync skipped — check PNL_FLOW_ONCHAIN_ENABLED / wallet", file=sys.stderr)
+        return 1
+
     if args.dry_run:
-        print(f"[pnl_flow_sync] dry-run wallet={wallet} flows={len(records)}")
-        for rec in records:
+        print(
+            f"[pnl_flow_sync] dry-run wallet={wallet} flows={result.scraped}"
+        )
+        for rec in result.records:
             print(
                 f"  {rec.kind} ${rec.amount_usd:.2f} @ {rec.ts.isoformat()} "
                 f"tx={rec.tx_hash} token={rec.token_symbol}"
             )
         return 0
 
-    existing, appended = merge_onchain_records_into_jsonl(records, PNL_FLOW_EVENTS_FILE)
+    wallet_short = format_wallet_short(result.wallet)
     print(
-        f"[pnl_flow_sync] wallet={wallet} scraped={len(records)} "
-        f"jsonl_existing={existing} appended={appended} path={PNL_FLOW_EVENTS_FILE}"
+        f"[nanoclaw] PNL_FLOW_SYNC | scraped={result.scraped} appended={result.appended} "
+        f"wallet={wallet_short} path={PNL_FLOW_EVENTS_FILE}"
     )
     return 0
 

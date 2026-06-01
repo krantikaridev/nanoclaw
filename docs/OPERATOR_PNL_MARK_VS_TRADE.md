@@ -44,7 +44,11 @@ After **abc**, stables fell below **10% reserve** (~$15.80 on $158 seed) → tie
 
 **Jun 2026 headroom:** Tiered BUY capped so post-trade stables stay **≥ reserve floor + `FE_STABLE_RUNWAY_TIERED_RESERVE_HEADROOM_USD`** (default **$2**). At ~**$19** stables (after rebuild), tiered is **blocked** (would need **≥ ~$22.80** for a **$5** min buy). Stops rebuild→**$10** tiered→**~$9** ping-pong churn.
 
+**Jun 2026 tiered re-entry cooldown:** After a successful **tiered USDC→EQUITY** fill or **WMATIC→stable rebuild** (`FE_STABLE_RUNWAY_TIERED_COOLDOWN_AFTER_REBUILD=true`), tiered BUY is blocked for **`FE_STABLE_RUNWAY_TIERED_COOLDOWN_HOURS`** (default **4h**). State: **`.runtime/fe_tiered_cooldown.json`**. Log: `[nanoclaw] FE STABLE RUNWAY TIERED | cooldown | stable_usd=… | until=…`.
+
 **Jun 2026 de-risk:** When `fe_share ≥ 80%`, stables **$15–$40**, and WMATIC **&lt; $8** (rebuild exhausted), bot may run **capped ~$12 WETH→USDC** (`FE STABLE RUNWAY DERISK`) — works while auto-paused. Lowers ETH mark beta without tiered BUY churn.
+
+**Jun 2026 auto-unpause hysteresis (optional, default off):** When `EXTERNAL_AUTO_UNPAUSE_HYSTERESIS_ENABLED=true`, the external layer (~30s ticks) requires **N consecutive** ticks where the **12h window PnL** is at least **`EXTERNAL_AUTO_WINDOW_MIN_PCT + EXTERNAL_AUTO_UNPAUSE_WINDOW_BUFFER_PCT`** (defaults: −2% + 0.25 → **−1.75%**) before writing `auto_unpause` to `control.json`. A single tick above the −2% pause floor is not enough — reduces pause/unpause whipsaw when the window hovers near the floor. Log example: `[external] auto_unpause hysteresis | ticks=3/6 | window=-1.9%`. Env: `EXTERNAL_AUTO_UNPAUSE_HYSTERESIS_TICKS` (default **6**). See `external_layer/unpause_hysteresis.py`.
 
 ---
 
@@ -128,7 +132,7 @@ Flow-adjusted session PnL: $+2.50 (+2.1%) | detected flows: deposit +$18.00 @ 20
 
 Flow tagging is **read-only** — it does **not** reset `portfolio_session_baseline.json` or change swap execution.
 
-**On-chain v2:** with **`PNL_FLOW_ONCHAIN_ENABLED=true`**, run **`python scripts/pnl_flow_sync.py`** (or cron) to scrape Polygon **USDT/USDC Transfer** logs for **`PNL_FLOW_WALLET`** via RPC and append tx-attributed rows to **`.runtime/pnl_flow_events.jsonl`**. `nanodaily` **prefers on-chain tags over heuristic** when both detect the same flow. Env: **`PNL_FLOW_ONCHAIN_LOOKBACK_HOURS`** (default **168**).
+**On-chain v2:** with **`PNL_FLOW_ONCHAIN_ENABLED=true`**, flows sync via **`PNL_FLOW_AUTO_SYNC_ENABLED=true`** (external layer, default every **6h**) or manual/cron **`python scripts/pnl_flow_sync.py`**. Both scrape Polygon **USDT/USDC Transfer** logs for **`PNL_FLOW_WALLET`** via RPC and append tx-attributed rows to **`.runtime/pnl_flow_events.jsonl`**. `nanodaily` **prefers on-chain tags over heuristic** when both detect the same flow. Env: **`PNL_FLOW_ONCHAIN_LOOKBACK_HOURS`** (default **168**), **`PNL_FLOW_AUTO_SYNC_INTERVAL_HOURS`** (default **6**).
 
 ---
 

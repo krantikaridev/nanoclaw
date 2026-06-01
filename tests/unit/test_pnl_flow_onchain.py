@@ -11,11 +11,13 @@ from nanoclaw.pnl_flow_onchain import (
     OnchainFlowRecord,
     fetch_transfer_logs,
     merge_onchain_records_into_jsonl,
+    run_pnl_flow_sync,
     scrape_onchain_flows,
     wallet_topic_hex,
     _parse_transfer_log,
 )
 import scripts.pnl_report as pnl_report
+from external_layer import pnl_flow_gate as pfg
 
 
 WALLET = "0x05eF62F48Cf339AA003F1a42E4CbD622FFa1FBe6"
@@ -297,3 +299,95 @@ def test_format_flow_adjusted_line_uses_onchain_tags(
     assert "Flow-adjusted session PnL: $+1.13 (+1.13%)" in line
     assert "(on-chain)" in line
     assert "deposit +$18.67" in line
+
+
+def _mock_rpc_get_logs(deposit_tx: str, withdraw_tx: str):
+    def _get_logs(params: dict) -> list[dict]:
+        topics = params["topics"]
+        if topics[1] is None:
+            return [_deposit_log(tx_hash=deposit_tx, amount_usd=18.67, block_number=500)]
+        return [_withdraw_log(tx_hash=withdraw_tx, amount_usd=10.02, block_number=501)]
+
+    def _block_ts(block_num: int) -> datetime | None:
+        if block_num == 500:
+            return datetime(2026, 5, 31, 9, 0, 0, tzinfo=timezone.utc)
+        if block_num == 501:
+            return datetime(2026, 5, 31, 11, 0, 0, tzinfo=timezone.utc)
+        return None
+
+    return _get_logs, _block_ts
+
+
+def test_run_pnl_flow_sync_with_mocked_rpc(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("PNL_FLOW_ONCHAIN_ENABLED", "true")
+    monkeypatch.setenv("PNL_FLOW_WALLET", WALLET)
+    deposit_tx = "0x" + "c" * 64
+    withdraw_tx = "0x" + "d" * 64
+    get_logs, block_ts = _mock_rpc_get_logs(deposit_tx, withdraw_tx)
+    jsonl_path = tmp_path / "pnl_flow_events.jsonl"
+
+    result = run_pnl_flow_sync(
+        lookback_hours=168.0,
+        jsonl_path=jsonl_path,
+        get_logs=get_logs,
+        get_block_timestamp=block_ts,
+        latest_block_number=1000,
+        token_addresses=[("USDT", USDT)],
+        now_utc=datetime(2026, 5, 31, 12, 0, 0, tzinfo=timezone.utc),
+    )
+    assert result is not None
+    assert result.scraped == 2
+    assert result.appended == 2
+    assert result.wallet == WALLET
+    lines = [ln for ln in jsonl_path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    assert len(lines) == 2
+
+
+def test_pnl_flow_gate_skips_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    pfg.reset_pnl_flow_gate_state_for_tests()
+    monkeypatch.setenv("PNL_FLOW_AUTO_SYNC_ENABLED", "false")
+    pfg.maybe_run_pnl_flow_sync(now_unix=1_000_000.0)
+    assert pfg._last_sync_unix == 0.0
+
+
+def test_pnl_flow_gate_runs_on_interval_with_mocked_rpc(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    pfg.reset_pnl_flow_gate_state_for_tests()
+    monkeypatch.setenv("PNL_FLOW_AUTO_SYNC_ENABLED", "true")
+    monkeypatch.setenv("PNL_FLOW_ONCHAIN_ENABLED", "true")
+    monkeypatch.setenv("PNL_FLOW_WALLET", WALLET)
+    monkeypatch.setenv("PNL_FLOW_AUTO_SYNC_INTERVAL_HOURS", "6")
+    deposit_tx = "0x" + "e" * 64
+    withdraw_tx = "0x" + "f" * 64
+    get_logs, block_ts = _mock_rpc_get_logs(deposit_tx, withdraw_tx)
+    jsonl_path = tmp_path / "pnl_flow_events.jsonl"
+
+    pfg.maybe_run_pnl_flow_sync(
+        now_unix=1_000_000.0,
+        jsonl_path=jsonl_path,
+        get_logs=get_logs,
+        get_block_timestamp=block_ts,
+        latest_block_number=1000,
+        token_addresses=[("USDT", USDT)],
+        now_utc=datetime(2026, 5, 31, 12, 0, 0, tzinfo=timezone.utc),
+    )
+    out = capsys.readouterr().out
+    assert "[nanoclaw] PNL_FLOW_SYNC | scraped=2 appended=2 wallet=0x05eF…FBe6" in out
+    assert pfg._last_sync_unix == pytest.approx(1_000_000.0)
+
+    capsys.readouterr()
+    pfg.maybe_run_pnl_flow_sync(
+        now_unix=1_000_100.0,
+        jsonl_path=jsonl_path,
+        get_logs=get_logs,
+        get_block_timestamp=block_ts,
+        latest_block_number=1000,
+        token_addresses=[("USDT", USDT)],
+        now_utc=datetime(2026, 5, 31, 12, 0, 0, tzinfo=timezone.utc),
+    )
+    assert capsys.readouterr().out == ""

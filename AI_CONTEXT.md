@@ -598,7 +598,7 @@ Earnings Volatility Capture Engine v1, while preserving strict hard risk limits 
 | `EXTERNAL_AUTO_PAUSE_ENABLED=true` | **Automated** pause/unpause via `external_layer` → `control.json` (no manual edits) |
 | `EXTERNAL_RPC_PAUSE_ENABLED=true` | **RPC auto-pause**: 2 consecutive all-endpoint probe failures (~60s) → `paused=true`; unpause when probe OK **and** green gates pass |
 | `python scripts/unpause_readiness.py` | Hard gates only (loss-cut off, FE runway, blocklist honor, copy audit) — exit **0** when safe to *consider* unpause |
-| `bash scripts/nano_48h_green.sh` | **48h-green snapshot**: PASS/FAIL on session PnL ≥ 0 and no `EXEC SUCCESS` after `[CONTROL] paused=True`; prints FE share estimate + last 3 `FE STABLE RUNWAY` lines from `real_cron.log`. Exit **0** only when both gates pass. |
+| `bash scripts/nano_48h_green.sh` | **48h-green snapshot**: PASS/FAIL on session PnL ≥ 0 and no `EXEC SUCCESS` after `[CONTROL] paused=True`; prints FE share estimate + last 3 `FE STABLE RUNWAY` lines from `real_cron.log` within the configured window (default 12h), each prefixed with cycle/log timestamp. Exit **0** only when both gates pass. |
 
 **`sprintmon`** was retired from this tree—use **`nanostatus`** / **`nanopnl`** + **`nanobot`** / **`nanoattach`** instead.
 

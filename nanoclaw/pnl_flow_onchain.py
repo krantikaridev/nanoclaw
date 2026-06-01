@@ -18,6 +18,7 @@ TRANSFER_EVENT_TOPIC = (
 _BLOCKS_PER_HOUR_EST = 1800
 _LOG_CHUNK_BLOCKS = 2000
 _STABLE_DECIMALS = 6
+PNL_FLOW_EVENTS_FILE = ".runtime/pnl_flow_events.jsonl"
 
 
 def _parse_env_bool(name: str, default: bool = False) -> bool:
@@ -383,3 +384,57 @@ def merge_onchain_records_into_jsonl(
     if appended:
         p.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return len(existing), appended
+
+
+@dataclass(frozen=True)
+class PnlFlowSyncResult:
+    wallet: str
+    scraped: int
+    appended: int
+    existing: int = 0
+    records: tuple[OnchainFlowRecord, ...] = ()
+
+
+def run_pnl_flow_sync(
+    *,
+    lookback_hours: float | None = None,
+    jsonl_path: Path | str | None = None,
+    dry_run: bool = False,
+    get_logs: Callable[..., list[dict[str, Any]]] | None = None,
+    get_block_timestamp: Callable[[int], datetime | None] | None = None,
+    latest_block_number: int | None = None,
+    token_addresses: Sequence[tuple[str, str]] | None = None,
+    now_utc: datetime | None = None,
+) -> PnlFlowSyncResult | None:
+    """Scrape on-chain flows and merge into jsonl. Returns None when disabled or wallet unset."""
+    if not pnl_flow_onchain_enabled():
+        return None
+    wallet = pnl_flow_wallet()
+    if not wallet:
+        return None
+    records = scrape_onchain_flows(
+        wallet=wallet,
+        lookback_hours=lookback_hours,
+        now_utc=now_utc,
+        get_logs=get_logs,
+        get_block_timestamp=get_block_timestamp,
+        latest_block_number=latest_block_number,
+        token_addresses=token_addresses,
+    )
+    record_tuple = tuple(records)
+    if dry_run:
+        return PnlFlowSyncResult(
+            wallet=wallet,
+            scraped=len(records),
+            appended=0,
+            records=record_tuple,
+        )
+    path = jsonl_path or PNL_FLOW_EVENTS_FILE
+    existing, appended = merge_onchain_records_into_jsonl(records, path)
+    return PnlFlowSyncResult(
+        wallet=wallet,
+        scraped=len(records),
+        appended=appended,
+        existing=existing,
+        records=record_tuple,
+    )

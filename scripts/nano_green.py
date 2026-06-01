@@ -35,6 +35,9 @@ CONTROL_FILE = "control.json"
 PAUSE_LINE_RE = re.compile(r"\[CONTROL\]\s+paused=True", re.IGNORECASE)
 EXEC_SUCCESS_RE = re.compile(r"EXEC SUCCESS")
 FE_RUNWAY_RE = re.compile(r"FE STABLE RUNWAY")
+_LOG_CAL_TS_RE = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s")
+_LOG_BRACKET_TS_RE = re.compile(r"^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]")
+_CYCLE_TS_RE = re.compile(r"=== CYCLE (\d+)")
 WALLET_TOTAL_RE = re.compile(
     r"WALLET TOTAL USD\s*\|\s*TOTAL=\$?([\d.]+).*?\|\s*FE_USD=\$?([\d.]+)",
     re.IGNORECASE,
@@ -237,12 +240,58 @@ def _fe_share_line(root: Path) -> str:
     return "fe_share: n/a"
 
 
-def _runway_lines(root: Path, n: int = 3) -> list[str]:
-    return [
-        line.strip()
-        for line in _read_log_lines(root)
-        if FE_RUNWAY_RE.search(line)
-    ][-n:]
+def _parse_log_line_timestamp(line: str) -> datetime | None:
+    cal = _LOG_CAL_TS_RE.match(line)
+    if cal:
+        try:
+            return datetime.strptime(cal.group(1), "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+        except ValueError:
+            return None
+    bracket = _LOG_BRACKET_TS_RE.match(line)
+    if bracket:
+        try:
+            return datetime.strptime(bracket.group(1), "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+        except ValueError:
+            return None
+    return None
+
+
+def _runway_lines(
+    root: Path,
+    *,
+    hours: float = 12.0,
+    n: int = 3,
+    now: datetime | None = None,
+) -> list[str]:
+    """Last ``n`` FE STABLE RUNWAY lines within ``hours`` lookback, with log timestamps."""
+    now_dt = now or datetime.now(timezone.utc)
+    cutoff = now_dt - timedelta(hours=float(hours))
+    matches: list[str] = []
+    last_ts: datetime | None = None
+
+    for line in _read_log_lines(root):
+        cycle_m = _CYCLE_TS_RE.search(line)
+        if cycle_m:
+            last_ts = datetime.fromtimestamp(int(cycle_m.group(1)), tz=timezone.utc)
+
+        explicit = _parse_log_line_timestamp(line)
+        if explicit is not None:
+            last_ts = explicit
+
+        if not FE_RUNWAY_RE.search(line):
+            continue
+
+        if float(hours) > 0 and (last_ts is None or last_ts < cutoff):
+            continue
+
+        content = line.strip()
+        if last_ts is not None:
+            ts_prefix = last_ts.strftime("%Y-%m-%dT%H:%M:%SZ")
+            matches.append(f"{ts_prefix} | {content}")
+        else:
+            matches.append(content)
+
+    return matches[-n:]
 
 
 def evaluate_green_gate(
@@ -304,7 +353,8 @@ def format_report(result: GreenGateResult, *, paused: bool, reason: str) -> str:
         "",
     ]
     out.extend(result.lines)
-    runway = _runway_lines(Path(os.environ.get("NANOCLAW_ROOT", str(ROOT))))
+    root = Path(os.environ.get("NANOCLAW_ROOT", str(ROOT)))
+    runway = _runway_lines(root, hours=result.hours)
     out.append("runway (last 3 FE STABLE RUNWAY):")
     if runway:
         out.extend(f"  {ln}" for ln in runway)

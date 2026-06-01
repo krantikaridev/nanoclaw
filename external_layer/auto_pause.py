@@ -55,7 +55,33 @@ def evaluate_auto_pause() -> tuple[bool, str, tuple[str, ...]]:
         session_min_pct=session_min,
         window_min_pct=window_min,
     )
+    from .unpause_hysteresis import (
+        apply_unpause_hysteresis,
+        record_unpause_hysteresis_tick,
+        unpause_hysteresis_enabled,
+    )
+
+    window_pct: float | None = None
+    if unpause_hysteresis_enabled():
+        window_pct = record_unpause_hysteresis_tick(
+            root=root,
+            hours=hours,
+            window_min_pct=window_min,
+        )
+
     if result.trading_allowed() and result.overall_pass:
+        allowed, hysteresis_log = apply_unpause_hysteresis(
+            True,
+            window_pct=window_pct,
+        )
+        if hysteresis_log:
+            print(hysteresis_log, flush=True)
+        if not allowed:
+            reason = (
+                f"auto_pause | unpause hysteresis "
+                f"({hours:.0f}h window above floor, awaiting consecutive ticks)"
+            )
+            return False, reason, result.rotation_open
         rot = ", ".join(result.rotation_open) or "none"
         reason = (
             f"auto_unpause | window={hours:.0f}h | session≥{session_min:+.1f}% | "

@@ -37,7 +37,7 @@ Output: git log -1 --oneline on V3.
 
 | Wave | Agents | Can run together? | Touches |
 |------|--------|-------------------|---------|
-| **1** | L, M, N, O | ✅ Yes | external_layer, scripts, nano_green only |
+| **1** | L, M, N, O | ✅ **DONE** | tiered cooldown, unpause hysteresis, flow auto-sync, nano_green timestamps |
 | **2** | P, Q, R | ✅ Yes | new `nanoclaw/*` modules + thin hooks |
 | **3** | S, T | ⚠️ Pair OK | `modules/swap_executor.py` / `signal.py` — **one owner each** |
 | **4** | Parent | After all | merge, full pytest, pre-deploy script |

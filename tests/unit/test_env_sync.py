@@ -186,3 +186,6 @@ def test_env_apply_preserve_keys_include_rpc_runtime_keys():
     assert "OPEX_RUNWAY_ALERT_DAYS" in keys
     assert "OPEX_RUNWAY_AUTO_CHECK_ENABLED" in keys
     assert "FE_USD_FALLBACK_REFRESH_ENABLED" in keys
+    assert "FE_STABLE_RUNWAY_TIERED_COOLDOWN_ENABLED" in keys
+    assert "FE_STABLE_RUNWAY_TIERED_COOLDOWN_HOURS" in keys
+    assert "FE_STABLE_RUNWAY_TIERED_COOLDOWN_AFTER_REBUILD" in keys

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
-from scripts.nano_green import evaluate_green_gate, rotation_open_symbols
+from scripts.nano_green import _runway_lines, evaluate_green_gate, rotation_open_symbols
 
 
 def _write_env(root: Path, **kwargs: str) -> None:
@@ -87,3 +88,33 @@ def test_rotation_open_symbols_respects_blocklist(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     assert rotation_open_symbols(root) == ["WETH_ALPHA"]
+
+
+def test_runway_lines_scoped_to_window_with_timestamps(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    root.mkdir()
+    now = datetime(2026, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+    old_cycle = int((now.timestamp()) - (24 * 3600))
+    new_cycle = int(now.timestamp() - 3600)
+
+    (root / "real_cron.log").write_text(
+        "\n".join(
+            [
+                f"[nanoclaw] === CYCLE {old_cycle} | BALANCES: USDT=$1 USDC=$1 WMATIC=$1 ===",
+                "[nanoclaw] FE STABLE RUNWAY TIERED | allow USDC→EQUITY BUY | stable_usd=18.00 | fe_share=0.85 | signal=0.90 | max_notional=$10.00",
+                f"[nanoclaw] === CYCLE {new_cycle} | BALANCES: USDT=$1 USDC=$1 WMATIC=$1 ===",
+                "[nanoclaw] FE STABLE RUNWAY | defer USDC→EQUITY BUY | stable_usd=13.00 | fe_share=0.89",
+                "[nanoclaw] FE STABLE RUNWAY TIERED | cooldown | stable_usd=13.00 | until=2026-06-01T16:00:00Z",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    lines = _runway_lines(root, hours=12.0, n=3, now=now)
+    assert len(lines) == 2
+    assert all("TIERED | allow" not in ln for ln in lines)
+    assert lines[0].startswith("2026-06-01T11:00:00Z | ")
+    assert "defer USDC→EQUITY BUY" in lines[0]
+    assert lines[1].startswith("2026-06-01T11:00:00Z | ")
+    assert "TIERED | cooldown" in lines[1]

@@ -1558,6 +1558,11 @@ def _fe_stable_runway_tiered_bypass_context(
     base = _fe_stable_runway_buy_block_context(balances)
     if base is None:
         return None
+    from nanoclaw import fe_tiered_cooldown as ftc
+
+    stable_usd = float(balances.usdt) + float(balances.usdc)
+    if ftc.maybe_defer_tiered_bypass(stable_usd):
+        return None
     reserve_block = _operating_reserve_buy_block_context(balances)
     tiered_exempt = _operating_reserve_tiered_exempt_for_signal(balances, signal_strength)
     if reserve_block is not None and not tiered_exempt:
@@ -4029,6 +4034,12 @@ async def main(*, dry_run: bool = False) -> None:
             if is_x_signal_buy:
                 _clear_x_signal_stf_pause(state, decision)
                 print(f"{_X_SIGNAL_STF_LOG} | EXEC SUCCESS | sym={x_sym} | tx={tx_hash}")
+                if _fe_stable_runway_buy_block_active(balances):
+                    from nanoclaw import fe_tiered_cooldown as ftc
+
+                    ftc.maybe_record_tiered_fill_cooldown(
+                        stable_usd=float(balances.usdt) + float(balances.usdc)
+                    )
                 from modules import x_signal_position as xsp
 
                 pending_root = state.setdefault("x_signal_pending_entries", {})
@@ -4078,6 +4089,11 @@ async def main(*, dry_run: bool = False) -> None:
                 _profit_take_record_exit(state)
                 if bool(_low_stables_dust_rebuild_state(state).get("pending_execution")):
                     _record_low_stables_dust_rebuild_executed(state)
+                    from nanoclaw import fe_tiered_cooldown as ftc
+
+                    ftc.maybe_record_rebuild_cooldown(
+                        stable_usd=float(balances.usdt) + float(balances.usdc)
+                    )
             if decision.cooldown_asset:
                 sym_ca, secs_a = decision.cooldown_asset
                 cs.mark_asset_traded(sym_ca, cooldown_seconds=int(secs_a))

@@ -236,10 +236,12 @@ def _apply_post_risk_overrides(payload: dict[str, object]) -> dict[str, object]:
     try:
         from .auto_pause import apply_auto_pause_control, auto_pause_enabled
         from .opex_gate import maybe_run_opex_runway_check
+        from .pnl_flow_gate import maybe_run_pnl_flow_sync
         from .rpc_gate import apply_rpc_pause_control
     except ImportError:
         from auto_pause import apply_auto_pause_control, auto_pause_enabled  # type: ignore[no-redef]
         from opex_gate import maybe_run_opex_runway_check  # type: ignore[no-redef]
+        from pnl_flow_gate import maybe_run_pnl_flow_sync  # type: ignore[no-redef]
         from rpc_gate import apply_rpc_pause_control  # type: ignore[no-redef]
     if auto_pause_enabled():
         payload = apply_auto_pause_control(payload)
@@ -251,6 +253,10 @@ def _apply_post_risk_overrides(payload: dict[str, object]) -> dict[str, object]:
         maybe_run_opex_runway_check(stable_usd=stable)
     except Exception as exc:
         print(f"[EXTERNAL] opex_runway check failed ({exc!s})", flush=True)
+    try:
+        maybe_run_pnl_flow_sync()
+    except Exception as exc:
+        print(f"[EXTERNAL] pnl_flow_sync failed ({exc!s})", flush=True)
     return payload
 
 
