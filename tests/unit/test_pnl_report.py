@@ -607,6 +607,23 @@ def test_sum_turnover_usd_ignores_plan_only_attribution(tmp_path: Path) -> None:
     assert tx_count == 1
 
 
+def test_sum_turnover_usd_ignores_wei_misattribution(tmp_path: Path) -> None:
+    ts = int(datetime(2026, 5, 27, 10, 0, 0, tzinfo=timezone.utc).timestamp())
+    log_file = _write_log(
+        tmp_path,
+        "\n".join(
+            [
+                f"[nanoclaw] === CYCLE {ts} | BALANCES: USDT=$1 USDC=$1 WMATIC=$1 ===",
+                _attribution_line("0xabc666", 5e19),
+                _attribution_line("0xabc777", 12.5),
+            ]
+        ),
+    )
+    notional, tx_count = pnl_report.sum_turnover_usd(log_file)
+    assert notional == pytest.approx(12.5)
+    assert tx_count == 1
+
+
 def test_format_turnover_lines_includes_session(tmp_path: Path) -> None:
     day = datetime(2026, 5, 26, 20, 0, 0, tzinfo=timezone.utc)
     day_start = day.replace(hour=0, minute=0, second=0, microsecond=0)

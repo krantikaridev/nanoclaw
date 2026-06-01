@@ -449,6 +449,12 @@ FE_STABLE_RUNWAY_TARGET_STABLE_USD = env_float("FE_STABLE_RUNWAY_TARGET_STABLE_U
 FE_STABLE_RUNWAY_TIERED_ENABLED = env_bool("FE_STABLE_RUNWAY_TIERED_ENABLED", True)
 FE_STABLE_RUNWAY_TIERED_MIN_SIGNAL = env_float("FE_STABLE_RUNWAY_TIERED_MIN_SIGNAL", 0.85)
 FE_STABLE_RUNWAY_TIERED_MAX_NOTIONAL_USD = env_float("FE_STABLE_RUNWAY_TIERED_MAX_NOTIONAL_USD", 10.0)
+# After tiered BUY, stables must stay ≥ reserve floor + this headroom (blocks $19→$10→$9 ping-pong).
+FE_STABLE_RUNWAY_TIERED_RESERVE_HEADROOM_USD = env_float(
+    "FE_STABLE_RUNWAY_TIERED_RESERVE_HEADROOM_USD", 2.0
+)
+# Minimum effective tiered notional; below this the bypass is skipped (defer to rebuild).
+FE_STABLE_RUNWAY_TIERED_MIN_NOTIONAL_USD = env_float("FE_STABLE_RUNWAY_TIERED_MIN_NOTIONAL_USD", 5.0)
 # Operating reserve: keep stables ≥ seed × pct for gas + RPC/hosting (defer new entries only).
 OPERATING_RESERVE_ENABLED = env_bool("OPERATING_RESERVE_ENABLED", True)
 OPERATING_RESERVE_PCT = env_float("OPERATING_RESERVE_PCT", 10.0)

@@ -359,6 +359,8 @@ _SWAP_SUCCESS_MARKER = "Swap executed successfully!"
 _TRADE_ATTRIBUTION_ONCHAIN_RE = re.compile(
     r"\[nanoclaw\]\s+TRADE_ATTRIBUTION\s+tx=(0x[0-9a-fA-F]+).*?\bsz≈([\d.eE+\-]+)"
 )
+# Reject raw token ``amount_in`` mis-logged when ``trade_size`` was zero (wei-scale notional).
+_MAX_TURNOVER_ATTRIBUTION_USD = 100_000.0
 
 
 _TRADE_SKIPPED_MARKER = "TRADE SKIPPED"
@@ -567,13 +569,13 @@ def sum_turnover_usd(
         tx_hex = attr.group(1).lower()
         if tx_hex in seen_tx:
             continue
-        seen_tx.add(tx_hex)
         try:
             sz = float(attr.group(2))
         except ValueError:
             continue
-        if not math.isfinite(sz) or sz < 0:
+        if not math.isfinite(sz) or sz < 0 or sz > _MAX_TURNOVER_ATTRIBUTION_USD:
             continue
+        seen_tx.add(tx_hex)
         notional_sum += sz
     return notional_sum, len(seen_tx)
 

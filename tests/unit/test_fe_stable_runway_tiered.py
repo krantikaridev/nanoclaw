@@ -69,11 +69,57 @@ def test_tiered_blocks_below_operating_reserve(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(se.cfg, "OPERATING_RESERVE_ENABLED", True)
     monkeypatch.setattr(se.cfg, "OPERATING_RESERVE_PCT", 10.0)
     monkeypatch.setattr(se.cfg, "STAGE_SEED_AUTO_SYNC_ENABLED", False)
+    monkeypatch.setattr(se.cfg, "FE_STABLE_RUNWAY_TIERED_RESERVE_HEADROOM_USD", 2.0)
+    monkeypatch.setattr(se.cfg, "FE_STABLE_RUNWAY_TIERED_MIN_NOTIONAL_USD", 5.0)
 
     bal = _Bal(usdt=1.07, usdc=13.42, total=158.16, fe=131.5)
     assert se._operating_reserve_buy_block_active(bal) is True  # noqa: SLF001
     assert se._fe_stable_runway_tiered_bypass_context(bal, signal_strength=0.92) is None  # noqa: SLF001
     assert se._low_stables_rebuild_urgent(bal) is True  # noqa: SLF001
+
+
+def test_tiered_blocks_when_headroom_insufficient(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Jun 2026 ping-pong: ~$19 stables after rebuild — $10 tiered would drop below reserve+headroom."""
+    monkeypatch.setattr(se.cfg, "FE_STABLE_RUNWAY_ENABLED", True)
+    monkeypatch.setattr(se.cfg, "FE_STABLE_RUNWAY_TARGET_STABLE_USD", 40.0)
+    monkeypatch.setattr(se.cfg, "FE_STABLE_RUNWAY_MIN_FE_SHARE", 0.55)
+    monkeypatch.setattr(se.cfg, "FE_STABLE_RUNWAY_TIERED_ENABLED", True)
+    monkeypatch.setattr(se.cfg, "FE_STABLE_RUNWAY_TIERED_MIN_SIGNAL", 0.85)
+    monkeypatch.setattr(se.cfg, "FE_STABLE_RUNWAY_TIERED_MAX_NOTIONAL_USD", 10.0)
+    monkeypatch.setattr(se.cfg, "FE_STABLE_RUNWAY_TIERED_RESERVE_HEADROOM_USD", 2.0)
+    monkeypatch.setattr(se.cfg, "FE_STABLE_RUNWAY_TIERED_MIN_NOTIONAL_USD", 5.0)
+    monkeypatch.setattr(se.cfg, "OPERATING_RESERVE_TIERED_EXEMPT_ENABLED", False)
+    monkeypatch.setattr(se.cfg, "STAGE_SEED_USD", 158.0)
+    monkeypatch.setattr(se.cfg, "OPERATING_RESERVE_ENABLED", True)
+    monkeypatch.setattr(se.cfg, "OPERATING_RESERVE_PCT", 10.0)
+    monkeypatch.setattr(se.cfg, "STAGE_SEED_AUTO_SYNC_ENABLED", False)
+
+    bal = _Bal(usdt=1.07, usdc=18.37, total=155.22, fe=129.0)
+    assert se._operating_reserve_buy_block_active(bal) is False  # noqa: SLF001
+    assert se._fe_stable_runway_tiered_bypass_context(bal, signal_strength=0.92) is None  # noqa: SLF001
+
+
+def test_tiered_caps_notional_to_reserve_headroom(monkeypatch: pytest.MonkeyPatch) -> None:
+    """At $28 stables, tiered spend capped so post-buy stables ≥ $17.80 (reserve $15.80 + $2 headroom)."""
+    monkeypatch.setattr(se.cfg, "FE_STABLE_RUNWAY_ENABLED", True)
+    monkeypatch.setattr(se.cfg, "FE_STABLE_RUNWAY_TARGET_STABLE_USD", 40.0)
+    monkeypatch.setattr(se.cfg, "FE_STABLE_RUNWAY_MIN_FE_SHARE", 0.55)
+    monkeypatch.setattr(se.cfg, "FE_STABLE_RUNWAY_TIERED_ENABLED", True)
+    monkeypatch.setattr(se.cfg, "FE_STABLE_RUNWAY_TIERED_MIN_SIGNAL", 0.85)
+    monkeypatch.setattr(se.cfg, "FE_STABLE_RUNWAY_TIERED_MAX_NOTIONAL_USD", 10.0)
+    monkeypatch.setattr(se.cfg, "FE_STABLE_RUNWAY_TIERED_RESERVE_HEADROOM_USD", 2.0)
+    monkeypatch.setattr(se.cfg, "FE_STABLE_RUNWAY_TIERED_MIN_NOTIONAL_USD", 5.0)
+    monkeypatch.setattr(se.cfg, "STAGE_SEED_USD", 158.0)
+    monkeypatch.setattr(se.cfg, "OPERATING_RESERVE_ENABLED", True)
+    monkeypatch.setattr(se.cfg, "OPERATING_RESERVE_PCT", 10.0)
+    monkeypatch.setattr(se.cfg, "STAGE_SEED_AUTO_SYNC_ENABLED", False)
+
+    bal = _Bal(usdt=1.0, usdc=26.0, total=155.0, fe=127.0)
+    ctx = se._fe_stable_runway_tiered_bypass_context(bal, signal_strength=0.92)  # noqa: SLF001
+    assert ctx is not None
+    assert ctx["max_notional_usd"] == pytest.approx(9.2)
+    capped = se.fe_stable_runway_tiered_cap_notional_usd(bal, signal_strength=0.92, proposed_notional_usd=12.0)
+    assert capped == pytest.approx(9.2)
 
 
 def test_low_stables_rebuild_eligible_at_490_notional(monkeypatch: pytest.MonkeyPatch) -> None:

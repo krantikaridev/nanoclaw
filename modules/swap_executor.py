@@ -1465,6 +1465,31 @@ def _low_stables_rebuild_urgent(balances: Balances) -> bool:
     return float(balances.total_portfolio_usd) > min_portfolio
 
 
+def _operating_reserve_floor_usd(balances: Balances) -> float:
+    """Reserve floor (seed × pct) even when stables are above it."""
+    if not bool(getattr(cfg, "OPERATING_RESERVE_ENABLED", True)):
+        return 0.0
+    pct = float(getattr(cfg, "OPERATING_RESERVE_PCT", 10.0))
+    if pct <= 0.0:
+        return 0.0
+    seed = _operating_reserve_seed_usd(balances)
+    if seed <= 0.0:
+        return 0.0
+    return seed * (pct / 100.0)
+
+
+def _fe_stable_runway_tiered_min_stables_after_buy_usd(balances: Balances) -> float:
+    """Stables floor tiered BUY must leave after spend (reserve + optional headroom)."""
+    headroom = float(getattr(cfg, "FE_STABLE_RUNWAY_TIERED_RESERVE_HEADROOM_USD", 2.0))
+    return max(0.0, _operating_reserve_floor_usd(balances) + max(0.0, headroom))
+
+
+def _fe_stable_runway_tiered_max_spend_usd(balances: Balances) -> float:
+    stable_usd = float(balances.usdt) + float(balances.usdc)
+    min_after = _fe_stable_runway_tiered_min_stables_after_buy_usd(balances)
+    return max(0.0, stable_usd - min_after)
+
+
 def _operating_reserve_tiered_exempt_for_signal(
     balances: Balances,
     signal_strength: float,
@@ -1501,10 +1526,15 @@ def _fe_stable_runway_tiered_bypass_context(
     max_notional = float(getattr(cfg, "FE_STABLE_RUNWAY_TIERED_MAX_NOTIONAL_USD", 10.0))
     if max_notional <= 0.0:
         return None
+    max_spend = _fe_stable_runway_tiered_max_spend_usd(balances)
+    effective_max = min(max_notional, max_spend)
+    min_notional = float(getattr(cfg, "FE_STABLE_RUNWAY_TIERED_MIN_NOTIONAL_USD", 5.0))
+    if effective_max + 1e-9 < min_notional:
+        return None
     return {
         **base,
         "signal_strength": float(signal_strength),
-        "max_notional_usd": max_notional,
+        "max_notional_usd": effective_max,
     }
 
 
@@ -1531,8 +1561,7 @@ def fe_stable_runway_tiered_cap_notional_usd(
     ctx = _fe_stable_runway_tiered_bypass_context(balances, signal_strength=signal_strength)
     if ctx is None:
         return float(proposed_notional_usd)
-    stable_usd = float(balances.usdt) + float(balances.usdc)
-    cap = min(float(ctx["max_notional_usd"]), stable_usd)
+    cap = float(ctx["max_notional_usd"])
     return min(float(proposed_notional_usd), cap)
 
 

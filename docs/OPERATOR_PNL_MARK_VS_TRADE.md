@@ -42,6 +42,8 @@ After **abc**, stables fell below **10% reserve** (~$15.80 on $158 seed) → tie
 
 **Jun 2026 fix:** When stables **< $15** rebuild threshold, **no tiered BUY** (rebuild only). WMATIC→USDC dust bypass floor lowered to **$4** so ~$4.90 reserve-protection sells execute.
 
+**Jun 2026 headroom:** Tiered BUY capped so post-trade stables stay **≥ reserve floor + `FE_STABLE_RUNWAY_TIERED_RESERVE_HEADROOM_USD`** (default **$2**). At ~**$19** stables (after rebuild), tiered is **blocked** (would need **≥ ~$22.80** for a **$5** min buy). Stops rebuild→**$10** tiered→**~$9** ping-pong churn.
+
 ---
 
 ## `FE_USD` and `FE_USD AUTO_FLOOR_UPDATE`
