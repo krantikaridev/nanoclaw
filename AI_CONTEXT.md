@@ -58,7 +58,7 @@ When a Grok (or Cursor) thread hits the message limit—or you deliberately star
 
 1. **Open the canonical snapshot**: Fetch raw `AI_CONTEXT.md` from branch `V2`: `https://raw.githubusercontent.com/krantikaridev/nanoclaw/V2/AI_CONTEXT.md`
 2. **Paste the operative sections** into the new thread **or** the first message: minimum = **AI / Cursor convention (Aniki)**, **On-chain ground truth**, **What the bot reports vs UI**, **Systematic Learning & History**, **Strategic release train (big picture)**, **Current Situation**, **TODO & Backlog**, **House-Cleaning Checklist**, and **V2.5.11+ Roadmap**, plus wallet (public) context if rotating.
-3. **Follow the detailed checklist**: Step-by-step copy/paste order and pitfalls live in **`docs/NEW_THREAD_PROTOCOL.md`**.
+3. **Follow the detailed checklist**: Step-by-step copy/paste order and pitfalls live in **`docs/NEW_THREAD_PROTOCOL.md`**. **Latest stage session snapshot (Jun 2026):** **`docs/OPERATOR_HANDOFF_2026-06-01.md`** (VM `V2` vs dev `V3`, deploy state, next steps).
 4. **Declare branch + scope** in thread #1 (`V2`, stage vs prod, VM vs local).
 5. **Secrets**: Never paste `.env`; refer only to **`.env.example` keys by name.**
 6. **First action in-thread**: Align on acceptance criteria once, then execute—mirror **One-go execution protocol** below.

@@ -46,6 +46,8 @@ After **abc**, stables fell below **10% reserve** (~$15.80 on $158 seed) → tie
 
 **Jun 2026 tiered re-entry cooldown:** After a successful **tiered USDC→EQUITY** fill or **WMATIC→stable rebuild** (`FE_STABLE_RUNWAY_TIERED_COOLDOWN_AFTER_REBUILD=true`), tiered BUY is blocked for **`FE_STABLE_RUNWAY_TIERED_COOLDOWN_HOURS`** (default **4h**). State: **`.runtime/fe_tiered_cooldown.json`**. Log: `[nanoclaw] FE STABLE RUNWAY TIERED | cooldown | stable_usd=… | until=…`.
 
+**Jun 2026 handoff:** Full thread state — [`docs/OPERATOR_HANDOFF_2026-06-01.md`](OPERATOR_HANDOFF_2026-06-01.md) (VM on `V2` @ `02c5fcd7`, V3 @ `de1c1c24` not deployed).
+
 **Jun 2026 de-risk:** When `fe_share ≥ 80%`, stables **$15–$40**, and WMATIC **&lt; $8** (rebuild exhausted), bot may run **capped ~$12 WETH→USDC** (`FE STABLE RUNWAY DERISK`) — works while auto-paused. Lowers ETH mark beta without tiered BUY churn.
 
 **Jun 2026 auto-unpause hysteresis (optional, default off):** When `EXTERNAL_AUTO_UNPAUSE_HYSTERESIS_ENABLED=true`, the external layer (~30s ticks) requires **N consecutive** ticks where the **12h window PnL** is at least **`EXTERNAL_AUTO_WINDOW_MIN_PCT + EXTERNAL_AUTO_UNPAUSE_WINDOW_BUFFER_PCT`** (defaults: −2% + 0.25 → **−1.75%**) before writing `auto_unpause` to `control.json`. A single tick above the −2% pause floor is not enough — reduces pause/unpause whipsaw when the window hovers near the floor. Log example: `[external] auto_unpause hysteresis | ticks=3/6 | window=-1.9%`. Env: `EXTERNAL_AUTO_UNPAUSE_HYSTERESIS_TICKS` (default **6**). See `external_layer/unpause_hysteresis.py`.
