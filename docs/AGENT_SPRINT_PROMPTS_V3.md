@@ -38,8 +38,8 @@ Output: git log -1 --oneline on V3.
 | Wave | Agents | Can run together? | Touches |
 |------|--------|-------------------|---------|
 | **1** | L, M, N, O | ✅ **DONE** | tiered cooldown, unpause hysteresis, flow auto-sync, nano_green timestamps |
-| **2** | P, Q, R | ✅ Yes | new `nanoclaw/*` modules + thin hooks |
-| **3** | S, T | ⚠️ Pair OK | `modules/swap_executor.py` / `signal.py` — **one owner each** |
+| **2** | P, Q, R | ✅ **DONE** | dynamic FE trim, drawdown throttle, adverse churn guard |
+| **3** | S, T | ✅ **DONE** | high-stable WMATIC rotation, v3_pre_deploy_check.sh |
 | **4** | Parent | After all | merge, full pytest, pre-deploy script |
 
 **Rule:** Agents **P–R** add logic in **new modules** and expose **one public function** wired from existing call sites. Avoid editing the same function bodies in parallel.

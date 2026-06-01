@@ -1492,6 +1492,11 @@ def try_fe_stable_runway_trim_equity_decision(
             stable_usd=float(fe_ctx["stable_usd"]),
             fe_share=float(fe_ctx["fe_share"]),
             max_trim_usd=float(fe_ctx["max_trim_usd"]),
+            dynamic_trim_usd=(
+                float(fe_ctx["dynamic_trim_usd"])
+                if "dynamic_trim_usd" in fe_ctx
+                else None
+            ),
         )
     else:
         swap_exec._log_fe_stable_runway_trim(
@@ -1685,6 +1690,12 @@ def try_x_signal_equity_decision(
             state=state,
             get_equity_balance=fcb.get_token_balance,
         ),
+    )
+    from nanoclaw import drawdown_throttle as drawdown_throttle_mod
+
+    buy_mult = drawdown_throttle_mod.apply_buy_size_multiplier(
+        buy_mult,
+        current_total=float(balances.total_portfolio_usd),
     )
     from modules import swap_executor as swap_exec
 

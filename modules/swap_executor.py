@@ -1453,7 +1453,18 @@ def _fe_stable_runway_derisk_context(
     base = _fe_stable_runway_buy_block_context(balances)
     if base is None:
         return None
-    min_fe = float(getattr(cfg, "FE_STABLE_RUNWAY_DERISK_MIN_FE_SHARE", 0.80))
+    default_min_fe = float(getattr(cfg, "FE_STABLE_RUNWAY_DERISK_MIN_FE_SHARE", 0.80))
+    default_max_trim = float(getattr(cfg, "FE_STABLE_RUNWAY_DERISK_MAX_TRIM_NOTIONAL_USD", 12.0))
+    from nanoclaw import fe_dynamic_trim as fdt
+
+    dynamic = fdt.resolve_derisk_dynamic_trim(
+        float(base["fe_share"]),
+        default_max_trim_usd=default_max_trim,
+        default_min_fe_share=default_min_fe,
+    )
+    if dynamic.max_trim_usd is None:
+        return None
+    min_fe = float(dynamic.min_fe_share)
     if float(base["fe_share"]) + 1e-9 < min_fe:
         return None
     stable_usd = float(base["stable_usd"])
@@ -1472,13 +1483,16 @@ def _fe_stable_runway_derisk_context(
             return None
     elif float(balances.wmatic) > 0.0:
         return None
-    max_trim = float(getattr(cfg, "FE_STABLE_RUNWAY_DERISK_MAX_TRIM_NOTIONAL_USD", 12.0))
+    max_trim = float(dynamic.max_trim_usd)
     if max_trim <= 0.0:
         return None
-    return {
+    ctx: dict[str, float] = {
         **base,
         "max_trim_usd": max_trim,
     }
+    if dynamic.dynamic_trim_usd is not None:
+        ctx["dynamic_trim_usd"] = float(dynamic.dynamic_trim_usd)
+    return ctx
 
 
 def _fe_stable_runway_buy_block_active(
@@ -1609,7 +1623,13 @@ def fe_stable_runway_tiered_cap_notional_usd(
     if ctx is None:
         return float(proposed_notional_usd)
     cap = float(ctx["max_notional_usd"])
-    return min(float(proposed_notional_usd), cap)
+    from nanoclaw import drawdown_throttle as dt
+
+    throttled_cap = dt.apply_tiered_max_throttle(
+        cap,
+        current_total=float(balances.total_portfolio_usd),
+    )
+    return min(float(proposed_notional_usd), throttled_cap)
 
 
 def _log_fe_stable_runway_trim(
@@ -1634,11 +1654,15 @@ def _log_fe_stable_runway_derisk(
     stable_usd: float,
     fe_share: float,
     max_trim_usd: float,
+    dynamic_trim_usd: float | None = None,
 ) -> None:
+    dynamic_part = ""
+    if dynamic_trim_usd is not None:
+        dynamic_part = f" | dynamic_trim_usd={float(dynamic_trim_usd):.2f}"
     print(
         f"{_FE_STABLE_RUNWAY_DERISK_LOG} | sym={sym} | sell_fraction={float(sell_fraction):.4f} | "
         f"stable_usd={float(stable_usd):.2f} | fe_share={float(fe_share):.2f} | "
-        f"max_trim_usd={float(max_trim_usd):.2f}"
+        f"max_trim_usd={float(max_trim_usd):.2f}{dynamic_part}"
     )
 
 
@@ -3572,6 +3596,29 @@ def determine_trade_decision(
 
     print(f"🔍 DECISION PATH: MAIN_STRATEGY (WMATIC≈${current_price:.4f})")
     _log_main_strategy_cycle_status(balances, current_price, profit_signal, state)
+    if not pause_active and not entries_paused:
+        from nanoclaw import high_stable_wmatic_rotation as hswm
+
+        hs_decision = hswm.try_high_stable_wmatic_rotation_decision(
+            balances,
+            entries_paused=entries_paused,
+        )
+        if hs_decision is not None:
+            if not _defer_if_dust(
+                hs_decision,
+                branch_name="HIGH_STABLE_WMATIC",
+                current_price_usd=current_price,
+            ):
+                decision_log.log_main_strategy_decision(
+                    action="ACCEPT",
+                    reason="high_stable_wmatic_rotation",
+                    direction="USDC_TO_WMATIC",
+                    notional_usd=float(hs_decision.trade_size or 0.0),
+                    wmatic_balance=float(balances.wmatic),
+                    wmatic_usd=float(balances.wmatic) * float(current_price),
+                    state=state,
+                )
+                return hs_decision
     # Signal-Driven Rotation (May 2026): idle WMATIC profit-take → opportunistic stable→equity via X-SIGNAL.
     if not pause_active and not entries_paused:
         fallback_xd = _main_strategy_stable_rotation_fallback(

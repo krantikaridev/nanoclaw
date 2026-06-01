@@ -35,6 +35,7 @@ def _patch_stage_vm(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(se.cfg, "FE_STABLE_RUNWAY_DERISK_MIN_STABLE_USD", 15.0)
     monkeypatch.setattr(se.cfg, "FE_STABLE_RUNWAY_DERISK_MAX_TRIM_NOTIONAL_USD", 12.0)
     monkeypatch.setattr(se.cfg, "FE_STABLE_RUNWAY_DERISK_MAX_WMATIC_USD", 8.0)
+    monkeypatch.setattr(se.cfg, "FE_STABLE_RUNWAY_DERISK_DYNAMIC_ENABLED", False)
     monkeypatch.setattr(se.cfg, "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_MAX_STABLE_USD", 15.0)
     monkeypatch.setattr(se.cfg, "STAGE_SEED_USD", 158.0)
     monkeypatch.setattr(se.cfg, "OPERATING_RESERVE_ENABLED", True)

@@ -32,6 +32,7 @@ def test_tiered_bypass_matches_vm_book(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(se.cfg, "FE_STABLE_RUNWAY_TIERED_ENABLED", True)
     monkeypatch.setattr(se.cfg, "FE_STABLE_RUNWAY_TIERED_MIN_SIGNAL", 0.85)
     monkeypatch.setattr(se.cfg, "FE_STABLE_RUNWAY_TIERED_MAX_NOTIONAL_USD", 10.0)
+    monkeypatch.setattr(se.cfg, "DRAWDOWN_THROTTLE_ENABLED", False)
     monkeypatch.setattr(se.cfg, "STAGE_SEED_USD", 132.0)
     monkeypatch.setattr(se.cfg, "OPERATING_RESERVE_ENABLED", True)
     monkeypatch.setattr(se.cfg, "OPERATING_RESERVE_PCT", 10.0)

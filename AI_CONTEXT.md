@@ -342,6 +342,16 @@ Instance A had **8 Polygon token contracts** (USDC, USDT, WMATIC, …) in `follo
 - **Disable rollback**: `FE_STABLE_RUNWAY_ENABLED=false` restores prior FE-heavy + low-stables deadlock behavior.
 - **Operator grep**: `grep -E 'FE STABLE RUNWAY' real_cron.log | tail -20`
 
+## Today's learnings (Jun 2026 — dynamic FE de-risk trim bands)
+
+- **`nanoclaw/fe_dynamic_trim.py`**: When `FE_STABLE_RUNWAY_DERISK_DYNAMIC_ENABLED=true`, scales de-risk cap by FE share: skip below `FE_STABLE_RUNWAY_DERISK_LOW_FE_SHARE` (0.70); default `FE_STABLE_RUNWAY_DERISK_MAX_TRIM_NOTIONAL_USD` in mid band; raise to `FE_STABLE_RUNWAY_DERISK_HIGH_FE_MAX_TRIM_USD` above `FE_STABLE_RUNWAY_DERISK_HIGH_FE_SHARE` (0.85) with relaxed min FE (0.70). Dead-zone stable bounds ($15–$40) unchanged.
+- **Logs**: `FE STABLE RUNWAY DERISK | … | dynamic_trim_usd=…` on resolution and trim execution when dynamic enabled.
+
+## Today's learnings (Jun 2026 — drawdown notional throttle)
+
+- **`nanoclaw/drawdown_throttle.py`**: When `DRAWDOWN_THROTTLE_ENABLED=true` and window PnL (default **8h** from `portfolio_history.csv`, same math as `nano_green`) is below `DRAWDOWN_THROTTLE_TRIGGER_PCT` (default **−1%**), halve tiered max notional and X-SIGNAL `buy_size_multiplier` via `DRAWDOWN_THROTTLE_NOTIONAL_MULT` (default **0.5**). Protection exits (derisk, rebuild, loss-cut) unchanged.
+- **Logs**: `[nanoclaw] DRAWDOWN THROTTLE | window=-1.2% | tiered_max=$5.00`
+
 ## Today's learnings (30 May 2026 — P1 auto FE_USD last-good spot cache)
 
 - **Incident (Instance A)**: `followed_equities.json` had **WETH_ALPHA** `current_price_usd=2500` (repo default + VM stash) while live pool quote was ~**$2000**/token → `FE_USD FALLBACK FLOOR APPLIED` contributed **$99.39** vs live **$79.53** → **TOTAL ~$150.91** vs MetaMask Polygon **~$131** → false **+14%** session PnL.

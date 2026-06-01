@@ -658,6 +658,12 @@ def _print_adverse_day_oneliner(current_total_usd: float) -> None:
         line = format_adverse_day_oneliner(metrics)
         if line:
             print(line)
+        try:
+            from nanoclaw.adverse_churn_guard import maybe_refresh_from_metrics
+
+            maybe_refresh_from_metrics(metrics)
+        except Exception:
+            pass
     except Exception:
         return
 

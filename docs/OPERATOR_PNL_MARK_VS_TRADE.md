@@ -223,6 +223,24 @@ python scripts/pnl_adverse_day.py --hours 24
 
 **Read-only** — metrics do not change swap sizing, gates, or baselines.
 
+### Adverse churn guard (v1 log + flag)
+
+With **`ADVERSE_CHURN_GUARD_ENABLED=true`**, the same adverse window that prints the one-liner also:
+
+1. Logs **`[nanoclaw] ADVERSE CHURN GUARD | …`** when **24h red** and fills ≥ **`PNL_ADVERSE_DAY_MIN_FILLS`**
+2. Writes **`.runtime/adverse_churn_flag.json`** with `"active": true` and **`recommended_notional_mult`** from **`ADVERSE_CHURN_GUARD_FILL_MULT`** (default **0.5**)
+
+When the window is green or fills are below the floor, the flag is refreshed with `"active": false`.
+
+**v1 does not** auto-pause, change green gates, or force trades — log and runtime file only.
+
+**v2 hook (Agent Q):** `nanoclaw.adverse_churn_guard.read_recommended_notional_mult()` returns the recommended multiplier when active (else `1.0`). Intended for tiered max notional / X-SIGNAL buy sizing alongside drawdown throttle — not wired in v1.
+
+```bash
+cat .runtime/adverse_churn_flag.json
+grep 'ADVERSE CHURN GUARD' real_cron.log | tail -5
+```
+
 ---
 
 ## Commands reference
