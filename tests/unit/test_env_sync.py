@@ -175,6 +175,9 @@ def test_env_apply_preserve_keys_include_rpc_runtime_keys():
     assert "PNL_FLOW_TAG_ENABLED" in keys
     assert "PNL_FLOW_STEP_MIN_USD" in keys
     assert "PNL_FLOW_LOOKBACK_HOURS" in keys
+    assert "PNL_FLOW_ONCHAIN_ENABLED" in keys
+    assert "PNL_FLOW_ONCHAIN_LOOKBACK_HOURS" in keys
+    assert "PNL_FLOW_WALLET" in keys
     assert "PNL_ADVERSE_DAY_ENABLED" in keys
     assert "PNL_ADVERSE_DAY_WINDOW_HOURS" in keys
     assert "PNL_ADVERSE_DAY_MIN_FILLS" in keys

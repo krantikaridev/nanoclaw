@@ -969,8 +969,9 @@ class FlowEvent:
     ts: datetime
     kind: str  # deposit_est | withdraw_est | deposit | withdraw
     amount_usd: float
-    source: str  # heuristic | manual
+    source: str  # heuristic | manual | onchain
     confidence: float | None = None
+    tx_hash: str | None = None
 
     @property
     def signed_usd(self) -> float:
@@ -1120,7 +1121,7 @@ def detect_flow_events_heuristic(
 
 
 def load_manual_flow_events(path: Path | str | None = None) -> list[FlowEvent]:
-    """Operator tags from ``.runtime/pnl_flow_events.jsonl`` (one JSON object per line)."""
+    """Persisted tags from ``.runtime/pnl_flow_events.jsonl`` (manual + on-chain sync)."""
     p = Path(path or PNL_FLOW_EVENTS_FILE)
     if not p.is_file():
         return []
@@ -1148,17 +1149,54 @@ def load_manual_flow_events(path: Path | str | None = None) -> list[FlowEvent]:
         ts = _parse_iso_ts(str(ts_raw or ""))
         if ts is None:
             continue
+        source_raw = str(obj.get("source") or "manual").strip().lower()
+        source = "onchain" if source_raw == "onchain" else "manual"
+        conf_raw = obj.get("confidence")
+        confidence: float | None
+        if conf_raw is None:
+            confidence = 1.0 if source == "onchain" else None
+        else:
+            try:
+                confidence = float(conf_raw)
+            except (TypeError, ValueError):
+                confidence = None
+        tx_hash = str(obj.get("tx_hash") or "").strip() or None
         events.append(
             FlowEvent(
                 ts=ts,
                 kind=kind,
                 amount_usd=amount,
-                source="manual",
-                confidence=None,
+                source=source,
+                confidence=confidence,
+                tx_hash=tx_hash,
             )
         )
     events.sort(key=lambda e: e.ts)
     return events
+
+
+def _heuristic_suppressed_by_onchain(
+    heuristic: FlowEvent,
+    onchain_events: list[FlowEvent],
+    *,
+    amount_tol_pct: float = 0.15,
+    time_tol_sec: float = 86400.0,
+) -> bool:
+    """Drop heuristic tag when a matching on-chain flow exists."""
+    def _base_kind(kind: str) -> str:
+        return "deposit" if kind.startswith("deposit") else "withdraw"
+
+    h_kind = _base_kind(heuristic.kind)
+    for oc in onchain_events:
+        if _base_kind(oc.kind) != h_kind:
+            continue
+        denom = max(float(oc.amount_usd), 1.0)
+        if abs(float(oc.amount_usd) - float(heuristic.amount_usd)) / denom > amount_tol_pct:
+            continue
+        if abs((oc.ts - heuristic.ts).total_seconds()) > time_tol_sec:
+            continue
+        return True
+    return False
 
 
 def collect_session_flow_events(
@@ -1170,23 +1208,32 @@ def collect_session_flow_events(
     history_rows: list[tuple[datetime, float, float]] | None = None,
     manual_path: Path | str | None = None,
 ) -> list[FlowEvent]:
-    """Merge heuristic + manual flow tags within the session window."""
+    """Merge on-chain + manual + heuristic flow tags within the session window."""
     sess_dt = _parse_iso_ts(session_started_at)
     if sess_dt is None:
         return []
     now = now_utc or datetime.now(timezone.utc)
+    persisted = load_manual_flow_events(manual_path)
+    onchain = [e for e in persisted if e.source == "onchain"]
+    manual = [e for e in persisted if e.source == "manual"]
     heuristic = detect_flow_events_heuristic(
         min_usd=min_usd,
         lookback_hours=lookback_hours,
         now_utc=now,
         history_rows=history_rows,
     )
-    manual = load_manual_flow_events(manual_path)
     merged: list[FlowEvent] = []
-    for event in sorted(heuristic + manual, key=lambda e: (e.ts, e.source != "manual")):
+    for event in onchain + manual:
         if event.ts < sess_dt or event.ts > now:
             continue
         merged.append(event)
+    for event in heuristic:
+        if event.ts < sess_dt or event.ts > now:
+            continue
+        if onchain and _heuristic_suppressed_by_onchain(event, onchain):
+            continue
+        merged.append(event)
+    merged.sort(key=lambda e: e.ts)
     return merged
 
 
@@ -1205,7 +1252,15 @@ def compute_flow_adjusted_session_pnl(
 def format_flow_event_tag(event: FlowEvent) -> str:
     label = "deposit" if event.kind in {"deposit_est", "deposit"} else "withdraw"
     sign = "+" if label == "deposit" else "-"
-    suffix = "(manual)" if event.source == "manual" else "(est)"
+    if event.source == "onchain":
+        suffix = "(on-chain)"
+    elif event.source == "manual":
+        suffix = "(manual)"
+    else:
+        suffix = "(est)"
+    if event.tx_hash:
+        tx_short = event.tx_hash if len(event.tx_hash) <= 14 else event.tx_hash[:10] + "…"
+        suffix = f"{suffix} tx={tx_short}"
     return f"{label} {sign}${event.amount_usd:.2f} @ {event.ts.isoformat()} {suffix}"
 
 
