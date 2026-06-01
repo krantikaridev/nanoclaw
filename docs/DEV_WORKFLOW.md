@@ -73,14 +73,51 @@ When writing agent instructions or runbook steps, **label the shell** if a snipp
   4. `git diff --stat` and verify only intended files.
 - Any behavior/config change must include tests + docs + `.env.example` updates in same PR.
 
-## V3 sprint branch (dev-only)
+## V3 merge gate
 
-- **Live stage VM stays on `V2`** while monitoring (auto-pause, window PnL, post-derisk book).
-- **Feature work** lands on **`V3`** forked from latest `V2` (≥ `02c5fcd7`). Parallel agent prompts: [`docs/AGENT_SPRINT_PROMPTS_V3.md`](AGENT_SPRINT_PROMPTS_V3.md).
-- **Do not `nanodeploy` V3** to stage until:
-  1. `bash scripts/v3_pre_deploy_check.sh` passes (Agent T), and
-  2. Parent merges `V3` → `V2` after VM monitoring gate (12h window stable / operator sign-off).
-- Pre-merge on dev machine: full parent checklist in `AGENT_SPRINT_PROMPTS_V3.md` § Parent review.
+V3 is **dev/CI only** until the parent merges to `V2` and deploys. The live stage VM stays on **`V2`** while monitoring (auto-pause, 12h window PnL, post-derisk book).
+
+| Step | Where | Action |
+|------|--------|--------|
+| 1 | Dev machine | `git checkout V3 && git pull` |
+| 2 | Dev machine | `bash scripts/v3_pre_deploy_check.sh` — **must exit 0** |
+| 3 | Stage VM (still on V2) | `nano12h` window **PASS**, `paused=False` stable ≥4h **or** operator accepts risk |
+| 4 | Dev machine | Merge `V3` → `V2`, push |
+| 5 | Stage VM | `NANOUP_AUTOSTASH=1 nanodeploy` |
+| 6 | Stage VM | Post-deploy verify (see below) |
+
+**Do not `nanodeploy` V3 directly** to stage while V2 is live-monitoring.
+
+### What `v3_pre_deploy_check.sh` runs
+
+One command before merge/deploy. Fails fast (non-zero exit) on any step:
+
+1. **Checklist** — prints `git log -1 --oneline`; verifies V3 sprint env keys exist in `.env.example`
+2. **`verify_env_example_keys.py`** — config/template coverage
+3. **`python -m compileall`** — `nanoclaw`, `modules`, `scripts`, `external_layer`
+4. **`python scripts/unpause_readiness.py`** — hard unpause gates (loss-cut off, FE runway, blocklist)
+5. **Targeted pytest** — wave 1–3 sprint modules + attribution/env_sync
+6. **`TIERED allow` regression** — `test_runway_lines_scoped_to_window_with_timestamps` (stale pre-deploy `TIERED allow` must not appear in 12h runway tail)
+7. **Dry `nano_green` runway** — fixture log at `tests/fixtures/v3_pre_deploy/real_cron.log` (same assertion, no RPC)
+
+Windows (Git Bash or WSL): run the same `bash scripts/v3_pre_deploy_check.sh`. For day-to-day commits on Windows PowerShell, use `scripts/pre_commit_gate.ps1` instead.
+
+### Post-merge verification (stage VM)
+
+After `nanodeploy` on `V2`:
+
+```bash
+git log -1 --oneline
+grep DERISK real_cron.log | tail -n 5
+nano12h | grep -E 'window|control|fe_share|runway'
+```
+
+Confirm: no ping-pong `FE STABLE RUNWAY TIERED | allow` at stables **< $23**; window gate stable.
+
+### References
+
+- Sprint agent prompts and parent pytest list: [`docs/AGENT_SPRINT_PROMPTS_V3.md`](AGENT_SPRINT_PROMPTS_V3.md)
+- Branch fork baseline: `V2` ≥ `02c5fcd7`
 
 ## Stable Trading Validation (Pre-Tag)
 

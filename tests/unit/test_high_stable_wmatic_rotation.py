@@ -74,3 +74,63 @@ def test_builds_usdc_to_wmatic_decision(monkeypatch: pytest.MonkeyPatch) -> None
     assert decision is not None
     assert decision.direction == "USDC_TO_WMATIC"
     assert decision.trade_size == pytest.approx(10.0)
+
+
+def test_blocks_tiered_cooldown_active(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_enabled(monkeypatch)
+    from nanoclaw import fe_tiered_cooldown as ftc
+
+    monkeypatch.setattr(ftc, "cooldown_active", lambda **kwargs: True)
+    assert hswm.resolve_high_stable_wmatic_context(_Bal(), wmatic_signal=0.92) is None
+
+
+def test_blocks_drawdown_throttle_below_min_trade(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_enabled(monkeypatch)
+    from nanoclaw import drawdown_throttle as dt
+    from nanoclaw import fe_tiered_cooldown as ftc
+
+    monkeypatch.setattr(ftc, "cooldown_active", lambda **kwargs: False)
+    monkeypatch.setattr(hswm.cfg, "DRAWDOWN_THROTTLE_ENABLED", True)
+    monkeypatch.setattr(
+        dt,
+        "resolve_drawdown_throttle",
+        lambda **kwargs: dt.DrawdownThrottleState(
+            active=True,
+            window_pct=-1.2,
+            notional_mult=0.5,
+        ),
+    )
+    assert hswm.resolve_high_stable_wmatic_context(_Bal(), wmatic_signal=0.92) is None
+
+
+def test_blocks_operating_reserve_headroom(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_enabled(monkeypatch)
+    from nanoclaw import fe_tiered_cooldown as ftc
+    from modules import swap_executor as se
+
+    monkeypatch.setattr(ftc, "cooldown_active", lambda **kwargs: False)
+    monkeypatch.setattr(se, "_operating_reserve_floor_usd", lambda _bal: 25.0)
+    assert hswm.resolve_high_stable_wmatic_context(_Bal(), wmatic_signal=0.92) is None
+
+
+def test_blocks_low_signal(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_enabled(monkeypatch)
+    from nanoclaw import fe_tiered_cooldown as ftc
+
+    monkeypatch.setattr(ftc, "cooldown_active", lambda **kwargs: False)
+    assert hswm.resolve_high_stable_wmatic_context(_Bal(), wmatic_signal=0.80) is None
+
+
+def test_log_includes_stable_signal_notional(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _patch_enabled(monkeypatch)
+    from nanoclaw import fe_tiered_cooldown as ftc
+
+    monkeypatch.setattr(ftc, "cooldown_active", lambda **kwargs: False)
+    hswm.try_high_stable_wmatic_rotation_decision(_Bal(), wmatic_signal=0.92)
+    out = capsys.readouterr().out
+    assert "[nanoclaw] HIGH STABLE WMATIC ROTATION" in out
+    assert "stable_usd=" in out
+    assert "signal=0.92" in out
+    assert "max_notional=$10.00" in out

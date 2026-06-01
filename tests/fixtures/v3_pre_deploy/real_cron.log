@@ -1,0 +1,5 @@
+[nanoclaw] === CYCLE 1780228800 | BALANCES: USDT=$1 USDC=$1 WMATIC=$1 ===
+[nanoclaw] FE STABLE RUNWAY TIERED | allow USDC→EQUITY BUY | stable_usd=18.00 | fe_share=0.85 | signal=0.90 | max_notional=$10.00
+[nanoclaw] === CYCLE 1780311600 | BALANCES: USDT=$1 USDC=$1 WMATIC=$1 ===
+[nanoclaw] FE STABLE RUNWAY | defer USDC→EQUITY BUY | stable_usd=13.00 | fe_share=0.89
+[nanoclaw] FE STABLE RUNWAY TIERED | cooldown | stable_usd=13.00 | until=2026-06-01T16:00:00Z
