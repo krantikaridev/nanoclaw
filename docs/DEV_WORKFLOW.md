@@ -73,6 +73,15 @@ When writing agent instructions or runbook steps, **label the shell** if a snipp
   4. `git diff --stat` and verify only intended files.
 - Any behavior/config change must include tests + docs + `.env.example` updates in same PR.
 
+## V3 sprint branch (dev-only)
+
+- **Live stage VM stays on `V2`** while monitoring (auto-pause, window PnL, post-derisk book).
+- **Feature work** lands on **`V3`** forked from latest `V2` (≥ `02c5fcd7`). Parallel agent prompts: [`docs/AGENT_SPRINT_PROMPTS_V3.md`](AGENT_SPRINT_PROMPTS_V3.md).
+- **Do not `nanodeploy` V3** to stage until:
+  1. `bash scripts/v3_pre_deploy_check.sh` passes (Agent T), and
+  2. Parent merges `V3` → `V2` after VM monitoring gate (12h window stable / operator sign-off).
+- Pre-merge on dev machine: full parent checklist in `AGENT_SPRINT_PROMPTS_V3.md` § Parent review.
+
 ## Stable Trading Validation (Pre-Tag)
 
 Run this checklist before creating a release tag (for `v2.7` and later):

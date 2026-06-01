@@ -2,7 +2,8 @@
 
 Copy one prompt per parallel agent. Parent agent reviews all PRs and runs regression before push.
 
-**Branch:** `V2`  
+**Branch:** `V2` (live stage VM) · **Next sprint:** [`docs/AGENT_SPRINT_PROMPTS_V3.md`](AGENT_SPRINT_PROMPTS_V3.md) on branch `V3` — dev only until merge gate passes.
+
 **VM path:** `~/.nanobot/workspace/nanoclaw`  
 **Do not commit:** `.env`, API keys, `control.json` operator state
 
