@@ -1367,6 +1367,21 @@ def _fe_stable_runway_compute_sell_fraction(
     return min(1.0, max(0.05, frac))
 
 
+def _fe_stable_runway_derisk_compute_sell_fraction(
+    *,
+    position_usd: float,
+    max_trim_usd: float,
+) -> float | None:
+    if position_usd <= 0.0:
+        return None
+    min_trade = float(getattr(cfg, "MIN_TRADE_USD", 10.0))
+    trim_usd = min(float(max_trim_usd), float(position_usd) * 0.20)
+    if trim_usd + 1e-9 < min_trade:
+        return None
+    frac = trim_usd / float(position_usd)
+    return min(1.0, max(0.05, frac))
+
+
 def try_fe_stable_runway_trim_equity_decision(
     balances: Balances,
     *,
@@ -1374,11 +1389,15 @@ def try_fe_stable_runway_trim_equity_decision(
     state: dict | None = None,
     wmatic_usd: float | None = None,
 ) -> Optional[TradeDecision]:
-    """Partial EQUITY→USDC trim when FE-heavy and stables critically low with no WMATIC rebuild."""
+    """Partial EQUITY→USDC trim when FE-heavy: critical low stables or dead-zone de-risk."""
     from modules import swap_executor as swap_exec
     from modules import x_signal_position as xsp
 
     fe_ctx = swap_exec._fe_stable_runway_context(balances, wmatic_usd=wmatic_usd)
+    derisk = False
+    if fe_ctx is None:
+        fe_ctx = swap_exec._fe_stable_runway_derisk_context(balances, wmatic_usd=wmatic_usd)
+        derisk = fe_ctx is not None
     if fe_ctx is None:
         return None
 
@@ -1430,11 +1449,17 @@ def try_fe_stable_runway_trim_equity_decision(
     holdings.sort(key=lambda row: (-row[0], row[1]))
     position_usd, _idx, asset, equity_balance, spot_px = holdings[0]
     sym = str(asset.symbol).strip()
-    sell_fraction = _fe_stable_runway_compute_sell_fraction(
-        stable_usd=float(fe_ctx["stable_usd"]),
-        target_stable_usd=float(fe_ctx["target_stable_usd"]),
-        position_usd=position_usd,
-    )
+    if derisk:
+        sell_fraction = _fe_stable_runway_derisk_compute_sell_fraction(
+            position_usd=position_usd,
+            max_trim_usd=float(fe_ctx["max_trim_usd"]),
+        )
+    else:
+        sell_fraction = _fe_stable_runway_compute_sell_fraction(
+            stable_usd=float(fe_ctx["stable_usd"]),
+            target_stable_usd=float(fe_ctx["target_stable_usd"]),
+            position_usd=position_usd,
+        )
     if sell_fraction is None:
         return None
 
@@ -1460,18 +1485,30 @@ def try_fe_stable_runway_trim_equity_decision(
         )
         return None
 
-    swap_exec._log_fe_stable_runway_trim(
-        sym=sym,
-        sell_fraction=sell_fraction,
-        stable_usd=float(fe_ctx["stable_usd"]),
-        fe_share=float(fe_ctx["fe_share"]),
-        target_stable_usd=float(fe_ctx["target_stable_usd"]),
-    )
+    if derisk:
+        swap_exec._log_fe_stable_runway_derisk(
+            sym=sym,
+            sell_fraction=sell_fraction,
+            stable_usd=float(fe_ctx["stable_usd"]),
+            fe_share=float(fe_ctx["fe_share"]),
+            max_trim_usd=float(fe_ctx["max_trim_usd"]),
+        )
+    else:
+        swap_exec._log_fe_stable_runway_trim(
+            sym=sym,
+            sell_fraction=sell_fraction,
+            stable_usd=float(fe_ctx["stable_usd"]),
+            fe_share=float(fe_ctx["fe_share"]),
+            target_stable_usd=float(fe_ctx["target_stable_usd"]),
+        )
+    msg = plan.message
+    if derisk:
+        msg = f"🟦 FE STABLE RUNWAY DERISK: {sym} | capped trim toward lower FE share"
     return TradeDecision(
         direction=plan.direction,
         amount_in=int(plan.amount_in),
         trade_size=float(plan.trade_size or 0.0),
-        message=plan.message,
+        message=msg,
         token_in=plan.token_in,
         token_out=plan.token_out,
         cooldown_asset=(sym, int(secs_order)),

@@ -832,6 +832,7 @@ _MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_LOG = (
     "Main Strategy dust conversion to USDC for stable buffer rebuild"
 )
 _FE_STABLE_RUNWAY_TRIM_LOG = "[nanoclaw] FE STABLE RUNWAY TRIM"
+_FE_STABLE_RUNWAY_DERISK_LOG = "[nanoclaw] FE STABLE RUNWAY DERISK"
 _FE_STABLE_RUNWAY_DEFER_BUY_LOG = "[nanoclaw] FE STABLE RUNWAY | defer USDC→EQUITY BUY"
 _MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_STATE_KEY = "low_stables_dust_rebuild"
 _MAIN_STRATEGY_LONG_IDLE_CYCLES_LOW = int(cfg.MAIN_STRATEGY_LONG_IDLE_CYCLES_LOW)
@@ -1439,6 +1440,47 @@ def _fe_stable_runway_context(
     return fe_buy
 
 
+def _fe_stable_runway_derisk_context(
+    balances: Balances,
+    *,
+    wmatic_usd: float | None = None,
+) -> dict[str, float] | None:
+    """Dead-zone de-risk: FE-heavy, stables above rebuild band but below runway target, WMATIC dust."""
+    if not bool(getattr(cfg, "FE_STABLE_RUNWAY_DERISK_ENABLED", True)):
+        return None
+    if _fe_stable_runway_context(balances, wmatic_usd=wmatic_usd) is not None:
+        return None
+    base = _fe_stable_runway_buy_block_context(balances)
+    if base is None:
+        return None
+    min_fe = float(getattr(cfg, "FE_STABLE_RUNWAY_DERISK_MIN_FE_SHARE", 0.80))
+    if float(base["fe_share"]) + 1e-9 < min_fe:
+        return None
+    stable_usd = float(base["stable_usd"])
+    rebuild_max = float(getattr(cfg, "MAIN_STRATEGY_LOW_STABLES_DUST_REBUILD_MAX_STABLE_USD", 15.0))
+    if stable_usd + 1e-9 < rebuild_max:
+        return None
+    min_stable = max(
+        _operating_reserve_floor_usd(balances),
+        float(getattr(cfg, "FE_STABLE_RUNWAY_DERISK_MIN_STABLE_USD", 15.0)),
+    )
+    if stable_usd + 1e-9 < min_stable:
+        return None
+    max_wm = float(getattr(cfg, "FE_STABLE_RUNWAY_DERISK_MAX_WMATIC_USD", 8.0))
+    if wmatic_usd is not None:
+        if float(wmatic_usd) + 1e-9 >= max_wm:
+            return None
+    elif float(balances.wmatic) > 0.0:
+        return None
+    max_trim = float(getattr(cfg, "FE_STABLE_RUNWAY_DERISK_MAX_TRIM_NOTIONAL_USD", 12.0))
+    if max_trim <= 0.0:
+        return None
+    return {
+        **base,
+        "max_trim_usd": max_trim,
+    }
+
+
 def _fe_stable_runway_buy_block_active(
     balances: Balances,
     *,
@@ -1577,6 +1619,21 @@ def _log_fe_stable_runway_trim(
         f"{_FE_STABLE_RUNWAY_TRIM_LOG} | sym={sym} | sell_fraction={float(sell_fraction):.4f} | "
         f"stable_usd={float(stable_usd):.2f} | fe_share={float(fe_share):.2f} | "
         f"target_stable_usd={float(target_stable_usd):.2f}"
+    )
+
+
+def _log_fe_stable_runway_derisk(
+    *,
+    sym: str,
+    sell_fraction: float,
+    stable_usd: float,
+    fe_share: float,
+    max_trim_usd: float,
+) -> None:
+    print(
+        f"{_FE_STABLE_RUNWAY_DERISK_LOG} | sym={sym} | sell_fraction={float(sell_fraction):.4f} | "
+        f"stable_usd={float(stable_usd):.2f} | fe_share={float(fe_share):.2f} | "
+        f"max_trim_usd={float(max_trim_usd):.2f}"
     )
 
 

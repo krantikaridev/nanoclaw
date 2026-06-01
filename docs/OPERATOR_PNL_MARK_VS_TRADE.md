@@ -44,6 +44,8 @@ After **abc**, stables fell below **10% reserve** (~$15.80 on $158 seed) → tie
 
 **Jun 2026 headroom:** Tiered BUY capped so post-trade stables stay **≥ reserve floor + `FE_STABLE_RUNWAY_TIERED_RESERVE_HEADROOM_USD`** (default **$2**). At ~**$19** stables (after rebuild), tiered is **blocked** (would need **≥ ~$22.80** for a **$5** min buy). Stops rebuild→**$10** tiered→**~$9** ping-pong churn.
 
+**Jun 2026 de-risk:** When `fe_share ≥ 80%`, stables **$15–$40**, and WMATIC **&lt; $8** (rebuild exhausted), bot may run **capped ~$12 WETH→USDC** (`FE STABLE RUNWAY DERISK`) — works while auto-paused. Lowers ETH mark beta without tiered BUY churn.
+
 ---
 
 ## `FE_USD` and `FE_USD AUTO_FLOOR_UPDATE`

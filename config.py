@@ -455,6 +455,15 @@ FE_STABLE_RUNWAY_TIERED_RESERVE_HEADROOM_USD = env_float(
 )
 # Minimum effective tiered notional; below this the bypass is skipped (defer to rebuild).
 FE_STABLE_RUNWAY_TIERED_MIN_NOTIONAL_USD = env_float("FE_STABLE_RUNWAY_TIERED_MIN_NOTIONAL_USD", 5.0)
+# High-FE de-risk: capped WETH→USDC trim in stables dead zone (≥ reserve, < target, WMATIC dust).
+FE_STABLE_RUNWAY_DERISK_ENABLED = env_bool("FE_STABLE_RUNWAY_DERISK_ENABLED", True)
+FE_STABLE_RUNWAY_DERISK_MIN_FE_SHARE = env_float("FE_STABLE_RUNWAY_DERISK_MIN_FE_SHARE", 0.80)
+FE_STABLE_RUNWAY_DERISK_MIN_STABLE_USD = env_float("FE_STABLE_RUNWAY_DERISK_MIN_STABLE_USD", 15.0)
+FE_STABLE_RUNWAY_DERISK_MAX_TRIM_NOTIONAL_USD = env_float(
+    "FE_STABLE_RUNWAY_DERISK_MAX_TRIM_NOTIONAL_USD", 12.0
+)
+# Skip de-risk when WMATIC USD ≥ this (main-strategy rebuild still actionable).
+FE_STABLE_RUNWAY_DERISK_MAX_WMATIC_USD = env_float("FE_STABLE_RUNWAY_DERISK_MAX_WMATIC_USD", 8.0)
 # Operating reserve: keep stables ≥ seed × pct for gas + RPC/hosting (defer new entries only).
 OPERATING_RESERVE_ENABLED = env_bool("OPERATING_RESERVE_ENABLED", True)
 OPERATING_RESERVE_PCT = env_float("OPERATING_RESERVE_PCT", 10.0)

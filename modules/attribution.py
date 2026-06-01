@@ -37,11 +37,16 @@ def log_trade_attribution(
     if not NANOCLAW_TRADE_ATTRIBUTION:
         return
     path = direction or ""
-    amt = trade_size if trade_size else float(amount_in)
+    if trade_size and float(trade_size) > 0:
+        sz_part = f"sz≈{float(trade_size):.6g}"
+    elif amount_in:
+        sz_part = f"amount_in={int(amount_in)}"
+    else:
+        sz_part = "sz≈0"
     clipped = " ".join((message or "").split())[:500]
     print(
         "[nanoclaw] TRADE_ATTRIBUTION "
-        f"tx={tx_hash_hex or 'pending'} dir={path} sz≈{amt:.6g} msg={clipped}",
+        f"tx={tx_hash_hex or 'pending'} dir={path} {sz_part} msg={clipped}",
         flush=True,
     )
 
