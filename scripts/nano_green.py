@@ -35,6 +35,8 @@ CONTROL_FILE = "control.json"
 PAUSE_LINE_RE = re.compile(r"\[CONTROL\]\s+paused=True", re.IGNORECASE)
 EXEC_SUCCESS_RE = re.compile(r"EXEC SUCCESS")
 FE_RUNWAY_RE = re.compile(r"FE STABLE RUNWAY")
+_DERISK_EVALUATE_RE = re.compile(r"FE STABLE RUNWAY DERISK \| evaluate")
+_DERISK_EXEC_PLAN_RE = re.compile(r"FE STABLE RUNWAY DERISK \| exec plan")
 _LOG_CAL_TS_RE = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s")
 _LOG_BRACKET_TS_RE = re.compile(r"^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]")
 _CYCLE_TS_RE = re.compile(r"=== CYCLE (\d+)")
@@ -256,6 +258,22 @@ def _parse_log_line_timestamp(line: str) -> datetime | None:
     return None
 
 
+def _annotate_runway_line(content: str) -> str:
+    """Tag DERISK probe vs swap-plan lines for operator runway tail."""
+    if _DERISK_EVALUATE_RE.search(content) or (
+        "FE STABLE RUNWAY DERISK" in content
+        and "dynamic_trim_usd=" in content
+        and "sym=" not in content
+        and "exec plan" not in content
+    ):
+        return f"[evaluate] {content}"
+    if _DERISK_EXEC_PLAN_RE.search(content) or (
+        "FE STABLE RUNWAY DERISK" in content and "sym=" in content and "sell_fraction=" in content
+    ):
+        return f"[exec-plan] {content}"
+    return content
+
+
 def _runway_lines(
     root: Path,
     *,
@@ -287,9 +305,9 @@ def _runway_lines(
         content = line.strip()
         if last_ts is not None:
             ts_prefix = last_ts.strftime("%Y-%m-%dT%H:%M:%SZ")
-            matches.append(f"{ts_prefix} | {content}")
+            matches.append(f"{ts_prefix} | {_annotate_runway_line(content)}")
         else:
-            matches.append(content)
+            matches.append(_annotate_runway_line(content))
 
     return matches[-n:]
 
@@ -355,7 +373,9 @@ def format_report(result: GreenGateResult, *, paused: bool, reason: str) -> str:
     out.extend(result.lines)
     root = Path(os.environ.get("NANOCLAW_ROOT", str(ROOT)))
     runway = _runway_lines(root, hours=result.hours)
-    out.append("runway (last 3 FE STABLE RUNWAY):")
+    out.append(
+        "runway (last 3 FE STABLE RUNWAY; DERISK [evaluate]=gate probe, [exec-plan]=swap queued):"
+    )
     if runway:
         out.extend(f"  {ln}" for ln in runway)
     else:

@@ -1455,7 +1455,12 @@ def _fe_stable_runway_derisk_context(
         return None
     default_min_fe = float(getattr(cfg, "FE_STABLE_RUNWAY_DERISK_MIN_FE_SHARE", 0.80))
     default_max_trim = float(getattr(cfg, "FE_STABLE_RUNWAY_DERISK_MAX_TRIM_NOTIONAL_USD", 12.0))
+    from external_layer.control import load_cycle_control
     from nanoclaw import fe_dynamic_trim as fdt
+    from nanoclaw import window_stress_derisk as wsd
+
+    ctrl = load_cycle_control()
+    window_stress = wsd.resolve_window_stress_derisk(paused=ctrl.paused, reason=ctrl.reason)
 
     dynamic = fdt.resolve_derisk_dynamic_trim(
         float(base["fe_share"]),
@@ -1465,6 +1470,10 @@ def _fe_stable_runway_derisk_context(
     if dynamic.max_trim_usd is None:
         return None
     min_fe = float(dynamic.min_fe_share)
+    max_wm = float(getattr(cfg, "FE_STABLE_RUNWAY_DERISK_MAX_WMATIC_USD", 8.0))
+    if window_stress is not None:
+        min_fe = float(window_stress.min_fe_share)
+        max_wm = float(window_stress.max_wmatic_usd)
     if float(base["fe_share"]) + 1e-9 < min_fe:
         return None
     stable_usd = float(base["stable_usd"])
@@ -1477,7 +1486,6 @@ def _fe_stable_runway_derisk_context(
     )
     if stable_usd + 1e-9 < min_stable:
         return None
-    max_wm = float(getattr(cfg, "FE_STABLE_RUNWAY_DERISK_MAX_WMATIC_USD", 8.0))
     if wmatic_usd is not None:
         if float(wmatic_usd) + 1e-9 >= max_wm:
             return None
@@ -1492,6 +1500,8 @@ def _fe_stable_runway_derisk_context(
     }
     if dynamic.dynamic_trim_usd is not None:
         ctx["dynamic_trim_usd"] = float(dynamic.dynamic_trim_usd)
+    if window_stress is not None:
+        ctx["window_stress_derisk"] = 1.0
     return ctx
 
 
@@ -1655,14 +1665,19 @@ def _log_fe_stable_runway_derisk(
     fe_share: float,
     max_trim_usd: float,
     dynamic_trim_usd: float | None = None,
+    window_stress_derisk: bool = False,
 ) -> None:
     dynamic_part = ""
     if dynamic_trim_usd is not None:
         dynamic_part = f" | dynamic_trim_usd={float(dynamic_trim_usd):.2f}"
+    stress_part = ""
+    if window_stress_derisk:
+        stress_part = " | window_stress=1"
     print(
-        f"{_FE_STABLE_RUNWAY_DERISK_LOG} | sym={sym} | sell_fraction={float(sell_fraction):.4f} | "
+        f"{_FE_STABLE_RUNWAY_DERISK_LOG} | exec plan | sym={sym} | "
+        f"sell_fraction={float(sell_fraction):.4f} | "
         f"stable_usd={float(stable_usd):.2f} | fe_share={float(fe_share):.2f} | "
-        f"max_trim_usd={float(max_trim_usd):.2f}{dynamic_part}"
+        f"max_trim_usd={float(max_trim_usd):.2f}{dynamic_part}{stress_part}"
     )
 
 

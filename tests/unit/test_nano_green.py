@@ -105,16 +105,22 @@ def test_runway_lines_scoped_to_window_with_timestamps(tmp_path: Path) -> None:
                 f"[nanoclaw] === CYCLE {new_cycle} | BALANCES: USDT=$1 USDC=$1 WMATIC=$1 ===",
                 "[nanoclaw] FE STABLE RUNWAY | defer USDC→EQUITY BUY | stable_usd=13.00 | fe_share=0.89",
                 "[nanoclaw] FE STABLE RUNWAY TIERED | cooldown | stable_usd=13.00 | until=2026-06-01T16:00:00Z",
+                "[nanoclaw] FE STABLE RUNWAY DERISK | evaluate | fe_share=0.74 | dynamic_trim_usd=12.00",
+                "[nanoclaw] FE STABLE RUNWAY DERISK | exec plan | sym=WETH_ALPHA | sell_fraction=0.0938 | stable_usd=26.00 | fe_share=0.74 | max_trim_usd=12.00 | window_stress=1",
             ]
         )
         + "\n",
         encoding="utf-8",
     )
 
-    lines = _runway_lines(root, hours=12.0, n=3, now=now)
-    assert len(lines) == 2
+    lines = _runway_lines(root, hours=12.0, n=5, now=now)
+    assert len(lines) == 4
     assert all("TIERED | allow" not in ln for ln in lines)
     assert lines[0].startswith("2026-06-01T11:00:00Z | ")
     assert "defer USDC→EQUITY BUY" in lines[0]
     assert lines[1].startswith("2026-06-01T11:00:00Z | ")
     assert "TIERED | cooldown" in lines[1]
+    assert "[evaluate]" in lines[2]
+    assert "dynamic_trim_usd=12.00" in lines[2]
+    assert "[exec-plan]" in lines[3]
+    assert "sym=WETH_ALPHA" in lines[3]

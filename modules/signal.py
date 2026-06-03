@@ -1497,6 +1497,7 @@ def try_fe_stable_runway_trim_equity_decision(
                 if "dynamic_trim_usd" in fe_ctx
                 else None
             ),
+            window_stress_derisk=bool(fe_ctx.get("window_stress_derisk")),
         )
     else:
         swap_exec._log_fe_stable_runway_trim(

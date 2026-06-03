@@ -84,10 +84,11 @@ def log_dynamic_trim(*, fe_share: float, dynamic_trim_usd: float | None) -> None
         return
     if dynamic_trim_usd is None:
         print(
-            f"{_DERISK_LOG_PREFIX} | fe_share={float(fe_share):.2f} | dynamic_trim_usd=skip"
+            f"{_DERISK_LOG_PREFIX} | evaluate | fe_share={float(fe_share):.2f} | "
+            f"dynamic_trim_usd=skip"
         )
         return
     print(
-        f"{_DERISK_LOG_PREFIX} | fe_share={float(fe_share):.2f} | "
+        f"{_DERISK_LOG_PREFIX} | evaluate | fe_share={float(fe_share):.2f} | "
         f"dynamic_trim_usd={float(dynamic_trim_usd):.2f}"
     )

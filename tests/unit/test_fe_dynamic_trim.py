@@ -80,6 +80,7 @@ def test_log_dynamic_trim_includes_value(
     _patch_dynamic(monkeypatch)
     fdt.log_dynamic_trim(fe_share=0.87, dynamic_trim_usd=15.0)
     out = capsys.readouterr().out
+    assert "DERISK | evaluate" in out
     assert "dynamic_trim_usd=15.00" in out
 
 

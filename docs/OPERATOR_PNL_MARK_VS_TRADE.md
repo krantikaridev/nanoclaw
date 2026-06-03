@@ -50,6 +50,8 @@ After **abc**, stables fell below **10% reserve** (~$15.80 on $158 seed) → tie
 
 **Jun 2026 de-risk:** When `fe_share ≥ 80%`, stables **$15–$40**, and WMATIC **&lt; $8** (rebuild exhausted), bot may run **capped ~$12 WETH→USDC** (`FE STABLE RUNWAY DERISK`) — works while auto-paused. Lowers ETH mark beta without tiered BUY churn.
 
+**Jun 2026 window-stress de-risk (optional, default off):** When `WINDOW_STRESS_DERISK_ENABLED=true` and external layer paused **only** for `auto_pause | window PnL below …` (12h floor, default **−2%** — unchanged), DERISK may use relaxed gates: **`WINDOW_STRESS_DERISK_MIN_FE_SHARE`** (default **0.72**) and **`WINDOW_STRESS_DERISK_MAX_WMATIC_USD`** (default **$12**). Still capped `FE_STABLE_RUNWAY_DERISK_MAX_TRIM_NOTIONAL_USD`; **entries and tiered BUY stay blocked**; tiered cooldown unchanged.
+
 **Jun 2026 auto-unpause hysteresis (optional, default off):** When `EXTERNAL_AUTO_UNPAUSE_HYSTERESIS_ENABLED=true`, the external layer (~30s ticks) requires **N consecutive** ticks where the **12h window PnL** is at least **`EXTERNAL_AUTO_WINDOW_MIN_PCT + EXTERNAL_AUTO_UNPAUSE_WINDOW_BUFFER_PCT`** (defaults: −2% + 0.25 → **−1.75%**) before writing `auto_unpause` to `control.json`. A single tick above the −2% pause floor is not enough — reduces pause/unpause whipsaw when the window hovers near the floor. Log example: `[external] auto_unpause hysteresis | ticks=3/6 | window=-1.9%`. Env: `EXTERNAL_AUTO_UNPAUSE_HYSTERESIS_TICKS` (default **6**). See `external_layer/unpause_hysteresis.py`.
 
 ---
@@ -242,6 +244,67 @@ When the window is green or fills are below the floor, the flag is refreshed wit
 cat .runtime/adverse_churn_flag.json
 grep 'ADVERSE CHURN GUARD' real_cron.log | tail -5
 ```
+
+---
+
+## Auto-pause, mark bleed, and DERISK logs without EXEC
+
+### Mark bleed vs churn (window −2% pause)
+
+When **`EXTERNAL_AUTO_PAUSE_ENABLED=true`**, the external layer (~30s) sets `control.json` **`paused=true`** if any green gate fails. The common stage pattern:
+
+```
+auto_pause | window PnL below -2.0% over 12h
+```
+
+That means **12h window TOTAL** (from `portfolio_history.csv`) is below the **−2% floor** — **not** necessarily bad fills. Cross-check before calling it churn:
+
+| Signal | Mark bleed | Churn |
+|--------|------------|-------|
+| `velocity_fills_session` / window fills | **0** or very low | ≥ **`PNL_ADVERSE_DAY_MIN_FILLS`** |
+| `FE_USD AUTO_FLOOR_UPDATE` / spot cache | Yes — MTM step on WETH/LINK | Unlikely alone |
+| `EXEC SUCCESS` after pause marker | **None** (discipline OK) | Fills while paused → `fill while paused` reason |
+| `TIERED \| cooldown` | Often absent | Ping-pong rebuild→tiered loop |
+| `Adverse window: mark $… \| churn est $…` | Large **mark** term | Large **turnover** + gas est |
+
+**Operator rule:** Window pause + **no EXEC SUCCESS** + **no tiered cooldown** + red window with **low fills** → treat as **mark bleed**, not strategy churn. Do **not** lower `EXTERNAL_AUTO_WINDOW_MIN_PCT` or disable tiered cooldown to “fix” MTM.
+
+Protection exits (**DERISK**, WMATIC→stable rebuild, loss-cut where allowed) **still run** while paused — only **entries** (X-SIGNAL BUY, tiered, copy) are blocked.
+
+### Why DERISK logs appear without `EXEC SUCCESS`
+
+DERISK has **two log stages** before on-chain execution. `nanogreen` runway tail labels them **`[evaluate]`** vs **`[exec-plan]`**:
+
+| Stage | Log pattern | Meaning |
+|-------|-------------|---------|
+| **Evaluate** | `FE STABLE RUNWAY DERISK \| evaluate \| fe_share=… \| dynamic_trim_usd=…` | Dynamic trim band resolved (`fe_dynamic_trim.py`). Fires even when later gates block the trim. |
+| **Exec plan** | `FE STABLE RUNWAY DERISK \| exec plan \| sym=… \| sell_fraction=…` | Swap **queued** — passed book gates, picked largest FE holding, built plan. Still not on-chain. |
+| **On-chain** | `EXEC SUCCESS` (+ `TRADE_ATTRIBUTION`) | Fill confirmed. |
+
+**Common evaluate-only cases (no exec plan, no EXEC SUCCESS):**
+
+1. **`fe_share` below static min** (`FE_STABLE_RUNWAY_DERISK_MIN_FE_SHARE=0.80`) — e.g. **~74% FE** with dynamic `dynamic_trim_usd=12` logged but context returns `None`.
+2. **WMATIC USD ≥ `FE_STABLE_RUNWAY_DERISK_MAX_WMATIC_USD`** (default **$8**) — rebuild still actionable; derisk deferred. Example: WMATIC **~$10**, stables **~$26** flat.
+3. **Stables outside dead zone** — below **$15** (critical TRIM path) or at/above **$40** target (no FE-heavy block).
+4. **Post-plan blocks** — per-asset cooldown, `below_min_net_edge`, dust defer, swap failure.
+
+**Optional relief:** Enable **`WINDOW_STRESS_DERISK_ENABLED=true`** when paused **only** for window PnL — relaxes to FE **≥ 72%** and WMATIC **≤ $12** for capped trim; does **not** change **−2%** unpause floor or tiered cooldown.
+
+Grep on VM:
+
+```bash
+grep -E 'FE STABLE RUNWAY DERISK|EXEC SUCCESS|auto_pause|auto_unpause|TIERED \| cooldown' real_cron.log | tail -30
+nanogreen   # runway tail shows [evaluate] vs [exec-plan]
+```
+
+### Operator checklist — window pause + DERISK evaluate only
+
+1. **`nanogreen`** — confirm `window: FAIL` and reason `auto_pause | window PnL below -2.0% over 12h`; check runway **`[evaluate]`** without matching **`[exec-plan]`** or **`EXEC SUCCESS`**.
+2. **`nanopnl`** — `velocity_fills_session` and adverse one-liner; prefer **mark** over **churn** when fills low.
+3. **Book shape** — `fe_share`, `STABLE_USD`, WMATIC USD vs `DERISK_MIN_FE_SHARE` / `DERISK_MAX_WMATIC_USD`.
+4. **Tiered state** — `grep 'TIERED | cooldown' real_cron.log`; read `.runtime/fe_tiered_cooldown.json` if present.
+5. **Window-stress option** — if mark bleed + FE **72–80%** + WMATIC **$8–12**, set `WINDOW_STRESS_DERISK_ENABLED=true` (requires window-only pause); redeploy; expect **`[exec-plan]`** then **`EXEC SUCCESS`** on next qualifying cycle.
+6. **Do not** weaken `EXTERNAL_AUTO_WINDOW_MIN_PCT` or `FE_STABLE_RUNWAY_TIERED_COOLDOWN_*` for MTM-only red windows.
 
 ---
 

@@ -477,6 +477,10 @@ FE_STABLE_RUNWAY_DERISK_HIGH_FE_MAX_TRIM_USD = env_float(
     "FE_STABLE_RUNWAY_DERISK_HIGH_FE_MAX_TRIM_USD", 15.0
 )
 FE_STABLE_RUNWAY_DERISK_LOW_FE_SHARE = env_float("FE_STABLE_RUNWAY_DERISK_LOW_FE_SHARE", 0.70)
+# Window-stress de-risk: relaxed DERISK gates when auto-paused for window PnL only (nanoclaw/window_stress_derisk.py).
+WINDOW_STRESS_DERISK_ENABLED = env_bool("WINDOW_STRESS_DERISK_ENABLED", False)
+WINDOW_STRESS_DERISK_MIN_FE_SHARE = env_float("WINDOW_STRESS_DERISK_MIN_FE_SHARE", 0.72)
+WINDOW_STRESS_DERISK_MAX_WMATIC_USD = env_float("WINDOW_STRESS_DERISK_MAX_WMATIC_USD", 12.0)
 # Drawdown throttle: halve tiered / X-SIGNAL buy sizing when window PnL below trigger (nanoclaw/drawdown_throttle.py).
 DRAWDOWN_THROTTLE_ENABLED = env_bool("DRAWDOWN_THROTTLE_ENABLED", False)
 DRAWDOWN_THROTTLE_WINDOW_HOURS = env_float("DRAWDOWN_THROTTLE_WINDOW_HOURS", 8.0)

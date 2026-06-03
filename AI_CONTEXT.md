@@ -345,7 +345,11 @@ Instance A had **8 Polygon token contracts** (USDC, USDT, WMATIC, …) in `follo
 ## Today's learnings (Jun 2026 — dynamic FE de-risk trim bands)
 
 - **`nanoclaw/fe_dynamic_trim.py`**: When `FE_STABLE_RUNWAY_DERISK_DYNAMIC_ENABLED=true`, scales de-risk cap by FE share: skip below `FE_STABLE_RUNWAY_DERISK_LOW_FE_SHARE` (0.70); default `FE_STABLE_RUNWAY_DERISK_MAX_TRIM_NOTIONAL_USD` in mid band; raise to `FE_STABLE_RUNWAY_DERISK_HIGH_FE_MAX_TRIM_USD` above `FE_STABLE_RUNWAY_DERISK_HIGH_FE_SHARE` (0.85) with relaxed min FE (0.70). Dead-zone stable bounds ($15–$40) unchanged.
-- **Logs**: `FE STABLE RUNWAY DERISK | … | dynamic_trim_usd=…` on resolution and trim execution when dynamic enabled.
+- **Logs**: `FE STABLE RUNWAY DERISK | evaluate | … | dynamic_trim_usd=…` on band resolution; `FE STABLE RUNWAY DERISK | exec plan | sym=…` when swap queued. `nanogreen` runway tail prefixes `[evaluate]` / `[exec-plan]`.
+
+## Today's learnings (Jun 2026 — window-stress de-risk)
+
+- **`nanoclaw/window_stress_derisk.py`**: When `WINDOW_STRESS_DERISK_ENABLED=true` and `control.json` reason is window-only auto_pause (`auto_pause | window PnL below …`), DERISK uses `WINDOW_STRESS_DERISK_MIN_FE_SHARE` (0.72) and `WINDOW_STRESS_DERISK_MAX_WMATIC_USD` ($12) instead of static 0.80 / $8. Trim cap unchanged; entries/tiered still blocked; `EXTERNAL_AUTO_WINDOW_MIN_PCT` and tiered cooldown unchanged.
 
 ## Today's learnings (Jun 2026 — drawdown notional throttle)
 
