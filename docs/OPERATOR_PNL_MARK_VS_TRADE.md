@@ -54,6 +54,8 @@ After **abc**, stables fell below **10% reserve** (~$15.80 on $158 seed) → tie
 
 **Jun 2026 auto-unpause hysteresis (optional, default off):** When `EXTERNAL_AUTO_UNPAUSE_HYSTERESIS_ENABLED=true`, the external layer (~30s ticks) requires **N consecutive** ticks where the **12h window PnL** is at least **`EXTERNAL_AUTO_WINDOW_MIN_PCT + EXTERNAL_AUTO_UNPAUSE_WINDOW_BUFFER_PCT`** (defaults: −2% + 0.25 → **−1.75%**) before writing `auto_unpause` to `control.json`. A single tick above the −2% pause floor is not enough — reduces pause/unpause whipsaw when the window hovers near the floor. Log example: `[external] auto_unpause hysteresis | ticks=3/6 | window=-1.9%`. Env: `EXTERNAL_AUTO_UNPAUSE_HYSTERESIS_TICKS` (default **6**). See `external_layer/unpause_hysteresis.py`.
 
+**Jun 2026 pause_exec discipline (always on):** `nano_green` / `EXTERNAL_AUTO_PAUSE_ENABLED` treat **`pause_exec`** as **FAIL** whenever **`real_cron.log`** shows **`EXEC SUCCESS`** after the last **`[CONTROL] paused=True`** marker — even if **`control.json`** already says **`paused=false`** from a brief **`auto_unpause`**. The external layer then writes **`auto_pause | fill while paused (discipline breach)`** on the next tick instead of leaving entries open. Complements hysteresis; does **not** change **`EXTERNAL_AUTO_WINDOW_MIN_PCT`** (−2%) or tiered cooldown.
+
 ---
 
 ## `FE_USD` and `FE_USD AUTO_FLOOR_UPDATE`

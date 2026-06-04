@@ -128,6 +128,34 @@ def test_hysteresis_window_floor_includes_buffer() -> None:
     assert hysteresis_window_floor_pct(-2.0) == pytest.approx(-1.75)
 
 
+def test_auto_unpause_blocked_when_exec_after_pause_marker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Discipline breach after auto_unpause must re-pause (no sustained entries)."""
+    monkeypatch.setenv("EXTERNAL_AUTO_PAUSE_ENABLED", "true")
+    monkeypatch.setenv("EXTERNAL_AUTO_UNPAUSE_HYSTERESIS_ENABLED", "false")
+
+    class _GreenGateFailPause:
+        overall_pass = False
+        readiness_pass = True
+        session_pass = True
+        window_pass = True
+        pause_pass = False
+        rotation_open = ()
+
+        def trading_allowed(self) -> bool:
+            return False
+
+    monkeypatch.setattr(
+        "scripts.nano_green.evaluate_green_gate",
+        lambda *a, **k: _GreenGateFailPause(),
+    )
+
+    allowed, reason, _ = evaluate_auto_pause()
+    assert allowed is False
+    assert "fill while paused" in reason
+
+
 def test_unpause_hysteresis_disabled_allows_immediate_unpause(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

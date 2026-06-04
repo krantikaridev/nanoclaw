@@ -6,7 +6,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from scripts.nano_green import _runway_lines, evaluate_green_gate, rotation_open_symbols
+from scripts.nano_green import _pause_exec_check, _runway_lines, evaluate_green_gate, rotation_open_symbols
 
 
 def _write_env(root: Path, **kwargs: str) -> None:
@@ -77,6 +77,81 @@ def test_session_fails_when_below_configured_floor(tmp_path: Path, monkeypatch) 
 
     result = evaluate_green_gate(root, hours=12.0, session_min_pct=-1.0, window_min_pct=-2.0)
     assert result.session_pass is False
+
+
+def test_pause_exec_fails_when_exec_after_pause_even_if_control_unpaused(tmp_path: Path) -> None:
+    """auto_unpause must not ignore discipline breaches while control.json says paused=false."""
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "control.json").write_text(json.dumps({"paused": False}), encoding="utf-8")
+    (root / "real_cron.log").write_text(
+        "\n".join(
+            [
+                "[CONTROL] paused=True → skipping new entry trades",
+                "[nanoclaw] X-SIGNAL STF | EXEC SUCCESS | sym=WMATIC_ALPHA | tx=0xabc",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    ok, detail = _pause_exec_check(root, paused=False)
+    assert ok is False
+    assert "EXEC SUCCESS after pause" in detail
+
+
+def test_pause_exec_passes_when_unpaused_and_no_exec_after_marker(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "control.json").write_text(json.dumps({"paused": False}), encoding="utf-8")
+    (root / "real_cron.log").write_text(
+        "[CONTROL] paused=True → skipping new entry trades\n",
+        encoding="utf-8",
+    )
+
+    ok, detail = _pause_exec_check(root, paused=False)
+    assert ok is True
+    assert "no EXEC SUCCESS after last pause marker" in detail
+
+
+def test_green_gate_overall_fails_when_exec_after_pause_while_control_unpaused(
+    tmp_path: Path, monkeypatch
+) -> None:
+    root = tmp_path / "repo"
+    root.mkdir()
+    _write_env(root, ALLOW_HIGH_RISK_LOSS_CUT_XSIGNAL="false", FE_STABLE_RUNWAY_ENABLED="true")
+    _write_followed(root, ["WETH_ALPHA"])
+    (root / "control.json").write_text(json.dumps({"paused": False}), encoding="utf-8")
+    (root / "real_cron.log").write_text(
+        "\n".join(
+            [
+                "[CONTROL] paused=True → skipping new entry trades",
+                "[nanoclaw] X-SIGNAL STF | EXEC SUCCESS | sym=WMATIC_ALPHA | tx=0xabc",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "scripts.nano_green.get_current_balance",
+        lambda: {"total": 131.0, "source": "test"},
+    )
+    monkeypatch.setattr(
+        "scripts.nano_green.resolve_session_baseline",
+        lambda total, reset=False: (130.0, "2026-05-29T00:00:00Z"),
+    )
+    monkeypatch.setattr(
+        "scripts.nano_green._window_pnl_check",
+        lambda *a, **k: (True, "PASS | 12h window (test)"),
+    )
+    monkeypatch.setattr(
+        "scripts.nano_green._fe_share_line",
+        lambda root: "fe_share=n/a (test)",
+    )
+
+    result = evaluate_green_gate(root, hours=12.0, session_min_pct=-1.0, window_min_pct=-2.0)
+    assert result.pause_pass is False
+    assert result.overall_pass is False
 
 
 def test_rotation_open_symbols_respects_blocklist(tmp_path: Path) -> None:

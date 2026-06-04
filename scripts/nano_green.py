@@ -7,7 +7,7 @@ Checks:
   1. Hard unpause readiness (loss-cut off, FE runway, blocklist, copy audit)
   2. Session PnL vs floor (default -1%% — not strict breakeven)
   3. Window PnL from ``portfolio_history.csv`` over ``--hours`` (optional if no history)
-  4. Pause discipline (no EXEC SUCCESS after pause marker while paused)
+  4. Pause discipline (no EXEC SUCCESS after last pause marker — always enforced when marker exists)
 """
 from __future__ import annotations
 
@@ -200,9 +200,14 @@ def _window_pnl_check(
 
 
 def _pause_exec_check(root: Path, paused: bool) -> tuple[bool, str]:
+    """Fail when any EXEC SUCCESS appears after the last pause marker in the log.
+
+    Discipline is checked whenever a pause marker exists — not only while
+    ``control.json`` still says ``paused=true``. That closes a gap where
+    ``auto_unpause`` could leave ``paused=false`` while fills after the marker
+    were ignored, allowing repeated entry trades before re-pause.
+    """
     lines = _read_log_lines(root)
-    if not paused:
-        return True, "PASS | paused=false (entries allowed when other gates pass)"
 
     last_pause_idx = None
     for idx, line in enumerate(lines):
@@ -210,7 +215,9 @@ def _pause_exec_check(root: Path, paused: bool) -> tuple[bool, str]:
             last_pause_idx = idx
 
     if last_pause_idx is None:
-        return False, "FAIL | paused=true but no [CONTROL] paused=True in log"
+        if paused:
+            return False, "FAIL | paused=true but no [CONTROL] paused=True in log"
+        return True, "PASS | no pause marker in log"
 
     post_pause = lines[last_pause_idx + 1 :]
     violations = [line for line in post_pause if EXEC_SUCCESS_RE.search(line)]
@@ -218,7 +225,9 @@ def _pause_exec_check(root: Path, paused: bool) -> tuple[bool, str]:
         sample = violations[0].strip()[:120]
         return False, f"FAIL | {len(violations)} EXEC SUCCESS after pause | first={sample!r}"
 
-    return True, "PASS | paused=true, no EXEC SUCCESS after pause marker"
+    if paused:
+        return True, "PASS | paused=true, no EXEC SUCCESS after pause marker"
+    return True, "PASS | no EXEC SUCCESS after last pause marker"
 
 
 def _fe_share_line(root: Path) -> str:

@@ -69,7 +69,7 @@ def evaluate_auto_pause() -> tuple[bool, str, tuple[str, ...]]:
             window_min_pct=window_min,
         )
 
-    if result.trading_allowed() and result.overall_pass:
+    if result.trading_allowed() and result.overall_pass and result.pause_pass:
         allowed, hysteresis_log = apply_unpause_hysteresis(
             True,
             window_pct=window_pct,
