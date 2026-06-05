@@ -912,7 +912,10 @@ class SignalEquityTrader:
             t = (s_abs - thr) / (1.0 - thr)
         t = max(0.0, min(1.0, t))
         raw = lo + (hi - lo) * t
-        sized = min(float(raw), float(usdc_balance), float(self.config.max_trade_usdc))
+        from nanoclaw.negative_window_x_signal_cap import resolve_effective_max_trade_usd
+
+        effective_max = resolve_effective_max_trade_usd(float(self.config.max_trade_usdc))
+        sized = min(float(raw), float(usdc_balance), effective_max)
         # TEMPORARY: USDC→equity very-strong signals — lift toward ~$9–$9.5 without changing global MIN_TRADE_USD.
         if (
             float(signal_strength) > 0
@@ -922,7 +925,7 @@ class SignalEquityTrader:
             boosted = min(
                 float(_X_SIGNAL_VERY_STRONG_SIZE_TARGET),
                 float(usdc_balance),
-                float(self.config.max_trade_usdc),
+                effective_max,
             )
             if boosted > float(sized):
                 print("[nanoclaw-av] X-SIGNAL boosted sizing for very strong signal")
@@ -941,7 +944,7 @@ class SignalEquityTrader:
                 lifted = min(
                     float(min_notional),
                     float(usdc_balance),
-                    float(self.config.max_trade_usdc),
+                    effective_max,
                 )
                 if lifted > float(sized):
                     print(

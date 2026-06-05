@@ -70,6 +70,20 @@ def evaluate_auto_pause() -> tuple[bool, str, tuple[str, ...]]:
         )
 
     if result.trading_allowed() and result.overall_pass and result.pause_pass:
+        from .dual_window_unpause import (
+            dual_window_unpause_required,
+            evaluate_dual_window_unpause,
+        )
+
+        dual_detail = ""
+        if dual_window_unpause_required():
+            dual_ok, dual_detail = evaluate_dual_window_unpause(
+                root,
+                window_min_pct=window_min,
+                long_hours=hours,
+            )
+            if not dual_ok:
+                return False, dual_detail, result.rotation_open
         allowed, hysteresis_log = apply_unpause_hysteresis(
             True,
             window_pct=window_pct,
@@ -83,9 +97,10 @@ def evaluate_auto_pause() -> tuple[bool, str, tuple[str, ...]]:
             )
             return False, reason, result.rotation_open
         rot = ", ".join(result.rotation_open) or "none"
+        dual_tag = f" | {dual_detail}" if dual_detail else ""
         reason = (
             f"auto_unpause | window={hours:.0f}h | session≥{session_min:+.1f}% | "
-            f"rotation={rot}"
+            f"rotation={rot}{dual_tag}"
         )
         return True, reason, result.rotation_open
     if not result.readiness_pass:
