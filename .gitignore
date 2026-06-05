@@ -5,6 +5,7 @@
 .env
 .env.*
 !.env.example
+!.env.dev.example
 !.env.sample
 
 *.backup*
@@ -49,6 +50,8 @@ eggs/
 .eggs/
 lib/
 lib64/
+!scripts/lib/
+!scripts/lib/**
 parts/
 sdist/
 var/

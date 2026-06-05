@@ -1,6 +1,6 @@
 # Infra automation backlog — multi-VM, cloud-agnostic deploy
 
-**Status:** Active roadmap (P0 next).  
+**Status:** Active roadmap (P0–P3 scripts local; VM+wallet tomorrow).  
 **Goal:** One-command **stage vs dev** provisioning — not Oracle-specific; maximize **free tier** (2× Oracle + other clouds).  
 **Dev env economics:** [`DEV_ENV.md`](DEV_ENV.md) — **~$50 experimental**, not $80–90 (that was 24/7 lab soak).
 
@@ -52,34 +52,34 @@
 
 ### P0b — Document & inventory (2h)
 
-- [ ] `docs/VM_ROLES.md` — stage vs dev table
-- [ ] `.env.dev.example` — `STAGE_SEED_USD=50`, dual-window on, play budget on, `NANOCLAW_ROLE=dev`
-- [ ] `scripts/dev_preflight.sh` — SSH, python3, git, RPC probe
+- [x] `docs/VM_ROLES.md` — stage vs dev table
+- [x] `.env.dev.example` — `STAGE_SEED_USD=50`, dual-window on, play budget on, `NANOCLAW_ROLE=dev`
+- [x] `scripts/dev_preflight.sh` — SSH, python3, git, RPC probe (`--dry-run`, `--skip-remote`)
 
 ### P1 — Ephemeral dev bootstrap (1 day)
 
-- [ ] `scripts/dev_bootstrap.sh` — cloud-agnostic SSH deploy:
+- [x] `scripts/dev_bootstrap.sh` — cloud-agnostic SSH deploy (`--dry-run`):
   - create user dir `~/.nanobot/workspace/nanoclaw`
   - `git clone` / `git pull` branch
   - `python3 -m venv .venv` + `pip install -r requirements.txt`
   - merge `secrets.dev.env` → VM `.env` (never commit)
   - `crontab` snippet for `clean_swap.py` (dev: easy disable on destroy)
   - `~/.local/bin` nano shims
-- [ ] `scripts/dev_destroy.sh` — stop cron, optional wipe `~/.nanobot/workspace/nanoclaw`, **keep wallet**
-- [ ] `--cloud generic` only first; Oracle/GCP = same script + optional cloud-init YAML
+- [x] `scripts/dev_destroy.sh` — stop cron, optional wipe `~/.nanobot/workspace/nanoclaw`, **keep wallet**
+- [x] `--cloud generic` only first; Oracle/GCP = same script + optional cloud-init YAML
 
 ### P2 — Secrets & role file (4h)
 
-- [ ] `~/.nanoclaw/secrets.env` on VM (gitignored pattern documented)
-- [ ] `NANOCLAW_ROLE=stage|dev` in `.env` — `nanodeploy` prints role in banner
-- [ ] Block `nanodeploy` if `role=dev` + branch `V2` or `WALLET=` stage address on `V4-play` mismatch
+- [x] `~/.nanoclaw/secrets.dev.env` pattern — [`infra/secrets.dev.env.example`](../infra/secrets.dev.env.example) + [`docs/VM_ROLES.md`](VM_ROLES.md)
+- [x] `NANOCLAW_ROLE=stage|dev` in `.env` — `nanodeploy` prints role in banner
+- [x] Block `nanodeploy` via `scripts/deploy_role_guard.py` (dev+V2, stage+V4, V4+stage wallet)
 - [ ] GitHub Secrets (optional): `DEV_SSH_KEY`, `DEV_HOST`, `POLYGON_PRIVATE_KEY_DEV` for Actions bootstrap
 
 ### P3 — Cloud-init templates (1 day)
 
-- [ ] `infra/cloud-init/generic.yaml` — ubuntu user, docker optional, swap off
-- [ ] `infra/cloud-init/oracle-ubuntu.yaml` — same as generic (Oracle = generic Ubuntu)
-- [ ] `infra/cloud-init/README.md` — paste into Oracle / GCP / AWS user-data
+- [x] `infra/cloud-init/generic.yaml` — ubuntu user, swap off, python3/git
+- [x] `infra/cloud-init/oracle-ubuntu.yaml` — same as generic (Oracle = generic Ubuntu)
+- [x] `infra/cloud-init/README.md` — paste into Oracle / GCP / AWS user-data
 
 ### P4 — CI smoke (optional)
 

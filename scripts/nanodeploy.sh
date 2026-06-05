@@ -34,7 +34,27 @@ for arg in "$@"; do
   fi
 done
 
+DEPLOY_ROLE="stage"
+DEPLOY_BRANCH="unknown"
+DEPLOY_WALLET=""
+if [[ -f "${ROOT}/.env" ]]; then
+  DEPLOY_ROLE="$(grep -E '^NANOCLAW_ROLE=' "${ROOT}/.env" | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'" || true)"
+  DEPLOY_WALLET="$(grep -E '^WALLET=' "${ROOT}/.env" | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'" || true)"
+fi
+if command -v git >/dev/null 2>&1; then
+  DEPLOY_BRANCH="$(git -C "${ROOT}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
+fi
+[[ -z "${DEPLOY_ROLE}" ]] && DEPLOY_ROLE="stage"
+
 echo "=== nanodeploy | $(date -u +%Y-%m-%dT%H:%M:%SZ) UTC | ${ROOT} ==="
+echo "  role=${DEPLOY_ROLE} branch=${DEPLOY_BRANCH} wallet=${DEPLOY_WALLET:0:10}…"
+
+echo ""
+echo "--- deploy_role_guard ---"
+if ! "${PYTHON}" scripts/deploy_role_guard.py --root "${ROOT}"; then
+  echo "nanodeploy: aborted by role guard" >&2
+  exit 1
+fi
 
 if [[ "${SKIP_NANOUP}" -eq 0 ]]; then
   echo ""

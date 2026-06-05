@@ -56,12 +56,21 @@ GitHub Secrets are **right for automated spin-up/teardown**; local `secrets.dev.
 ## Ephemeral dev VM lifecycle (target)
 
 ```bash
-# Laptop config (once): cp infra/config.yaml.example ~/.nanoclaw/config.yaml
-# One command from laptop (P1 backlog)
-./scripts/dev_bootstrap.sh --host NEW_IP --branch V4-play --seed-usd 50 --secrets ~/.nanoclaw/secrets.dev.env
-./scripts/nanoremote.sh --role dev logs         # tail real_cron.log
+# Laptop config (once)
+cp infra/config.yaml.example ~/.nanoclaw/config.yaml
+cp infra/secrets.dev.env.example ~/.nanoclaw/secrets.dev.env   # fill WALLET + keys
+
+# Dry-run locally (no VM/wallet)
+./scripts/dev_preflight.sh --role dev --dry-run --skip-remote
+./scripts/dev_bootstrap.sh --role dev --dry-run
+./scripts/dev_destroy.sh --role dev --dry-run
+
+# Tomorrow: cloud-init (infra/cloud-init/README.md) → preflight → bootstrap
+./scripts/dev_preflight.sh --role dev
+./scripts/dev_bootstrap.sh --role dev --branch V4-play --seed-usd 50 --secrets ~/.nanoclaw/secrets.dev.env
+./scripts/nanoremote.sh --role dev logs
 ./scripts/nanoremote.sh --role dev nano12h
-./scripts/dev_destroy.sh --host NEW_IP          # optional: stop cron, wipe dir, keep wallet on-chain
+./scripts/dev_destroy.sh --role dev --wipe   # optional; wallet keeps on-chain funds
 ```
 
 **Same wallet across VM respins:** yes — fund wallet once; each new VM gets fresh clone + same `secrets.dev.env`.

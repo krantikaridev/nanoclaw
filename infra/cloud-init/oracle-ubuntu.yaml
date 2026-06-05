@@ -1,0 +1,32 @@
+#cloud-config
+# Oracle Cloud Ubuntu — identical to generic.yaml (Oracle = generic Ubuntu AMD micro).
+# Use this file name when operators prefer provider-specific docs; content matches generic.
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - git
+  - python3
+  - python3-venv
+  - python3-pip
+  - curl
+  - ca-certificates
+  - jq
+
+swap:
+  size: 0
+
+write_files:
+  - path: /etc/sysctl.d/99-nanoclaw-swap.conf
+    content: |
+      vm.swappiness=10
+    owner: root:root
+    permissions: "0644"
+
+runcmd:
+  - sysctl -p /etc/sysctl.d/99-nanoclaw-swap.conf || true
+  - mkdir -p /home/ubuntu/.nanobot/workspace
+  - chown -R ubuntu:ubuntu /home/ubuntu/.nanobot
+
+final_message: "nanoclaw oracle-ubuntu cloud-init complete — run dev_bootstrap.sh from laptop"
