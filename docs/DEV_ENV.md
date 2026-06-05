@@ -56,10 +56,11 @@ GitHub Secrets are **right for automated spin-up/teardown**; local `secrets.dev.
 ## Ephemeral dev VM lifecycle (target)
 
 ```bash
+# Laptop config (once): cp infra/config.yaml.example ~/.nanoclaw/config.yaml
 # One command from laptop (P1 backlog)
 ./scripts/dev_bootstrap.sh --host NEW_IP --branch V4-play --seed-usd 50 --secrets ~/.nanoclaw/secrets.dev.env
-./scripts/nanoremote.sh --host NEW_IP logs      # tail real_cron.log
-./scripts/nanoremote.sh --host NEW_IP nano12h
+./scripts/nanoremote.sh --role dev logs         # tail real_cron.log
+./scripts/nanoremote.sh --role dev nano12h
 ./scripts/dev_destroy.sh --host NEW_IP          # optional: stop cron, wipe dir, keep wallet on-chain
 ```
 

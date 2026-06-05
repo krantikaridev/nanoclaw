@@ -47,8 +47,8 @@
 ### P0 — Highest ROI (do first — saves time every day)
 
 - [x] `docs/DEV_ENV.md` — dev capital, 48h gate, secrets
-- [ ] **`scripts/nanoremote.sh`** — single command: `logs | nano12h | nano8h | diag | shell` via SSH (replaces 3-step ssh+cd+activate)
-- [ ] `~/.nanoclaw/config.yaml` on laptop: `stage_host`, `dev_host`, `ssh_key` (only variables)
+- [x] **`scripts/nanoremote.sh`** — single command: `logs | nano12h | nano8h | diag | shell` via SSH (replaces 3-step ssh+cd+activate)
+- [x] `~/.nanoclaw/config.yaml` on laptop: `stage_host`, `dev_host`, `ssh_key` — template: [`infra/config.yaml.example`](../infra/config.yaml.example)
 
 ### P0b — Document & inventory (2h)
 
