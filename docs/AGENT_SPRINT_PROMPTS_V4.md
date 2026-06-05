@@ -6,7 +6,7 @@
 |------|--------|
 | **Branch** | `V4-play` (fork from `V2` @ `738222ed`) |
 | **Stage (Track A)** | `V2` @ tag `v2-stage-2026-06-05` — paused, no experiments |
-| **Lab (Track B)** | New VM + new wallet, `STAGE_SEED_USD=80` |
+| **Dev (Track B)** | Ephemeral VM + wallet, **`STAGE_SEED_USD=50`** (~$50 total — see [`DEV_ENV.md`](DEV_ENV.md)) |
 
 ## Shipped on V4-play (`d6c6d627`)
 
@@ -22,7 +22,7 @@
 ```bash
 git clone https://github.com/krantikaridev/nanoclaw.git && cd nanoclaw
 git checkout V4-play && git pull
-# .env: new WALLET, STAGE_SEED_USD=80, drpc-first RPC
+# .env: WALLET, STAGE_SEED_USD=50, NANOCLAW_ROLE=dev, drpc-first RPC
 # EXTERNAL_AUTO_UNPAUSE_REQUIRE_DUAL_WINDOW=true (default on branch)
 bash scripts/v3_pre_deploy_check.sh
 NANOUP_AUTOSTASH=1 nanodeploy

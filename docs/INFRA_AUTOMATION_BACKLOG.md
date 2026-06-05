@@ -1,7 +1,8 @@
-# Infra automation backlog — multi-VM, cloud-agnostic lab deploy
+# Infra automation backlog — multi-VM, cloud-agnostic deploy
 
-**Status:** TODO when operator returns from break.  
-**Goal:** One-command **stage vs lab** provisioning — not Oracle-specific; maximize **free tier** (2× Oracle + other clouds).
+**Status:** Active roadmap (P0 next).  
+**Goal:** One-command **stage vs dev** provisioning — not Oracle-specific; maximize **free tier** (2× Oracle + other clouds).  
+**Dev env economics:** [`DEV_ENV.md`](DEV_ENV.md) — **~$50 experimental**, not $80–90 (that was 24/7 lab soak).
 
 ## Problem today
 
@@ -16,50 +17,63 @@
 ## Target end state
 
 ```bash
-# From laptop (any OS)
-./scripts/lab_bootstrap.sh \
-  --cloud oracle|gcp|aws|generic \
-  --host lab-vm.example \
-  --wallet 0xNEW… \
+# From laptop (any OS) — spin ephemeral dev VM
+./scripts/dev_bootstrap.sh \
+  --host 92.4.73.239 \
+  --key ~/.ssh/ssh-key-2026-03-15.key \
   --branch V4-play \
-  --seed-usd 80 \
-  --dry-run
+  --seed-usd 50 \
+  --secrets ~/.nanoclaw/secrets.dev.env \
+  --role dev
 
-# On VM after bootstrap (idempotent)
-nanodeploy --role lab   # or --role stage
+# Remote ops (only IP + key vary)
+./scripts/nanoremote.sh --host 92.4.73.239 --key ... logs
+./scripts/nanoremote.sh --host 92.4.73.239 --key ... nano12h
+./scripts/nanoremote.sh --host 92.4.73.239 --key ... diag
+
+# Teardown when done (wallet keeps on-chain funds)
+./scripts/dev_destroy.sh --host 92.4.73.239 --key ...
 ```
 
 **Roles:**
 
-| Role | Branch | Tag | Wallet |
-|------|--------|-----|--------|
-| **stage** | `V2` | `v2-stage-2026-06-05` | `0x05eF…` (frozen until merge gate) |
-| **lab** | `V4-play` | — | new wallet per VM |
+| Role | Branch | Tag | Wallet | Capital |
+|------|--------|-----|--------|---------|
+| **stage** | `V2` | `v2-stage-2026-06-05` | `0x05eF…` | ~$130 (24/7) |
+| **dev** | `V4-play` | — | same or new | **~$50** experimental, ephemeral VM |
 
 ## Sprint phases (when back)
 
-### P0 — Document & inventory (2h)
+### P0 — Highest ROI (do first — saves time every day)
 
-- [ ] `docs/VM_ROLES.md` — stage vs lab table, never-share `.env` rule
-- [ ] `.env.lab.example` — minimal template (`STAGE_SEED_USD=80`, dual-window on, play budget on)
-- [ ] `scripts/lab_preflight.sh` — SSH check, python3, git, disk, RPC probe
+- [x] `docs/DEV_ENV.md` — dev capital, 48h gate, secrets
+- [ ] **`scripts/nanoremote.sh`** — single command: `logs | nano12h | nano8h | diag | shell` via SSH (replaces 3-step ssh+cd+activate)
+- [ ] `~/.nanoclaw/config.yaml` on laptop: `stage_host`, `dev_host`, `ssh_key` (only variables)
 
-### P1 — Generic bootstrap script (1 day)
+### P0b — Document & inventory (2h)
 
-- [ ] `scripts/lab_bootstrap.sh` — cloud-agnostic SSH deploy:
+- [ ] `docs/VM_ROLES.md` — stage vs dev table
+- [ ] `.env.dev.example` — `STAGE_SEED_USD=50`, dual-window on, play budget on, `NANOCLAW_ROLE=dev`
+- [ ] `scripts/dev_preflight.sh` — SSH, python3, git, RPC probe
+
+### P1 — Ephemeral dev bootstrap (1 day)
+
+- [ ] `scripts/dev_bootstrap.sh` — cloud-agnostic SSH deploy:
   - create user dir `~/.nanobot/workspace/nanoclaw`
   - `git clone` / `git pull` branch
   - `python3 -m venv .venv` + `pip install -r requirements.txt`
-  - copy `.env` from operator-supplied secrets file (never commit)
-  - `crontab` snippet for `clean_swap.py`
+  - merge `secrets.dev.env` → VM `.env` (never commit)
+  - `crontab` snippet for `clean_swap.py` (dev: easy disable on destroy)
   - `~/.local/bin` nano shims
+- [ ] `scripts/dev_destroy.sh` — stop cron, optional wipe `~/.nanobot/workspace/nanoclaw`, **keep wallet**
 - [ ] `--cloud generic` only first; Oracle/GCP = same script + optional cloud-init YAML
 
 ### P2 — Secrets & role file (4h)
 
 - [ ] `~/.nanoclaw/secrets.env` on VM (gitignored pattern documented)
-- [ ] `NANOCLAW_ROLE=stage|lab` in `.env` — `nanodeploy` prints role in banner
-- [ ] Block `nanodeploy` if `WALLET=` matches known stage address on `role=lab` branch mismatch
+- [ ] `NANOCLAW_ROLE=stage|dev` in `.env` — `nanodeploy` prints role in banner
+- [ ] Block `nanodeploy` if `role=dev` + branch `V2` or `WALLET=` stage address on `V4-play` mismatch
+- [ ] GitHub Secrets (optional): `DEV_SSH_KEY`, `DEV_HOST`, `POLYGON_PRIVATE_KEY_DEV` for Actions bootstrap
 
 ### P3 — Cloud-init templates (1 day)
 
@@ -81,11 +95,23 @@ nanodeploy --role lab   # or --role stage
 | **AWS** | t2/t3.micro 12mo | cold standby |
 | **Azure** | B1s | dev pytest runner |
 
+## V4 engineering priority (PnL > 0)
+
+| Priority | Item | Why |
+|----------|------|-----|
+| **P0** | **`nanoremote.sh`** + dev bootstrap | Operator time; no manual SSH dance |
+| **P1** | **Prove V4-play on $50 dev** | Dual-window + play budget stops Jun-3 class losses |
+| **P2** | **Merge V4 gates → stage** | Highest trading ROI after 48h dev soak |
+| **P3** | Refactor `swap_executor.py` | Maintainability; **not** blocking PnL if gates work |
+| **Defer** | More symbols, copy trading | Widens risk before gates proven |
+
+**Code quality today:** `ruff` + pytest in CI (`.github/workflows/ci.yml`); **~79% coverage** per `AI_CONTEXT.md`; run `python scripts/update_coverage_history.py` for snapshot. No standalone HTML report — `coverage.xml` from CI. **Weakest:** `swap_executor.py` size/monolith.
+
 ## Non-goals (this sprint)
 
 - Terraform full IaC (later if needed)
 - Auto-fund wallets / on-chain deploy keys via cloud APIs
-- Merging `V4-play` → stage without 48h lab gate
+- Merging `V4-play` → stage without **48h dev soak** (see `DEV_ENV.md`)
 
 ## Operator handoff (Jun 5 break)
 
