@@ -73,6 +73,20 @@ When writing agent instructions or runbook steps, **label the shell** if a snipp
   4. `git diff --stat` and verify only intended files.
 - Any behavior/config change must include tests + docs + `.env.example` updates in same PR.
 
+## V4-play lab branch (parallel to stage)
+
+**Stage wallet stays on `V2`** (tag `v2-stage-2026-06-05` @ `738222ed`) while paused. **`V4-play`** is for a **second VM + new wallet** only.
+
+| Step | Where | Action |
+|------|--------|--------|
+| 1 | Dev | `git checkout V4-play && git pull` |
+| 2 | Lab VM | Fund **$60–100** USDC + POL; new `WALLET=` in `.env` |
+| 3 | Lab VM | `bash scripts/v3_pre_deploy_check.sh` → `NANOUP_AUTOSTASH=1 nanodeploy` |
+| 4 | Lab VM | Run **48h**; see [`docs/ROTATION_PLAYBOOK.md`](ROTATION_PLAYBOOK.md) |
+| 5 | Dev | Merge `V4-play` → `V2` only after lab gate + operator sign-off |
+
+Sprint prompts: [`docs/AGENT_SPRINT_PROMPTS_V4.md`](AGENT_SPRINT_PROMPTS_V4.md).
+
 ## V3 merge gate
 
 V3 is **dev/CI only** until the parent merges to `V2` and deploys. The live stage VM stays on **`V2`** while monitoring (auto-pause, 12h window PnL, post-derisk book).
