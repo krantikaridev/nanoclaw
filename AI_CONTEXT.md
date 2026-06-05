@@ -40,7 +40,7 @@
 ## **Stage vs lab (Jun 2026)**
 
 - **Track A — stage**: Git **`V2`**, tag **`v2-stage-2026-06-05`** @ **`738222ed`** (`pause_exec` discipline + window-stress derisk). Wallet **`0x05eF…`**. **Paused** when 12h window ≤ −2%; **do not** deploy experiments here while bleeding.
-- **Track B — lab**: Branch **`V4-play`** on a **second VM + new wallet** (`STAGE_SEED_USD≈80`). Adds dual-window unpause (8h+12h), play budget (2 fills/day on books &lt; $200), negative-window X-Signal cap ($10). Safe swap table: **`docs/ROTATION_PLAYBOOK.md`**. Sprint: **`docs/AGENT_SPRINT_PROMPTS_V4.md`**.
+- **Track B — lab**: Branch **`V4-play`** on a **second VM + new wallet** (`STAGE_SEED_USD≈80`). Adds dual-window unpause (8h+12h), play budget (2 fills/day on books &lt; $200), negative-window X-Signal cap ($10). Safe swap table: **`docs/ROTATION_PLAYBOOK.md`**. Sprint: **`docs/AGENT_SPRINT_PROMPTS_V4.md`**. **TODO (infra):** one-command cloud-agnostic lab bootstrap — **`docs/INFRA_AUTOMATION_BACKLOG.md`** (Oracle 2× free + other clouds).
 
 ## **Developer environments (shell + machine)**
 

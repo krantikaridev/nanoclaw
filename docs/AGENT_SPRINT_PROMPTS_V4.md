@@ -35,3 +35,7 @@ NANOUP_AUTOSTASH=1 nanodeploy
 3. Stage `nanodeploy` only after operator sign-off  
 
 See [`ROTATION_PLAYBOOK.md`](ROTATION_PLAYBOOK.md) for swap caps.
+
+## Infra automation (when operator returns)
+
+End-to-end multi-VM deploy (cloud-agnostic, free-tier friendly): [`INFRA_AUTOMATION_BACKLOG.md`](INFRA_AUTOMATION_BACKLOG.md).
