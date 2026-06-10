@@ -1,0 +1,14 @@
+# Operator laptop config — copy to ~/.nanoclaw/config.yaml (chmod 600).
+# Never commit secrets or private keys. Only host/key paths vary per machine.
+#
+#   mkdir -p ~/.nanoclaw
+#   cp infra/config.yaml.example ~/.nanoclaw/config.yaml
+#   # edit stage_host, dev_host, ssh_key
+
+ssh_user: ubuntu
+ssh_key: ~/.ssh/ssh-key-2026-03-15.key
+remote_root: ~/.nanobot/workspace/nanoclaw
+
+# VM IPs — stage is 24/7; dev is ephemeral lab (set when spun up)
+stage_host: 92.4.73.239
+dev_host: ""

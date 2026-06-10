@@ -1,0 +1,34 @@
+#cloud-config
+# Generic Ubuntu cloud-init for nanoclaw lab/stage VMs (Oracle, GCP, AWS, Azure).
+# Paste into instance "User data" / cloud-init on first boot.
+#
+# See infra/cloud-init/README.md
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - git
+  - python3
+  - python3-venv
+  - python3-pip
+  - curl
+  - ca-certificates
+  - jq
+
+swap:
+  size: 0
+
+write_files:
+  - path: /etc/sysctl.d/99-nanoclaw-swap.conf
+    content: |
+      vm.swappiness=10
+    owner: root:root
+    permissions: "0644"
+
+runcmd:
+  - sysctl -p /etc/sysctl.d/99-nanoclaw-swap.conf || true
+  - mkdir -p /home/ubuntu/.nanobot/workspace
+  - chown -R ubuntu:ubuntu /home/ubuntu/.nanobot
+
+final_message: "nanoclaw generic cloud-init complete — run dev_bootstrap.sh from laptop"

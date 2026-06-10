@@ -37,6 +37,11 @@
 - Canonical role split and collaboration loop live in `docs/OPERATING_MODEL.md`.
 - Keep this file as canonical backlog/process memory; keep role mechanics in the operating-model doc to avoid drift.
 
+## **Stage vs lab (Jun 2026)**
+
+- **Track A — stage**: Git **`V2`**, tag **`v2-stage-2026-06-05`** @ **`738222ed`** (`pause_exec` discipline + window-stress derisk). Wallet **`0x05eF…`**. **Paused** when 12h window ≤ −2%; **do not** deploy experiments here while bleeding.
+- **Track B — dev**: Branch **`V4-play`** on an **ephemeral VM** (`STAGE_SEED_USD≈50`, **~$50 wallet** — see **`docs/DEV_ENV.md`**). Not 24/7; destroy after test. Adds dual-window unpause (8h+12h), play budget (2 fills/day on books &lt; $200), negative-window X-Signal cap ($10). Safe swap table: **`docs/ROTATION_PLAYBOOK.md`**. Sprint: **`docs/AGENT_SPRINT_PROMPTS_V4.md`**. **TODO (infra):** one-command cloud-agnostic lab bootstrap — **`docs/INFRA_AUTOMATION_BACKLOG.md`** (Oracle 2× free + other clouds).
+
 ## **Developer environments (shell + machine)**
 
 - **Local / Cursor**: Often **Windows + PowerShell** — do not assume **`&&`** (use **`;`** / **`$LASTEXITCODE`** on PS 5.x, or **PowerShell 7+**). See **`docs/DEV_WORKFLOW.md`** § *Shell: Windows vs Linux*.

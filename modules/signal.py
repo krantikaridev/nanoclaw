@@ -1611,6 +1611,7 @@ def try_x_signal_equity_decision(
     buy_mult = 1.0
     skip_buys = False
     medium_usdt_wmatic_guard = False
+    play_budget_block: str | None = None
 
     if risk_level == "HIGH":
         buy_mult = 0.0
@@ -1619,6 +1620,19 @@ def try_x_signal_equity_decision(
     elif risk_level == "MEDIUM":
         risk_reasons = set(str(x) for x in (risk_ctx.get("reasons") or []))
         medium_usdt_wmatic_guard = "usdt_below_medium_buffer_and_wmatic_high" in risk_reasons
+
+    from nanoclaw import play_budget as play_budget_mod
+
+    play_ok, play_budget_block = play_budget_mod.entry_allows(
+        total_usd=float(balances.total_portfolio_usd),
+    )
+    if not play_ok:
+        skip_buys = True
+        buy_mult = 0.0
+        play_budget_mod.log_play_budget_block(
+            reason=str(play_budget_block or "play_budget_exhausted"),
+            total_usd=float(balances.total_portfolio_usd),
+        )
 
     fe_cfg = fcb._load_followed_equities_json_dict()
     cfg_enabled = bool(fe_cfg.get("enabled", True)) if isinstance(fe_cfg, dict) else True
