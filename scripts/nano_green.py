@@ -7,7 +7,7 @@ Checks:
   1. Hard unpause readiness (loss-cut off, FE runway, blocklist, copy audit)
   2. Session PnL vs floor (default -1%% — not strict breakeven)
   3. Window PnL from ``portfolio_history.csv`` over ``--hours`` (optional if no history)
-  4. Pause discipline (no EXEC SUCCESS after last pause marker — always enforced when marker exists)
+  4. Pause discipline (no EXEC SUCCESS in the active paused window — cleared after auto_unpause)
 """
 from __future__ import annotations
 
@@ -33,6 +33,15 @@ from scripts.unpause_readiness import run_checks as run_readiness_checks  # noqa
 LOG_FILE = "real_cron.log"
 CONTROL_FILE = "control.json"
 PAUSE_LINE_RE = re.compile(r"\[CONTROL\]\s+paused=True", re.IGNORECASE)
+UNPAUSE_LINE_RE = re.compile(r"\[CONTROL\]\s+paused=False", re.IGNORECASE)
+UNPAUSE_REASON_RE = re.compile(
+    r"\[CONTROL\]\s+External layer reason:.*auto_unpause",
+    re.IGNORECASE,
+)
+DISCIPLINE_BREACH_REASON_RE = re.compile(
+    r"fill while paused|discipline breach",
+    re.IGNORECASE,
+)
 EXEC_SUCCESS_RE = re.compile(r"EXEC SUCCESS")
 FE_RUNWAY_RE = re.compile(r"FE STABLE RUNWAY")
 _DERISK_EVALUATE_RE = re.compile(r"FE STABLE RUNWAY DERISK \| evaluate")
@@ -199,34 +208,99 @@ def _window_pnl_check(
     return ok, detail
 
 
-def _pause_exec_check(root: Path, paused: bool) -> tuple[bool, str]:
-    """Fail when any EXEC SUCCESS appears after the last pause marker in the log.
+def _first_unpause_idx_after(lines: list[str], pause_idx: int) -> int | None:
+    """First log line after ``pause_idx`` that marks a cleared auto-unpause."""
+    for idx in range(pause_idx + 1, len(lines)):
+        line = lines[idx]
+        if UNPAUSE_LINE_RE.search(line) or UNPAUSE_REASON_RE.search(line):
+            return idx
+    return None
 
-    Discipline is checked whenever a pause marker exists — not only while
-    ``control.json`` still says ``paused=true``. That closes a gap where
-    ``auto_unpause`` could leave ``paused=false`` while fills after the marker
-    were ignored, allowing repeated entry trades before re-pause.
-    """
-    lines = _read_log_lines(root)
 
-    last_pause_idx = None
+def _last_pause_idx(lines: list[str]) -> int | None:
+    last: int | None = None
     for idx, line in enumerate(lines):
         if PAUSE_LINE_RE.search(line):
-            last_pause_idx = idx
+            last = idx
+    return last
 
+
+def _episode_start_pause_idx(lines: list[str], last_pause_idx: int) -> int:
+    """Pause marker that opened the episode ending at ``last_pause_idx``."""
+    last_unpause_before_final: int | None = None
+    for idx in range(last_pause_idx - 1, -1, -1):
+        if UNPAUSE_LINE_RE.search(lines[idx]) or UNPAUSE_REASON_RE.search(lines[idx]):
+            last_unpause_before_final = idx
+            break
+    if last_unpause_before_final is None:
+        return last_pause_idx
+    for idx in range(last_unpause_before_final - 1, -1, -1):
+        if PAUSE_LINE_RE.search(lines[idx]):
+            return idx
+    return last_pause_idx
+
+
+def _pause_exec_scan_lines(
+    lines: list[str],
+    pause_idx: int,
+    *,
+    paused: bool,
+    control_reason: str,
+    last_pause_idx: int | None = None,
+) -> list[str]:
+    """Lines to scan for EXEC SUCCESS violations for the current pause episode."""
+    episode_pause = _episode_start_pause_idx(lines, pause_idx)
+    first_unpause = _first_unpause_idx_after(lines, episode_pause)
+    breach = bool(DISCIPLINE_BREACH_REASON_RE.search(control_reason or ""))
+    final_pause = last_pause_idx if last_pause_idx is not None else pause_idx
+
+    if not paused and first_unpause is not None:
+        # Properly unpaused: only fills while paused (before clearance) count.
+        return lines[episode_pause + 1 : first_unpause]
+
+    if paused and breach and first_unpause is not None:
+        # Brief auto_unpause then fills → discipline re-pause: count post-unpause fills.
+        return lines[first_unpause + 1 : final_pause]
+
+    return lines[final_pause + 1 :]
+
+
+def _pause_exec_check(root: Path, paused: bool) -> tuple[bool, str]:
+    """Fail when EXEC SUCCESS appears in the active paused window of the log.
+
+    After a cleared ``auto_unpause`` (``[CONTROL] paused=False`` or external
+    ``auto_unpause`` reason in ``real_cron.log``), fills during the prior paused
+    window are ignored so legitimate post-unpause rotation does not keep
+    ``pause_exec`` stuck on FAIL. Re-pause for discipline breach still counts
+    fills after the last unpause attempt in that episode.
+    """
+    lines = _read_log_lines(root)
+    control = _load_control(root)
+    control_reason = str(control.get("reason") or "")
+
+    last_pause_idx = _last_pause_idx(lines)
     if last_pause_idx is None:
         if paused:
             return False, "FAIL | paused=true but no [CONTROL] paused=True in log"
         return True, "PASS | no pause marker in log"
 
-    post_pause = lines[last_pause_idx + 1 :]
-    violations = [line for line in post_pause if EXEC_SUCCESS_RE.search(line)]
+    episode_pause = _episode_start_pause_idx(lines, last_pause_idx)
+    scan_lines = _pause_exec_scan_lines(
+        lines,
+        episode_pause,
+        paused=paused,
+        control_reason=control_reason,
+        last_pause_idx=last_pause_idx,
+    )
+    violations = [line for line in scan_lines if EXEC_SUCCESS_RE.search(line)]
     if violations:
         sample = violations[0].strip()[:120]
-        return False, f"FAIL | {len(violations)} EXEC SUCCESS after pause | first={sample!r}"
+        return False, f"FAIL | {len(violations)} EXEC SUCCESS in paused window | first={sample!r}"
 
     if paused:
-        return True, "PASS | paused=true, no EXEC SUCCESS after pause marker"
+        return True, "PASS | paused=true, no EXEC SUCCESS in active paused window"
+    if _first_unpause_idx_after(lines, episode_pause) is not None:
+        return True, "PASS | no EXEC SUCCESS in paused window (cleared after auto_unpause)"
     return True, "PASS | no EXEC SUCCESS after last pause marker"
 
 

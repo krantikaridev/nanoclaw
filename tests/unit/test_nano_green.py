@@ -6,7 +6,13 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from scripts.nano_green import _pause_exec_check, _runway_lines, evaluate_green_gate, rotation_open_symbols
+from scripts.nano_green import (
+    _pause_exec_check,
+    _pause_exec_scan_lines,
+    _runway_lines,
+    evaluate_green_gate,
+    rotation_open_symbols,
+)
 
 
 def _write_env(root: Path, **kwargs: str) -> None:
@@ -80,7 +86,7 @@ def test_session_fails_when_below_configured_floor(tmp_path: Path, monkeypatch) 
 
 
 def test_pause_exec_fails_when_exec_after_pause_even_if_control_unpaused(tmp_path: Path) -> None:
-    """auto_unpause must not ignore discipline breaches while control.json says paused=false."""
+    """Fills during the paused window before clearance still fail even if control.json says unpaused."""
     root = tmp_path / "repo"
     root.mkdir()
     (root / "control.json").write_text(json.dumps({"paused": False}), encoding="utf-8")
@@ -97,7 +103,58 @@ def test_pause_exec_fails_when_exec_after_pause_even_if_control_unpaused(tmp_pat
 
     ok, detail = _pause_exec_check(root, paused=False)
     assert ok is False
-    assert "EXEC SUCCESS after pause" in detail
+    assert "EXEC SUCCESS in paused window" in detail
+
+
+def test_pause_exec_passes_after_auto_unpause_clears_prior_pause(tmp_path: Path) -> None:
+    """Legitimate fills after auto_unpause must not keep pause_exec on FAIL."""
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "control.json").write_text(
+        json.dumps({"paused": False, "reason": "auto_unpause | window=12h | session≥-1.0%"}),
+        encoding="utf-8",
+    )
+    (root / "real_cron.log").write_text(
+        "\n".join(
+            [
+                "[CONTROL] paused=True → skipping new entry trades",
+                "[CONTROL] External layer reason: auto_unpause | window=12h | session≥-1.0%",
+                "[CONTROL] paused=False → entry trades allowed when other gates pass",
+                "[nanoclaw] X-SIGNAL STF | EXEC SUCCESS | sym=WETH_ALPHA | tx=0xdef",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    ok, detail = _pause_exec_check(root, paused=False)
+    assert ok is True
+    assert "cleared after auto_unpause" in detail
+
+
+def test_pause_exec_fails_discipline_breach_after_brief_unpause(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "control.json").write_text(
+        json.dumps({"paused": True, "reason": "auto_pause | fill while paused (discipline breach)"}),
+        encoding="utf-8",
+    )
+    (root / "real_cron.log").write_text(
+        "\n".join(
+            [
+                "[CONTROL] paused=True → skipping new entry trades",
+                "[CONTROL] External layer reason: auto_unpause | window=12h",
+                "[nanoclaw] X-SIGNAL STF | EXEC SUCCESS | sym=WMATIC_ALPHA | tx=0xabc",
+                "[CONTROL] paused=True → skipping new entry trades",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    ok, detail = _pause_exec_check(root, paused=True)
+    assert ok is False
+    assert "EXEC SUCCESS in paused window" in detail
 
 
 def test_pause_exec_passes_when_unpaused_and_no_exec_after_marker(tmp_path: Path) -> None:
@@ -111,7 +168,20 @@ def test_pause_exec_passes_when_unpaused_and_no_exec_after_marker(tmp_path: Path
 
     ok, detail = _pause_exec_check(root, paused=False)
     assert ok is True
-    assert "no EXEC SUCCESS after last pause marker" in detail
+    assert "no EXEC SUCCESS" in detail
+
+
+def test_pause_exec_scan_lines_bounds_cleared_unpause() -> None:
+    lines = [
+        "[CONTROL] paused=True",
+        "noise",
+        "[CONTROL] External layer reason: auto_unpause | window=12h",
+        "[nanoclaw] EXEC SUCCESS | sym=WETH_ALPHA",
+    ]
+    scanned = _pause_exec_scan_lines(
+        lines, 0, paused=False, control_reason="auto_unpause", last_pause_idx=0
+    )
+    assert scanned == ["noise"]
 
 
 def test_green_gate_overall_fails_when_exec_after_pause_while_control_unpaused(

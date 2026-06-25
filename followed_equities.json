@@ -40,6 +40,26 @@
       "upside_pct": 13,
       "earnings_days": null,
       "current_price_usd": 9.43
+    },
+    {
+      "symbol": "AAVE_ALPHA",
+      "address": "0xD6DF932A45C0f255f85145f286eA0b292B21C90B",
+      "decimals": 18,
+      "min_signal_strength": 0.55,
+      "signal_strength": 0.79,
+      "upside_pct": 12,
+      "earnings_days": null,
+      "current_price_usd": 280.0
+    },
+    {
+      "symbol": "UNI_ALPHA",
+      "address": "0xb33Ea7258dfc0BAAe54842834a62874427A1d57",
+      "decimals": 18,
+      "min_signal_strength": 0.55,
+      "signal_strength": 0.77,
+      "upside_pct": 11,
+      "earnings_days": null,
+      "current_price_usd": 8.5
     }
   ]
 }

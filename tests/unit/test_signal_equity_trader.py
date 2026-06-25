@@ -2055,6 +2055,8 @@ def test_followed_equities_json_uses_canonical_polygon_token_addresses():
         "WETH_ALPHA":   "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619",
         "WBTC_ALPHA":   "0x1bfd67037b42cf73acf204706795bf64736c834e",
         "LINK_ALPHA":   "0x53e0bca35ec356bd5dddfebbd1fc0fd03fabad39",
+        "AAVE_ALPHA":   "0xd6df932a45c0f255f85145f286ea0b292b21c90b",
+        "UNI_ALPHA":    "0xb33ea7258dfc0baae54842834a62874427a1d57",
     }
 
     repo_root = Path(__file__).resolve().parents[2]

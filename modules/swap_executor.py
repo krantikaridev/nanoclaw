@@ -3113,7 +3113,9 @@ def determine_trade_decision(
         print(f"[CONTROL] External layer reason: {ctrl.reason}")
     if operator_paused:
         print("[CONTROL] paused=True → skipping new entry trades (protection exits still allowed)")
-    elif reserve_ctx is not None:
+    else:
+        print("[CONTROL] paused=False → entry trades allowed when other gates pass")
+    if not operator_paused and reserve_ctx is not None:
         _log_operating_reserve_defer(
             stable_usd=float(reserve_ctx["stable_usd"]),
             reserve_floor_usd=float(reserve_ctx["reserve_floor_usd"]),

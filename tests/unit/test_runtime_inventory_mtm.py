@@ -401,7 +401,7 @@ def test_followed_equities_json_has_fallback_prices_for_held_assets() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     data = json.loads((repo_root / "followed_equities.json").read_text(encoding="utf-8"))
     by_sym = {a["symbol"]: a for a in data["assets"]}
-    for sym in ("WETH_ALPHA", "WBTC_ALPHA", "LINK_ALPHA"):
+    for sym in ("WETH_ALPHA", "WBTC_ALPHA", "LINK_ALPHA", "AAVE_ALPHA", "UNI_ALPHA"):
         assert "current_price_usd" in by_sym[sym], f"missing fallback price for {sym}"
         assert float(by_sym[sym]["current_price_usd"]) > 0
 
