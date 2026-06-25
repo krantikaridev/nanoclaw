@@ -19,7 +19,7 @@
       "signal_strength": 0.87,
       "upside_pct": 16,
       "earnings_days": null,
-      "current_price_usd": 2500.0
+      "current_price_usd": 1560.0
     },
     {
       "symbol": "WBTC_ALPHA",
@@ -45,21 +45,19 @@
       "symbol": "AAVE_ALPHA",
       "address": "0xD6DF932A45C0f255f85145f286eA0b292B21C90B",
       "decimals": 18,
-      "min_signal_strength": 0.55,
       "signal_strength": 0.79,
-      "upside_pct": 12,
-      "earnings_days": null,
-      "current_price_usd": 280.0
-    },
-    {
-      "symbol": "UNI_ALPHA",
-      "address": "0xb33Ea7258dfc0BAAe54842834a62874427A1d57",
-      "decimals": 18,
       "min_signal_strength": 0.55,
+      "upside_pct": 12,
+      "current_price_usd": 280
+     },
+     {
+      "symbol": "UNI_ALPHA",
+      "address": "0xb33c57e8c3a8f8e5a5a5a5a5a5a5a5a5a5a5a5a5",   // ← This is still wrong in your file
+      "decimals": 18,
       "signal_strength": 0.77,
+      "min_signal_strength": 0.55,
       "upside_pct": 11,
-      "earnings_days": null,
       "current_price_usd": 8.5
-    }
+     }
   ]
 }
