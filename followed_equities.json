@@ -1,5 +1,5 @@
 {
-  "_note": "Only Polygon-valid addresses are kept active. Tier 1 adds liquid Polygon assets with per-asset min_signal_strength floors. earnings_days controls earnings window filter (None = no restriction). current_price_usd is a TRUE FALLBACK FLOOR for FE_USD MTM accounting: per-asset USD = max(live_quote_usdt, bal × current_price_usd). Cleanup #3 (May 2026) flipped this from zero-quote-only-fallback to true-floor after LINK_ALPHA MTM'd at $35.78 vs spot $53.52. Update periodically — a stale fallback above true spot will overstate TOTAL.",
+  "_note": "Only Polygon-valid addresses are kept active. Tier 1 adds liquid Polygon assets with per-asset min_signal_strength floors. earnings_days controls earnings window filter (None = no restriction). Removed UNI_ALPHA (bad address: 0xb33c57e8c3a8f8e5a5a5a5a5a5a5a5a5a5a5a5a5) during stabilization phase - 2026-06-26",
   "enabled": true,
   "min_signal_strength": 0.6,
   "assets": [
@@ -49,15 +49,6 @@
       "min_signal_strength": 0.55,
       "upside_pct": 12,
       "current_price_usd": 280
-     },
-     {
-      "symbol": "UNI_ALPHA",
-      "address": "0xb33c57e8c3a8f8e5a5a5a5a5a5a5a5a5a5a5a5a5",   // ← This is still wrong in your file
-      "decimals": 18,
-      "signal_strength": 0.77,
-      "min_signal_strength": 0.55,
-      "upside_pct": 11,
-      "current_price_usd": 8.5
-     }
+    }
   ]
 }
