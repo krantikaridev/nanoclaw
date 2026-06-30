@@ -1,5 +1,5 @@
 {
-  "_note": "Only Polygon-valid addresses are kept active. Tier 1 adds liquid Polygon assets with per-asset min_signal_strength floors. earnings_days controls earnings window filter (None = no restriction). Removed UNI_ALPHA (bad address: 0xb33c57e8c3a8f8e5a5a5a5a5a5a5a5a5a5a5a5a5) during stabilization phase - 2026-06-26",
+  "_note": "Removed LINK_ALPHA (zero balance + unquoted) during stabilization phase - 2026-07-01. Only Polygon-valid addresses are kept active. Tier 1 adds liquid Polygon assets with per-asset min_signal_strength floors. earnings_days controls earnings window filter (None = no restriction).",
   "enabled": true,
   "min_signal_strength": 0.6,
   "assets": [
@@ -30,16 +30,6 @@
       "upside_pct": 14,
       "earnings_days": null,
       "current_price_usd": 95000.0
-    },
-    {
-      "symbol": "LINK_ALPHA",
-      "address": "0x53E0bca35eC356Bd5DdDFebbD1Fc0FD03FaBad39",
-      "decimals": 18,
-      "min_signal_strength": 0.55,
-      "signal_strength": 0.81,
-      "upside_pct": 13,
-      "earnings_days": null,
-      "current_price_usd": 9.43
     },
     {
       "symbol": "AAVE_ALPHA",
